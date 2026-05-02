@@ -58,6 +58,7 @@ Archives let the user defer the deletion decision without polluting active PARA 
 | Index file | `archives.md` may serve as an index of what was archived and when — user-owned, not managed by sb-os |
 | Sensitive originals | When archived content is sensitive (e.g., personal reflections, financial records, medical notes), agents read or summarize ONLY when the user explicitly requests it |
 | Retention | sb-os does not enforce a retention policy. Users define their own review cycle (or none) below the marker block |
+| Sub-files | Loose `.md` files at the `4-archives/` root (siblings of archived folders) are user-owned and freeform — sb-os does not manage their structure or naming |
 
 ---
 
@@ -71,15 +72,4 @@ Archives let the user defer the deletion decision without polluting active PARA 
      User-owned section — preserved on `--upgrade`. Add anything below.
      ===================================================================== -->
 
-## Your Archive Index
-
-<!--
-Optional: maintain an index of what was archived and when, document a
-retention policy (e.g., "review every quarter; delete anything >2 years old"),
-or list sensitive folders that require explicit user approval before reading.
-Example:
-
-| Item | Archived on | Origin | Notes |
-|------|-------------|--------|-------|
-| {item-name} | YYYY-MM-DD | `1-projects/{project-name}/` | one-line reason |
--->
+<!-- Add your own content below — anything outside the sb:start/sb:end markers survives --upgrade. -->

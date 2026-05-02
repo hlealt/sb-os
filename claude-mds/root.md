@@ -23,8 +23,8 @@ Personal Obsidian vault structured as a second brain using the PARA method, mana
 
 | Content type | Default destination |
 |--------------|---------------------|
-| Active goals with deadlines | `1-projects/{project-name}/` |
-| Ongoing responsibilities (no end date) | `2-areas/{area-name}/` |
+| Bounded work with a defined "done" | `1-projects/{project-name}/` |
+| Ongoing responsibilities (no defined endpoint) | `2-areas/{area-name}/` |
 | Reference material, tools, knowledge bases | `3-resources/{topic}/` |
 | Completed, abandoned, or under-review content | `4-archives/` |
 | External code repos / project workspaces | `5-workbench/{repo-name}/` |
@@ -33,7 +33,11 @@ Personal Obsidian vault structured as a second brain using the PARA method, mana
 
 Fits an existing file → append. Index files (`{dir-name}.md`) are NEVER content destinations. Unclear destination → ask the user before writing.
 
-Users extend these defaults below the marker block (see "Your Routing").
+**Exception — daily-note override.** When the user explicitly says "add to today", "save to daily", or "add to daily note", route to the daily note regardless of the table above.
+
+**Auto-memory.** Claude Code's auto-memory serves ONLY for agent behavior feedback (preferences, corrections, workflow tweaks). Content goes to the vault. When in doubt, vault wins.
+
+Users extend these defaults by adding their own routing rules below the marker block — anything outside the markers wins over the marker-block defaults (agents read top-to-bottom).
 
 ---
 
@@ -57,7 +61,7 @@ Every file gets its parent area tag (the directory name under `2-areas/`). Cross
 | Folder | Purpose |
 |--------|---------|
 | `0-periodic-notes/` | Periodic notes (Daily=inbox, Weekly, Monthly, Quarterly) |
-| `1-projects/` | Active goals with deadlines |
+| `1-projects/` | Bounded work — projects with a beginning and an end |
 | `2-areas/` | Ongoing responsibilities (e.g., `area-personal/`, `area-work/`, `area-learning/`) |
 | `3-resources/` | Reference content (e.g., `tools/`, `knowledge-base/`) |
 | `4-archives/` | Holding zone before deletion — completed projects, abandoned files, content under review |
@@ -67,6 +71,8 @@ Every file gets its parent area tag (the directory name under `2-areas/`). Cross
 **Vault file** = any `.md` in PARA folders (`0-` through `4-`). **System component** = files under `.claude/` or the sb-os repo. `5-workbench/` contains independent repos — not vault files.
 
 **Vault content** = vault files governed by sb-os conventions: indexes (`{dir-name}.md`), task files (`{name}-tasks.md`), references, logs, periodic notes. **Project deliverables** = technical documents governed by per-project workflows (PRDs, specs, plans, code) — sb-os does not police their format.
+
+Loose `.md` files placed directly under any PARA folder (siblings of subfolders) are user-owned and freeform — sb-os does not manage their structure or naming.
 
 `.claude/` contains ONLY what Claude Code recognizes natively (rules, skills, commands, settings).
 
@@ -84,19 +90,7 @@ The sb-os repo path on this vault is recorded in `sb-os.json` at the vault root 
      User-owned section — preserved on `--upgrade`. Add anything below.
      ===================================================================== -->
 
-## Your Routing
-
-<!--
-Extend the default routing table above with your own destinations. Examples:
-
-| Content type | Destination |
-|--------------|-------------|
-| Articles to read later  | `2-areas/{your-area}/reading-list.md` (append) |
-| Coding tools you discover  | `3-resources/tools/catalogs/coding.md` (append) |
-| Reusable LLM prompts  | `3-resources/tools/prompts/{prompt-name}.md` (one file per prompt) |
-
-Anything you put here wins over the marker-block defaults — agents read top-to-bottom.
--->
+<!-- Add your own content below — anything outside the sb:start/sb:end markers survives --upgrade. -->
 
 ## Name Glossary
 

@@ -35,8 +35,9 @@ If a project has notes and tasks but no code repo, it belongs in `1-projects/{pr
 | Repo internals | Governed by the repo's own `CLAUDE.md` and conventions — NOT by the vault's |
 | Per-repo `CLAUDE.md` | Lives at the repo root. User-owned (sb-os does not manage it) |
 | Vault index for the repo | Optional `1-projects/{project-name}/{project-name}.md` that links to the workbench path |
+| Sub-files | Loose `.md` files at the `5-workbench/` root (siblings of repo folders) are user-owned and freeform — sb-os does not manage their structure or naming |
 
-Examples (replace with your own): `5-workbench/repo-a/`, `5-workbench/repo-b/`.
+Use evocative folder names matching the repo: `client-website-2027/`, `ml-experiments/`, `personal-blog/`. Treat those as illustrations only — pick names that match your repos.
 
 ---
 
@@ -75,13 +76,4 @@ Many real workspaces use BOTH: `1-projects/{project-name}/` for vault-side notes
      User-owned section — preserved on `--upgrade`. Add anything below.
      ===================================================================== -->
 
-## Your Workbench Repos
-
-<!--
-Optional: list your nested workbench repos here as a quick index. Commit
-and PR skills can resolve repo paths from this table. Example:
-
-| Repo | Path | Entry point | Notes |
-|------|------|-------------|-------|
-| {repo-name} | `5-workbench/{repo-name}/` | `5-workbench/{repo-name}/CLAUDE.md` | one-line scope description |
--->
+<!-- Add your own content below — anything outside the sb:start/sb:end markers survives --upgrade. -->

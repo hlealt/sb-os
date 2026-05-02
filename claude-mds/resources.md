@@ -35,6 +35,7 @@ When a resource starts requiring active stewardship, promote it to an area. When
 | Reserved subfolder — `tools/` | Active tooling: tool catalogs, reusable prompts, installed code repos. Provides functionality to the vault but is not itself vault content |
 | Reserved subfolder — wiki | Synthesis space for consumed external content. Path is configurable per install (`wiki_root` in `sb-os.json`); the installer creates `{wiki_root}/CLAUDE.md` when the wiki feature is enabled |
 | Index file | `{category-name}.md` inside each leaf category folder when it holds many similar files. Container folders (multiple subfolders with distinct purposes) skip the index — the folder's `CLAUDE.md` does the navigation |
+| Sub-files | Loose `.md` files at the `3-resources/` root (siblings of category folders) are user-owned and freeform — sb-os does not manage their structure or naming |
 
 ---
 
@@ -43,10 +44,21 @@ When a resource starts requiring active stewardship, promote it to an area. When
 | Situation | Action |
 |-----------|--------|
 | New tool, prompt, or installable repo | Place under `3-resources/tools/` |
-| Saved external content (articles, papers, transcripts) | Place under your wiki path (`{wiki_root}/`) — agents resolve the path from `sb-os.json` |
+| Saved external content (articles, papers, transcripts) | Place originals under `{wiki_root}/raw/`; place synthesis derived from them elsewhere under `{wiki_root}/`. Agents resolve `wiki_root` from `sb-os.json` |
 | Topic of interest with no active stewardship | Create `3-resources/{category-name}/` |
 | Resource gains active stewardship | Promote to `2-areas/{area-name}/` |
 | Resource seeds a time-bound goal | Spin up `1-projects/{project-name}/`; the resource folder may remain as reference |
+
+---
+
+## Raw vs Synthesis
+
+Saved external content splits into two layers:
+
+- **Raw originals** — articles, papers, transcripts captured verbatim from a source. Live under `{wiki_root}/raw/` and are treated as **immutable**: never edit a saved source. The original record stays auditable.
+- **Synthesis** — notes, summaries, cross-links, and structured knowledge derived from raw sources. Lives elsewhere under `{wiki_root}/` and may evolve freely.
+
+Agents append new captures to `raw/` and write derived notes to the synthesis layer — never overwrite a raw file.
 
 ---
 
@@ -73,13 +85,4 @@ Subfolders under `3-resources/tools/` MAY be independent git repositories (insta
      User-owned section — preserved on `--upgrade`. Add anything below.
      ===================================================================== -->
 
-## Your Resource Categories
-
-<!--
-Optional: list your top-level resource categories here as a quick index,
-or document category-specific conventions. Example:
-
-| Category | Folder | Notes |
-|----------|--------|-------|
-| {category-name} | `3-resources/{category-name}/` | one-line scope description |
--->
+<!-- Add your own content below — anything outside the sb:start/sb:end markers survives --upgrade. -->

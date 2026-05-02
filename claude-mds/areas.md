@@ -36,8 +36,9 @@ If a thread of work has a deadline and a defined outcome, it belongs in `1-proje
 | Task file | `{area-name}-tasks.md` inside the folder — single source of recurring or open tasks for the area |
 | Per-area `CLAUDE.md` | User-owned (sb-os does not manage it). Use it for area-specific agent rules and routing |
 | Sub-folders | Free-form per area — agents follow the area's own `CLAUDE.md` if present |
+| Sub-files | Loose `.md` files at the `2-areas/` root (siblings of area folders) are user-owned and freeform — sb-os does not manage their structure or naming |
 
-Examples (replace with your own): `2-areas/area-a/`, `2-areas/area-b/`.
+Use evocative folder names that describe the responsibility itself: `health/`, `finance/`, `home/`. Treat those as illustrations only — pick names that match your areas.
 
 ---
 
@@ -70,13 +71,4 @@ Every file inside `2-areas/{area-name}/` gets `{area-name}` as a tag (the direct
      User-owned section — preserved on `--upgrade`. Add anything below.
      ===================================================================== -->
 
-## Your Areas
-
-<!--
-Optional: list your active areas here as a quick index, or document
-area-set conventions specific to your workflow. Example:
-
-| Area | Folder | Notes |
-|------|--------|-------|
-| {area-name} | `2-areas/{area-name}/` | one-line scope description |
--->
+<!-- Add your own content below — anything outside the sb:start/sb:end markers survives --upgrade. -->

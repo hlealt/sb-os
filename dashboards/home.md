@@ -126,10 +126,4 @@ limit 30
      welcome message, custom widgets, dashboards, or any personal links.
      ===================================================================== -->
 
-## Your Home
-
-<!--
-Optional: add a welcome message, links to frequently used notes, custom
-Dataview/Tasks widgets, or any home-page content specific to your workflow.
-This section is preserved verbatim on every `--upgrade`.
--->
+<!-- Add your own content below — anything outside the sb:start/sb:end markers survives --upgrade. -->
