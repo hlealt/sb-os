@@ -8,8 +8,11 @@ This rule does NOT apply when merely reading a workflow file for reference, expl
 
 1. Take the workflow file's path relative to its workflow root (e.g., `{workflow-name}/{phase}/step-01-{name}.md`)
 2. Swap `.md` extension to `.yaml`
-3. Prepend the configured user-context root (default `.user/context/`; resolve from `sb-os.json` → `user_context_root`)
-4. Result: `{user_context_root}/{workflow-name}/{phase}/step-01-{name}.yaml`
+3. Read `sb-os.json` at the vault root and extract the `user_context_root` field. If `sb-os.json` is missing or `user_context_root` is unset, use the default `.user/context/`.
+4. Prepend the resolved `user_context_root` to the path from step 2.
+5. Result: `{user_context_root}/{workflow-name}/{phase}/step-01-{name}.yaml`
+
+The base path MUST always be resolved through `sb-os.json` — never hardcoded in any agent reasoning, prompt, or downstream tool call.
 
 ## Schema Reference
 
