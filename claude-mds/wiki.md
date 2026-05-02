@@ -18,8 +18,4 @@ Synthesized knowledge (your summaries, cross-links, atomic notes, topic pages) l
 
 <!-- sb:end -->
 
-<!-- =====================================================================
-     User-owned section — preserved on `--upgrade`. Add anything below.
-     ===================================================================== -->
-
 <!-- Add your own content below — anything outside the sb:start/sb:end markers survives --upgrade. -->

@@ -121,9 +121,4 @@ limit 30
 
 <!-- sb:end -->
 
-<!-- =====================================================================
-     User content below this line is preserved on `--upgrade`. Add a
-     welcome message, custom widgets, dashboards, or any personal links.
-     ===================================================================== -->
-
 <!-- Add your own content below — anything outside the sb:start/sb:end markers survives --upgrade. -->

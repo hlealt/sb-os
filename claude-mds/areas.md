@@ -67,8 +67,4 @@ Every file inside `2-areas/{area-name}/` gets `{area-name}` as a tag (the direct
 
 <!-- sb:end -->
 
-<!-- =====================================================================
-     User-owned section — preserved on `--upgrade`. Add anything below.
-     ===================================================================== -->
-
 <!-- Add your own content below — anything outside the sb:start/sb:end markers survives --upgrade. -->

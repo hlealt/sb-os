@@ -81,8 +81,4 @@ Subfolders under `3-resources/tools/` MAY be independent git repositories (insta
 
 <!-- sb:end -->
 
-<!-- =====================================================================
-     User-owned section — preserved on `--upgrade`. Add anything below.
-     ===================================================================== -->
-
 <!-- Add your own content below — anything outside the sb:start/sb:end markers survives --upgrade. -->

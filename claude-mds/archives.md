@@ -68,8 +68,4 @@ Archives let the user defer the deletion decision without polluting active PARA 
 
 <!-- sb:end -->
 
-<!-- =====================================================================
-     User-owned section — preserved on `--upgrade`. Add anything below.
-     ===================================================================== -->
-
 <!-- Add your own content below — anything outside the sb:start/sb:end markers survives --upgrade. -->

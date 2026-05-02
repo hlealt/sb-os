@@ -86,10 +86,6 @@ The sb-os repo path on this vault is recorded in `sb-os.json` at the vault root 
 
 <!-- sb:end -->
 
-<!-- =====================================================================
-     User-owned section — preserved on `--upgrade`. Add anything below.
-     ===================================================================== -->
-
 <!-- Add your own content below — anything outside the sb:start/sb:end markers survives --upgrade. -->
 
 ## Name Glossary
