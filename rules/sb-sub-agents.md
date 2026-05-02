@@ -11,7 +11,7 @@ When launching sub-agents via the Agent tool, use `sonnet` as the default model.
 Before EVERY Agent tool call, you MUST:
 
 1. **Scan the planned prompt** for trigger keywords (see Mandatory Skill Triggers below).
-2. **Identify every matching skill** from the available skill list — both the universal sb-os triggers below and any added via the SB-OS-MANAGED block.
+2. **Identify every matching skill** from the available skill list — sb-os skills below, plus any added via the SB-OS-MANAGED block, plus any non-sb-os skills (user-defined, plugins, third-party) that match the planned task.
 3. **Name each matching skill explicitly** in the sub-agent prompt using the Required Phrasing format.
 4. **Include the mandate** — do not just mention the skill; instruct the sub-agent to invoke and follow it.
 
@@ -19,12 +19,10 @@ You MUST NOT dispatch until the prompt contains every required skill directive. 
 
 ## Mandatory Skill Triggers
 
-If the planned sub-agent task or prompt contains ANY trigger in a row below, you MUST name the matching installed skill in the prompt. Multiple matching trigger families = multiple skills named.
+If the planned sub-agent task or prompt contains ANY trigger in a row below, you MUST name the matching installed sb-os skill in the prompt. Multiple matching trigger families = multiple skills named.
 
-The trigger families below are universal — they fire on every sb-os install. Plugins (e.g., RBTV) may add their own parallel rule with additional families.
-
-| Trigger family — keywords or task type | Matching skill |
-|----------------------------------------|----------------|
+| Trigger family — keywords or task type | Matching sb-os skill |
+|----------------------------------------|----------------------|
 | Vault content edits, moves, renames, new files in PARA folders or `.user/` | `sb-vault-ops` |
 | Creating, moving, renaming, or deleting any vault file (post-op structural sweep) | `sb-vault-integrity` |
 
@@ -35,6 +33,10 @@ If multiple installed skills match a trigger family, name every match. If no ins
 <!-- based on the components selected during install. DO NOT EDIT MANUALLY. -->
 <!-- Edits inside this block are overwritten on each `install.py` run. -->
 <!-- SB-OS-MANAGED END -->
+
+## Non-sb-os Skills
+
+This rule covers sb-os skills only. Other skills installed in the workspace (user-defined, plugins like RBTV, third-party) have their own scope and triggers. When a non-sb-os skill matches the planned sub-agent task — based on its description in the available skill list — you MUST also name it in the sub-agent prompt using the Required Phrasing below. The Pre-Dispatch Gate fires for ALL applicable skills, regardless of source.
 
 ## Required Phrasing
 

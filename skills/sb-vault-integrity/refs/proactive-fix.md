@@ -1,6 +1,6 @@
 # Proactive Fix
 
-Same-file fix scope when editing any file in the vault and the file violates a rule from `.claude/rules/` or its parent CLAUDE.md chain.
+Same-file fix scope when editing any file in the vault or `.user/` and the file violates a rule from `.claude/rules/` or its parent CLAUDE.md chain.
 
 ## Verifiable (auto-fix in the same edit)
 

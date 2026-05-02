@@ -1,10 +1,19 @@
 # Workflow Context Injection
 
-When the agent begins executing a workflow step file — a `.md` file under an sb-os workflow root that the agent has been instructed to follow as part of a workflow — check for a matching context YAML before acting on the step's instructions. This check fires per step file, not once per session — every time the agent loads a new step, re-check. If the file exists, read it and process entries top-to-bottom BEFORE the step's native logic. If it does not exist, skip silently and proceed with native workflow logic only.
+When the agent begins executing a workflow step file — a `.md` file under any workflow root that the agent has been instructed to follow as part of a workflow — check for a matching context YAML before acting on the step's instructions. This check fires per step file, not once per session — every time the agent loads a new step, re-check. If the file exists, read it and process entries top-to-bottom BEFORE the step's native logic. If it does not exist, skip silently and proceed with native workflow logic only.
+
+A "workflow root" is any directory that contains workflow definitions. Two roots are valid:
+
+| Root | Holds |
+|------|-------|
+| sb-os repo workflows directory (`{sb_os_path}/workflows/`) | Shippable sb-os workflows installed via the sb-os installer |
+| Personal workflows directory (e.g., `.user/_workflows/`) | User-owned workflows that ship with the vault but not with sb-os (accountant, mentor, sb-life-planner, therapy-summarizer, etc.) |
 
 This rule does NOT apply when merely reading a workflow file for reference, exploration, or analysis.
 
 ## Path Resolution
+
+The resolution treats both workflow roots identically: only the path relative to the workflow root matters; the YAML always lives under a single `user_context_root`.
 
 1. Take the workflow file's path relative to its workflow root (e.g., `{workflow-name}/{phase}/step-01-{name}.md`)
 2. Swap `.md` extension to `.yaml`
@@ -12,7 +21,15 @@ This rule does NOT apply when merely reading a workflow file for reference, expl
 4. Prepend the resolved `user_context_root` to the path from step 2.
 5. Result: `{user_context_root}/{workflow-name}/{phase}/step-01-{name}.yaml`
 
-The base path MUST always be resolved through `sb-os.json` — never hardcoded in any agent reasoning, prompt, or downstream tool call.
+### Examples
+
+| Workflow file | Path relative to root | Resolved YAML (assuming `user_context_root: .user/_context/`) |
+|---------------|----------------------|---------------------------------------------------------------|
+| `{sb_os_path}/workflows/sb-tutor/sb-tutor.md` | `sb-tutor/sb-tutor.md` | `.user/_context/sb-tutor/sb-tutor.yaml` |
+| `.user/_workflows/accountant/accountant.md` | `accountant/accountant.md` | `.user/_context/accountant/accountant.yaml` |
+| `.user/_workflows/sb-life-planner/weekly-review/step-04-calendar.md` | `sb-life-planner/weekly-review/step-04-calendar.md` | `.user/_context/sb-life-planner/weekly-review/step-04-calendar.yaml` |
+
+The base path MUST always be resolved through `sb-os.json` — never hardcoded in any agent reasoning, prompt, or downstream tool call. Workflow names are unique across roots; if a collision ever exists, the agent treats the workflow it is currently executing as authoritative for path-relative resolution.
 
 ## Schema Reference
 

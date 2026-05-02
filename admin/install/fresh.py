@@ -170,16 +170,15 @@ def _copy_rule(
     sb_os_root: Path,
     target_root: Path,
     rule_name: str,
+    sb_os_loader_path: str,
     created: list[str],
 ) -> None:
-    src = sb_os_root / "rules" / rule_name
-    if not src.is_file():
-        raise FileNotFoundError(
-            f"sb-os rule source missing: {src}. Re-clone the sb-os repo."
-        )
-    dst = target_root / ".claude" / "rules" / rule_name
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(src, dst)
+    loaders.install_rule(
+        target_root=target_root,
+        sb_os_root=sb_os_root,
+        rule_name=rule_name,
+        sb_os_path=sb_os_loader_path,
+    )
     rel = f".claude/rules/{rule_name}"
     if rel not in created:
         created.append(rel)
@@ -524,9 +523,9 @@ def _execute_fresh(
             if rel not in created:
                 created.append(rel)
 
-    # Rules — verbatim copies
+    # Rules — copies with placeholder substitution (see loaders.install_rule)
     for rule in RULES:
-        _copy_rule(sb_os_root, target_root, rule, created)
+        _copy_rule(sb_os_root, target_root, rule, sb_os_loader_path, created)
 
 
 __all__ = ["run_fresh", "SKILLS", "COMMANDS", "RULES", "CLAUDE_MD_MAP", "DASHBOARD_MAP"]

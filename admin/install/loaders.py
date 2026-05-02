@@ -179,3 +179,46 @@ def install_command_loader(
         encoding="utf-8",
     )
     return target
+
+
+def substitute_rule_placeholders(text: str, sb_os_path: str | Path) -> str:
+    """Replace install-time placeholders in rule file content.
+
+    Rule sources may carry the ``{sb_os_path}`` template placeholder so the
+    sb-os-relative reference paths inside the file resolve correctly once
+    installed at the user-chosen ``sb_os_path``. Without substitution, the
+    placeholder reaches ``.claude/rules/`` unresolved and any ``Read ...``
+    instruction following it fails.
+
+    Currently only ``{sb_os_path}`` is substituted. Future placeholders
+    (e.g., ``{user_context_root}``, ``{wiki_root}``) extend this function
+    rather than scattering substitution across modules.
+    """
+    base = _normalize_sb_os_path(sb_os_path)
+    return text.replace("{sb_os_path}", base)
+
+
+def install_rule(
+    target_root: Path | str,
+    sb_os_root: Path | str,
+    rule_name: str,
+    sb_os_path: str | Path,
+) -> Path:
+    """Install a rule file from sb-os source to ``.claude/rules/`` with
+    placeholder substitution.
+
+    Replaces ``shutil.copyfile`` callers in ``fresh.py`` and ``upgrade.py``
+    so rule install runs through the same substitution pass that loaders
+    already use. Per architecture §8 rules are always rewritten on
+    ``--upgrade`` — the call is idempotent.
+    """
+    src = Path(sb_os_root) / "rules" / rule_name
+    if not src.is_file():
+        raise FileNotFoundError(
+            f"sb-os rule source missing: {src}. Re-clone the sb-os repo."
+        )
+    dst = Path(target_root) / ".claude" / "rules" / rule_name
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    text = src.read_text(encoding="utf-8")
+    dst.write_text(substitute_rule_placeholders(text, sb_os_path), encoding="utf-8")
+    return dst

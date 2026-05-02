@@ -88,6 +88,13 @@
         "target": ".claude/rules/sb-workflow-context.md",
         "mode": "copy",
         "description": "YAML context injection on workflow steps from user_context_root."
+      },
+      {
+        "name": "sb-source-of-truth",
+        "source": "rules/sb-source-of-truth.md",
+        "target": ".claude/rules/sb-source-of-truth.md",
+        "mode": "copy",
+        "description": "Warns that sb-os components in .claude/ are overwritten on re-install — edit at the source repo."
       }
     ]
   }

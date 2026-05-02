@@ -29,7 +29,6 @@ Pure stdlib.
 """
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 from typing import Iterable
 
@@ -306,16 +305,14 @@ def _execute_upgrade(
             sb_os_path=sb_os_loader_path,
         )
 
-    # Rules — verbatim copies (§8: always rewritten)
+    # Rules — copies with placeholder substitution (§8: always rewritten)
     for rule in RULES:
-        src = sb_os_root / "rules" / rule
-        if not src.is_file():
-            raise FileNotFoundError(
-                f"sb-os rule source missing: {src}. Re-clone the sb-os repo."
-            )
-        dst = target_root / ".claude" / "rules" / rule
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(src, dst)
+        loaders.install_rule(
+            target_root=target_root,
+            sb_os_root=sb_os_root,
+            rule_name=rule,
+            sb_os_path=sb_os_loader_path,
+        )
 
 
 __all__ = ["run_upgrade"]
