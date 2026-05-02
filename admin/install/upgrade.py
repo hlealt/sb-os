@@ -274,17 +274,21 @@ def _execute_upgrade(
     sb_os_loader_path: str,
     wiki_root: str,
 ) -> None:
-    # Marker-block replacements
+    # Marker-block replacements. Source files carry the full install template
+    # (markers + outer comments); ``markers.extract_inside`` returns just the
+    # between-markers slice that the target's marker block should hold.
     for source_rel, dest_rel in CLAUDE_MD_MAP:
-        inside = _read_source(sb_os_root, source_rel)
+        inside = markers.extract_inside(_read_source(sb_os_root, source_rel))
         markers.replace_managed(target_root / dest_rel, inside)
-    wiki_claude_inside = _read_source(sb_os_root, WIKI_CLAUDE_MD_SOURCE)
+    wiki_claude_inside = markers.extract_inside(
+        _read_source(sb_os_root, WIKI_CLAUDE_MD_SOURCE)
+    )
     markers.replace_managed(
         target_root / (wiki_root.rstrip("/") + "/CLAUDE.md"),
         wiki_claude_inside,
     )
     for source_rel, dest_rel in DASHBOARD_MAP:
-        inside = _read_source(sb_os_root, source_rel)
+        inside = markers.extract_inside(_read_source(sb_os_root, source_rel))
         markers.replace_managed(target_root / dest_rel, inside)
 
     # Loaders — always rewritten (§8)

@@ -23,10 +23,12 @@ from typing import TypedDict
 CURRENT_VERSION = 1
 
 # Capture the version digit so the parser can detect future-format files.
-# The pattern is anchored on full lines so the marker comments must occupy
-# their own line — this prevents accidental matches inside prose.
-_START_RE = re.compile(r"<!--\s*sb:start\s+v=(\d+)\s*-->")
-_END_RE = re.compile(r"<!--\s*sb:end\s*-->")
+# Patterns are anchored on FULL LINES (re.MULTILINE) so a marker comment must
+# occupy its own line. This prevents accidental matches when the source's
+# documentation comment references the literal marker text inline (e.g.
+# "Content INSIDE `<!-- sb:start v=1 -->` is overwritten ...").
+_START_RE = re.compile(r"^[ \t]*<!--\s*sb:start\s+v=(\d+)\s*-->[ \t]*$", re.MULTILINE)
+_END_RE = re.compile(r"^[ \t]*<!--\s*sb:end\s*-->[ \t]*$", re.MULTILINE)
 
 
 class MissingMarkersError(Exception):
@@ -146,6 +148,26 @@ def validate_markers(path: Path | str) -> None:
     """Raise MissingMarkersError or MarkerVersionError if the file at `path`
     is not a valid managed file. Returns None on success."""
     read_managed(path)
+
+
+def extract_inside(text: str) -> str:
+    """Return the content between markers in ``text``.
+
+    Source files in ``sb-os/claude-mds/`` and ``sb-os/dashboards/`` carry the
+    full installable structure — outer documentation comments, the marker
+    pair, the managed content, and a trailing user-content placeholder. The
+    installer needs the *inside-marker* slice when refreshing a target's
+    marker block; this helper extracts it.
+
+    When the text has no marker pair, return the text verbatim — the caller
+    decides how to treat marker-less sources (fresh-install wrap-up, abort,
+    etc.).
+    """
+    parts = parse(text)
+    if parts is None:
+        return text
+    _prefix, managed, _suffix = parts
+    return managed
 
 
 def wrap(inside_content: str, version: int = CURRENT_VERSION) -> str:

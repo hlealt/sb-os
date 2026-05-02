@@ -154,13 +154,25 @@ def _read_source(sb_os_root: Path, rel_source: str) -> str:
 def _write_managed(
     target_root: Path,
     rel_target: str,
-    inside: str,
+    source_text: str,
     created: list[str],
 ) -> None:
-    """Write a fresh marker-block file. Parent dirs must already exist."""
+    """Write a fresh managed file.
+
+    ``source_text`` is the FULL source-file content read from
+    ``sb-os/claude-mds/<name>.md`` or ``sb-os/dashboards/<name>.md``. When
+    the source already carries the ``<!-- sb:start v=1 -->...<!-- sb:end -->``
+    pair (the v1 convention — the source IS the install template), the
+    destination is written verbatim. When the source lacks markers, wrap it
+    so the destination still satisfies the marker-block protocol.
+    """
     abs_path = target_root / rel_target
     abs_path.parent.mkdir(parents=True, exist_ok=True)
-    abs_path.write_text(markers.wrap(inside), encoding="utf-8")
+    if markers.parse(source_text) is None:
+        content = markers.wrap(source_text)
+    else:
+        content = source_text
+    abs_path.write_text(content, encoding="utf-8")
     if rel_target not in created:
         created.append(rel_target)
 
