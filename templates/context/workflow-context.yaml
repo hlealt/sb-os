@@ -1,0 +1,89 @@
+# Context injection manifest for: [workflow step name]
+# Place at: {user_context_root}/{workflow-path}/{step-name}.yaml
+# (default user_context_root: .user/context/; configured in sb-os.json)
+# See sb-os/rules/sb-workflow-context.md for full schema reference.
+
+context:
+  # --- type: file (read) ---
+  - name: User preferences
+    type: file
+    mode: read
+    path: .user/profile/preferences.md
+    instruction: >
+      Load user preferences and apply them throughout this workflow step.
+
+  # --- type: file with sections filter ---
+  - name: Weekly goals
+    type: file
+    mode: read
+    path: 0-periodic-notes/weekly/YYYY-Wnn.md
+    sections:
+      - "Goals"
+      - "Priorities"
+    instruction: >
+      Read the user's weekly goals and priorities for context.
+
+  # --- type: file with glob and selection ---
+  - name: Recent daily notes
+    type: file
+    mode: read
+    path: 0-periodic-notes/daily/
+    glob: "YYYY-MM-*.md"
+    select: latest
+    count: 3
+    instruction: >
+      Load the 3 most recent daily notes. Summarize open tasks.
+
+  # --- type: file (write) ---
+  - name: Summary output
+    type: file
+    mode: write
+    path: .user/state/weekly-summary.md
+    instruction: >
+      Write the consolidated summary from this step to this file.
+
+  # --- type: file (read-write) ---
+  - name: Running log
+    type: file
+    mode: read-write
+    path: .user/state/running-log.md
+    instruction: >
+      Read the current log, append today's observations, write back.
+
+  # --- type: script ---
+  - name: External data fetch
+    type: script
+    command: python
+    args:
+      - .user/scripts/fetch-data.py
+      - --account
+      - default
+    instruction: >
+      Run the script. Use the output as input for this step.
+
+  # --- type: url ---
+  - name: External reference
+    type: url
+    url: https://example.com/api/status
+    instruction: >
+      Fetch the status page and report any active incidents.
+
+  # --- type: text ---
+  - name: Custom guidance
+    type: text
+    content: >
+      Always greet the user by name and summarize the previous session
+      before starting new work.
+    instruction: >
+      Apply this guidance at the start of the workflow step.
+
+  # --- type: mcp ---
+  - name: Channel summary
+    type: mcp
+    server: {server-name}
+    tool: {tool-name}
+    params:
+      query: "weekly update"
+      limit: 5
+    instruction: >
+      Query the MCP server and summarize key results.
