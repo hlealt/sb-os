@@ -16,11 +16,87 @@ field Claude Code reads to surface the skill in the harness. The command
 loader is a single line — Claude Code does not require frontmatter on
 commands.
 
-Pure stdlib (pathlib).
+This module also exposes the declarative component manifest reader. The
+manifest at ``module-manifest.json`` (sibling to this file) is the single
+source of truth for what the installer ships — adding a component is a
+JSON edit, not a Python edit. ``fresh.py`` and ``upgrade.py`` consume
+``SKILLS``, ``COMMANDS``, and ``RULES`` derived from the manifest.
+
+Pure stdlib (json, pathlib).
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import Any
+
+
+# ---------------------------------------------------------------------------
+# Module manifest — declarative component list
+# ---------------------------------------------------------------------------
+
+MODULE_MANIFEST_FILENAME = "module-manifest.json"
+
+
+def _module_manifest_path() -> Path:
+    """Return the on-disk path to ``module-manifest.json``.
+
+    The manifest sits beside this file under ``admin/install/``. Resolving
+    against ``__file__`` keeps the lookup independent of the caller's cwd.
+    """
+    return Path(__file__).resolve().parent / MODULE_MANIFEST_FILENAME
+
+
+def read_module_manifest() -> dict[str, Any]:
+    """Load and return ``module-manifest.json`` as a dict.
+
+    Raises ``FileNotFoundError`` when the manifest is missing — the file is
+    required for the installer to function. The error message includes the
+    expected path so the user can diagnose a broken sb-os checkout.
+    """
+    path = _module_manifest_path()
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"sb-os module manifest missing: {path}. The sb-os repo is "
+            "incomplete — re-clone the repo or restore the file from git."
+        )
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def manifest_skills() -> tuple[tuple[str, str], ...]:
+    """Return ``((name, description), ...)`` for every shippable skill.
+
+    Order matches the manifest; install order is therefore controlled by the
+    JSON file rather than scattered across Python modules.
+    """
+    manifest = read_module_manifest()
+    return tuple(
+        (entry["name"], entry.get("description", ""))
+        for entry in manifest["components"]["skills"]
+    )
+
+
+def manifest_commands() -> tuple[str, ...]:
+    """Return command names in manifest order.
+
+    Commands carry no per-item description in the loader (Claude Code surfaces
+    them by filename) — only the name is needed for loader generation.
+    """
+    manifest = read_module_manifest()
+    return tuple(entry["name"] for entry in manifest["components"]["commands"])
+
+
+def manifest_rules() -> tuple[str, ...]:
+    """Return rule filenames (with ``.md`` extension) in manifest order.
+
+    The installer copies these verbatim from ``sb-os/rules/`` to
+    ``.claude/rules/``. Filenames carry the ``.md`` to match the existing
+    ``fresh.RULES`` shape consumed by the copy logic.
+    """
+    manifest = read_module_manifest()
+    return tuple(
+        f"{entry['name']}.md" for entry in manifest["components"]["rules"]
+    )
 
 
 def _normalize_sb_os_path(sb_os_path: str | Path) -> str:

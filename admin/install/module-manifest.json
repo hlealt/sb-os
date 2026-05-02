@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "description": "sb-os component manifest. Declarative source of truth for every shippable component the installer renders into a target vault. Edit this file to add, remove, or rename a component; loaders.py reads from here. RBTV's module-manifest.json is the structural reference, adapted to sb-os's single-bundle reality (no module grouping in v1 — see architecture doc §6 'v1 ships without a separate module system').",
+  "components": {
+    "skills": [
+      {
+        "name": "sb-vault-ops",
+        "source_template": "skills/sb-vault-ops/SKILL.md",
+        "target": ".claude/skills/sb-vault-ops/SKILL.md",
+        "description": "Gatekeeper for vault content and component modifications."
+      },
+      {
+        "name": "sb-vault-integrity",
+        "source_template": "skills/sb-vault-integrity/SKILL.md",
+        "target": ".claude/skills/sb-vault-integrity/SKILL.md",
+        "description": "Post-operation structural sweep after file moves, renames, or deletes."
+      },
+      {
+        "name": "sb-wiki-create-topic",
+        "source_template": "skills/sb-wiki-create-topic/SKILL.md",
+        "target": ".claude/skills/sb-wiki-create-topic/SKILL.md",
+        "description": "Create a wiki topic page from a candidate or freshly-proposed topic. Auto-fires when the user expresses intent to create or promote a topic."
+      }
+    ],
+    "commands": [
+      {
+        "name": "sb-archivist",
+        "source_template": "commands/sb-archivist.md",
+        "target": ".claude/commands/sb-archivist.md",
+        "description": "Knowledge-base ingestion and routing."
+      },
+      {
+        "name": "sb-tutor",
+        "source_template": "commands/sb-tutor.md",
+        "target": ".claude/commands/sb-tutor.md",
+        "description": "Tutor persona for guided learning sessions."
+      },
+      {
+        "name": "sb-inject-context",
+        "source_template": "commands/sb-inject-context.md",
+        "target": ".claude/commands/sb-inject-context.md",
+        "description": "Manual context injection helper."
+      },
+      {
+        "name": "sb-wiki-ingest",
+        "source_template": "commands/sb-wiki-ingest.md",
+        "target": ".claude/commands/sb-wiki-ingest.md",
+        "description": "Two-stage Karpathy-style ingest of a raw source into the wiki."
+      },
+      {
+        "name": "sb-wiki-lint",
+        "source_template": "commands/sb-wiki-lint.md",
+        "target": ".claude/commands/sb-wiki-lint.md",
+        "description": "Structural and citation lint for the wiki; auto-syncs raw and leaf indexes."
+      },
+      {
+        "name": "sb-wiki-query",
+        "source_template": "commands/sb-wiki-query.md",
+        "target": ".claude/commands/sb-wiki-query.md",
+        "description": "Query the wiki and synthesize an answer with grep/ripgrep Karpathy fallback (no embeddings)."
+      }
+    ],
+    "rules": [
+      {
+        "name": "sb-obsidian-markdown",
+        "source": "rules/sb-obsidian-markdown.md",
+        "target": ".claude/rules/sb-obsidian-markdown.md",
+        "mode": "copy",
+        "description": "Obsidian-flavored markdown reference (callouts, embeds, frontmatter)."
+      },
+      {
+        "name": "sb-sub-agents",
+        "source": "rules/sb-sub-agents.md",
+        "target": ".claude/rules/sb-sub-agents.md",
+        "mode": "copy",
+        "description": "Pre-dispatch gate for Agent tool calls — name matching skills explicitly in sub-agent prompts."
+      },
+      {
+        "name": "sb-user-preferences",
+        "source": "rules/sb-user-preferences.md",
+        "target": ".claude/rules/sb-user-preferences.md",
+        "mode": "copy",
+        "description": "Loads .user/profile/preferences.md if present."
+      },
+      {
+        "name": "sb-workflow-context",
+        "source": "rules/sb-workflow-context.md",
+        "target": ".claude/rules/sb-workflow-context.md",
+        "mode": "copy",
+        "description": "YAML context injection on workflow steps from user_context_root."
+      }
+    ]
+  }
+}

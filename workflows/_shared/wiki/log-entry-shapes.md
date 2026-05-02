@@ -12,19 +12,20 @@ Every entry is an H2 heading:
 
 Use the SAME timestamp for every sibling entry emitted in one ingest run so cross-references resolve cleanly.
 
-## Active Types (7)
+## Active Types (8)
 
 | Type | Trigger | Sibling of |
 |------|---------|------------|
 | `ingest` | `/sb-wiki-ingest <slug>` — always emitted | — (anchor entry) |
 | `candidate-topic` | One of 3 triggers fires during ingest or lint | Sibling of parent `ingest`; referenced from it by timestamp |
+| `candidate-mention` | Entity/concept name surfaced in step 3 but stub-creation rule did NOT fire (per `stub-policy.md`); informational — lint reviews periodically | Sibling of parent `ingest`; referenced from it by timestamp |
 | `concept-created` | Stub Concept created during ingest step 5 | Sibling of parent `ingest`; referenced from it by timestamp |
 | `entity-created` | Stub Entity created during ingest step 5 | Sibling of parent `ingest`; referenced from it by timestamp |
 | `topic-created` | `sb-wiki-create-topic` skill — mid-ingest or user-intent-driven | Sibling of parent `ingest` (or standalone if user-intent-driven) |
 | `lint` | `/sb-wiki-lint` | — (standalone) |
 | `query` | `/sb-wiki-query` — only if the user files the answer back | — (standalone) |
 
-**Sibling rule:** `candidate-topic`, `concept-created`, `entity-created`, and `topic-created` entries are NEVER nested under the parent `ingest` entry. They are sibling H2 entries in `log.md`, referenced from the parent `ingest` entry by timestamp.
+**Sibling rule:** `candidate-topic`, `candidate-mention`, `concept-created`, `entity-created`, and `topic-created` entries are NEVER nested under the parent `ingest` entry. They are sibling H2 entries in `log.md`, referenced from the parent `ingest` entry by timestamp.
 
 ## Entry Shapes
 
@@ -42,6 +43,12 @@ Use the SAME timestamp for every sibling entry emitted in one ingest run so cros
 - claim A (verbatim): "MCP works in code-mode form when collapsed to..."
 - claim B (verbatim): "MCP went sideways for our use case..."
 - promote via: sb-wiki-create-topic skill (express intent: "create the mcp-debate topic")
+
+## [2026-04-30 14:32] candidate-mention | sandboxing
+- name: sandboxing
+- classification: concept
+- reason: stub rule did not fire (name not in source title, Notable Quote, or Substance bullet)
+- from-ingest: 2026-04-30 14:32
 
 ## [2026-04-30 14:32] concept-created | code-execution-pattern
 - page: [[code-execution-pattern.md]]

@@ -30,11 +30,11 @@ These files codify rules referenced across multiple `sb-wiki-*` workflows. Load 
 | `../_shared/wiki/page-types.md` | 3 |
 | `../_shared/wiki/frontmatter-schemas.md` | 2, 5 |
 | `../_shared/wiki/section-menus.md` | 2, 4 |
-| `../_shared/wiki/stub-policy.md` | 3, 5 |
+| `../_shared/wiki/stub-policy.md` | 3, 4, 5 |
 | `../_shared/wiki/citation-format.md` | 2, 4 |
 | `../_shared/wiki/log-entry-shapes.md` | 9 |
 | `../_shared/wiki/index-formats.md` | 7, 8 |
-| `../_shared/wiki/naming-convention.md` | 2 |
+| `../_shared/wiki/naming-convention.md` | 2, 5 |
 | `../_shared/wiki/folder-structure.md` | 2, 5 |
 | `./data/candidate-topic-triggers.md` | 6 |
 
@@ -102,14 +102,10 @@ Citations: emit inline `[^N]` markers at every claim derived from the raw, then 
 For each page in `existing-pages`:
 
 1. Read the target page in full.
-2. **Append-only protection**: NEVER overwrite a main content section that already contains substantive content (>50 words). User-fleshed content is authoritative. Permitted modifications:
-   - Append a NEW section (e.g., `## <New perspective from this source>`) when adding a perspective the page does not yet cover.
-   - Add bullets to an existing list section ONLY if the list is itself a section under 50 words OR explicitly bullet-shaped.
-   - Add `[^N]: [[<raw-filename>]]` footnote definitions to the `Sources` section.
-3. If a section already exceeds 50 words AND your update would alter its prose, write your update as a NEW sibling section (e.g., `## How it works — Code Mode perspective`) instead of editing the original.
-4. If Contradiction-`same-scope-opposing` fires (detected in step 6 against this page's existing claims), populate the `Open variants / debates` section AND prepend a `> [!warning] Disputed` callout per `../_shared/wiki/section-menus.md` Concept/Entity rules.
-5. Update `last-touched: <today>` in frontmatter.
-6. Append inline `[^N]` markers in any newly-written prose tied to this source, with matching `[^N]: [[<raw-filename>]]` definition in `Sources`. Number footnotes locally per page; lint renumbers across pages later.
+2. Apply append-only protection per `../_shared/wiki/stub-policy.md` "Append-Only Protection" section.
+3. If Contradiction-`same-scope-opposing` fires (detected in step 6 against this page's existing claims), populate the `Open variants / debates` section AND prepend a `> [!warning] Disputed` callout per `../_shared/wiki/section-menus.md` "Contradiction — Disputed Callout" section.
+4. Update `last-touched: <today>` in frontmatter.
+5. Append inline `[^N]` markers in any newly-written prose tied to this source, with matching `[^N]: [[<raw-filename>]]` definition in `Sources`. Number footnotes locally per page; lint renumbers across pages later. Format per `../_shared/wiki/citation-format.md`.
 
 ### Step 5 — Create stubs
 

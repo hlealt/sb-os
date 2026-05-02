@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any
 
 
-__VERSION__ = "0.1.0"
+__VERSION__ = "0.2.0"
 VERSION = __VERSION__  # alias for callers that prefer non-dunder
 
 MANIFEST_FILENAME = "sb-os.json"

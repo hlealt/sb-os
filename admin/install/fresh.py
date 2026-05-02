@@ -42,33 +42,22 @@ from . import cli, loaders, manifest, markers
 # ---------------------------------------------------------------------------
 # Inventory — what `sb-os --fresh` ships in v1
 # ---------------------------------------------------------------------------
+#
+# SKILLS, COMMANDS, and RULES are derived from ``module-manifest.json``
+# (read via ``loaders.py``). The manifest is the single source of truth for
+# what the installer ships — adding a component is a JSON edit, not a
+# Python edit. Module-level evaluation keeps the existing import-time shape
+# (``from .fresh import SKILLS, COMMANDS, RULES`` continues to work in
+# upgrade.py and any test).
 
 # Skills — each entry: (name, description used in loader frontmatter).
-SKILLS: tuple[tuple[str, str], ...] = (
-    (
-        "sb-vault-ops",
-        "Gatekeeper for vault content and component modifications.",
-    ),
-    (
-        "sb-vault-integrity",
-        "Post-operation structural sweep after file moves, renames, or deletes.",
-    ),
-)
+SKILLS: tuple[tuple[str, str], ...] = loaders.manifest_skills()
 
 # Commands — each entry: command name (no .md extension).
-COMMANDS: tuple[str, ...] = (
-    "sb-archivist",
-    "sb-tutor",
-    "sb-inject-context",
-)
+COMMANDS: tuple[str, ...] = loaders.manifest_commands()
 
 # Rules — copied verbatim from sb-os/rules/ to .claude/rules/.
-RULES: tuple[str, ...] = (
-    "sb-obsidian-markdown.md",
-    "sb-sub-agents.md",
-    "sb-user-preferences.md",
-    "sb-workflow-context.md",
-)
+RULES: tuple[str, ...] = loaders.manifest_rules()
 
 # Managed CLAUDE.md source → destination map (architecture §4).
 # Source paths are RELATIVE to the sb-os repo root.

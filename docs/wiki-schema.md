@@ -460,12 +460,13 @@ If filed as Topic, the agent invokes `sb-wiki-create-topic` with the proposed na
 
 ## Log entry types
 
-7 types active at v1. Each entry is an H2 heading: `## [YYYY-MM-DD HH:MM] type | brief`.
+8 types active at v1. Each entry is an H2 heading: `## [YYYY-MM-DD HH:MM] type | brief`.
 
 | Type | Trigger | User action surfaced |
 |------|---------|----------------------|
 | `ingest` | `/sb-wiki-ingest <slug>` | Review diff at Stage 1; reflect at Stage 2 if desired |
 | `candidate-topic` | Auto-fired during `ingest` or `lint` when 1 of 3 triggers fires. **Always a sibling H2 entry** (not nested under the parent ingest), referenced from the parent ingest entry by timestamp | Decide whether to promote via the `sb-wiki-create-topic` skill (express intent to fire it) |
+| `candidate-mention` | Auto-fired during `ingest` step 3 when an entity/concept name surfaces but the stub-creation rule does NOT fire (per Stub policy). **Sibling H2 entry**, referenced from the parent ingest by timestamp | None — informational; lint reviews periodically and may promote to a stub if the name recurs |
 | `concept-created` | Auto-fired during `ingest` when a stub Concept is created. **Sibling H2 entry**, referenced from the parent ingest by timestamp | None — informational; greppable by type |
 | `entity-created` | Auto-fired during `ingest` when a stub Entity is created. **Sibling H2 entry**, referenced from the parent ingest by timestamp | None — informational; greppable by type |
 | `topic-created` | `sb-wiki-create-topic` skill (mid-ingest acceptance OR user-intent-driven invocation) | None — closes the loop. Lets lint know which candidates are spent |
@@ -488,6 +489,12 @@ If filed as Topic, the agent invokes `sb-wiki-create-topic` with the proposed na
 - claim A (verbatim): "MCP works in code-mode form when collapsed to..."
 - claim B (verbatim): "MCP went sideways for our use case..."
 - promote via: sb-wiki-create-topic skill (express intent: "create the mcp-debate topic")
+
+## [2026-04-30 14:32] candidate-mention | sandboxing
+- name: sandboxing
+- classification: concept
+- reason: stub rule did not fire (name not in source title, Notable Quote, or Substance bullet)
+- from-ingest: 2026-04-30 14:32
 
 ## [2026-04-30 14:32] concept-created | code-execution-pattern
 - page: [[code-execution-pattern.md]]
