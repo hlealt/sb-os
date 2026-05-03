@@ -12,6 +12,10 @@ User mode preference: **query-driven** (asks the agent rather than browses), wit
 
 Audience: future agents executing wiki ingest / create-topic / lint / query operations, and the user reviewing those operations.
 
+## Installer scope guarantee
+
+The sb-os installer (`install.py`) NEVER reads or writes any file under `{wiki_root}/wiki/` or `{wiki_root}/raw/`. The installer's write surface is limited to: managed CLAUDE.mds (marker blocks only), `.claude/` thin loaders, and `sb-os.json` at the vault root. Wiki content — leaf indexes (`wiki/concepts/concepts.md`, `wiki/entities/entities.md`, `wiki/topics/topics.md`, `wiki/sources/{origin}/{origin}.md`), raw leaf indexes (`raw/{origin}/{origin}.md`), source pages, concept pages, entity pages, topic pages, and `log.md` — is created and maintained EXCLUSIVELY by `/sb-wiki-lint` and `/sb-wiki-ingest`. Re-running `install.py --upgrade` is safe at any time and will not modify, overwrite, or delete any wiki content.
+
 ## Page types
 
 Currently 4: **Concept**, **Entity**, **Topic**, **Source**. Type identity is enforced by both folder placement and frontmatter `type:` field.
@@ -90,6 +94,48 @@ Naming: filename mirrors the raw counterpart exactly.
 ```
 
 Type folders are stable. Topic-folder organization (e.g., `wiki/concepts/ai/`) is explicitly NOT pre-organized — let it emerge after ≥20 wiki pages.
+
+## Asset folder
+
+Local storage for images and other binary attachments referenced by source pages and wiki pages. The standard is **flat, single shared folder** at `{wiki_root}/raw/assets/`. Karpathy-style workflow: after clipping a page or article into `raw/{origin}/`, the user runs Obsidian's core "Download attachments for current file" command (introduced in Obsidian 1.8.0, January 2025) to download all referenced external images locally. This keeps images viewable by LLMs on demand and immune to upstream URL rot.
+
+### Path
+
+`{wiki_root}/raw/assets/` — single shared folder at the root of `raw/`. Flat. No per-source or per-note subfolders.
+
+**Why flat.** Obsidian's core "Download attachments for current file" command follows the global "Default location for new attachments" setting and does NOT support per-file subfolder templates (`${filename}`, `${noteFileName}`, etc., as of Obsidian 1.9.6). Every download for every note lands in the same destination. The schema standardizes on that destination rather than fighting it.
+
+### Maintained by
+
+The user, via Obsidian. Configuration: Obsidian Settings → Files and links → "Default location for new attachments" → `raw/assets`. The user binds the "Download attachments for current file" command to a hotkey (e.g. Ctrl+Shift+D) and runs it after each clip.
+
+**Agents NEVER write to `raw/assets/`.** Neither `sb-wiki-ingest`, `sb-wiki-lint`, `sb-wiki-create-topic`, nor `sb-wiki-query` create, move, rename, or delete files inside `raw/assets/`. The folder is user-owned content, populated by Obsidian's own command.
+
+### Filenames
+
+Whatever Obsidian writes — typically the original remote filename, or `Image 1.jpg` / `Image 2.jpg` patterns when filenames collide or are missing. (A known Obsidian 1.9.6 bug affects this renaming; fix pending upstream.) Agents do NOT enforce a filename convention inside `raw/assets/`.
+
+### Referencing assets
+
+Source pages (`raw/{origin}/*.md`) and wiki pages (`wiki/concepts/*.md`, `wiki/entities/*.md`, `wiki/topics/*.md`, `wiki/sources/*.md`) reference assets via standard Obsidian image embeds: `![[filename.png]]`, `![[filename.jpg]]`, etc. Obsidian resolves these via its global attachment search; no folder-relative path is required in the embed.
+
+### Lint behavior — SKIP entirely
+
+`raw/assets/` is NOT a raw origin. It has no source pages, no wiki sources index, no leaf index. Lint MUST NOT:
+
+| Behavior | Required state |
+|----------|----------------|
+| Create an index file at `raw/assets/assets.md` | NEVER. `raw/assets/` is not an origin. |
+| Walk `raw/assets/` as part of raw-origin sweeps (step 7 of `/sb-wiki-lint`) | NEVER. Skip the directory entirely. |
+| Count files inside `raw/assets/` toward orphan detection (in or out) | NEVER. Assets are out of scope for orphan computation in BOTH directions — they are not eligible to be orphans, and image embeds inside them do not count as inbound links. |
+| Enforce filename conventions inside `raw/assets/` | NEVER. Obsidian writes whatever names it writes. |
+| Treat `raw/assets/` as an origin folder for any other purpose | NEVER. |
+
+Workflows that walk `{wiki_root}/raw/` MUST explicitly exclude `raw/assets/` from their iteration sets.
+
+### Pre-existing exceptions
+
+A vault MAY have legacy asset folders nested inside specific origin subdirectories (for example, `raw/mails/assets/{message-folder}/`, written historically by tools like `gmail-bridge` before this standard existed). These are NOT the standard going forward. New assets land in `{wiki_root}/raw/assets/`. Existing legacy structures are user-owned, untouched by lint and any other sb-os component, and may be migrated to the standard at the user's discretion.
 
 ## Naming convention
 
@@ -254,8 +300,40 @@ Each `wiki/sources/{origin}/{origin}.md` index:
 
 - `What it says` is agent-written during ingest (factual derivative of the source's `Substance` section).
 - `My take` is **agent-derived from the source page's `My take` section** during ingest and refreshed during lint. **The source page is canonical; the index entry is derived. The user never writes the index manually.**
-- If the source page's `My take` is empty (Stage 2 skipped), the index `My take` cell stays blank until the user fills the source page; lint syncs on the next pass.
+- The `My take` cell encodes one of three explicit states. **Blank is BANNED** as a state marker — every row carries one of the three values below.
 - Stale-by-7d acceptable for skim purpose; agents may fall back to reading the source page if deeper signal is needed.
+
+### `My take` cell — three states (NEVER blank)
+
+The `My take` cell distinguishes **pre-reflect** (the user has not yet been prompted, or skipped the prompt — action pending) from **post-reflect-empty** (the user reflected and intentionally recorded no take — final). Blank cannot encode this distinction; explicit tokens can.
+
+| State | Token in cell | Meaning | Source page state |
+|-------|---------------|---------|-------------------|
+| Pre-reflect | `pending` | Stage 2 was skipped (or never reached) — the source page's `My take` section is an empty shell awaiting user action. | `My take` heading present, body empty |
+| Post-reflect-empty | `—` (em-dash, U+2014) | Stage 2 ran and the user explicitly recorded no take. Finalized. | `My take` heading present, body explicitly empty after a Stage 2 run (lint can recognize this state via the source page's reflection-status — see below) |
+| Reflected | 1-sentence opinion derived from the source page's `My take` section (≤280 chars; truncate with ellipsis if longer) | The user filled `My take` on the source page. Index cell mirrors the take. | `My take` heading present, body has substantive content |
+
+**Rationale.** The two empty states have different downstream behaviors (see below) and different remediations from the user's standpoint. Blank conflates them. Two human-readable, typographically distinct tokens preserve the distinction at a glance and let lint detect each state programmatically. `pending` was chosen for its action-pending semantics (a verb-shaped keyword the user reads as "needs me to act"); `—` (em-dash) was chosen for its long-standing convention as a typographic null marker (the user reads it as "nothing here, intentionally").
+
+### Lint and ingest behavior per state
+
+| State | Written by | When | Lint behavior |
+|-------|-----------|------|---------------|
+| `pending` | `sb-wiki-ingest` step 8 (initial) AND step 11 if Stage 2 is skipped (`n` to reflection prompt OR `skip` at every per-section prompt) | At end of ingest when no take was captured | The 7-day staleness rule applies — lint may re-sync (no-op if source page's `My take` body is still empty) |
+| `—` | `sb-wiki-ingest` step 11 if Stage 2 ran AND the user explicitly recorded no take (Stage 2 reached but `My take` per-section prompt was skipped while at least one OTHER user-half section was filled — see Stage 2 finalization rule below) | At end of Stage 2 | Final. The 7-day staleness rule does NOT apply — `—` rows do NOT age out. Lint preserves `—` on every pass (no-op). |
+| Reflected (1-sentence preview) | `sb-wiki-ingest` step 11 if the user filled `My take`; refreshed by `sb-wiki-lint` step 6 on every run | At end of Stage 2 / on every lint pass | Re-sync from the source page's `My take` section on every run, preserving the three-state distinction (if the source page's `My take` body is now empty after previously having content, the lint downgrades the cell to `—` only if a `pending` state cannot be inferred — see "Re-sync algorithm" below) |
+
+**Stage 2 finalization rule.** The `—` token is written ONLY when the user explicitly engaged Stage 2. The signal is:
+1. The user answered `y` to the reflection prompt (Stage 2 entered), AND
+2. The user typed `skip` at the `My take` per-section prompt (the `My take` was deliberately left empty while the user was actively reflecting).
+
+If the user answered `n` to the reflection prompt, the cell stays `pending` — the user did not engage and no finalization signal exists.
+
+**Re-sync algorithm (lint step 6).** For each row:
+- If the source page's `My take` section has substantive content → write the 1-sentence preview (overwriting the prior cell value).
+- If the source page's `My take` section is empty AND the cell currently reads `—` → preserve `—` (already finalized).
+- If the source page's `My take` section is empty AND the cell currently reads `pending` → preserve `pending`.
+- If the source page's `My take` section is empty AND the cell currently reads anything else (legacy blank, stray content, etc.) → write `pending` (default to action-pending; safer to over-prompt the user than to over-finalize).
 
 The raw index (`raw/{origin}/{origin}.md`) keeps its existing format with `Wiki` column — factual only, no opinion. Raw indexes are created and maintained by lint (see `/sb-wiki-lint`).
 
@@ -285,9 +363,27 @@ The agent auto-creates a stub Concept or Entity page when the entity/concept nam
 1. **Source title/headline**, OR
 2. **An extracted Notable Quote OR a `Substance` bullet** (the agent's own output from step 2 of the ingest workflow).
 
-Deterministic — tied to artifacts the agent has already produced, not to recounting the source.
+Deterministic — tied to artifacts the agent has already produced, not to recounting the source. (The Notable-Quote branch is qualified by agent discretion — see "Notable Quote stub creation" below.)
 
 Otherwise, the agent logs a `candidate-mention` in `log.md` for periodic review by lint.
+
+#### Notable Quote stub creation (agent discretion)
+
+The Notable-Quote branch of the stub-creation rule is **agent discretion**, NOT mechanical extraction. A passing mention surfaced inside a Notable Quote does NOT compel a stub.
+
+For each entity/concept name surfaced ONLY by a Notable Quote (i.e., not by source title and not by a `Substance` bullet), the agent applies the relevance heuristic before creating a stub:
+
+| Question | If YES | If NO |
+|----------|--------|-------|
+| Would this stub plausibly become a real concept/entity page given the source context (recurrence, framing weight, the user's known interests)? | Create the stub | Log `candidate-mention` instead |
+
+**Trade-off (state explicitly).** Discretion risks under-stubbing — a stub that would have grown into a real page is deferred to a `candidate-mention`. Mechanical extraction risks bloat — every name dropped inside a quote becomes a shallow stub that never matures.
+
+**Discretion wins** because lint can later catch missing entity references via broken-wikilink detection (an under-stubbed name surfaces the moment another page tries to link to it), but lint cannot easily prune mass-produced shallow stubs without false positives.
+
+The source title branch and the `Substance`-bullet branch remain mechanical — those artifacts are short, agent-curated, and high-signal by construction. Only the Notable Quote branch carries discretion.
+
+**Reference example.** At p6-6 of the sb-wiki-build plan, 5 stubs were created from Notable Quotes where 3 were warranted. Agent discretion would have prevented the 2 shallow stubs that the lint then had to flag as orphaned.
 
 ### Stub state (lint detection)
 
@@ -326,7 +422,7 @@ Single command: `/sb-wiki-ingest <slug>` where slug is a raw filename or unique 
 | 5 | Create stubs for new entities/concepts that meet the rule | Agent |
 | 6 | Detect candidate-topic triggers (Contradiction, Evolution, Cross-application); add `> [!warning] Disputed` callouts on Contradiction-`same-scope-opposing` | Agent |
 | 7 | Update raw index: `Wiki = Yes` | Agent |
-| 8 | Update wiki sources index (`What it says` filled; `My take` left blank — populated post Stage 2) | Agent |
+| 8 | Update wiki sources index (`What it says` filled; `My take` set to `pending` — populated post Stage 2 per the three-state rule) | Agent |
 | 9 | Append `ingest` entry to `log.md` summarizing operations + candidates (separate `candidate-topic`, `concept-created`, `entity-created` H2 entries when triggered) | Agent |
 | 10 | **Stage 1 checkpoint**: present structured table + PROPOSED TOPICS block; the user accepts-all / rejects N / aborts file changes; per topic: accept (agent invokes `sb-wiki-create-topic` skill now) / defer (keeps as candidate in log) | Agent + User |
 | 11 | **Stage 2 checkpoint** (optional): present source page draft; agent prompts for `My take` / `Open questions` / `Dive deeper`. The user can fill or skip. If filled, agent writes user-half sections AND syncs the `My take` column to the wiki sources index. | Agent + User |
@@ -377,7 +473,7 @@ Open questions — what's unclear? (type or speak; "skip")
 Dive deeper — what to follow up on? (type or speak; "skip")
 ```
 
-Skip is allowed at any prompt. Skipped sections remain empty; the user can fill later in Obsidian editor. If at least one section is filled, the agent re-syncs the `My take` index column.
+Skip is allowed at any prompt. Skipped sections remain empty; the user can fill later in Obsidian editor. The agent re-syncs the `My take` index cell per the three-state rule defined under "Wiki sources index format" — write the 1-sentence preview if `My take` was filled; write `—` if Stage 2 ran but `My take` was skipped while at least one other user-half section was filled (Stage 2 finalization rule); leave `pending` if Stage 2 was declined entirely (`n` to reflection prompt).
 
 ### `sb-wiki-create-topic`
 
@@ -400,11 +496,11 @@ Single command: `/sb-wiki-lint`. Runs across `raw/` and `wiki/` folders. Mostly 
 | Step | Operation |
 |------|-----------|
 | 1 | Walk all wiki pages — detect stubs (structural rule) and record age via `created` |
-| 2 | Walk all wiki pages — detect orphans (no inbound wikilinks); skip leaf indexes |
+| 2 | Walk all wiki pages — detect orphans (no inbound wikilinks). **Orphan-detection scope is STRICT** — see "Orphan-detection scope" below |
 | 3 | Walk wiki concept/entity pages — detect unresolved Disputed callouts (older than 30 days without resolution) |
 | 4 | Walk `log.md` — detect candidate-topics aging without promotion (>30 days) |
 | 5 | Walk all wiki pages — verify wikilinks resolve (broken if target file missing); collect broken links |
-| 6 | For each `wiki/sources/{origin}/` — re-sync `My take` column from each source page's `My take` section; renumber footnotes; remove stale footnote definitions |
+| 6 | For each `wiki/sources/{origin}/` — re-sync `My take` column from each source page's `My take` section per the three-state rule (`pending` / `—` / reflected preview — see "Wiki sources index format" §); renumber footnotes; remove stale footnote definitions |
 | 7 | For each `raw/{origin}/` — verify `{origin}.md` index exists; if missing, create it with the standard `\| File \| Title \| Date \| Wiki \|` columns. For each raw file in `{origin}/`, ensure a row exists with `Wiki = No` (default) or `Yes/Partial` (preserved). Same for `raw/studies/studies.md`. **Index creation and maintenance is the agent's job**, not the user's. |
 | 8 | Append `lint` entry to `log.md` summarizing findings: stubs aged, orphans, unresolved callouts, candidates aging, broken links, index sync count, raw indexes created/updated |
 | 9 | Present findings to the user (read-only summary; no diff to apply) |
@@ -425,6 +521,19 @@ Footnotes renumbered: 2 source pages
 
 No action required (lint is read-mostly; index sync writes auto-applied).
 ```
+
+#### Orphan-detection scope (STRICT)
+
+Orphan-detection is the lint signal for "the wiki is not actually building knowledge about this entity / concept / topic." It MUST be computed against synthesis pages only — not against every file in `{wiki_root}/`.
+
+| Scope | Files |
+|-------|-------|
+| **In scope for inbound-link computation** | `wiki/concepts/*.md`, `wiki/entities/*.md`, `wiki/topics/*.md` — and ONLY these |
+| **Out of scope** (do NOT count as inbound links toward orphan status) | `log.md` entries, `wiki/sources/{origin}/{origin}.md` indexes, raw source pages under `raw/`, `wiki/sources/{origin}/<date>-<slug>.md` source pages, and any leaf index file (`concepts.md`, `entities.md`, `topics.md`, `{origin}.md`, `studies.md`) |
+
+**Rationale.** Log entries and source-page footnote definitions are EVIDENCE OF MENTION, not synthesis. An entity referenced only by `log.md`, only by a source page, or only by a raw index is an entity the wiki has noticed but is not actively cross-linking from real synthesis. Orphan-detection is meant to surface exactly these — pages that exist as stubs but have not earned a place in the actual knowledge graph. Forcing inbound links to come from real wiki content (concept / entity / topic pages) keeps the bar high and preserves the orphan signal's diagnostic value.
+
+**Practical implication.** A new stub created from a source page's `Notable Quotes` will, by design, be flagged as an orphan on the next lint run if no concept/entity/topic page links to it from its body or `Related` section. This is correct behavior, not a false positive — the orphan flag is the lint asking the user (or a future ingest) whether the stub deserves real synthesis.
 
 ### `/sb-wiki-query`
 
@@ -524,7 +633,7 @@ If filed as Topic, the agent invokes `sb-wiki-create-topic` with the proposed na
 
 Each wiki capability is its own component under the `sb-` prefix (alongside other sb-os components such as `sb-vault-ops`, `sb-tutor`, `sb-archivist`). No umbrella `sb-wiki` skill — capabilities are independent.
 
-Source files live in the sb-os repo under `sb-os/workflows/sb-wiki-*/`. Skills and commands installed into `.claude/` are **thin loaders** that point back to those source files (per architecture doc §4 loader pattern). Editing installed loaders is forbidden — the source is the repo. Re-running `sb-os install --upgrade` regenerates loaders.
+Source files live in the sb-os repo under `sb-os/workflows/sb-wiki-*/`. Skills and commands installed into `.claude/` are **thin loaders** that point back to those source files (per architecture doc §4 loader pattern). Editing installed loaders is forbidden — the source is the repo. Re-running `python install.py` regenerates loaders.
 
 | Component | Type | Source (sb-os repo) | Installed loader (vault) | Purpose |
 |-----------|------|--------------------|--------------------------|---------|
@@ -567,7 +676,7 @@ These edits happen at sb-os v2 build time. Until v2 lands, the user's vault reta
 - **`sb-os/claude-mds/wiki.md`** (managed CLAUDE.md source per architecture §4): replace the v1 placeholder with operational rules referencing this schema (page types — call out extensibility, ingest flow, stub policy, citation format, index rules, lint's raw-index responsibility). Installs to `{vault}/{wiki_root}/CLAUDE.md`.
 - **`sb-os/install.py`**: confirm `wiki_root` prompt persists into `sb-os.json` (already in v1 per architecture §6 manifest schema); v2 adds the `sb-wiki-*` loader generation.
 
-**Vault-side (post `sb-os install --upgrade` to v2):**
+**Vault-side (post `python install.py` to v2):**
 
 - **`{wiki_root}/CLAUDE.md`** (managed): rewritten by the installer from `sb-os/claude-mds/wiki.md` per the §6 marker block protocol — content inside `<!-- sb:start v=1 -->...<!-- sb:end -->` is replaced; user content outside markers is preserved.
 - **NEW `{wiki_root}/raw/studies/CLAUDE.md`**: operational rules for study captures (filename pattern `YYYY-MM-DD-{slug}.md`, immutability, relationship to ingest). User-owned per architecture §7 ("Subfolder CLAUDE.mds within PARA are user-owned, untouched by sb-os") — created on first `sb-wiki-ingest` of a study source if absent, or by the user manually.

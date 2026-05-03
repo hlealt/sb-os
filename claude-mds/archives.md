@@ -2,7 +2,7 @@
 sb-os managed file — installs to `{vault}/4-archives/CLAUDE.md`.
 
 Content INSIDE `<!-- sb:start v=1 -->` ... `<!-- sb:end -->` is overwritten
-on `python install.py --upgrade`. Edit it in the sb-os source repo.
+on `python install.py`. Edit it in the sb-os source repo.
 
 Content OUTSIDE the markers is yours — list your own archived index,
 document a retention policy, or extend the routing rules.
@@ -68,4 +68,4 @@ Archives let the user defer the deletion decision without polluting active PARA 
 
 <!-- sb:end -->
 
-<!-- Add your own content below — anything outside the sb:start/sb:end markers survives --upgrade. -->
+<!-- Add your own content below — anything outside the sb:start/sb:end markers survives re-install. -->

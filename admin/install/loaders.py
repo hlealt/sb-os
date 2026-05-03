@@ -63,39 +63,83 @@ def read_module_manifest() -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def manifest_skills() -> tuple[tuple[str, str], ...]:
+def manifest_modules() -> dict[str, dict[str, Any]]:
+    """Return the modules dict in manifest order."""
+    manifest = read_module_manifest()
+    if "modules" not in manifest:
+        raise ValueError(
+            f"Module manifest at {_module_manifest_path()} has no 'modules' "
+            "key. The manifest is from an older sb-os version — re-pull the "
+            "sb-os repo or restore the file from git."
+        )
+    return manifest["modules"]
+
+
+def select_modules(
+    selected: tuple[str, ...] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Return only the modules whose name is in ``selected`` (always-installed
+    modules are forcibly included). When ``selected`` is None, returns all.
+    """
+    modules = manifest_modules()
+    if selected is None:
+        return modules
+    chosen = set(selected)
+    chosen.update(
+        name for name, mod in modules.items() if mod.get("always_installed")
+    )
+    return {name: mod for name, mod in modules.items() if name in chosen}
+
+
+def _flatten(
+    modules: dict[str, dict[str, Any]],
+    kind: str,
+    excluded: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    excluded = excluded or set()
+    out: list[dict[str, Any]] = []
+    for mod in modules.values():
+        for entry in mod.get(kind, []):
+            target = entry.get("target", "").replace("\\", "/")
+            if target in excluded:
+                continue
+            out.append(entry)
+    return out
+
+
+def manifest_skills(
+    modules: dict[str, dict[str, Any]] | None = None,
+    excluded: set[str] | None = None,
+) -> tuple[tuple[str, str], ...]:
     """Return ``((name, description), ...)`` for every shippable skill.
 
-    Order matches the manifest; install order is therefore controlled by the
-    JSON file rather than scattered across Python modules.
+    With no args, returns ALL skills across ALL modules (used by upgrade
+    orphan-cleanup and tests). Pass ``modules`` to scope to selected ones.
     """
-    manifest = read_module_manifest()
+    mods = modules if modules is not None else manifest_modules()
     return tuple(
         (entry["name"], entry.get("description", ""))
-        for entry in manifest["components"]["skills"]
+        for entry in _flatten(mods, "skills", excluded)
     )
 
 
-def manifest_commands() -> tuple[str, ...]:
-    """Return command names in manifest order.
+def manifest_commands(
+    modules: dict[str, dict[str, Any]] | None = None,
+    excluded: set[str] | None = None,
+) -> tuple[str, ...]:
+    """Return command names. See ``manifest_skills`` for arg semantics."""
+    mods = modules if modules is not None else manifest_modules()
+    return tuple(entry["name"] for entry in _flatten(mods, "commands", excluded))
 
-    Commands carry no per-item description in the loader (Claude Code surfaces
-    them by filename) — only the name is needed for loader generation.
-    """
-    manifest = read_module_manifest()
-    return tuple(entry["name"] for entry in manifest["components"]["commands"])
 
-
-def manifest_rules() -> tuple[str, ...]:
-    """Return rule filenames (with ``.md`` extension) in manifest order.
-
-    The installer copies these verbatim from ``sb-os/rules/`` to
-    ``.claude/rules/``. Filenames carry the ``.md`` to match the existing
-    ``fresh.RULES`` shape consumed by the copy logic.
-    """
-    manifest = read_module_manifest()
+def manifest_rules(
+    modules: dict[str, dict[str, Any]] | None = None,
+    excluded: set[str] | None = None,
+) -> tuple[str, ...]:
+    """Return rule filenames (with ``.md``). See ``manifest_skills`` for args."""
+    mods = modules if modules is not None else manifest_modules()
     return tuple(
-        f"{entry['name']}.md" for entry in manifest["components"]["rules"]
+        f"{entry['name']}.md" for entry in _flatten(mods, "rules", excluded)
     )
 
 

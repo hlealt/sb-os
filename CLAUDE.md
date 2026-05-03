@@ -2,7 +2,7 @@
 
 Source repository for **sb-os** — an opinionated, PARA-based personal knowledge management system for Obsidian with native Claude Code agent integration. This file gives an agent the context it needs to work inside the sb-os codebase. It does NOT describe an installed sb-os vault — that is the user's environment, not this repo.
 
-> Full architecture, install flow, customization model, and migration plan: `docs/architecture.md` (planned — not yet committed in v0.1.0).
+> Full architecture, install flow and customization model `docs/architecture.md`.
 
 ## What sb-os ships
 
@@ -17,7 +17,7 @@ Source repository for **sb-os** — an opinionated, PARA-based personal knowledg
 
 | Path | Contents |
 |------|----------|
-| `install.py` | Entry point — flag parsing, mode auto-detection, dispatch |
+| `install.py` | Entry point — interactive target detection, mode auto-detection, dispatch |
 | `admin/install/` | Installer internals (CLI, manifest, marker handling, mode handlers) |
 | `workflows/` | Source of truth for `sb-*` workflows. Each workflow is a directory with an entry point and optional step files, data, scripts, templates |
 | `templates/` | Source of truth for templates that ship to a vault on install |
@@ -25,7 +25,6 @@ Source repository for **sb-os** — an opinionated, PARA-based personal knowledg
 | `commands/` | Source files for `sb-*` command loaders. Installer renders thin loaders into a vault's `.claude/commands/` |
 | `rules/` | `sb-*` rule files. Installer copies these verbatim into `.claude/rules/` (Claude Code auto-loads from there) |
 | `claude-mds/` | Source files for managed CLAUDE.mds. Filename encodes install destination — see `docs/architecture.md` |
-| `dashboards/` | Source files for marker-managed dashboard scaffolds (e.g., `Home.md`). Filename encodes install destination |
 | `docs/` | Architecture, conventions, hooks reference, user-facing documentation |
 
 ## Editing Conventions
@@ -34,7 +33,7 @@ Source repository for **sb-os** — an opinionated, PARA-based personal knowledg
 |------|--------|
 | Source-of-truth principle | Every component installed to a vault has its source here. Edit the source — never the installed copy. The installer overwrites loaders and rule copies on every run |
 | Architecture doc is the spec | Behavior changes require updating `docs/architecture.md` first |
-| Marker-block protocol | Managed CLAUDE.mds and dashboards use `<!-- sb:start v=1 -->...<!-- sb:end -->` markers. Content inside is owned by sb-os; outside is preserved on `--upgrade` |
+| Marker-block protocol | Managed CLAUDE.mds use `<!-- sb:start v=1 -->...<!-- sb:end -->` markers. Content inside is owned by sb-os; outside is preserved on every install run |
 | `user_context_root` is configurable | Components that read user context resolve the path from `sb-os.json` via the manifest module — never hardcoded |
 | Settings.json is user-managed | The installer never creates or modifies `.claude/settings.json` in a target vault. Hooks ship as documented snippets in `docs/hooks.md` |
 | Workflow directory contents | Each workflow directory contains ONLY step files, data, scripts, and templates — no README, no design docs |
@@ -50,4 +49,4 @@ All shippable components carry the `sb-` prefix. The prefix marks a component as
 |----------|-----------------|
 | User content | A user's vault — never imported here |
 | Personal extensions | A user's `.user/` folder in their installed vault — never shipped from this repo |
-| Other agent harnesses | Components are written portable where possible; only Claude Code is a validated target in v1 |
+| Other agent harnesses | Components are written portable where possible; only Claude Code is currently a validated target |

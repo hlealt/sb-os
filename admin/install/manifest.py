@@ -8,6 +8,7 @@ Schema (architecture §6)::
       "mode": "fresh",
       "wiki_root": "3-resources/knowledge-base/",
       "user_context_root": ".user/context/",
+      "sb_os_path": "3-resources/tools/sb-os/",
       "created_paths": []
     }
 
@@ -41,6 +42,9 @@ _KEY_ORDER = (
     "mode",
     "wiki_root",
     "user_context_root",
+    "sb_os_path",
+    "selected_modules",
+    "excluded_components",
     "created_paths",
 )
 
@@ -96,12 +100,18 @@ def create_initial(
     mode: str,
     wiki_root: str,
     user_context_root: str,
+    sb_os_path: str,
     created_paths: list[str] | None = None,
+    selected_modules: list[str] | None = None,
+    excluded_components: list[str] | None = None,
 ) -> dict[str, Any]:
     """Build a fresh-install manifest dict.
 
     Caller is responsible for passing the actual list of paths the installer
     created (or [] for the p7-7 own-vault seed where PARA folders pre-exist).
+    `sb_os_path` is the vault-relative location of the sb-os repo clone (the
+    path baked into thin loaders); convention is a trailing slash to match
+    `wiki_root` and `user_context_root`.
     Does not write — caller passes the result to `write()`.
     """
     return {
@@ -110,19 +120,31 @@ def create_initial(
         "mode": mode,
         "wiki_root": wiki_root,
         "user_context_root": user_context_root,
+        "sb_os_path": sb_os_path,
+        "selected_modules": list(selected_modules) if selected_modules is not None else [],
+        "excluded_components": list(excluded_components) if excluded_components is not None else [],
         "created_paths": list(created_paths) if created_paths is not None else [],
     }
 
 
 def update_for_upgrade(
     vault_root: Path | str,
+    sb_os_path: str | None = None,
     extra_created_paths: list[str] | None = None,
+    selected_modules: list[str] | None = None,
+    excluded_components: list[str] | None = None,
 ) -> dict[str, Any]:
     """Read existing manifest, flip mode to 'upgrade', refresh installed_at.
 
     Preserves wiki_root, user_context_root, and the existing created_paths
     list. New paths created during the upgrade (if any) are appended without
     de-duplication or reordering — the order reflects creation history.
+
+    `sb_os_path` is back-filled idempotently: when the existing manifest
+    lacks the field (older installs predating the v0.2.0 schema), the value
+    passed by the caller is written. When the field is already present, the
+    existing value is preserved verbatim — the upgrade NEVER overwrites a
+    user-set `sb_os_path`.
 
     Returns the updated dict. Caller passes it to `write()` to persist.
     Raises FileNotFoundError if no manifest exists at vault_root.
@@ -131,12 +153,19 @@ def update_for_upgrade(
     if existing is None:
         raise FileNotFoundError(
             f"No {MANIFEST_FILENAME} at {vault_root!s}; cannot upgrade an "
-            "uninstalled vault. Run with --fresh or seed the manifest first."
+            "uninstalled vault. Run the installer from a target without an "
+            "existing manifest to bootstrap, or seed the manifest first."
         )
     updated = dict(existing)
     updated["version"] = __VERSION__
     updated["installed_at"] = _now_iso_utc()
     updated["mode"] = "upgrade"
+    if "sb_os_path" not in updated and sb_os_path is not None:
+        updated["sb_os_path"] = sb_os_path
+    if selected_modules is not None:
+        updated["selected_modules"] = list(selected_modules)
+    if excluded_components is not None:
+        updated["excluded_components"] = list(excluded_components)
     if extra_created_paths:
         existing_paths = list(updated.get("created_paths", []))
         for p in extra_created_paths:

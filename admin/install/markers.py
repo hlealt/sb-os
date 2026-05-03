@@ -1,8 +1,7 @@
 """Marker block parser/replacer for sb-os managed files.
 
 Implements the marker block protocol from architecture §6: every managed
-CLAUDE.md and the shipped Home.md wraps installer-managed content in HTML
-comments::
+CLAUDE.md wraps installer-managed content in HTML comments::
 
     <!-- sb:start v=1 -->
     [managed content]
@@ -91,7 +90,7 @@ def read_managed(path: Path | str) -> ManagedBlock:
     if end_match is None:
         raise MissingMarkersError(
             f"{p}: found '<!-- sb:start v=... -->' but no '<!-- sb:end -->'. "
-            "Restore the closing marker, then re-run --upgrade."
+            "Restore the closing marker, then re-run the installer."
         )
     version = int(start_match.group(1))
     if version != CURRENT_VERSION:
@@ -153,8 +152,8 @@ def validate_markers(path: Path | str) -> None:
 def extract_inside(text: str) -> str:
     """Return the content between markers in ``text``.
 
-    Source files in ``sb-os/claude-mds/`` and ``sb-os/dashboards/`` carry the
-    full installable structure — outer documentation comments, the marker
+    Source files in ``sb-os/claude-mds/`` carry the full installable
+    structure — outer documentation comments, the marker
     pair, the managed content, and a trailing user-content placeholder. The
     installer needs the *inside-marker* slice when refreshing a target's
     marker block; this helper extracts it.

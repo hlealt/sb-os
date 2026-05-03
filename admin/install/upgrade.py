@@ -1,11 +1,10 @@
-"""--upgrade install mode.
+"""Upgrade install mode.
 
 Idempotent refresh of an existing sb-os install. Per architecture §6/§8:
 
 * Read existing ``sb-os.json`` at vault root; abort if missing.
-* For each managed CLAUDE.md and ``Home.md``:
-  - Read the corresponding source from ``sb-os/claude-mds/<name>.md`` or
-    ``sb-os/dashboards/<name>.md``.
+* For each managed CLAUDE.md:
+  - Read the corresponding source from ``sb-os/claude-mds/<name>.md``.
   - Replace the content BETWEEN ``<!-- sb:start v=1 -->`` and
     ``<!-- sb:end -->`` markers verbatim.
   - Preserve content OUTSIDE the markers (user-owned).
@@ -17,13 +16,12 @@ Idempotent refresh of an existing sb-os install. Per architecture §6/§8:
 * NEVER create new top-level folders.
 * NEVER touch ``.user/`` or ``.claude/settings.json``.
 * NEVER touch user-edited content outside markers (rules excepted —
-  rules are always rewritten verbatim per §8; document in the planned-action
-  list so the user is not surprised).
+  rules are always rewritten verbatim per §8).
 * Update ``sb-os.json`` via ``manifest.update_for_upgrade(...)`` —
   ``mode`` flips to ``"upgrade"``, ``installed_at`` refreshed,
   ``wiki_root`` / ``user_context_root`` / ``created_paths`` preserved.
 
-Public API: ``run_upgrade(target_root, args, plan) -> int``.
+Public API: ``run_upgrade(target_root, sb_os_root) -> int``.
 
 Pure stdlib.
 """
@@ -34,12 +32,10 @@ from typing import Iterable
 
 from . import cli, loaders, manifest, markers
 from .fresh import (
+    CANONICAL_SB_OS_REL,
     CLAUDE_MD_MAP,
-    COMMANDS,
-    DASHBOARD_MAP,
-    RULES,
-    SKILLS,
     WIKI_CLAUDE_MD_SOURCE,
+    _module_has_wiki_artifacts,
 )
 
 
@@ -49,24 +45,20 @@ from .fresh import (
 
 def run_upgrade(
     target_root: Path | str,
-    args,
-    plan: cli.Plan | None = None,
+    sb_os_root: Path | str,
+    selected_modules: tuple[str, ...] | None = None,
+    excluded_components: tuple[str, ...] | None = None,
 ) -> int:
-    """Execute the ``--upgrade`` install flow.
-
-    Returns 0 on success, 1 on abort or error.
-    """
+    """Execute the upgrade flow. Returns 0 on success, 1 on abort or error."""
     target_root = Path(target_root)
-    sb_os_root = _resolve_sb_os_root(args)
-    dry_run = bool(getattr(args, "dry_run", False))
-    plan = plan if plan is not None else cli.Plan()
+    sb_os_root = Path(sb_os_root).resolve()
 
     # ----- Read existing manifest -------------------------------------
     existing = manifest.read(target_root)
     if existing is None:
         cli.abort(
-            f"No {manifest.MANIFEST_FILENAME} at {target_root}. Run with "
-            "--fresh to bootstrap, or seed the manifest first."
+            f"No {manifest.MANIFEST_FILENAME} at {target_root}. Run from a "
+            "fresh install location to bootstrap, or seed the manifest first."
         )
         return 1  # unreachable — abort raises
 
@@ -74,75 +66,55 @@ def run_upgrade(
     user_context_root = existing.get(
         "user_context_root", cli.DEFAULT_USER_CONTEXT_ROOT
     )
-    sb_os_loader_path = _resolve_sb_os_loader_path(args, sb_os_root, target_root)
+
+    all_modules = loaders.manifest_modules()
+    if selected_modules is None:
+        prev = existing.get("selected_modules") or list(all_modules.keys())
+        selected = tuple(prev)
+    else:
+        selected = tuple(selected_modules)
+    if excluded_components is None:
+        excluded = tuple(existing.get("excluded_components") or ())
+    else:
+        excluded = tuple(excluded_components)
+    install_wiki = _module_has_wiki_artifacts(all_modules, selected)
+
+    # ----- Resolve loader path from clone location --------------------
+    sb_os_loader_path = _loader_path_or_abort(sb_os_root, target_root)
 
     # ----- Pre-flight: validate every managed file has markers --------
-    # This MUST happen before any write — per architecture §6, missing
-    # markers abort the upgrade entirely; no file is modified until every
-    # file has been verified.
-    managed_targets = list(_iter_managed_targets(wiki_root))
-    missing: list[Path] = []
-    for rel_target in managed_targets:
-        abs_target = target_root / rel_target
-        if not abs_target.is_file():
-            # Missing managed file — same severity as missing markers; the
-            # user removed/renamed something the installer expects to update.
-            missing.append(abs_target)
-            continue
-        try:
-            markers.validate_markers(abs_target)
-        except markers.MissingMarkersError:
-            missing.append(abs_target)
-        except markers.MarkerVersionError as exc:
-            cli.abort(str(exc))
-            return 1
-    if missing:
-        bullet = "\n".join(f"  - {p}" for p in missing)
-        cli.abort(
-            "Cannot --upgrade: the following managed files are missing "
-            "their marker block (or the file itself is missing).\n"
-            f"{bullet}\n\n"
-            "Restore the markers (or the file) and re-run --upgrade. To "
-            "regenerate from scratch, delete the file and re-run with "
-            "--fresh, or restore a known-good copy from version control."
-        )
+    if not _preflight_markers(target_root, wiki_root, install_wiki):
         return 1
 
-    # ----- Build planned-action list ----------------------------------
-    _build_plan(
-        plan=plan,
-        wiki_root=wiki_root,
-        user_context_root=user_context_root,
+    # ----- Build plan + confirm ---------------------------------------
+    plan = build_upgrade_plan(
+        wiki_root, user_context_root, selected, set(excluded), install_wiki
     )
-
-    # ----- Display + confirm -------------------------------------------
-    if dry_run:
-        cli.print_plan(plan.actions)
-        print(f"\n{cli.cyan('Dry run — no files will be written.')}")
-        return 0
-
     cli.print_plan(plan.actions)
     print(
         cli.dim(
             "\nNote: rules in .claude/rules/ are rewritten verbatim from "
-            "the sb-os repo on every --upgrade (architecture §8). Edits to "
+            "the sb-os repo on every upgrade (architecture §8). Edits to "
             "those files will be lost. Edit at the source: sb-os/rules/."
         )
     )
-    if not cli.confirm("\nProceed with --upgrade?", default=True):
+    if not cli.confirm("\nProceed with the upgrade?", default=True):
         cli.abort("User declined.")
         return 1
 
     # ----- Execute -----------------------------------------------------
     try:
+        _clear_orphans(target_root, selected, set(excluded))
         _execute_upgrade(
             target_root=target_root,
             sb_os_root=sb_os_root,
             sb_os_loader_path=sb_os_loader_path,
             wiki_root=wiki_root,
+            selected_modules=selected,
+            excluded_components=set(excluded),
+            install_wiki=install_wiki,
         )
     except markers.MissingMarkersError as exc:
-        # Defensive — pre-flight should have caught this.
         cli.abort(str(exc))
         return 1
     except FileNotFoundError as exc:
@@ -150,7 +122,16 @@ def run_upgrade(
         return 1
 
     # ----- Update manifest --------------------------------------------
-    updated = manifest.update_for_upgrade(target_root)
+    # Pass sb_os_path with trailing slash so update_for_upgrade can back-fill
+    # the field on manifests predating the v0.2.0 schema. update_for_upgrade
+    # is idempotent — it will NOT overwrite an existing user-set value.
+    sb_os_path_for_manifest = sb_os_loader_path.rstrip("/") + "/"
+    updated = manifest.update_for_upgrade(
+        target_root,
+        sb_os_path=sb_os_path_for_manifest,
+        selected_modules=list(selected),
+        excluded_components=list(excluded),
+    )
     manifest.write(target_root, updated)
 
     print(f"\n{cli.green('Upgrade complete.')}")
@@ -163,108 +144,192 @@ def run_upgrade(
 # Internals
 # ---------------------------------------------------------------------------
 
-def _resolve_sb_os_root(args) -> Path:
-    explicit = getattr(args, "sb_os_source", None)
-    if explicit:
-        return Path(explicit).expanduser().resolve()
-    return Path(__file__).resolve().parent.parent.parent
+def _loader_path_or_abort(sb_os_root: Path, target_root: Path) -> str:
+    """Return the vault-relative path baked into thin loaders.
 
-
-def _resolve_sb_os_loader_path(args, sb_os_root: Path, target_root: Path) -> str:
-    explicit = getattr(args, "sb_os_path", None)
-    if explicit:
-        return str(explicit)
+    On upgrade the sb-os clone MUST live inside the target vault — loaders
+    point at it via a relative path. If the running clone is outside the
+    vault, the upgrade is unsafe (loaders would dangle): abort with a
+    remediation hint.
+    """
     try:
         rel = sb_os_root.relative_to(target_root)
-        return str(rel).replace("\\", "/")
     except ValueError:
-        return cli.DEFAULT_SB_OS_PATH
+        cli.abort(
+            f"sb-os clone at {sb_os_root} is not inside the target vault "
+            f"{target_root}.\n"
+            f"Run install.py from inside the vault's sb-os clone, e.g.:\n"
+            f"  cd {target_root / CANONICAL_SB_OS_REL}\n"
+            f"  python install.py"
+        )
+        return ""  # unreachable — abort raises
+    return str(rel).replace("\\", "/")
 
 
-def _iter_managed_targets(wiki_root: str) -> Iterable[str]:
+def _clear_orphans(
+    target_root: Path,
+    selected_modules: tuple[str, ...],
+    excluded_components: set[str],
+) -> None:
+    """Remove sb-* loaders/rules that exist on disk but are no longer selected.
+
+    Mirrors RBTV's clear_previous_install pattern but is selection-aware:
+    only files that the new selection EXCLUDES are removed; files that will
+    be rewritten by the upcoming install pass are left alone (no churn).
+    """
+    import shutil
+
+    all_modules = loaders.manifest_modules()
+    keep_modules = loaders.select_modules(selected_modules)
+    keep_skill_targets = {
+        e["target"].replace("\\", "/")
+        for m in keep_modules.values() for e in m.get("skills", [])
+        if e["target"].replace("\\", "/") not in excluded_components
+    }
+    keep_command_targets = {
+        e["target"].replace("\\", "/")
+        for m in keep_modules.values() for e in m.get("commands", [])
+        if e["target"].replace("\\", "/") not in excluded_components
+    }
+    keep_rule_targets = {
+        e["target"].replace("\\", "/")
+        for m in keep_modules.values() for e in m.get("rules", [])
+        if e["target"].replace("\\", "/") not in excluded_components
+    }
+
+    all_skill_targets = {
+        e["target"].replace("\\", "/")
+        for m in all_modules.values() for e in m.get("skills", [])
+    }
+    all_command_targets = {
+        e["target"].replace("\\", "/")
+        for m in all_modules.values() for e in m.get("commands", [])
+    }
+    all_rule_targets = {
+        e["target"].replace("\\", "/")
+        for m in all_modules.values() for e in m.get("rules", [])
+    }
+
+    for rel in all_skill_targets - keep_skill_targets:
+        skill_dir = target_root / Path(rel).parent
+        if skill_dir.is_dir():
+            shutil.rmtree(skill_dir)
+    for rel in all_command_targets - keep_command_targets:
+        f = target_root / rel
+        if f.is_file():
+            f.unlink()
+    for rel in all_rule_targets - keep_rule_targets:
+        f = target_root / rel
+        if f.is_file():
+            f.unlink()
+
+
+def _preflight_markers(target_root: Path, wiki_root: str, install_wiki: bool = True) -> bool:
+    """Validate every managed file has its marker block before any write.
+
+    Per architecture §6, missing markers abort the upgrade entirely; no file
+    is modified until every file has been verified. Returns True when all
+    files pass; False after calling cli.abort otherwise (False is unreachable
+    because abort raises).
+    """
+    managed_targets = list(_iter_managed_targets(wiki_root, install_wiki))
+    missing: list[Path] = []
+    for rel_target in managed_targets:
+        abs_target = target_root / rel_target
+        if not abs_target.is_file():
+            missing.append(abs_target)
+            continue
+        try:
+            markers.validate_markers(abs_target)
+        except markers.MissingMarkersError:
+            missing.append(abs_target)
+        except markers.MarkerVersionError as exc:
+            cli.abort(str(exc))
+            return False
+    if missing:
+        bullet = "\n".join(f"  - {p}" for p in missing)
+        cli.abort(
+            "Cannot upgrade: the following managed files are missing "
+            "their marker block (or the file itself is missing).\n"
+            f"{bullet}\n\n"
+            "Restore the markers (or the file) and re-run the installer. "
+            "To regenerate from scratch, delete the file and re-run from "
+            "a fresh-install location, or restore a known-good copy from "
+            "version control."
+        )
+        return False
+    return True
+
+
+def _iter_managed_targets(wiki_root: str, install_wiki: bool = True) -> Iterable[str]:
     """Yield vault-relative paths to every marker-managed file."""
     for _src, dest in CLAUDE_MD_MAP:
         yield dest
-    yield wiki_root.rstrip("/") + "/CLAUDE.md"
-    for _src, dest in DASHBOARD_MAP:
-        yield dest
+    if install_wiki:
+        yield wiki_root.rstrip("/") + "/CLAUDE.md"
 
 
 def _read_source(sb_os_root: Path, rel_source: str) -> str:
     src = sb_os_root / rel_source
     if not src.is_file():
         raise FileNotFoundError(
-            f"sb-os source missing: {src}. Re-clone the sb-os repo or "
-            "verify your --sb-os-source argument."
+            f"sb-os source missing: {src}. Re-clone the sb-os repo."
         )
     return src.read_text(encoding="utf-8")
 
 
-def _build_plan(
-    plan: cli.Plan,
+def build_upgrade_plan(
     wiki_root: str,
     user_context_root: str,
-) -> None:
-    # Marker-block refreshes
+    selected_modules: tuple[str, ...] | None = None,
+    excluded_components: set[str] | None = None,
+    install_wiki: bool = True,
+) -> cli.Plan:
+    """Build the planned-action list for an upgrade. Pure — no FS writes."""
+    plan = cli.Plan()
+    modules_scoped = loaders.select_modules(selected_modules)
+    excl = excluded_components or set()
+
     for source_rel, dest_rel in CLAUDE_MD_MAP:
-        plan.add(
-            cli.Action(
-                category="file",
-                target=dest_rel,
-                detail=f"replace marker block (source: {source_rel})",
-            )
-        )
-    plan.add(
-        cli.Action(
+        plan.add(cli.Action(
+            category="file",
+            target=dest_rel,
+            detail=f"replace marker block (source: {source_rel})",
+        ))
+    if install_wiki:
+        plan.add(cli.Action(
             category="file",
             target=wiki_root.rstrip("/") + "/CLAUDE.md",
             detail=f"replace marker block (source: {WIKI_CLAUDE_MD_SOURCE})",
-        )
-    )
-    for source_rel, dest_rel in DASHBOARD_MAP:
-        plan.add(
-            cli.Action(
-                category="file",
-                target=dest_rel,
-                detail=f"replace marker block (source: {source_rel})",
-            )
-        )
-    # Loaders — always rewritten
-    for name, _desc in SKILLS:
-        plan.add(
-            cli.Action(
-                category="loader",
-                target=f".claude/skills/{name}/SKILL.md",
-                detail="rewrite",
-            )
-        )
-    for name in COMMANDS:
-        plan.add(
-            cli.Action(
-                category="loader",
-                target=f".claude/commands/{name}.md",
-                detail="rewrite",
-            )
-        )
-    # Rules — always rewritten
-    for rule in RULES:
-        plan.add(
-            cli.Action(
-                category="file",
-                target=f".claude/rules/{rule}",
-                detail="rewrite (verbatim from sb-os/rules/)",
-            )
-        )
-    # Manifest
-    plan.add(
-        cli.Action(
-            category="manifest",
-            target=manifest.MANIFEST_FILENAME,
-            detail=f"mode=upgrade, refresh installed_at "
+        ))
+    for name, _desc in loaders.manifest_skills(modules_scoped, excl):
+        plan.add(cli.Action(
+            category="loader",
+            target=f".claude/skills/{name}/SKILL.md",
+            detail="rewrite",
+        ))
+    for name in loaders.manifest_commands(modules_scoped, excl):
+        plan.add(cli.Action(
+            category="loader",
+            target=f".claude/commands/{name}.md",
+            detail="rewrite",
+        ))
+    for rule in loaders.manifest_rules(modules_scoped, excl):
+        plan.add(cli.Action(
+            category="file",
+            target=f".claude/rules/{rule}",
+            detail="rewrite (verbatim from sb-os/rules/)",
+        ))
+    plan.add(cli.Action(
+        category="manifest",
+        target=manifest.MANIFEST_FILENAME,
+        detail=(
+            f"mode=upgrade, refresh installed_at "
             f"(preserve wiki_root={wiki_root}, "
-            f"user_context_root={user_context_root})",
-        )
-    )
+            f"user_context_root={user_context_root})"
+        ),
+    ))
+    return plan
 
 
 def _execute_upgrade(
@@ -272,33 +337,34 @@ def _execute_upgrade(
     sb_os_root: Path,
     sb_os_loader_path: str,
     wiki_root: str,
+    selected_modules: tuple[str, ...],
+    excluded_components: set[str],
+    install_wiki: bool = True,
 ) -> None:
-    # Marker-block replacements. Source files carry the full install template
-    # (markers + outer comments); ``markers.extract_inside`` returns just the
-    # between-markers slice that the target's marker block should hold.
+    modules_scoped = loaders.select_modules(selected_modules)
+
+    # Marker-block replacements.
     for source_rel, dest_rel in CLAUDE_MD_MAP:
         inside = markers.extract_inside(_read_source(sb_os_root, source_rel))
         markers.replace_managed(target_root / dest_rel, inside)
-    wiki_claude_inside = markers.extract_inside(
-        _read_source(sb_os_root, WIKI_CLAUDE_MD_SOURCE)
-    )
-    markers.replace_managed(
-        target_root / (wiki_root.rstrip("/") + "/CLAUDE.md"),
-        wiki_claude_inside,
-    )
-    for source_rel, dest_rel in DASHBOARD_MAP:
-        inside = markers.extract_inside(_read_source(sb_os_root, source_rel))
-        markers.replace_managed(target_root / dest_rel, inside)
+    if install_wiki:
+        wiki_claude_inside = markers.extract_inside(
+            _read_source(sb_os_root, WIKI_CLAUDE_MD_SOURCE)
+        )
+        markers.replace_managed(
+            target_root / (wiki_root.rstrip("/") + "/CLAUDE.md"),
+            wiki_claude_inside,
+        )
 
     # Loaders — always rewritten (§8)
-    for name, desc in SKILLS:
+    for name, desc in loaders.manifest_skills(modules_scoped, excluded_components):
         loaders.install_skill_loader(
             target_root=target_root,
             name=name,
             sb_os_path=sb_os_loader_path,
             description=desc,
         )
-    for name in COMMANDS:
+    for name in loaders.manifest_commands(modules_scoped, excluded_components):
         loaders.install_command_loader(
             target_root=target_root,
             name=name,
@@ -306,7 +372,7 @@ def _execute_upgrade(
         )
 
     # Rules — copies with placeholder substitution (§8: always rewritten)
-    for rule in RULES:
+    for rule in loaders.manifest_rules(modules_scoped, excluded_components):
         loaders.install_rule(
             target_root=target_root,
             sb_os_root=sb_os_root,
@@ -315,4 +381,4 @@ def _execute_upgrade(
         )
 
 
-__all__ = ["run_upgrade"]
+__all__ = ["run_upgrade", "build_upgrade_plan"]

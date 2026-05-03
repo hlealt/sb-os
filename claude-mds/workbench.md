@@ -2,7 +2,7 @@
 sb-os managed file — installs to `{vault}/5-workbench/CLAUDE.md`.
 
 Content INSIDE `<!-- sb:start v=1 -->` ... `<!-- sb:end -->` is overwritten
-on `python install.py --upgrade`. Edit it in the sb-os source repo.
+on `python install.py`. Edit it in the sb-os source repo.
 
 Content OUTSIDE the markers is yours — list your nested repos, document
 per-repo conventions, or point agents to per-repo CLAUDE.mds.
@@ -72,4 +72,4 @@ Many real workspaces use BOTH: `1-projects/{project-name}/` for vault-side notes
 
 <!-- sb:end -->
 
-<!-- Add your own content below — anything outside the sb:start/sb:end markers survives --upgrade. -->
+<!-- Add your own content below — anything outside the sb:start/sb:end markers survives re-install. -->

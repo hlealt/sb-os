@@ -13,7 +13,7 @@ Provides the user-facing primitives shared across install modes:
 
 Stdlib only — uses ``sys``, ``shutil``, and ``dataclasses``. ANSI colors are
 emitted only when stdout is a TTY so the layer remains graceful in CI logs and
-``--dry-run`` redirected output.
+redirected output.
 
 The intent of this module is to keep the *interaction* concerns isolated from
 the *side-effect* concerns. Each prompt returns plain Python data; mode
@@ -103,10 +103,10 @@ def print_section(title: str) -> None:
 
 @dataclass(frozen=True)
 class Component:
-    """A single installable unit (skill, command, rule, dashboard, ...)."""
+    """A single installable unit (skill, command, rule, ...)."""
 
     name: str
-    kind: str  # "skill", "command", "rule", "claude-md", "dashboard", "folder"
+    kind: str  # "skill", "command", "rule", "claude-md", "folder"
     target: str  # vault-relative path where the component lands
     description: str = ""
 
@@ -178,6 +178,41 @@ def prompt_yes_no(question: str, default: bool = True) -> bool:
     return confirm(question, default=default)
 
 
+def find_manifest_upward(start: Path) -> Path | None:
+    """Walk from *start* toward the filesystem root looking for sb-os.json.
+
+    Returns the directory containing the manifest, or None if no ancestor
+    holds one. Used to auto-detect an existing install when the user runs
+    ``install.py`` from anywhere inside a vault.
+    """
+    # Local import to avoid a circular dependency: cli is imported by manifest.
+    from . import manifest
+
+    current = start.resolve()
+    for directory in [current] + list(current.parents):
+        if (directory / manifest.MANIFEST_FILENAME).is_file():
+            return directory
+    return None
+
+
+def prompt_target(default: str | None = None) -> Path:
+    """Interactive prompt for the target vault path.
+
+    Empty input returns ``default`` if provided, otherwise re-prompts.
+    Always returns an absolute, expanded ``Path``.
+    """
+    while True:
+        suffix = f" [{dim(default)}]" if default else ""
+        raw = _read_input(f"Target vault path{suffix}: ").strip()
+        if not raw:
+            if default:
+                raw = default
+            else:
+                print(yellow("  Path required."))
+                continue
+        return Path(raw).expanduser().resolve()
+
+
 def prompt_path(
     question: str,
     default: str,
@@ -225,6 +260,121 @@ def prompt_choice(
         if value in choices:
             return value
         print(yellow(f"  Choose one of: {', '.join(choices)}"))
+
+
+def prompt_modules(
+    modules: dict,
+    previously_selected: list[str] | None = None,
+) -> list[str]:
+    """Numbered opt-out / opt-in for modules.
+
+    Always-installed modules are listed but cannot be deselected. On re-install
+    the previous selection is the default; on first install all optional
+    modules default to selected. Atomic modules are toggled as a unit (the
+    customization pass below skips them).
+    """
+    print_section("Modules")
+    names = list(modules.keys())
+    always = {n for n, m in modules.items() if m.get("always_installed")}
+    if previously_selected is None:
+        defaults = set(names)
+    else:
+        defaults = set(previously_selected) | always
+
+    for i, name in enumerate(names, start=1):
+        mod = modules[name]
+        marks = []
+        if name in always:
+            marks.append("always")
+        if mod.get("atomic"):
+            marks.append("atomic")
+        tag = f" [{', '.join(marks)}]" if marks else ""
+        check = "x" if name in defaults else " "
+        desc = f"  {dim(mod.get('description', ''))}"
+        print(f"  {i:>2}. [{check}] {bold(name)}{tag}{desc}")
+
+    print(
+        dim(
+            "\nEnter indices to TOGGLE (comma-separated), or press Enter to "
+            "accept defaults shown above."
+        )
+    )
+    while True:
+        raw = _read_input("Toggle: ").strip().lower()
+        if not raw:
+            chosen = sorted(defaults, key=names.index)
+            return chosen
+        try:
+            indices = {int(tok) for tok in raw.replace(" ", "").split(",") if tok}
+        except ValueError:
+            print(yellow("  Please enter integers separated by commas."))
+            continue
+        if any(i < 1 or i > len(names) for i in indices):
+            print(yellow(f"  Indices must be between 1 and {len(names)}."))
+            continue
+        toggled = set(defaults)
+        for i in indices:
+            n = names[i - 1]
+            if n in always:
+                print(yellow(f"  '{n}' is always installed; cannot deselect."))
+                continue
+            if n in toggled:
+                toggled.remove(n)
+            else:
+                toggled.add(n)
+        return sorted(toggled, key=names.index)
+
+
+def prompt_module_components(
+    modules: dict,
+    selected_modules: list[str],
+    previously_excluded: list[str] | None = None,
+) -> list[str]:
+    """Per-module component opt-out for non-atomic modules. Returns the list
+    of excluded target paths (forward-slash normalized).
+    """
+    if not confirm("\nCustomize individual components?", default=False):
+        return list(previously_excluded or [])
+
+    excluded: set[str] = set(previously_excluded or [])
+
+    for name in selected_modules:
+        mod = modules[name]
+        if mod.get("atomic"):
+            print(dim(f"\n  {name} is atomic — components install as a unit, skipping."))
+            continue
+        all_entries: list[tuple[str, str, str]] = []  # (kind, name, target)
+        for entry in mod.get("skills", []):
+            all_entries.append(("skill", entry["name"], entry["target"].replace("\\", "/")))
+        for entry in mod.get("commands", []):
+            all_entries.append(("cmd", entry["name"], entry["target"].replace("\\", "/")))
+        for entry in mod.get("rules", []):
+            all_entries.append(("rule", entry["name"], entry["target"].replace("\\", "/")))
+        if not all_entries:
+            continue
+        print_section(f"Components in '{name}'")
+        for i, (kind, cname, target) in enumerate(all_entries, start=1):
+            check = " " if target in excluded else "x"
+            print(f"  {i:>2}. [{check}] {kind:<5} {cname}  {dim('->')} {target}")
+        print(dim("\n  Enter indices to TOGGLE, or Enter to keep as shown."))
+        raw = _read_input("Toggle: ").strip().lower()
+        if not raw:
+            continue
+        try:
+            indices = {int(tok) for tok in raw.replace(" ", "").split(",") if tok}
+        except ValueError:
+            print(yellow("  Skipped — invalid input."))
+            continue
+        for i in indices:
+            if i < 1 or i > len(all_entries):
+                continue
+            target = all_entries[i - 1][2]
+            if target in excluded:
+                excluded.remove(target)
+            else:
+                excluded.add(target)
+
+    return sorted(excluded)
 
 
 def prompt_components(
@@ -436,13 +586,17 @@ __all__ = [
     "cyan",
     "dim",
     "display_planned_actions",
+    "find_manifest_upward",
     "green",
     "print_plan",
     "print_section",
     "prompt_choice",
     "prompt_components",
+    "prompt_modules",
+    "prompt_module_components",
     "prompt_path",
     "prompt_sb_os_path",
+    "prompt_target",
     "prompt_user_context_root",
     "prompt_wiki_root",
     "prompt_yes_no",

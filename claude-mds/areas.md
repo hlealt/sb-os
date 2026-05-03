@@ -2,7 +2,7 @@
 sb-os managed file — installs to `{vault}/2-areas/CLAUDE.md`.
 
 Content INSIDE `<!-- sb:start v=1 -->` ... `<!-- sb:end -->` is overwritten
-on `python install.py --upgrade`. Edit it in the sb-os source repo.
+on `python install.py`. Edit it in the sb-os source repo.
 
 Content OUTSIDE the markers is yours — list your own areas, document
 per-area conventions, or extend the routing rules.
@@ -67,4 +67,4 @@ Every file inside `2-areas/{area-name}/` gets `{area-name}` as a tag (the direct
 
 <!-- sb:end -->
 
-<!-- Add your own content below — anything outside the sb:start/sb:end markers survives --upgrade. -->
+<!-- Add your own content below — anything outside the sb:start/sb:end markers survives re-install. -->

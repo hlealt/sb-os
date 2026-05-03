@@ -18,7 +18,7 @@ Read `3-resources/tools/sb-os/docs/wiki-schema.md` — Operations § "/sb-wiki-i
 | `{wiki_root}` | Read from `sb-os.json` at vault root → `wiki_root` field. Resolve via `admin/install/manifest.py` (`manifest.read(vault_root)`). Never hardcode. |
 | `{user_context_root}` | Read from `sb-os.json` → `user_context_root`. Never hardcode. |
 | `{wiki_root}/wiki/` | Wiki page tree (concepts, entities, topics, sources). |
-| `{wiki_root}/raw/` | Raw source tree. |
+| `{wiki_root}/raw/` | Raw source tree. **EXCLUDES `raw/assets/`** (user-maintained binary attachments — per `../_shared/wiki/folder-structure.md` "Asset Folder"). This workflow NEVER reads or writes `raw/assets/`. |
 | `{wiki_root}/log.md` | Single append-only event log. |
 
 ## Shared Data Files
@@ -91,11 +91,11 @@ Citations: emit inline `[^N]` markers at every claim derived from the raw, then 
 1. Extract candidate entity and concept mentions from the raw source AND from the agent-written `Substance` and `Notable quotes` sections of the source page produced in step 2.
 2. For each candidate, classify as `entity` or `concept` per `../_shared/wiki/page-types.md` discriminator rule.
 3. For each candidate, check existence under `{wiki_root}/wiki/concepts/{slug}.md` and `{wiki_root}/wiki/entities/{slug}.md`.
-4. Apply the stub-creation rule per `../_shared/wiki/stub-policy.md` — fires when the entity/concept name appears in source title OR in an extracted Notable Quote OR in a `Substance` bullet.
+4. Apply the stub-creation rule per `../_shared/wiki/stub-policy.md`. The source-title branch and the `Substance`-bullet branch are MECHANICAL — fire on match. The Notable-Quote branch is AGENT DISCRETION — apply the relevance heuristic in `../_shared/wiki/stub-policy.md` "Notable Quote Stub Creation" section before deciding to fire. A passing mention surfaced only in a Notable Quote does NOT compel a stub; demote to `candidate-mention` if the heuristic does not pass.
 5. Build three working sets for downstream steps:
    - `existing-pages` — pages that already exist (handled in step 4)
    - `stub-candidates` — new pages whose stub-creation rule fires (handled in step 5)
-   - `mention-only` — names that did NOT clear the stub rule (logged as `candidate-mention` in step 9)
+   - `mention-only` — names that did NOT clear the stub rule, including Notable-Quote-only mentions that the discretion heuristic demoted (logged as `candidate-mention` in step 9)
 
 ### Step 4 — Update existing entity/concept pages
 
@@ -146,7 +146,7 @@ If no triggers fire, leave the candidate set empty — Stage 1 omits the PROPOSE
 3. Add (or update) the row for the current source:
    - `File`: `[[<date>-<slug>.md>]]` matching the source page filename exactly.
    - `What it says`: 1-sentence factual summary (≤280 chars) derived from the source page's `Substance` section.
-   - `My take`: leave BLANK at this step. Populated only at Stage 2 (step 11) if the user fills the source page's `My take` section.
+   - `My take`: write `pending` at this step (NEVER blank — see `../_shared/wiki/index-formats.md` "`My take` Cell — Three States" section). Stage 2 (step 11) may overwrite this cell with a 1-sentence reflected preview, with `—` (em-dash) if the user finalizes empty, or leave it as `pending` if the user declines reflection.
 
 ### Step 9 — Append log entries
 
@@ -220,14 +220,17 @@ Handling:
 
 | User response | Behavior |
 |---------------|----------|
-| `n` to reflection prompt | Skip step 11 entirely. Source page user-half stays empty. Wiki sources index `My take` cell stays blank. End run. |
+| `n` to reflection prompt | Skip step 11 entirely. Source page user-half stays empty. Wiki sources index `My take` cell stays `pending` (set at step 8). End run. |
 | `skip` at any per-section prompt | Leave that section empty. Continue to next prompt. |
 | Any other text at a per-section prompt | Write the text under that section heading on the source page. |
 
-After all three section prompts:
+After all three section prompts, re-sync the wiki sources index `My take` cell per `../_shared/wiki/index-formats.md` "`My take` Cell — Three States" section. Source page is canonical; index is derived. **NEVER leave the cell blank.**
 
-1. If at least one user-half section now has content → re-sync the wiki sources index `My take` column for this source. Source page is canonical; index is derived. Format per `../_shared/wiki/index-formats.md` wiki sources index format (`My take` cell: 1-sentence opinion derived from the source page's `My take` section).
-2. If all three sections were skipped → leave the index `My take` cell blank. Lint will sync on the next pass when the user fills the source page in Obsidian.
+| Stage 2 outcome | Index `My take` cell value |
+|-----------------|----------------------------|
+| `My take` per-section prompt was filled with text | 1-sentence reflected preview derived from the source page's `My take` section (≤280 chars; truncate with ellipsis) |
+| `My take` per-section prompt was `skip`-ed AND at least one of `Open questions` or `Dive deeper` was filled (Stage 2 finalization rule — user reflected but chose to record no take) | `—` (em-dash, U+2014) |
+| All three per-section prompts were `skip`-ed (Stage 2 entered but no content captured) | `pending` (no change from step 8 — Stage 2 did not produce a finalization signal) |
 
 End of flow.
 

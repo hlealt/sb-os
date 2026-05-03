@@ -2,7 +2,7 @@
 sb-os managed file — vault root CLAUDE.md
 
 Content INSIDE the `<!-- sb:start v=1 -->` ... `<!-- sb:end -->` block is
-overwritten on every `python install.py --upgrade`. Edit it in the sb-os
+overwritten on every `python install.py`. Edit it in the sb-os
 source repo, not here.
 
 Content OUTSIDE the markers is yours — add personal routing rules, your
@@ -29,7 +29,7 @@ Personal Obsidian vault structured as a second brain using the PARA method, mana
 | Completed, abandoned, or under-review content | `4-archives/` |
 | External code repos / project workspaces | `5-workbench/{repo-name}/` |
 | Tasks for a specific project or area | `{project-or-area}-tasks.md` inside that folder |
-| Genuinely ambiguous / no clear vault home | Daily note (`0-periodic-notes/Daily/`) |
+| Genuinely ambiguous / no clear vault home | Daily note (`0-periodic-notes/daily/`) |
 
 Fits an existing file → append. Index files (`{dir-name}.md`) are NEVER content destinations. Unclear destination → ask the user before writing.
 
@@ -66,7 +66,7 @@ Every file gets its parent area tag (the directory name under `2-areas/`). Cross
 | `3-resources/` | Reference content (e.g., `tools/`, `knowledge-base/`) |
 | `4-archives/` | Holding zone before deletion — completed projects, abandoned files, content under review |
 | `5-workbench/` | Project workspaces with their own git repos and structures |
-| `.user/` | User-owned root: user-context folder + personal extensions (sb-os never writes inside after `--fresh`) |
+| `.user/` | User-owned root: user-context folder + personal extensions (sb-os creates this directory on the initial install and never writes inside it thereafter) |
 
 **Vault file** = any `.md` in PARA folders (`0-` through `4-`). **System component** = files under `.claude/` or the sb-os repo. `5-workbench/` contains independent repos — not vault files.
 
@@ -80,13 +80,13 @@ Loose `.md` files placed directly under any PARA folder (siblings of subfolders)
 
 ## Component Placement
 
-System component conventions ship with sb-os under the sb-os repo. Skills and commands installed into `.claude/` are ALWAYS thin loaders pointing to workflow files in the sb-os repo — never edit them in `.claude/` (overwritten on `--upgrade`).
+System component conventions ship with sb-os under the sb-os repo. Skills and commands installed into `.claude/` are ALWAYS thin loaders pointing to workflow files in the sb-os repo — never edit them in `.claude/` (overwritten on every install run).
 
-The sb-os repo path on this vault is recorded in `sb-os.json` at the vault root (`sb_os_path` field). Edit sb-os components in the source repo, then re-run `python install.py --upgrade`.
+The sb-os repo path on this vault is recorded in `sb-os.json` at the vault root (`sb_os_path` field). Edit sb-os components in the source repo, then re-run `python install.py`.
 
 <!-- sb:end -->
 
-<!-- Add your own content below — anything outside the sb:start/sb:end markers survives --upgrade. -->
+<!-- Add your own content below — anything outside the sb:start/sb:end markers survives re-install. -->
 
 ## Name Glossary
 

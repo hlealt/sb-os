@@ -20,11 +20,36 @@ Formats for the two index types maintained in the wiki. Ownership and maintenanc
 |--------|-----------|------|
 | `File` | Agent | During ingest (step 8) |
 | `What it says` | Agent | During ingest (step 8) — factual derivative of the source page's `Substance` section |
-| `My take` | Agent (derived from source page) | Populated at Stage 2 (step 11) if the user fills the source page; refreshed by lint on each pass |
+| `My take` | Agent (derived from source page) | Populated at Stage 2 (step 11) if the user fills the source page; refreshed by lint on each pass per the three-state rule below |
 
-- `My take` stays BLANK until the user fills the source page's `My take` section. The source page is canonical; the index entry is derived. The user NEVER writes the index manually.
+- The source page is canonical; the index entry is derived. The user NEVER writes the index manually.
 - Stale-by-7d acceptable for skim purpose. Agents may fall back to reading the source page if deeper signal is needed.
 - If the index file does not exist at ingest step 8, create it with the header row and add the first entry.
+
+### `My take` Cell — Three States (NEVER blank)
+
+The `My take` cell encodes one of three explicit states. **Blank is BANNED** as a state marker — every row carries one of the three values below. The two empty states (`pending` and `—`) have different downstream behaviors and different remediations from the user's standpoint; blank conflates them.
+
+| State | Token in cell | Meaning | Source page state |
+|-------|---------------|---------|-------------------|
+| Pre-reflect | `pending` | Stage 2 was skipped (or never reached) — source page's `My take` body is an empty shell awaiting user action | `My take` heading present, body empty |
+| Post-reflect-empty | `—` (em-dash, U+2014) | Stage 2 ran and the user explicitly recorded no take. Finalized. | `My take` heading present, body explicitly empty after a Stage 2 run |
+| Reflected | 1-sentence opinion derived from the source page's `My take` section (≤280 chars; truncate with ellipsis) | The user filled `My take` on the source page | `My take` heading present, body has substantive content |
+
+**Write rules.**
+
+| Trigger | Cell value to write |
+|---------|---------------------|
+| Ingest step 8 (initial row creation, before Stage 2) | `pending` |
+| Stage 2 (step 11) — user answered `n` to reflection prompt | `pending` (no change) |
+| Stage 2 (step 11) — user filled `My take` per-section prompt | 1-sentence reflected preview |
+| Stage 2 (step 11) — user answered `y` AND typed `skip` at `My take` per-section prompt while at least one OTHER user-half section was filled (Stage 2 finalization rule) | `—` |
+| Lint step 6 re-sync — source page's `My take` body has substantive content | 1-sentence reflected preview (overwrite prior cell value) |
+| Lint step 6 re-sync — source page's `My take` body empty AND cell currently reads `—` | Preserve `—` (final, do not age out) |
+| Lint step 6 re-sync — source page's `My take` body empty AND cell currently reads `pending` | Preserve `pending` |
+| Lint step 6 re-sync — source page's `My take` body empty AND cell currently reads anything else (legacy blank, stray content) | Write `pending` (default to action-pending; safer to over-prompt than to over-finalize) |
+
+**Staleness behavior.** The 7-day staleness rule applies to `pending` rows ONLY. `—` rows are final and do NOT age out. Reflected rows are refreshed every lint pass.
 
 ## Raw Index
 

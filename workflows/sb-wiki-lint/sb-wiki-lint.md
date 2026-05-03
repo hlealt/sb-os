@@ -54,6 +54,8 @@ This workflow is read-mostly by contract. Auto-applied writes are SCOPED to inde
 
 NEVER edit page bodies, frontmatter (other than `last-touched` on indexes), or any user-authored content from this workflow. NEVER delete pages. NEVER modify candidate-topic, candidate-mention, concept-created, entity-created, topic-created, ingest, query, or prior lint entries in `log.md`.
 
+**`raw/assets/` is OUT OF SCOPE for this workflow.** No reads, no writes, no walks, no index creation, no orphan-detection participation, no filename validation. The folder is user-maintained via Obsidian's "Download attachments for current file" command (per `../_shared/wiki/folder-structure.md` "Asset Folder" and schema § "Asset folder"). Treat it as if it were not present in the tree. Same exclusion applies to any pre-existing legacy asset folder nested under a specific origin (e.g., `raw/mails/assets/`) — user-owned, untouched.
+
 ## Flow
 
 No mid-flow user input. All 9 steps run unattended. Output is a single LINT REPORT presented at step 9.
@@ -67,10 +69,20 @@ No mid-flow user input. All 9 steps run unattended. Output is a single LINT REPO
 
 ### Step 2 — Walk all wiki pages; detect orphans
 
-1. Walk every wiki page per `../_shared/wiki/folder-structure.md`. Skip leaf indexes.
-2. Build a set of inbound wikilinks per page: scan ALL wiki page bodies, frontmatter `related:` lists, and `Sources` section footnote definitions for `[[<target>.md]]` references.
-3. Mark a page as `orphan` if zero inbound wikilinks point to its filename.
+**Orphan-detection scope is STRICT.** Inbound-link computation considers ONLY synthesis pages — not log entries, not source pages, not raw indexes, not leaf indexes. The orphan signal exists to surface entities/concepts/topics the wiki has noticed but is not actively cross-linking from real synthesis.
+
+| Scope | Files |
+|-------|-------|
+| **Pages eligible to BE orphans** | `wiki/concepts/*.md`, `wiki/entities/*.md`, `wiki/topics/*.md` (excluding leaf indexes `concepts.md`, `entities.md`, `topics.md`) |
+| **Files in scope as INBOUND-LINK SOURCES** | The same set above — `wiki/concepts/*.md`, `wiki/entities/*.md`, `wiki/topics/*.md` (excluding leaf indexes) |
+| **Files OUT OF SCOPE as inbound-link sources** | `log.md`, `wiki/sources/{origin}/{origin}.md` indexes, `wiki/sources/{origin}/<date>-<slug>.md` source pages, raw source pages under `raw/`, `raw/{origin}/{origin}.md` raw indexes, all leaf indexes (`concepts.md`, `entities.md`, `topics.md`, `studies.md`), and **everything inside `raw/assets/`** (binary attachments — image embeds inside source/wiki pages do NOT count as inbound links toward orphan status) |
+
+1. Build the eligible-orphan set: every concept/entity/topic page (excluding leaf indexes).
+2. Build the inbound-link map: scan ONLY concept/entity/topic page bodies, frontmatter `related:` lists, and `Sources` section footnote definitions for `[[<target>.md]]` references. Do NOT scan source pages, log entries, raw files, or any leaf index.
+3. Mark a page as `orphan` if zero in-scope inbound wikilinks point to its filename. Wikilinks from out-of-scope files (log mentions, source-page footnote definitions, raw indexes) do NOT count toward inbound — they are evidence of mention, not synthesis.
 4. Build `orphans` set. Capture page filenames for the LINT REPORT.
+
+**Rationale.** Forcing inbound links to come from real wiki content (concept / entity / topic pages) keeps the orphan bar high and preserves the signal's diagnostic value. A stub created from a Notable Quote will, by design, be flagged as an orphan on the next lint run if no concept/entity/topic page links to it — this is correct behavior, not a false positive (per schema § "Orphan-detection scope (STRICT)").
 
 ### Step 3 — Walk wiki concept/entity pages; detect unresolved Disputed callouts
 
@@ -92,8 +104,9 @@ No mid-flow user input. All 9 steps run unattended. Output is a single LINT REPO
 
 1. Walk every wiki page per `../_shared/wiki/folder-structure.md`. Skip leaf indexes.
 2. Extract all `[[<target>.md]]` wikilinks from each page body, frontmatter `related:` list, and footnote definitions per `../_shared/wiki/naming-convention.md`.
-3. For each wikilink, verify the target file exists. Resolution rule: `<target>.md` must match an actual filename in `{wiki_root}/wiki/concepts/`, `entities/`, `topics/`, `sources/{*}/`, or `{wiki_root}/raw/{*}/`. Filename match is exact — wikilinks preserve the date format the target file uses (per `../_shared/wiki/naming-convention.md`).
-4. Build `broken-wikilinks` set: source-page filename + missing target for the LINT REPORT.
+3. For each wikilink, verify the target file exists. Resolution rule: `<target>.md` must match an actual filename in `{wiki_root}/wiki/concepts/`, `entities/`, `topics/`, `sources/{*}/`, or `{wiki_root}/raw/{*}/` — EXCLUDING `raw/assets/` (assets are binary attachments, not wiki targets, per `../_shared/wiki/folder-structure.md` "Asset Folder"). Filename match is exact — wikilinks preserve the date format the target file uses (per `../_shared/wiki/naming-convention.md`).
+4. Image-embed wikilinks (`![[<target>.<ext>]]` where `<ext>` is `png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`, `pdf`, or any non-`md` extension) are SKIPPED at this step. Obsidian resolves embeds via global attachment search; they target `raw/assets/` (or pre-existing exception folders), which lint does not validate.
+5. Build `broken-wikilinks` set: source-page filename + missing target for the LINT REPORT.
 
 ### Step 6 — Re-sync wiki sources `My take` column; renumber footnotes; remove stale footnote definitions
 
@@ -101,9 +114,19 @@ For each `{wiki_root}/wiki/sources/{origin}/` directory (including `studies/`):
 
 1. Read `{origin}.md` (or `studies.md`). Header format per `../_shared/wiki/index-formats.md` "Wiki Sources Index" section: `| File | What it says | My take |`.
 2. For each row, locate the source page at `{wiki_root}/wiki/sources/{origin}/{filename}`. Read the page's `My take` section.
-3. If the source page's `My take` section has content, derive a 1-sentence opinion (≤280 chars; truncate with ellipsis) per `../_shared/wiki/index-formats.md` ownership rules and write it to the row's `My take` cell (overwriting the prior derived value). If the source page's `My take` section is empty, leave the row's `My take` cell blank.
+3. Apply the three-state re-sync rule per `../_shared/wiki/index-formats.md` "`My take` Cell — Three States" section. **NEVER leave the cell blank** — every row carries `pending`, `—`, or a 1-sentence reflected preview.
+
+   | Source page's `My take` body | Current cell value | Action |
+   |------------------------------|--------------------|--------|
+   | Has substantive content | Any | Write 1-sentence reflected preview (≤280 chars; truncate with ellipsis), overwriting prior cell value |
+   | Empty | `—` | Preserve `—` (final, do NOT age out) |
+   | Empty | `pending` | Preserve `pending` |
+   | Empty | Anything else (legacy blank, stray content) | Write `pending` (default to action-pending; safer to over-prompt than to over-finalize) |
+
 4. The source page is canonical. NEVER modify the source page's `My take` content.
 5. Capture `sources-resynced` count for the LINT REPORT.
+
+**Staleness behavior.** The 7-day staleness rule for `My take` re-sync applies to `pending` rows ONLY. `—` rows are final and do NOT age out. Reflected rows are refreshed every lint pass.
 
 For each wiki page (concepts, entities, topics, source pages):
 
@@ -115,7 +138,7 @@ For each wiki page (concepts, entities, topics, source pages):
 
 ### Step 7 — Verify and create raw indexes; verify wiki leaf indexes
 
-For each `{wiki_root}/raw/{origin}/` directory (including `studies/`):
+For each `{wiki_root}/raw/{origin}/` directory (including `studies/`), **EXCLUDING `raw/assets/`** (per `../_shared/wiki/folder-structure.md` "Asset Folder" — `raw/assets/` is NOT a raw origin and MUST NOT receive an `assets.md` leaf index, MUST NOT be walked as part of raw-origin maintenance, and MUST NOT have its filenames validated):
 
 1. Verify `{origin}.md` (or `studies.md`) exists. If missing, CREATE it with the standard raw index header per `../_shared/wiki/index-formats.md` "Raw Index" section: `| File | Title | Date | Wiki |`.
 2. For each raw file in the directory, ensure a row exists in the index. If missing, add the row with `Wiki = No` (default). If a row already exists, preserve its `Wiki` value (`Yes`, `Partial`, or `No`).

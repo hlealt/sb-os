@@ -17,13 +17,12 @@ The canonical source is the sb-os repo. Its path in the target vault is recorded
 | Workflows | `{sb_os_path}/workflows/` | *(not installed — referenced via loaders)* |
 | Templates | `{sb_os_path}/templates/` | `.user/templates/` (installed copies) |
 | Managed CLAUDE.mds | `{sb_os_path}/claude-mds/` | Marker-block content in target vault CLAUDE.mds |
-| Dashboards | `{sb_os_path}/dashboards/` | Marker-block content in target vault dashboard files (e.g., `home.md`) |
 
 ## Why
 
 Skills, commands, rules, and subagents are thin loaders or copies in `.claude/` that point back to the sb-os source at `{sb_os_path}`. Edits in `.claude/` are lost on the next re-install. The sb-os source is the only durable location.
 
-For managed CLAUDE.mds and dashboards: content INSIDE marker blocks (`<!-- sb:start v=1 -->...<!-- sb:end -->`) is overwritten on `--upgrade`; content OUTSIDE markers is preserved.
+For managed CLAUDE.mds: content INSIDE marker blocks (`<!-- sb:start v=1 -->...<!-- sb:end -->`) is overwritten on every install run; content OUTSIDE markers is preserved.
 
 ## After Editing
 
@@ -32,5 +31,5 @@ For content changes (workflows, skill bodies referenced by loaders, templates), 
 When a skill, command, rule, or subagent is created, deleted, or renamed, update `admin/install/module-manifest.json` to reflect the change, then re-run the installer:
 
 ```bash
-python install.py --upgrade
+python install.py
 ```
