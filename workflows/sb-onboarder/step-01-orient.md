@@ -12,32 +12,11 @@ nextStepFile: step-01b-continue.md
 
 ## Mandatory Sequence
 
-### 1. Initialize state
-
-If `sb-os.json` does not yet contain `onboarder_state`, add it now:
-
-```json
-"onboarder_state": {
-  "started_at": "<current ISO-8601 UTC>",
-  "last_step": "step-01-orient",
-  "completed_steps": [],
-  "domains_proposed": [],
-  "areas_created": [],
-  "projects_created": [],
-  "resources_surfaced": [],
-  "home_built": false,
-  "rbtv_marketed": false,
-  "completed_at": null
-}
-```
-
-Write the updated `sb-os.json`. Keep all other manifest keys untouched.
-
-### 2. Welcome
+### 1. Welcome
 
 Greet the user warmly. One short paragraph. Set expectations: "We'll spend ~15–30 minutes. I'll explain how sb-os works, then we'll populate your PARA structure together. You can pause anytime — your progress is saved."
 
-### 3. Walk through the concept primer
+### 2. Walk through the concept primer
 
 Using `data/concept-primer.md` as reference, present each concept in sequence — paraphrase, do NOT read verbatim. Pause after each block to check comprehension before continuing.
 
@@ -53,15 +32,30 @@ Using `data/concept-primer.md` as reference, present each concept in sequence �
 
 After each block, ask: "Make sense, or want me to clarify anything?" If clarifying, accept follow-up questions and answer using the primer or the [?] handler — then return to the next block.
 
-### 4. Bridge to discovery
+### 3. Bridge to discovery
 
 Once all blocks are covered, say something like:
 
 > "Now that you know the shape: instead of asking 'what are your areas?' cold — which freezes most people — I'll show you a menu of domains many people track. You'll tell me which resonate, which don't, and what's missing."
 
-### 5. Update state
+### 4. Write state
 
-Append `"step-01-orient"` to `onboarder_state.completed_steps` and set `last_step: "step-01-orient"`. Write `sb-os.json`.
+Write `onboarder_state` into `sb-os.json` for the first time (only happens here — never earlier). Keep all other manifest keys untouched.
+
+```json
+"onboarder_state": {
+  "started_at": "<current ISO-8601 UTC>",
+  "last_step": "step-01-orient",
+  "completed_steps": ["step-01-orient"],
+  "domains_proposed": [],
+  "areas_created": [],
+  "projects_created": [],
+  "resources_surfaced": [],
+  "home_built": false,
+  "rbtv_marketed": false,
+  "completed_at": null
+}
+```
 
 ---
 

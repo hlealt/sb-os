@@ -36,7 +36,7 @@ State persists in `sb-os.json` at the vault root, under `onboarder_state`. Schem
 }
 ```
 
-Initialize the key on the first run of `step-01-orient.md`. Update it after every completed step. The installer preserves unknown manifest keys across upgrade runs, so this state survives re-installs without code changes.
+Initialize the key at the END of `step-01-orient.md` (after the user completes the concept walk-through — never before). Update it after every completed step. The installer preserves unknown manifest keys across upgrade runs, so this state survives re-installs without code changes.
 
 ## Help menu — `[?] Ask`
 
