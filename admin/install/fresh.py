@@ -23,7 +23,9 @@ Pure stdlib (pathlib, shutil).
 """
 from __future__ import annotations
 
+import os
 import shutil
+import stat
 from pathlib import Path
 from typing import Iterable
 
@@ -162,6 +164,17 @@ def _copy_rule(
 # Auto-relocate
 # ---------------------------------------------------------------------------
 
+def _rmtree(path: Path) -> None:
+    """Remove a directory tree, handling Windows read-only files (e.g. .git)."""
+    def _on_error(func, fpath, excinfo):
+        # Windows marks some .git object files read-only; chmod and retry.
+        try:
+            os.chmod(fpath, stat.S_IWRITE)
+            func(fpath)
+        except Exception:
+            raise excinfo[1]
+    shutil.rmtree(path, onerror=_on_error)
+
 def _canonical_clone_path(target_root: Path) -> Path:
     return (target_root / CANONICAL_SB_OS_REL).resolve()
 
@@ -225,7 +238,7 @@ def _relocate_sb_os_clone(sb_os_root: Path, target_root: Path) -> None:
         removal_failed = None  # cannot rmtree src — it is the vault root
     else:
         try:
-            shutil.rmtree(src)
+            _rmtree(src)
         except OSError as exc:
             removal_failed = exc
 
@@ -252,7 +265,7 @@ def _relocate_sb_os_clone(sb_os_root: Path, target_root: Path) -> None:
 # Validation
 # ---------------------------------------------------------------------------
 
-def _validate_target(target_root: Path) -> bool:
+def _validate_target(target_root: Path, sb_os_root: Path | None = None) -> bool:
     """Validate the target dir is empty OR confirm with the user."""
     if not target_root.exists():
         target_root.mkdir(parents=True, exist_ok=True)
@@ -260,7 +273,13 @@ def _validate_target(target_root: Path) -> bool:
     if not target_root.is_dir():
         print(cli.red(f"Target {target_root} exists and is not a directory."))
         return False
-    entries = [p for p in target_root.iterdir() if p.name not in {".git"}]
+    # Exclude the sb-os clone itself — it is the installer's own source, not
+    # pre-existing user content, and will be relocated during the install.
+    exclude: set[Path] = {sb_os_root.resolve()} if sb_os_root else set()
+    entries = [
+        p for p in target_root.iterdir()
+        if p.name not in {".git"} and p.resolve() not in exclude
+    ]
     if not entries:
         return True
     print(cli.yellow(
@@ -383,7 +402,7 @@ def run_fresh(
     sb_os_root = Path(sb_os_root).resolve()
     sb_os_loader_path = cli.DEFAULT_SB_OS_PATH
 
-    if not _validate_target(target_root):
+    if not _validate_target(target_root, sb_os_root):
         return 1
 
     all_modules = loaders.manifest_modules()

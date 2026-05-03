@@ -51,15 +51,18 @@ def _validate_runtime_env(repo_root: Path) -> int:
     return 0
 
 
-def _resolve_target(cli_mod, manifest_mod) -> tuple[Path, bool]:
+def _resolve_target(cli_mod, manifest_mod, repo_root: Path) -> tuple[Path, bool]:
     found = cli_mod.find_manifest_upward(Path.cwd())
     if found is not None:
         print(f"  Found existing sb-os install at: {found}")
         if cli_mod.confirm("  Use this as the target?", default=True):
             return found, True
-        target = cli_mod.prompt_target(default=str(Path.cwd()))
-    else:
-        target = cli_mod.prompt_target(default=str(Path.cwd()))
+
+    # When the user runs install.py from inside the sb-os repo directory, cwd
+    # IS the repo — not a sensible vault root.  Default to its parent instead.
+    cwd = Path.cwd()
+    default_target = str(repo_root.parent if cwd.resolve() == repo_root else cwd)
+    target = cli_mod.prompt_target(default=default_target)
 
     has_manifest = (target / manifest_mod.MANIFEST_FILENAME).is_file()
     return target, has_manifest
@@ -130,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
         target = args.target.expanduser().resolve()
         has_manifest = (target / manifest_mod.MANIFEST_FILENAME).is_file()
     else:
-        target, has_manifest = _resolve_target(cli_mod, manifest_mod)
+        target, has_manifest = _resolve_target(cli_mod, manifest_mod, repo_root)
 
     selected, excluded = _resolve_selection(
         cli_mod, loaders_mod, manifest_mod, target, args
