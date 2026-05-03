@@ -195,22 +195,49 @@ def _relocate_sb_os_clone(sb_os_root: Path, target_root: Path) -> None:
         return
 
     canonical.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(
-        src,
-        canonical,
-        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"),
-    )
-    removal_failed: Exception | None = None
+
+    # Guard: if canonical is inside src (e.g. the user ran the installer from
+    # the vault root that IS the sb-os clone), copytree would recurse
+    # infinitely into the destination it is creating.  Detect this, exclude
+    # the destination subtree from the copy, and skip the rmtree — deleting
+    # src would destroy the vault root.
+    src_contains_canonical = False
     try:
-        shutil.rmtree(src)
-    except OSError as exc:
-        removal_failed = exc
+        rel = canonical.relative_to(src)
+        src_contains_canonical = True
+        _skip_top = rel.parts[0]
+        _base_ignore = shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo")
+        def _ignore(directory: str, contents: list[str],
+                    _skip: str = _skip_top,
+                    _base: "Callable[[str, list[str]], set[str]]" = _base_ignore
+                    ) -> set[str]:
+            ignored = _base(directory, contents)
+            if Path(directory).resolve() == src:
+                ignored = ignored | {_skip}
+            return ignored
+        ignore_fn = _ignore
+    except ValueError:
+        ignore_fn = shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo")
+
+    shutil.copytree(src, canonical, ignore=ignore_fn)
+    removal_failed: Exception | None = None
+    if src_contains_canonical:
+        removal_failed = None  # cannot rmtree src — it is the vault root
+    else:
+        try:
+            shutil.rmtree(src)
+        except OSError as exc:
+            removal_failed = exc
 
     print()
     print(cli.green("  Relocated sb-os clone:"))
     print(f"    {src}")
     print(f"    -> {canonical}")
-    if removal_failed is not None:
+    if src_contains_canonical:
+        print(cli.dim(
+            "  Original not removed: it is a parent of the canonical path."
+        ))
+    elif removal_failed is not None:
         print(cli.yellow(
             f"  Could not remove the original ({removal_failed}). Delete "
             f"{src} manually when convenient."
