@@ -143,6 +143,24 @@ def manifest_rules(
     )
 
 
+def manifest_templates(
+    modules: dict[str, dict[str, Any]] | None = None,
+    excluded: set[str] | None = None,
+) -> tuple[tuple[str, str], ...]:
+    """Return ``((source, target), ...)`` for every shippable template.
+
+    Templates are copied verbatim from the sb-os repo into the target vault
+    using install-if-missing semantics — they bootstrap on fresh, and on
+    upgrade only when the target does not already exist. User customizations
+    are never overwritten. See ``install_template_if_missing``.
+    """
+    mods = modules if modules is not None else manifest_modules()
+    return tuple(
+        (entry["source"], entry["target"])
+        for entry in _flatten(mods, "templates", excluded)
+    )
+
+
 def _normalize_sb_os_path(sb_os_path: str | Path) -> str:
     """Return a forward-slash path without leading/trailing slash.
 
@@ -223,6 +241,35 @@ def install_command_loader(
         encoding="utf-8",
     )
     return target
+
+
+def install_template_if_missing(
+    target_root: Path | str,
+    sb_os_root: Path | str,
+    source_rel: str,
+    target_rel: str,
+) -> Path | None:
+    """Copy a template from sb-os source to the target vault if absent.
+
+    Templates are user-customizable defaults (e.g., periodic-note templates).
+    They are bootstrapped on fresh install and, on upgrade, copied only when
+    the target file does not already exist. Existing files are NEVER
+    overwritten — user edits survive every install run.
+
+    Returns the written path on copy, or ``None`` when the target already
+    exists (no-op).
+    """
+    src = Path(sb_os_root) / source_rel
+    if not src.is_file():
+        raise FileNotFoundError(
+            f"sb-os template source missing: {src}. Re-clone the sb-os repo."
+        )
+    dst = Path(target_root) / target_rel
+    if dst.exists():
+        return None
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+    return dst
 
 
 def substitute_rule_placeholders(text: str, sb_os_path: str | Path) -> str:

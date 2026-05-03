@@ -160,18 +160,26 @@ def main(argv: list[str] | None = None) -> int:
         if not cli_mod.confirm("\nProceed with the actual install now?", default=True):
             cli_mod.abort("User declined.")
             return 1
-        return fresh_mod.run_fresh(
+        code = fresh_mod.run_fresh(
             target, repo_root,
             skip_confirm=True,
             selected_modules=selected,
             excluded_components=excluded,
         )
-    return fresh_mod.run_fresh(
-        target, repo_root,
-        skip_confirm=args.non_interactive,
-        selected_modules=selected,
-        excluded_components=excluded,
-    )
+    else:
+        code = fresh_mod.run_fresh(
+            target, repo_root,
+            skip_confirm=args.non_interactive,
+            selected_modules=selected,
+            excluded_components=excluded,
+        )
+
+    if code == 0:
+        print()
+        print(cli_mod.bold("Your vault is ready."))
+        print("Open it in Claude Code and run  /sb-onboarder  to set up your PARA structure.\n")
+
+    return code
 
 
 if __name__ == "__main__":

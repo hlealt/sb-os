@@ -15,7 +15,7 @@ The canonical source is the sb-os repo. Its path in the target vault is recorded
 | Skills (`sb-*/SKILL.md` and refs) | `{sb_os_path}/skills/<name>/` | `.claude/skills/sb-*/` |
 | Commands (`sb-*.md`) | `{sb_os_path}/commands/<name>.md` | `.claude/commands/sb-*.md` |
 | Workflows | `{sb_os_path}/workflows/` | *(not installed — referenced via loaders)* |
-| Templates | `{sb_os_path}/templates/` | `.user/templates/` (installed copies) |
+| Templates | `{sb_os_path}/templates/` | `.user/config/templates/` (installed copies) |
 | Managed CLAUDE.mds | `{sb_os_path}/claude-mds/` | Marker-block content in target vault CLAUDE.mds |
 
 ## Why

@@ -28,6 +28,8 @@ Using `data/concept-primer.md` as reference, present each concept in sequence �
 | Workbench | Short — "external code repos live here, not vault content" |
 | Tags | Parent area tag + cross-cutting tags |
 | Wiki | Light — name the surface and the four commands; point to docs for depth |
+| Life planner | The core review workflow — one command, three tiers (week/month/quarter), close + plan in each session. Run on cadence to keep Home oriented. Weekly tier inventories dailies via sub-agents, routes every item, reads calendar/mail/transcripts via injected scripts/MCP, writes next week's day-by-day plan to vault with triple-check. Heavily personalizable via context injection |
+| Context injection | The core extension point — per-step YAML that injects user data into workflows without editing them. Cover what it injects (file/script/url/text/mcp) and how to add one |
 | Home (preview) | Optional dashboard, built later in step 06 if you want |
 
 After each block, ask: "Make sense, or want me to clarify anything?" If clarifying, accept follow-up questions and answer using the primer or the [?] handler — then return to the next block.

@@ -17,7 +17,7 @@ The agent-notes section contains the challenges and patterns the Block A agent s
 
 ### 1. Vault scan (silent — do NOT present to the user yet)
 
-Search for ALL `- [ ]` tasks in the vault (recursive grep). Default exclusions: `.user/templates/`, weekly notes, session logs. If context YAML provides `vault-scan.exclude-paths`, extend the default list with the configured patterns.
+Search for ALL `- [ ]` tasks in the vault (recursive grep). Default exclusions: `.user/config/templates/`, weekly notes, session logs. If context YAML provides `vault-scan.exclude-paths`, extend the default list with the configured patterns.
 
 Categorize internally:
 - **With date in the week being planned** — already scheduled

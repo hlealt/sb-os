@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "description": "sb-os component manifest. Declarative source of truth for every shippable component the installer renders into a target vault. Edit this file to add, remove, or rename a component; loaders.py reads from here. Components are grouped into modules; users select which modules to install. The 'wiki' module is atomic — selecting it installs all of its components AND creates the wiki folder + wiki CLAUDE.md; deselecting it skips all of them.",
+  "description": "sb-os component manifest. Declarative source of truth for every shippable component the installer renders into a target vault. Edit this file to add, remove, or rename a component; loaders.py reads from here. Components are grouped into modules; users select which modules to install. The 'wiki' module is atomic — selecting it installs all of its components AND creates the wiki folder + wiki CLAUDE.md; deselecting it skips all of them. Component kinds: skills/commands/rules are rewritten on every install (loader and rule-copy semantics). Templates use install-if-missing semantics — they are copied on fresh install, AND on upgrade only when the target file does not exist. Templates are never overwritten so user customizations are preserved across upgrades.",
   "modules": {
     "core": {
       "description": "Core vault operations and behavioral rules. Always installed.",
@@ -69,6 +69,32 @@
           "target": ".claude/rules/sb-source-of-truth.md",
           "mode": "copy",
           "description": "Warns that sb-os components in .claude/ are overwritten on re-install."
+        }
+      ],
+      "templates": [
+        {
+          "name": "periodic-daily",
+          "source": "templates/periodic-notes/Daily.md",
+          "target": ".user/config/templates/periodic-notes/Daily.md",
+          "description": "Obsidian daily note template (install-if-missing)."
+        },
+        {
+          "name": "periodic-weekly",
+          "source": "templates/periodic-notes/Weekly.md",
+          "target": ".user/config/templates/periodic-notes/Weekly.md",
+          "description": "Obsidian weekly note template (install-if-missing)."
+        },
+        {
+          "name": "periodic-monthly",
+          "source": "templates/periodic-notes/Monthly.md",
+          "target": ".user/config/templates/periodic-notes/Monthly.md",
+          "description": "Obsidian monthly note template (install-if-missing)."
+        },
+        {
+          "name": "periodic-quarterly",
+          "source": "templates/periodic-notes/Quarterly.md",
+          "target": ".user/config/templates/periodic-notes/Quarterly.md",
+          "description": "Obsidian quarterly note template (install-if-missing)."
         }
       ]
     },

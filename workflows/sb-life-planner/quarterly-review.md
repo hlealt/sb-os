@@ -8,7 +8,7 @@ Close the ending quarter and set strategic intentions for the next one. Produces
 
 Default quarterly note path: `0-periodic-notes/quarterly/{quarter}.md`. If context YAML provides `path.quarterly.note`, use that value. `{quarter}` expands to `YYYY-QN`.
 
-Default template path: `.user/templates/periodic-notes/Quarterly.md`. If context YAML provides `path.quarterly.template`, use that value. If neither the configured path nor the default exists, skip the template and create the note from scratch.
+Default template path: `.user/config/templates/periodic-notes/Quarterly.md`. If context YAML provides `path.quarterly.template`, use that value. If neither the configured path nor the default exists, skip the template and create the note from scratch.
 
 ## Output taxonomy
 

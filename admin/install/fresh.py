@@ -11,7 +11,10 @@ Bootstraps a clean vault per architecture §3:
   ``{target}/3-resources/tools/sb-os/`` as the final step.
 
 NEVER writes ``.claude/settings.json`` (architecture §8 + §10 item 14).
-NEVER writes inside ``.user/`` (architecture §3 + Decisions Log #26).
+NEVER writes inside ``.user/`` except for the single templates carve-out
+documented in architecture §3 — manifest-declared templates are installed
+under ``.user/config/templates/`` using install-if-missing semantics so
+user edits are never overwritten.
 NEVER ships ``_system/``.
 
 Public API:
@@ -44,6 +47,7 @@ from . import cli, loaders, manifest, markers
 SKILLS: tuple[tuple[str, str], ...] = loaders.manifest_skills()
 COMMANDS: tuple[str, ...] = loaders.manifest_commands()
 RULES: tuple[str, ...] = loaders.manifest_rules()
+TEMPLATES: tuple[tuple[str, str], ...] = loaders.manifest_templates()
 
 WIKI_MODULE_NAME = "wiki"
 
@@ -339,12 +343,15 @@ def build_fresh_plan(
     skills = loaders.manifest_skills(modules_scoped, excluded)
     commands = loaders.manifest_commands(modules_scoped, excluded)
     rules = loaders.manifest_rules(modules_scoped, excluded)
+    templates = loaders.manifest_templates(modules_scoped, excluded)
     for name, _desc in skills:
         _add_loader_action(plan, f".claude/skills/{name}/SKILL.md")
     for name in commands:
         _add_loader_action(plan, f".claude/commands/{name}.md")
     for rule in rules:
         _add_file_action(plan, f".claude/rules/{rule}", detail="rule (verbatim copy)")
+    for _src, target_rel in templates:
+        _add_file_action(plan, target_rel, detail="template (install-if-missing)")
 
     # Manifest
     plan.add(cli.Action(
@@ -516,6 +523,19 @@ def _execute_fresh(
     for rule in loaders.manifest_rules(modules_scoped, excluded_components):
         _copy_rule(sb_os_root, target_root, rule, sb_os_loader_path, created)
 
+    # Templates — install-if-missing (preserves user customizations across re-runs)
+    for source_rel, target_rel in loaders.manifest_templates(
+        modules_scoped, excluded_components
+    ):
+        written = loaders.install_template_if_missing(
+            target_root=target_root,
+            sb_os_root=sb_os_root,
+            source_rel=source_rel,
+            target_rel=target_rel,
+        )
+        if written is not None and target_rel not in created:
+            created.append(target_rel)
+
 
 __all__ = [
     "run_fresh",
@@ -524,6 +544,7 @@ __all__ = [
     "SKILLS",
     "COMMANDS",
     "RULES",
+    "TEMPLATES",
     "CLAUDE_MD_MAP",
     "WIKI_CLAUDE_MD_SOURCE",
     "PARA_FOLDERS",

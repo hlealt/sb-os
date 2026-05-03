@@ -320,6 +320,12 @@ def build_upgrade_plan(
             target=f".claude/rules/{rule}",
             detail="rewrite (verbatim from sb-os/rules/)",
         ))
+    for _src, target_rel in loaders.manifest_templates(modules_scoped, excl):
+        plan.add(cli.Action(
+            category="file",
+            target=target_rel,
+            detail="template (install-if-missing — skipped when target exists)",
+        ))
     plan.add(cli.Action(
         category="manifest",
         target=manifest.MANIFEST_FILENAME,
@@ -378,6 +384,17 @@ def _execute_upgrade(
             sb_os_root=sb_os_root,
             rule_name=rule,
             sb_os_path=sb_os_loader_path,
+        )
+
+    # Templates — install-if-missing (preserve user customizations)
+    for source_rel, target_rel in loaders.manifest_templates(
+        modules_scoped, excluded_components
+    ):
+        loaders.install_template_if_missing(
+            target_root=target_root,
+            sb_os_root=sb_os_root,
+            source_rel=source_rel,
+            target_rel=target_rel,
         )
 
 

@@ -7,7 +7,7 @@ A "workflow root" is any directory that contains workflow definitions. Two roots
 | Root | Holds |
 |------|-------|
 | sb-os repo workflows directory (`{sb_os_path}/workflows/`) | Shippable sb-os workflows installed via the sb-os installer |
-| Personal workflows directory (e.g., `.user/_workflows/`) | User-owned workflows that ship with the vault but not with sb-os (accountant, mentor, sb-life-planner, therapy-summarizer, etc.) |
+| Personal workflows directory (e.g., `.user/workflows/`) | User-owned workflows that ship with the vault but not with sb-os (accountant, mentor, sb-life-planner, therapy-summarizer, etc.) |
 
 This rule does NOT apply when merely reading a workflow file for reference, exploration, or analysis.
 
@@ -23,11 +23,11 @@ The resolution treats both workflow roots identically: only the path relative to
 
 ### Examples
 
-| Workflow file | Path relative to root | Resolved YAML (assuming `user_context_root: .user/_context/`) |
+| Workflow file | Path relative to root | Resolved YAML (assuming `user_context_root: .user/context/`) |
 |---------------|----------------------|---------------------------------------------------------------|
-| `{sb_os_path}/workflows/sb-tutor/sb-tutor.md` | `sb-tutor/sb-tutor.md` | `.user/_context/sb-tutor/sb-tutor.yaml` |
-| `.user/_workflows/accountant/accountant.md` | `accountant/accountant.md` | `.user/_context/accountant/accountant.yaml` |
-| `.user/_workflows/sb-life-planner/weekly-review/step-04-calendar.md` | `sb-life-planner/weekly-review/step-04-calendar.md` | `.user/_context/sb-life-planner/weekly-review/step-04-calendar.yaml` |
+| `{sb_os_path}/workflows/sb-tutor/sb-tutor.md` | `sb-tutor/sb-tutor.md` | `.user/context/sb-tutor/sb-tutor.yaml` |
+| `.user/workflows/accountant/accountant.md` | `accountant/accountant.md` | `.user/context/accountant/accountant.yaml` |
+| `.user/workflows/sb-life-planner/weekly-review/step-04-calendar.md` | `sb-life-planner/weekly-review/step-04-calendar.md` | `.user/context/sb-life-planner/weekly-review/step-04-calendar.yaml` |
 
 The base path MUST always be resolved through `sb-os.json` — never hardcoded in any agent reasoning, prompt, or downstream tool call. Workflow names are unique across roots; if a collision ever exists, the agent treats the workflow it is currently executing as authoritative for path-relative resolution.
 

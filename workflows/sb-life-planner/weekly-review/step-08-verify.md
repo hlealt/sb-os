@@ -139,7 +139,7 @@ If `count == 0`: report in the final summary as `No orphan files`.
 
 - Delete the agent-notes section from the weekly note (heading prefix from `section.agent-notes.heading`, default `Agent notes`; the section was created in step 03 with the `(steps 01–03)` suffix and extended in step 05). Temporary scaffolding, no longer needed.
 - Add `reviewed` and `routed` tags to the weekly note
-- Update `last-weekly-review` in the user state file. Default path `.user/state/reviews.md`. If context YAML provides `path.state.reviews`, use that value instead. If the file does not exist, skip silently.
+- Update `last-weekly-review` in the user state file. Default path `.user/runtime/state/reviews.md`. If context YAML provides `path.state.reviews`, use that value instead. If the file does not exist, skip silently.
 - Remove `stepsCompleted`, `closingWeek`, `planningWeek` from frontmatter (session continuity fields)
 
 ### 8. Archive session log

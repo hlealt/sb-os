@@ -46,9 +46,13 @@ Confirm the user has installed and enabled them, OR is willing to do so right af
 
 ### 4. Elicit surfaces
 
-Show the **Capabilities to consider** table from `ideas/home-dashboard.md`. Ask:
+Present the **full Capabilities section** from `ideas/home-dashboard.md`. The doc groups capabilities into six families: Temporal orientation, Intent and direction, Tasks, Recurring obligations, Personal lifecycle, Quick interaction. **You MUST present every family table verbatim — do NOT condense the menu into a single summary table.** The user picks across families; collapsing the families erases that affordance.
 
-> "Pick 2–4 of these. Two well-chosen views beats seven competing widgets."
+Format the presentation so each family is its own table with its full row set, exactly as it appears in the design doc. Include the inline notes (e.g., the "running-balance calculator" widget under Recurring obligations, the "auto-advance month" behavior, the multi-horizon intention compass tie-in to the life-planner workflow).
+
+After all six tables are visible, ask:
+
+> "Pick 2–4 of these — across families, not within one. Two well-chosen views beats seven competing widgets. You can also describe a surface that isn't in the menu."
 
 Capture the user's selection plus any custom additions. Optionally ask filter preferences (priority scheme? task plugin emoji conventions? language label preferences? — but offer the user-supplied option, never assume).
 

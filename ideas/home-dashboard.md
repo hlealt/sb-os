@@ -28,13 +28,13 @@ These are surfaces a home dashboard *could* expose. Pick the ones that match how
 | Today's date | Long-form date prominently rendered |
 | Calendar overlay | Today's reading from a cultural / astrological / religious / lunar calendar (e.g. "favorable", "neutral", "unfavorable" with color-coded text) |
 | Daily quote | A rotating quote drawn from a source file, deterministically picked from the day-of-year so the same day always yields the same quote |
-| Periodic-note quick links | One-click jumps to today's daily, this week's weekly, this month's monthly, this quarter's quarterly |
+| Periodic-note quick links | One-click jumps to today's daily, this week's weekly, this month's monthly, this quarter's quarterly. The daily link should also **create** today's note from the daily template (`.user/config/templates/periodic-notes/Daily.md`) when it doesn't exist yet — one click takes you from a fresh vault open to a writable note |
 
 ### Intent and direction
 
 | Capability | What it shows |
 |------------|---------------|
-| Multi-horizon intention compass | Strategic (quarterly), thematic (monthly), and tactical (weekly) intentions side by side. Shows "who you're trying to be" at three time horizons — qualitative, not tasks |
+| Multi-horizon intention compass | Strategic (quarterly), thematic (monthly), and tactical (weekly) intentions side by side. Shows "who you're trying to be" at three time horizons — qualitative, not tasks. **Fed by `/sb-life-planner`**: each tier writes an `Intentions` subsection inside its periodic note (`0-periodic-notes/{period}/`); the dashboard parses those subsections and surfaces the latest one per horizon. Run the review on cadence → the compass stays current. Skip a review → that horizon goes stale. Intentions are broader than tasks: things to read, remember, and embody throughout the period |
 | Goals / OKRs / key results | Per life area, the result you're committing to this period |
 | Status per life area | A traffic-light or RAG indicator per area, sourced from your latest weekly review |
 
@@ -61,7 +61,7 @@ These are surfaces a home dashboard *could* expose. Pick the ones that match how
 | Overdue and urgent flagging | Color-coding for past-due (red) and imminent (yellow, e.g. ≤2 days) items |
 | Auto-advance month | When the current month is fully resolved and the month is nearly over, surface next month so you stop seeing a "0 due" empty state |
 | Inline mark-paid | Check from the dashboard; the write goes back to the source file |
-| Running-balance calculator | Optional widget — type your current balance, see what's left after each upcoming day's obligations |
+| Running-balance calculator | Optional inline widget — type your current liquid balance, see what's left after each upcoming day's obligations. Extends naturally to **funding-source planning**: when balance < total due, surface how much needs to be moved in (investment withdrawal, transfer, sale) day-by-day to keep payments green. The calculator is a few lines of DVJS plus a numeric input — small surface, high daily value when bills cluster |
 
 ### Personal lifecycle
 

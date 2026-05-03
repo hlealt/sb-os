@@ -66,7 +66,7 @@ Enable in **Settings → Core plugins**:
 | Daily notes | Folder | `0-periodic-notes/daily/` |
 | Daily notes | Date format | `YYYY-MM-DD` |
 | Daily notes | Template | path to your daily template (optional) |
-| Templates | Template folder | `3-resources/tools/sb-os/templates/` or your `.user/templates/` |
+| Templates | Template folder | `3-resources/tools/sb-os/templates/` or your `.user/config/templates/` |
 | Unique note creator | *(disable)* | Not needed — sb-os uses predictable paths |
 
 ### Recommended community plugins
@@ -74,8 +74,8 @@ Enable in **Settings → Core plugins**:
 | Plugin | Purpose |
 |--------|---------|
 | [Calendar](https://github.com/liamcain/obsidian-calendar-plugin) | Visual week/day navigation for periodic notes |
-| [Dataview](https://github.com/blacksmithgu/obsidian-dataview) | Dynamic queries across vault content |
-| [Templater](https://github.com/SilentVoid13/Templater) | Advanced templating for periodic notes and new files |
+| [Dataview](https://github.com/blacksmithgu/obsidian-dataview) | Dynamic queries across vault content - required for Home.md dashboard |
+| [Templater](https://github.com/SilentVoid13/Templater) | Advanced templating for periodic notes and new files - required for Home.md dashboard |
 
 ### Vault settings
 

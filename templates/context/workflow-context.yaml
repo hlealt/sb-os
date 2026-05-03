@@ -38,7 +38,7 @@ context:
   - name: Summary output
     type: file
     mode: write
-    path: .user/state/weekly-summary.md
+    path: .user/runtime/state/weekly-summary.md
     instruction: >
       Write the consolidated summary from this step to this file.
 
@@ -46,7 +46,7 @@ context:
   - name: Running log
     type: file
     mode: read-write
-    path: .user/state/running-log.md
+    path: .user/runtime/state/running-log.md
     instruction: >
       Read the current log, append today's observations, write back.
 
@@ -55,7 +55,7 @@ context:
     type: script
     command: python
     args:
-      - .user/scripts/fetch-data.py
+      - .user/runtime/scripts/fetch-data.py
       - --account
       - default
     instruction: >

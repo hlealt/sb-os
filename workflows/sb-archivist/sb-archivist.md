@@ -9,9 +9,9 @@ Document all work done in this conversation into the work-log file. Capture the 
 
 1. **Read the work-log template.** Read `{sb_os_path}/templates/work-log.md` for the canonical format and section layout.
 
-2. **Check today's work-log.** Read `.user/state/work-log.md`:
+2. **Check today's work-log.** Read `.user/runtime/state/work-log.md`:
    - If the `date` in frontmatter matches today → append to it (do NOT overwrite existing content).
-   - If the `date` is older than today → move (`mv`) the stale file to `.user/state/work-log-archive/{YYYY-MM-DD}-work-log.md` (using the date from its frontmatter), then create a fresh work-log file from the template. Do NOT use `cp` + overwrite.
+   - If the `date` is older than today → move (`mv`) the stale file to `.user/runtime/state/work-log-archive/{YYYY-MM-DD}-work-log.md` (using the date from its frontmatter), then create a fresh work-log file from the template. Do NOT use `cp` + overwrite.
    - If the file does not exist or is empty → create a fresh work-log file from the template.
 
 3. **Review the full conversation history.** Scan the entire session and extract:

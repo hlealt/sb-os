@@ -84,6 +84,21 @@ System component conventions ship with sb-os under the sb-os repo. Skills and co
 
 The sb-os repo path on this vault is recorded in `sb-os.json` at the vault root (`sb_os_path` field). Edit sb-os components in the source repo, then re-run `python install.py`.
 
+---
+
+## Periodic Notes Templates
+
+Templates for daily, weekly, monthly, and quarterly notes live at `.user/config/templates/periodic-notes/`:
+
+| Template | Path |
+|----------|------|
+| Daily | `.user/config/templates/periodic-notes/Daily.md` |
+| Weekly | `.user/config/templates/periodic-notes/Weekly.md` |
+| Monthly | `.user/config/templates/periodic-notes/Monthly.md` |
+| Quarterly | `.user/config/templates/periodic-notes/Quarterly.md` |
+
+When the user says "log this to my daily note" (or weekly/monthly/quarterly), use the matching template's structure to create or append to the note in `0-periodic-notes/{period}/`. The note filename follows the Obsidian daily-notes plugin convention (e.g., `YYYY-MM-DD.md` for daily). Templates are user-owned and editable — sb-os bootstraps them on install but never overwrites them on upgrade.
+
 <!-- sb:end -->
 
 <!-- Add your own content below — anything outside the sb:start/sb:end markers survives re-install. -->

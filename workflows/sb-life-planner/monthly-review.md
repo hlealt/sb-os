@@ -8,7 +8,7 @@ Close the ending month and set intentions for the next one. Produces objectives,
 
 Default monthly note path: `0-periodic-notes/monthly/{month}.md`. If context YAML provides `path.monthly.note`, use that value. `{month}` expands to `YYYY-MM`.
 
-Default template path: `.user/templates/periodic-notes/Monthly.md`. If context YAML provides `path.monthly.template`, use that value. If neither the configured path nor the default exists, skip the template and create the note from scratch.
+Default template path: `.user/config/templates/periodic-notes/Monthly.md`. If context YAML provides `path.monthly.template`, use that value. If neither the configured path nor the default exists, skip the template and create the note from scratch.
 
 ## Output taxonomy
 
