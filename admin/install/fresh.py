@@ -238,6 +238,10 @@ def _relocate_sb_os_clone(sb_os_root: Path, target_root: Path) -> None:
         removal_failed = None  # cannot rmtree src — it is the vault root
     else:
         try:
+            # On Windows, rmtree fails with WinError 32 if the process's cwd
+            # is inside the tree being deleted.  Move out first.
+            if Path.cwd().resolve().is_relative_to(src):
+                os.chdir(target_root)
             _rmtree(src)
         except OSError as exc:
             removal_failed = exc
