@@ -123,7 +123,7 @@ Filenames use `lowercase-kebab.md`. Source page filenames mirror the raw counter
 
 ## Asset Folder
 
-Standard local-asset path: `{wiki_root}/raw/assets/` — flat, single shared folder. Maintained by the user via Obsidian's core "Download attachments for current file" command (Karpathy-style workflow: clip a source, then hotkey-download all referenced images locally). Configure once in Obsidian Settings → Files and links → "Default location for new attachments" → `raw/assets`. Reference from any page via `![[filename.png]]`. **Agents NEVER write to `raw/assets/`. Lint SKIPS it entirely** — not a raw origin, no leaf index, excluded from orphan detection. Full rules: schema § "Asset folder".
+Standard local-asset path: `{wiki_root}/raw/_assets/` — flat, single shared folder. Maintained by the user via Obsidian's core "Download attachments for current file" command (Karpathy-style workflow: clip a source, then hotkey-download all referenced images locally). Configure once in Obsidian Settings → Files and links → "Default location for new attachments" → `raw/_assets`. Reference from any page via `![[filename.png]]`. **Agents NEVER write to `raw/_assets/`. Lint SKIPS it entirely** — not a raw origin, no leaf index, excluded from orphan detection. Full rules: schema § "Asset folder".
 
 <!-- sb:end -->
 
