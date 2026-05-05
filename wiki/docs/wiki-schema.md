@@ -491,7 +491,15 @@ When invoked mid-ingest, no separate user checkpoint — the parent `/sb-wiki-in
 
 ### `/sb-wiki-lint`
 
-Single command: `/sb-wiki-lint`. Runs across `raw/` and `wiki/` folders. Mostly read-only; index sync writes are auto-applied (no diff to accept).
+Single command: `/sb-wiki-lint`. Runs across `raw/` and `wiki/` folders. Mostly read-only; deterministic index sync writes are auto-applied (no diff to accept). Judgment-bearing index cells are never script-filled.
+
+Before walking the tree, agents run this command from the vault root with the active Python interpreter:
+
+```bash
+python 3-resources/tools/sb-os/wiki/scripts/sb-wiki-lint-deterministic.py --apply --report 3-resources/knowledge-base/lint-deterministic-report.json
+```
+
+The script performs deterministic maintenance and emits `judgment_needed`. The agent reads every queued item, reads the referenced file, and fills the required semantic index cell before appending the lint log entry.
 
 | Step | Operation |
 |------|-----------|
@@ -506,6 +514,8 @@ Single command: `/sb-wiki-lint`. Runs across `raw/` and `wiki/` folders. Mostly 
 | 9 | Present findings to the user (read-only summary; no diff to apply) |
 
 #### Lint output format
+
+Step 7 does not authorize scripts to write blank semantic cells. `Description`, `Scope`, and `What it says` require LLM judgment. Raw index `Title` is script-safe only when it comes from frontmatter or an H1; filename slug guesses are forbidden.
 
 ```
 LINT REPORT — 2026-04-30 09:00

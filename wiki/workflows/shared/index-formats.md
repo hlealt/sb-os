@@ -25,6 +25,7 @@ Formats for the two index types maintained in the wiki. Ownership and maintenanc
 - The source page is canonical; the index entry is derived. The user NEVER writes the index manually.
 - Stale-by-7d acceptable for skim purpose. Agents may fall back to reading the source page if deeper signal is needed.
 - If the index file does not exist at ingest step 8, create it with the header row and add the first entry.
+- `What it says` is judgment-bearing. Scripts MUST NOT create or overwrite it from filenames, headings, or excerpts. If a source-index row is missing, scripts report it as `judgment_needed`; the LLM reads the source page and writes a 1-sentence factual summary.
 
 ### `My take` Cell — Three States (NEVER blank)
 
@@ -68,9 +69,30 @@ The `My take` cell encodes one of three explicit states. **Blank is BANNED** as 
 | Column | Written by | When |
 |--------|-----------|------|
 | `File` | Lint (creates rows) — ingest may add defensively | Lint sweep; ingest may add missing rows |
-| `Title` | Lint | On index creation |
-| `Date` | Lint | On index creation |
+| `Title` | Lint | On index creation when deterministic from frontmatter or H1; otherwise LLM judgment pass |
+| `Date` | Lint | On index creation when deterministic from frontmatter or filename; otherwise LLM judgment pass |
 | `Wiki` | Agent (ingest sets `Yes`; rollback sets `No`) | Updated during ingest step 7; downgraded to `Partial` if downstream pages are rejected at Stage 1 |
 
 - Raw index creation and maintenance is lint's job. Ingest defensively adds a missing row but does NOT create the index file if it is absent (logs a warning for lint).
 - `Wiki` values: `No` (default), `Yes` (source page created), `Partial` (source page created but some downstream pages rejected).
+- Missing rows are script-safe only when `Title` and `Date` are deterministic. Scripts MUST NOT fill `Title` from a slug guess. Non-deterministic rows are reported as `judgment_needed` for the LLM.
+
+## Wiki Leaf Indexes
+
+**Files:** `{wiki_root}/wiki/concepts/concepts.md`, `{wiki_root}/wiki/entities/entities.md`, `{wiki_root}/wiki/topics/topics.md`
+
+**Formats:**
+
+```markdown
+| File | Description |
+|------|-------------|
+| [[concept.md]] | 1-sentence description. |
+```
+
+```markdown
+| File | Scope |
+|------|-------|
+| [[topic.md]] | 1-sentence scope. |
+```
+
+`Description` and `Scope` are judgment-bearing. Scripts MAY create missing headers and report missing page rows. Scripts MUST NOT add rows with blank `Description` or `Scope`. The LLM reads each page and writes the semantic cell.

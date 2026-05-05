@@ -5,7 +5,7 @@ description: Health check + index maintenance for `raw/` and `wiki/` — detect 
 
 # sb-wiki-lint
 
-Health check + index maintenance pass across `{wiki_root}/raw/` and `{wiki_root}/wiki/`. Implements the 9-step lint flow defined in the wiki schema. Read-mostly: index sync writes are auto-applied (no diff to accept); the user is presented with findings only.
+Health check + index maintenance pass across `{wiki_root}/raw/` and `{wiki_root}/wiki/`. Implements the 9-step lint flow defined in the wiki schema. Read-mostly: deterministic index sync writes are auto-applied; judgment-bearing index cells are filled by the LLM before the final report.
 
 ## Schema Source
 
@@ -56,9 +56,21 @@ NEVER edit page bodies, frontmatter (other than `last-touched` on indexes), or a
 
 **`raw/assets/` is OUT OF SCOPE for this workflow.** No reads, no writes, no walks, no index creation, no orphan-detection participation, no filename validation. The folder is user-maintained via Obsidian's "Download attachments for current file" command (per `../shared/folder-structure.md` "Asset Folder" and schema § "Asset folder"). Treat it as if it were not present in the tree. Same exclusion applies to any pre-existing legacy asset folder nested under a specific origin (e.g., `raw/mails/assets/`) — user-owned, untouched.
 
+## Deterministic Helper
+
+Before Step 1, run the deterministic helper from the vault root with the active Python interpreter:
+
+```bash
+python 3-resources/tools/sb-os/wiki/scripts/sb-wiki-lint-deterministic.py --apply --report 3-resources/knowledge-base/lint-deterministic-report.json
+```
+
+The helper is mandatory. It performs only script-safe work: raw index creation when `Title` and `Date` are deterministic, wiki leaf-index header creation, wiki source `My take` re-sync, broken-wikilink inventory, and a JSON queue named `judgment_needed`.
+
+The helper MUST NOT fill judgment-bearing cells. `Description`, `Scope`, and `What it says` require LLM judgment. After the helper runs, read the JSON report and resolve every `judgment_needed` item by reading the referenced file and writing the required semantic cell before Step 8.
+
 ## Flow
 
-No mid-flow user input. All 9 steps run unattended. Output is a single LINT REPORT presented at step 9.
+No mid-flow user input. All 9 steps run unattended. The agent must perform the LLM judgment pass from the deterministic helper report before Step 8. Output is a single LINT REPORT presented at step 9.
 
 ### Step 1 — Walk all wiki pages; detect stubs and record age
 
@@ -141,9 +153,10 @@ For each wiki page (concepts, entities, topics, source pages):
 For each `{wiki_root}/raw/{origin}/` directory (including `studies/`), **EXCLUDING `raw/assets/`** (per `../shared/folder-structure.md` "Asset Folder" — `raw/assets/` is NOT a raw origin and MUST NOT receive an `assets.md` leaf index, MUST NOT be walked as part of raw-origin maintenance, and MUST NOT have its filenames validated):
 
 1. Verify `{origin}.md` (or `studies.md`) exists. If missing, CREATE it with the standard raw index header per `../shared/index-formats.md` "Raw Index" section: `| File | Title | Date | Wiki |`.
-2. For each raw file in the directory, ensure a row exists in the index. If missing, add the row with `Wiki = No` (default). If a row already exists, preserve its `Wiki` value (`Yes`, `Partial`, or `No`).
+2. For each raw file in the directory, ensure a row exists in the index. If missing, add the row only when `Title` and `Date` are deterministic from frontmatter, an H1, or the filename date.
 3. Index creation and maintenance is the agent's job, not the user's (per schema § "/sb-wiki-lint" step 7 and `../shared/folder-structure.md` "Creation Rules" table).
-4. Capture `raw-indexes-created` count and `raw-rows-added` total for the LINT REPORT.
+4. If a row already exists, preserve its `Wiki` value (`Yes`, `Partial`, or `No`).
+5. Capture `raw-indexes-created` count, `raw-rows-added` total, and unresolved raw rows from `judgment_needed` for the LINT REPORT.
 
 For each wiki leaf folder (`{wiki_root}/wiki/concepts/`, `entities/`, `topics/`):
 
@@ -151,8 +164,10 @@ For each wiki leaf folder (`{wiki_root}/wiki/concepts/`, `entities/`, `topics/`)
 2. If `wiki/topics/topics.md` is missing, CREATE it with the 2-column header `| File | Scope |` (per `shared/folder-structure.md` "Creation Rules" table; topics-leaf-index format defined alongside `sb-wiki-create-topic`).
 3. If `wiki/topics/topics.md` exists with a different column layout (user-customized), preserve the user's columns. Operate accordingly: read filenames from the `File` column; do NOT rewrite the layout.
 4. For `wiki/concepts/concepts.md` and `wiki/entities/entities.md`: create with the standard wiki leaf-index header (`| File | Description |`) if missing. Preserve user-customized layouts when present.
-5. For each page in the leaf folder, ensure a row exists for that page. If missing, add the row with `File = [[<filename>.md]]` and remaining columns blank for future agent population.
+5. For each page in the leaf folder, ensure a row exists for that page. If missing, read the page and add a row with a semantic `Description` or `Scope`; never leave judgment-bearing columns blank.
 6. Capture `wiki-leaf-indexes-created` count and `wiki-leaf-rows-added` total for the LINT REPORT.
+
+**Judgment-bearing cell rule:** Steps above never authorize blank semantic cells. `Description`, `Scope`, and `What it says` require LLM judgment. If the deterministic helper reports a missing row for those cells, the agent MUST read the referenced page and write the semantic cell before appending the lint log entry.
 
 ### Step 8 — Append `lint` log entry
 
