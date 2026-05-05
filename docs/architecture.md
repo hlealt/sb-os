@@ -129,21 +129,25 @@ sb-os/
 
 Skills and commands installed into `.claude/` are **thin loaders** that point back to `sb-os` source files. Editing installed loaders is forbidden — the source is the repo. Re-running the installer regenerates loaders.
 
-Rules are **copied verbatim** from `sb-os/rules/` to `.claude/rules/` because Claude Code auto-loads rules from that path natively.
+Rules are **copied verbatim** from a module's `rules/` folder (`sb-os/{module}/rules/`, where `{module}` is `para` or `wiki`) to `.claude/rules/` because Claude Code auto-loads rules from that path natively.
+
+### Module Layout
+
+Shippable components live under one of two module folders at the repo root: `para/` (PARA-aligned components — vault structure, periodic-notes templates, life planner, tutor) and `wiki/` (knowledge-base layer). Each module folder follows the same internal layout: `commands/`, `rules/`, `skills/`, `workflows/`, `claude-mds/`, optional `docs/`, and (for `para/`) `templates/`. The manifest's `module` field on each component encodes which folder owns its source.
 
 ### Managed CLAUDE.md sources
 
-Source files in `claude-mds/` are named for their install destination. The installer reads each file, replaces marker-block content (per §6 marker block protocol), and writes to the mapped path:
+Source files live under each module's `claude-mds/` folder, named for their install destination. The installer reads each file, replaces marker-block content (per §6 marker block protocol), and writes to the mapped path:
 
 | Source file | Install destination |
 |-------------|---------------------|
-| `claude-mds/root.md` | `{vault}/CLAUDE.md` |
-| `claude-mds/projects.md` | `{vault}/1-projects/CLAUDE.md` |
-| `claude-mds/areas.md` | `{vault}/2-areas/CLAUDE.md` |
-| `claude-mds/resources.md` | `{vault}/3-resources/CLAUDE.md` |
-| `claude-mds/archives.md` | `{vault}/4-archives/CLAUDE.md` |
-| `claude-mds/workbench.md` | `{vault}/5-workbench/CLAUDE.md` |
-| `claude-mds/wiki.md` | `{vault}/{wiki_root}/CLAUDE.md` (conditional on wiki feature) |
+| `para/claude-mds/root.md` | `{vault}/CLAUDE.md` |
+| `para/claude-mds/projects.md` | `{vault}/1-projects/CLAUDE.md` |
+| `para/claude-mds/areas.md` | `{vault}/2-areas/CLAUDE.md` |
+| `para/claude-mds/resources.md` | `{vault}/3-resources/CLAUDE.md` |
+| `para/claude-mds/archives.md` | `{vault}/4-archives/CLAUDE.md` |
+| `para/claude-mds/workbench.md` | `{vault}/5-workbench/CLAUDE.md` |
+| `wiki/claude-mds/wiki.md` | `{vault}/{wiki_root}/CLAUDE.md` (conditional on wiki feature) |
 
 Editing the installed file directly is forbidden — the source is the repo. Re-running the installer regenerates the marker-block content from the source.
 

@@ -121,11 +121,11 @@ def main(argv: list[str] | None = None) -> int:
     if code != 0:
         return code
 
-    from admin.install import cli as cli_mod
-    from admin.install import fresh as fresh_mod
-    from admin.install import loaders as loaders_mod
-    from admin.install import manifest as manifest_mod
-    from admin.install import upgrade as upgrade_mod
+    from install import cli as cli_mod
+    from install import fresh as fresh_mod
+    from install import loaders as loaders_mod
+    from install import manifest as manifest_mod
+    from install import upgrade as upgrade_mod
 
     print(f"\n{cli_mod.bold('sb-os installer')} v{manifest_mod.VERSION}\n")
 
