@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "suppliers": {
+    "uber": {
+      "canonical": "Uber",
+      "aliases": ["UBER"],
+      "movable": false,
+      "default_category": "transporte",
+      "notes": "fixture supplier — basic substring alias"
+    },
+    "claro_movel": {
+      "canonical": "Claro",
+      "aliases": ["CLARO"],
+      "movable": true,
+      "default_category": "moradia",
+      "notes": "fixture supplier — movable utility"
+    },
+    "ifood_generic": {
+      "canonical": "iFood (generic)",
+      "aliases": ["IFD*"],
+      "movable": false,
+      "default_category": "alimentacao",
+      "notes": "fixture supplier — short alias to test longest-first"
+    },
+    "ifood_arcos": {
+      "canonical": "McDonald's (iFood)",
+      "aliases": ["IFD*ARCOS DOURADOS"],
+      "movable": false,
+      "default_category": "alimentacao",
+      "notes": "fixture supplier — long alias must beat IFD*"
+    },
+    "abc_clinic": {
+      "canonical": "ABC Clinic",
+      "aliases": ["DR. ABC"],
+      "movable": false,
+      "default_category": "saude",
+      "notes": "fixture supplier under saude (mixed hint)"
+    },
+    "dr_xyz": {
+      "canonical": "Dr. XYZ",
+      "aliases": ["XYZ DOCTOR"],
+      "movable": true,
+      "default_category": "saude",
+      "notes": "fixture supplier with explicit movable=true under saude"
+    },
+    "rare_shop": {
+      "canonical": "Rare Shop",
+      "aliases": ["RARESHOP"],
+      "movable": false,
+      "default_category": "compras",
+      "notes": "fixture supplier used to exercise R$200 rollup boundary"
+    },
+    "active_shop": {
+      "canonical": "Active Shop",
+      "aliases": ["ACTIVESHOP"],
+      "movable": false,
+      "default_category": "compras",
+      "notes": "fixture supplier above R$200 rollup threshold"
+    }
+  }
+}

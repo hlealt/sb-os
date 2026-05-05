@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard Financeiro</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<link rel="stylesheet" href="scripts/dashboard/styles.css">
+</head>
+<body class="privacy-mode">
+<div class="container">
+  <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+    <div>
+      <h1>Dashboard Financeiro</h1>
+      <p class="subtitle" id="subtitle">Despesas e receitas</p>
+    </div>
+    <div style="display:flex; align-items:center; gap:16px;">
+      <nav class="mode-nav">
+        <button class="mode-btn active" onclick="switchMode('financeiro')" data-mode="financeiro">Despesas</button>
+        <button class="mode-btn" onclick="switchMode('investimentos')" data-mode="investimentos">Investimentos</button>
+      </nav>
+      <select class="date-axis-select" id="date-axis-select" title="Eixo temporal das agregacoes" onchange="setDateAxis(this.value)">
+        <option value="data_caixa">Caixa (data_caixa)</option>
+        <option value="data_competencia">Competencia (data_competencia)</option>
+      </select>
+      <button class="privacy-btn active" onclick="togglePrivacy(this)" title="Mostrar valores">Mostrar Valores</button>
+    </div>
+  </div>
+
+  <div id="financeiro-mode" class="mode-content">
+    <div class="tabs" id="tabs"></div>
+    <div id="content">
+      <div class="loading"><div class="loading-spinner"></div><br>Carregando dados...</div>
+    </div>
+  </div>
+
+  <div id="investimentos-mode" class="mode-content" hidden>
+    <div class="tabs" id="inv-tabs"></div>
+    <div id="inv-content">
+      <div class="loading"><div class="loading-spinner"></div><br>Carregando dados de investimentos...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+function switchMode(mode) {
+  // Use the `hidden` attribute (not inline display:none) so the inactive subtree
+  // is removed from the accessibility tree — otherwise sort/collapsible glyphs
+  // from the inactive mode leak into screen-reader output.
+  document.getElementById('financeiro-mode').hidden = mode !== 'financeiro';
+  document.getElementById('investimentos-mode').hidden = mode !== 'investimentos';
+  document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === mode));
+  document.getElementById('subtitle').textContent = mode === 'financeiro' ? 'Despesas e receitas' : 'Carteira de investimentos';
+}
+</script>
+<script src="scripts/dashboard/shared.js"></script>
+<script src="scripts/dashboard/expenses.js"></script>
+<script src="scripts/dashboard/inv-data.js"></script>
+<script src="scripts/dashboard/inv-carteira.js"></script>
+<script src="scripts/dashboard/inv-bolsa.js"></script>
+<script src="scripts/dashboard/inv-balcao.js"></script>
+<script src="scripts/dashboard/inv-crypto.js"></script>
+<script src="scripts/dashboard/inv-proventos.js"></script>
+<script src="scripts/dashboard/inv-historico.js"></script>
+<script src="scripts/dashboard/investments.js"></script>
+</body>
+</html>

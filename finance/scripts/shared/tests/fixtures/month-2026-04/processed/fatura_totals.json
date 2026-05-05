@@ -1,0 +1,8 @@
+{
+  "visa_fatura": {
+    "bank_name": "Fixture Visa Fatura",
+    "total": 350.00,
+    "file": "fixture-visa.pdf",
+    "payment_date": "2026-05-10"
+  }
+}

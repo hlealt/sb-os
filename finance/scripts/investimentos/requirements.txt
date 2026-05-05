@@ -1,0 +1,6 @@
+pdfplumber
+openpyxl
+numpy-financial
+yfinance
+requests
+scipy

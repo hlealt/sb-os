@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "tags": {
+    "tennis": {
+      "label": "Tennis",
+      "added": "2026-05-02",
+      "notes": "fixture tag — accepted"
+    }
+  },
+  "rejected": [
+    {
+      "token": "natalia",
+      "date": "2026-05-02",
+      "reason": "fixture rejected — return_count=2 (one short of resurface)",
+      "return_count": 2
+    },
+    {
+      "token": "junk",
+      "date": "2026-05-02",
+      "reason": "fixture rejected — return_count=3 (resurface threshold)",
+      "return_count": 3
+    }
+  ]
+}

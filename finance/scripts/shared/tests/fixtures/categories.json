@@ -1,0 +1,67 @@
+{
+  "categories": {
+    "moradia": {
+      "description": "fixture",
+      "movable_hint": "movable"
+    },
+    "alimentacao": {
+      "description": "fixture",
+      "movable_hint": "non-movable"
+    },
+    "saude": {
+      "description": "fixture",
+      "movable_hint": "mixed"
+    },
+    "transporte": {
+      "description": "fixture",
+      "movable_hint": "non-movable"
+    },
+    "compras": {
+      "description": "fixture",
+      "movable_hint": "non-movable"
+    },
+    "receitas": {
+      "description": "fixture",
+      "movable_hint": "non-movable"
+    },
+    "intercontas": {
+      "description": "fixture",
+      "movable_hint": "non-movable"
+    },
+    "ignorar": {
+      "description": "fixture",
+      "movable_hint": "non-movable"
+    },
+    "a_identificar": {
+      "description": "fixture",
+      "movable_hint": "non-movable"
+    }
+  },
+  "vendor_mappings": {
+    "UBER": "transporte",
+    "CLARO": "moradia",
+    "IFD*ARCOS DOURADOS": "alimentacao",
+    "IFD*": "alimentacao",
+    "DR. ABC": "saude",
+    "XYZ DOCTOR": "saude",
+    "RARESHOP": "compras",
+    "ACTIVESHOP": "compras",
+    "SUPERMERCADO": "alimentacao"
+  },
+  "value_based_mappings": [],
+  "recurrence_rules": {
+    "default_by_category": {
+      "moradia": "recorrente",
+      "alimentacao": "pontual",
+      "saude": "pontual",
+      "transporte": "pontual",
+      "compras": "pontual"
+    },
+    "installments_override": "pontual",
+    "vendor_overrides": {}
+  },
+  "self_transfer_patterns": [],
+  "reimbursement_mappings": {
+    "REEMBOLSO": "saude"
+  }
+}

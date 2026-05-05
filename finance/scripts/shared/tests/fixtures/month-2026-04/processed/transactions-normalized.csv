@@ -1,0 +1,5 @@
+date,description,amount,balance,bank,source_type,currency,original_ref,installment_current,installment_total,original_amount,exchange_rate
+2026-04-12,UBER 12345,-50.00,,visa_fatura,fatura,BRL,REF001,,,,
+2026-03-10,ACTIVESHOP PARC 1/3,-300.00,,visa_fatura,fatura,BRL,REF002,1,3,,
+2026-04-05,CLARO,-120.00,9000.00,bradesco_extrato,extrato,BRL,REF003,,,,
+2026-04-30,REEMBOLSO PLANO SAUDE,200.00,9100.00,bradesco_extrato,extrato,BRL,REF004,,,,
