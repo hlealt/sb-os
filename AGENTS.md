@@ -24,17 +24,15 @@ Source repository for **sb-os** — an opinionated, PARA-based personal knowledg
 
 ## Repo Layout
 
+Shippable components live under per-module folders at the repo root: `para/` (PARA-aligned components) and `wiki/` (knowledge-base layer). Each module folder mirrors the same internal layout (`commands/`, `rules/`, `skills/`, `workflows/`, `claude-mds/`, optional `docs/`, plus `para/templates/`).
+
 | Path | Contents |
 |------|----------|
 | `install.py` | Entry point — interactive target detection, mode auto-detection, dispatch |
-| `install/` | Installer internals (CLI, manifest, marker handling, mode handlers) |
-| `workflows/` | Source of truth for `sb-*` workflows. Each workflow is a directory with an entry point and optional step files, data, scripts, templates |
-| `templates/` | Source of truth for templates that ship to a vault on install |
-| `skills/` | Source files for `sb-*` skill loaders. Installer renders thin loaders into a vault's `.claude/skills/` |
-| `commands/` | Source files for `sb-*` command loaders. Installer renders thin loaders into a vault's `.claude/commands/` |
-| `rules/` | `sb-*` rule files. Installer copies these verbatim into `.claude/rules/` (Claude Code auto-loads from there) |
-| `claude-mds/` | Source files for managed CLAUDE.mds. Filename encodes install destination — see `docs/architecture.md` |
-| `docs/` | Architecture, conventions, hooks reference, user-facing documentation |
+| `install/` | Installer internals (CLI, manifest, marker handling, mode handlers). `module-manifest.json` declares each component's owning module via the `module` field |
+| `para/` | PARA module sources: `commands/`, `rules/`, `skills/`, `workflows/`, `claude-mds/` (PARA-structure CLAUDE.mds), `templates/`, `ideas/`, `docs/` (PARA-scoped reference, e.g. `obsidian-markdown/`) |
+| `wiki/` | Wiki module sources: `commands/`, `skills/`, `workflows/` (with `shared/` for cross-workflow conventions), `claude-mds/wiki.md`, `docs/wiki-schema.md` |
+| `docs/` | Repo-level architecture, conventions, hooks reference. Module-scoped docs live under each module's own `docs/` folder |
 
 ## Editing Conventions
 
