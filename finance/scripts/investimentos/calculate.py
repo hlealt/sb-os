@@ -25,6 +25,7 @@ def _find_vault_root() -> Path:
 VAULT_ROOT = _find_vault_root()
 
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.append(str(Path(__file__).resolve().parents[1] / "shared"))
 
 from position_calculator import (calculate_positions, load_csv, LEDGER_DIR,
                                  load_assets, _resolve_valuation_method,
@@ -33,8 +34,9 @@ from position_calculator import (calculate_positions, load_csv, LEDGER_DIR,
 from fx_engine import build_fx_state
 from price_fetcher import fetch_prices, fetch_market_indicators
 from irr_calculator import compute_xirr
+from lib import audit  # noqa: E402
 
-OUTPUT_DIR = VAULT_ROOT / "3-resources" / "tools" / "finance" / "ledgers" / "investimentos"
+OUTPUT_DIR = VAULT_ROOT / ".user" / "finance" / "bookkeeper" / "ledgers" / "investimentos"
 SNAPSHOTS_JSON = OUTPUT_DIR / 'snapshots.json'
 
 # RF tradicional product types — non-defaulted instruments should not yield
@@ -673,15 +675,31 @@ def write_portfolio(portfolio: dict, cut_date: str = None):
     """Write portfolio.json and optionally a dated snapshot."""
     # Write main portfolio.json
     output_path = OUTPUT_DIR / 'portfolio.json'
-    with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(portfolio, f, indent=2, ensure_ascii=False)
+    with audit.track_write(
+        output_path,
+        materiality="high",
+        action="overwrite",
+        event_type="ledger_write",
+        source_function="calculate.write_portfolio",
+        trigger_context={"cut_date": cut_date} if cut_date else None,
+    ):
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(portfolio, f, indent=2, ensure_ascii=False)
     print(f'Written: {output_path}')
 
     # If cut_date, also write dated snapshot
     if cut_date:
         snapshot_path = OUTPUT_DIR / f'portfolio-{cut_date}.json'
-        with open(snapshot_path, 'w', encoding='utf-8') as f:
-            json.dump(portfolio, f, indent=2, ensure_ascii=False)
+        with audit.track_write(
+            snapshot_path,
+            materiality="high",
+            action="create",
+            event_type="ledger_write",
+            source_function="calculate.write_portfolio",
+            trigger_context={"cut_date": cut_date, "snapshot": True},
+        ):
+            with open(snapshot_path, 'w', encoding='utf-8') as f:
+                json.dump(portfolio, f, indent=2, ensure_ascii=False)
         print(f'Written: {snapshot_path}')
 
         # Update snapshots.json
@@ -699,8 +717,16 @@ def _update_snapshots_manifest(cut_date: str):
         snapshots.append(cut_date)
         snapshots.sort(reverse=True)
 
-    with open(SNAPSHOTS_JSON, 'w', encoding='utf-8') as f:
-        json.dump(snapshots, f, indent=2)
+    with audit.track_write(
+        SNAPSHOTS_JSON,
+        materiality="medium",
+        action="overwrite",
+        event_type="state_write",
+        source_function="calculate._update_snapshots_manifest",
+        trigger_context={"cut_date": cut_date},
+    ):
+        with open(SNAPSHOTS_JSON, 'w', encoding='utf-8') as f:
+            json.dump(snapshots, f, indent=2)
     print(f'Updated: {SNAPSHOTS_JSON}')
 
 

@@ -11,8 +11,10 @@ Default port: 8080. Must be launched with the vault root as CWD.
 """
 
 import json
+import os
 import subprocess
 import sys
+import uuid
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -37,12 +39,16 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     def _handle_refresh_prices(self):
         try:
+            env = os.environ.copy()
+            env["BOOKKEEPER_ACTOR"] = "dashboard_trigger"
+            env["BOOKKEEPER_RUN_ID"] = str(uuid.uuid4())
             proc = subprocess.run(
                 [sys.executable, str(CALCULATE_SCRIPT)],
                 cwd=str(VAULT_ROOT),
                 capture_output=True,
                 text=True,
                 timeout=180,
+                env=env,
             )
             body = {
                 "ok": proc.returncode == 0,

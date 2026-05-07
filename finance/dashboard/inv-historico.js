@@ -5,7 +5,7 @@
 //
 // This view is the only one that bypasses portfolio.json — raw transactions
 // are not aggregated into the portfolio output. CSVs are kept fresh by the
-// accountant workflow downstream of update_ledgers.py.
+// bookkeeper workflow downstream of update_ledgers.py.
 
 const INV_HIST_LEDGERS = [
   { id: 'orders',    file: './ledgers/investimentos/orders.csv',    label: 'Ordens'     },

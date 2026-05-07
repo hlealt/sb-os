@@ -5,13 +5,13 @@ Investment tracking workflow — import historical data, ingest new source files
 ## Path Variables
 
 ```
-WORKFLOW_DIR     = .user/workflows/accountant/investimentos
-SCRIPTS_DIR      = 3-resources/tools/finance/scripts/accountant/investimentos
-CONFIG_DIR       = .user/workflows/accountant/config
-ASSETS_FILE      = .user/workflows/accountant/data/assets.csv
-LEDGER_DIR       = 3-resources/tools/finance/ledgers/investimentos
-INV_RAW_ROOT     = 3-resources/tools/finance/raw                     # per-month investment raw under {INV_RAW_ROOT}/{MONTH}/investment
-INV_PROCESSED    = {WORKFLOW_DIR}/tmp-processed          # intermediate parsed CSVs (overwritten per run)
+WORKFLOW_DIR     = 3-resources/tools/sb-os/finance/workflows/bookkeeper/investimentos
+SCRIPTS_DIR      = 3-resources/tools/sb-os/finance/scripts/investimentos
+CONFIG_DIR       = .user/finance/bookkeeper/config
+ASSETS_FILE      = .user/finance/bookkeeper/data/assets.csv
+LEDGER_DIR       = .user/finance/bookkeeper/ledgers/investimentos
+INV_RAW_ROOT     = .user/finance/bookkeeper/raw-data                # per-month investment raw under {INV_RAW_ROOT}/{MONTH}/investment
+INV_PROCESSED    = .user/finance/bookkeeper/investimentos/tmp-processed  # intermediate parsed CSVs (overwritten per run)
 ```
 
 ## Config Files

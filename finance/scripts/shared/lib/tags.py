@@ -72,10 +72,18 @@ def load_tags(tags_json_path: Path) -> TagIndex:
 
 def save_tags(index: TagIndex, tags_json_path: Path) -> None:
     """Persist a TagIndex to disk. Side-effecting boundary."""
+    from lib import audit  # local import to avoid circular load on package init
     tags_json_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(tags_json_path, "w", encoding="utf-8") as f:
-        json.dump(index.raw, f, ensure_ascii=False, indent=2, sort_keys=False)
-        f.write("\n")
+    with audit.track_write(
+        tags_json_path,
+        materiality="medium",
+        action="overwrite",
+        event_type="config_write",
+        source_function="lib.tags.save_tags",
+    ):
+        with open(tags_json_path, "w", encoding="utf-8") as f:
+            json.dump(index.raw, f, ensure_ascii=False, indent=2, sort_keys=False)
+            f.write("\n")
 
 
 def _clone(index: TagIndex) -> TagIndex:

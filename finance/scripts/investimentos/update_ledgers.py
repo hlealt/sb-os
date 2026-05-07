@@ -24,12 +24,14 @@ VAULT_ROOT = _find_vault_root()
 
 # Ensure scripts/ is on path for utils import
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.append(str(Path(__file__).resolve().parents[1] / "shared"))
 from utils import (
     ORDERS_COLUMNS, PROVENTOS_COLUMNS, BALCAO_COLUMNS,
     CRYPTO_COLUMNS, CORPORATE_ACTIONS_COLUMNS, AVENUE_FX_COLUMNS,
 )
+from lib import audit  # noqa: E402
 
-LEDGER_DIR = VAULT_ROOT / "3-resources" / "tools" / "finance" / "ledgers" / "investimentos"
+LEDGER_DIR = VAULT_ROOT / ".user" / "finance" / "bookkeeper" / "ledgers" / "investimentos"
 
 # Map: normalized CSV prefix → (target ledger filename, column list)
 PREFIX_TO_LEDGER = {
@@ -434,7 +436,16 @@ def main():
             existing['fee_updates'].extend(report['fee_updates'])
 
         # Write updated ledger
-        write_csv(ledger_path, ledger_rows, columns)
+        with audit.track_write(
+            ledger_path,
+            materiality="high",
+            action="overwrite",
+            event_type="ledger_write",
+            source_function="update_ledgers.main",
+            trigger_context={"source_csv": csv_file.name, "ledger": ledger_name},
+            summary_extra={"inserted": report['inserted']},
+        ):
+            write_csv(ledger_path, ledger_rows, columns)
 
     # Print summary
     print(format_report(all_reports))

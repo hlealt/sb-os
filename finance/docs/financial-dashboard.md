@@ -4,15 +4,16 @@ Dashboard HTML interativo para visualização e análise de gastos mensais. Arqu
 
 ## Arquitetura
 
-O dashboard é **totalmente dinâmico** — alimentado por CSVs gerados pelo workflow de fechamento financeiro (`3-resources/tools/finance/ledgers/fechamento/{YYYY-MM}/transactions.csv`).
+O dashboard é **totalmente dinâmico** — alimentado por CSVs gerados pelo workflow de fechamento financeiro (`.user/finance/bookkeeper/ledgers/fechamento/{YYYY-MM}/transactions.csv`).
 
 ### Estrutura de arquivos
 
 ```
-3-resources/tools/finance/
-├── dashboard.html                         ← HTML shell (entry point)
-├── scripts/
-│   └── dashboard/
+finance system (post-p1-11 layout):
+3-resources/tools/sb-os/finance/dashboard/    ← HTML/JS/CSS shipped via sb-os
+.user/finance/dashboard.html                  ← entry HTML (install destination, pending p1-13)
+.user/finance/bookkeeper/{ledgers,config}/    ← personal data
+├── dashboard/                                  (logical view — files below ship from sb-os/finance/dashboard/)
 │       ├── styles.css                     ← design system compartilhado
 │       ├── shared.js                      ← utilitários, componentes, privacidade
 │       ├── expenses.js                    ← lógica page-specific (abas mensais, evolução, filtros)
@@ -28,7 +29,7 @@ O dashboard é **totalmente dinâmico** — alimentado por CSVs gerados pelo wor
 │   ├── fechamento/                        ← CSVs categorizados mensais + months.json
 │   └── investimentos/                     ← portfolio.json + snapshots.json + ledgers CSV
 └── config/
-    └── categories.json                    ← shared with accountant (reimbursement_mappings)
+    └── categories.json                    ← shared with bookkeeper (reimbursement_mappings)
 ```
 
 - `shared.js` define globals usados por qualquer dashboard: constantes (cores, bancos), formatação, multi-select, collapsible, privacidade, estado global (`allData`, `charts`).
@@ -62,7 +63,7 @@ O dashboard é **totalmente dinâmico** — alimentado por CSVs gerados pelo wor
   - **Resumo por tipo** (colapsável, aberto): agrega `by_type_brl` de todos os meses em `monthly_totals`, com swatch de cor + label PT-BR + total + % do total. Ordenado por valor desc.
   - **Por ativo** (colapsável, aberto): tabela sortável com Ativo (nome resolvido via lookup em `positions[id]`, fallback para id), Classe (label PT-BR via `INV_PROV_CLASS_LABELS`), Instituição (label via `INV_PROV_BROKER_LABELS`), Total em BRL (vem direto de `total_brl` — FX ticker-ponderado; hint `(US$ X)` ao lado para tickers `currency='USD'`). Tickers sem position correspondente (RF redimida fora do recorte ativo, etc.) aparecem com `—` em Classe/Instituição mas com seu valor preservado. Default sort: `total_brl` desc.
   - Estado de ordenação em módulo (`invProvSortState`).
-- `inv-historico.js` renderiza a view Histórico — **única view que bypassa `portfolio.json`**. Lê os 4 ledgers brutos (`orders.csv`, `proventos.csv`, `balcao.csv`, `crypto.csv`) via PapaParse (já carregado para o dashboard de despesas), normaliza linhas em uma estrutura unificada `{ledger, date, broker, operation, asset, asset_class, quantity, currency, value_native, detail, source}`, cacheia em módulo (`invHistTxs`) na primeira render. Justificativa: transações brutas não são agregadas em `portfolio.json` (que carrega só posições atuais e agregados de income); forçá-las em portfolio.json incharia o output para todas as outras views. CSVs ficam frescos via accountant workflow downstream do `update_ledgers.py`.
+- `inv-historico.js` renderiza a view Histórico — **única view que bypassa `portfolio.json`**. Lê os 4 ledgers brutos (`orders.csv`, `proventos.csv`, `balcao.csv`, `crypto.csv`) via PapaParse (já carregado para o dashboard de despesas), normaliza linhas em uma estrutura unificada `{ledger, date, broker, operation, asset, asset_class, quantity, currency, value_native, detail, source}`, cacheia em módulo (`invHistTxs`) na primeira render. Justificativa: transações brutas não são agregadas em `portfolio.json` (que carrega só posições atuais e agregados de income); forçá-las em portfolio.json incharia o output para todas as outras views. CSVs ficam frescos via bookkeeper workflow downstream do `update_ledgers.py`.
   - **Filtros**: ledger (orders/proventos/balcao/crypto/all), instituição (todas + uma por broker), data de/até (date inputs), busca textual (asset/operação/broker/source). Estado em módulo (`invHistFilters`).
   - **Tabela paginada** (50/página): Data, Ledger (label PT-BR), Operação, Ativo, Instituição, Qtd, Valor (sinal — verde positivo, vermelho negativo, prefixo `R$` ou `US$`), Detalhe, Fonte. Sortable por qualquer coluna; default `date` desc. Pager fixo no rodapé (Anterior/Próxima + contador).
   - **Sinal de Valor**: orders compra → negativo (saída de caixa); orders venda → positivo. Proventos sempre positivos. Balcão `amount` já vem signed. Crypto: BRL→cripto = negativo; cripto→BRL = positivo.
@@ -265,7 +266,7 @@ A coluna armazenada não tem flag `is_reimbursement` — a regra é replicada de
 | `amount > 0` AND `description.toUpperCase()` contém um substring de qualquer chave de `reimbursement_mappings` | É reembolso |
 | Caso contrário | Não é reembolso |
 
-Os patterns vêm de `categories.json` — fetched UMA VEZ no `init()` via `CATEGORIES_CONFIG_PATH = '../../.user/workflows/accountant/config/categories.json'` (relativo ao HTML em `2-areas/finance/`). Se o fetch falhar: graceful degradation — `_reimbursementPatterns = []`, `console.warn` emitido, netting vira no-op (reembolsos aparecem como linhas positivas sem subtrair). Decisão de p4-4 (Opção B — single source of truth).
+Os patterns vêm de `categories.json` — fetched UMA VEZ no `init()` via `CATEGORIES_CONFIG_PATH` resolvido relativo ao HTML em `.user/finance/dashboard.html` apontando para `.user/finance/bookkeeper/config/categories.json`. Se o fetch falhar: graceful degradation — `_reimbursementPatterns = []`, `console.warn` emitido, netting vira no-op (reembolsos aparecem como linhas positivas sem subtrair). Decisão de p4-4 (Opção B — single source of truth).
 
 ### Onde aplica
 
@@ -325,7 +326,7 @@ Categorias `ignorar` e `intercontas` são excluídas dos cálculos de gastos (ca
 
 ## Formato do CSV esperado
 
-**Schema authority:** `.user/workflows/accountant/docs/data-model.md` §1.1 (12 colunas normalizadas) + §1.2 (7 colunas categorizadas). 19 colunas no total, output de `categorize.py`. Esta seção NÃO duplica o contrato — consulte data-model.md para tipos, semântica e invariantes completos.
+**Schema authority:** `3-resources/tools/sb-os/finance/docs/expenses-data.md` §1.1 (12 colunas normalizadas) + §1.2 (7 colunas categorizadas). 19 colunas no total, output de `categorize.py`. Esta seção NÃO duplica o contrato — consulte expenses-data.md para tipos, semântica e invariantes completos.
 
 Colunas que o dashboard consome diretamente (resumo informal — data-model.md é autoritativo):
 

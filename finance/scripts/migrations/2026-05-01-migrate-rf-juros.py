@@ -22,8 +22,18 @@ Run:
 
 import argparse
 import csv
+import sys
 from datetime import datetime
 from pathlib import Path
+
+# Make sb-os/finance/scripts/shared/ importable for the audit helper.
+_SHARED = Path(__file__).resolve().parents[1] / "shared"
+if str(_SHARED) not in sys.path:
+    sys.path.insert(0, str(_SHARED))
+try:
+    from lib import audit  # noqa: E402
+except ImportError:
+    audit = None
 
 
 def _find_vault_root() -> Path:
@@ -34,10 +44,10 @@ def _find_vault_root() -> Path:
 
 
 VAULT = _find_vault_root()
-LEDGER_DIR = VAULT / 'tools' / 'finance' / 'ledgers' / 'investimentos'
+LEDGER_DIR = VAULT / '.user' / 'finance' / 'bookkeeper' / 'ledgers' / 'investimentos'
 PROVENTOS = LEDGER_DIR / 'proventos.csv'
 BALCAO = LEDGER_DIR / 'balcao.csv'
-ASSETS = VAULT / '.user' / 'workflows' / 'accountant' / 'data' / 'assets.csv'
+ASSETS = VAULT / '.user' / 'finance' / 'bookkeeper' / 'data' / 'assets.csv'
 LOG_DIR = Path(__file__).parent / 'logs'
 
 
@@ -96,10 +106,24 @@ def load_csv(path: Path) -> tuple[list[dict], list[str]]:
 
 
 def write_csv(path: Path, rows: list[dict], fields: list[str]):
-    with open(path, 'w', encoding='utf-8', newline='') as f:
-        w = csv.DictWriter(f, fieldnames=fields)
-        w.writeheader()
-        w.writerows(rows)
+    def _do_write():
+        with open(path, 'w', encoding='utf-8', newline='') as f:
+            w = csv.DictWriter(f, fieldnames=fields)
+            w.writeheader()
+            w.writerows(rows)
+
+    if audit is None:
+        _do_write()
+        return
+    with audit.track_write(
+        path,
+        materiality="high",
+        action="overwrite",
+        event_type="ledger_write",
+        actor="migration",
+        source_function="migrate-rf-juros.write_csv",
+    ):
+        _do_write()
 
 
 def main():

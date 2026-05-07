@@ -1,0 +1,1 @@
+The investor sibling agent is design-scope only and not yet built. The workflow at `{sb_os_path}/finance/workflows/investor/` does not exist. Tell the user `/investor` is reserved but unimplemented and stop.

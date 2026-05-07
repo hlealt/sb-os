@@ -9,7 +9,7 @@ const DATA_PATH = (month) => `./ledgers/fechamento/${month}/transactions.csv${CA
 // categories.json is the authoritative source for reimbursement_mappings.
 // Loading it at init avoids hardcoding the pattern list in JS (drift risk).
 // The dashboard server serves from vault root; this path is resolved relative
-// to dashboard.html (which lives at `3-resources/tools/finance/dashboard.html`).
+// to dashboard.html (install destination `.user/finance/dashboard.html` pending p1-13).
 const CATEGORIES_CONFIG_PATH = `./config/categories.json${CACHE_BUST}`;
 const ROWS_PER_PAGE = 30;
 

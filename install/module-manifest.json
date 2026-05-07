@@ -188,6 +188,29 @@
         }
       ],
       "rules": []
+    },
+    "finance": {
+      "description": "Personal finance system: bookkeeper sibling agent (monthly close — gastos, investimentos), dashboard, and tool scripts. Investor sibling agent is design-scope only and not yet built — its command loader is reserved but unimplemented.",
+      "always_installed": false,
+      "atomic": false,
+      "skills": [],
+      "commands": [
+        {
+          "name": "bookkeeper",
+          "module": "finance",
+          "source_template": "finance/commands/bookkeeper.md",
+          "target": ".claude/commands/bookkeeper.md",
+          "description": "Monthly financial closing — gastos, investimentos, or both."
+        },
+        {
+          "name": "investor",
+          "module": "finance",
+          "source_template": "finance/commands/investor.md",
+          "target": ".claude/commands/investor.md",
+          "description": "Investor sibling agent (design-scope; not yet built)."
+        }
+      ],
+      "rules": []
     }
   }
 }

@@ -10,7 +10,7 @@ nextStepFile: step-04-validate.md
 
 ## Pre-Script Action — Lot Splits
 
-**Source.** `{CONFIG_DIR}/lot-splits.yaml` (formerly inlined into a YAML companion file at `.user/context/accountant/investimentos/step-03-update.yaml`; consolidated here on 2026-05-05 per p1-15).
+**Source.** `{CONFIG_DIR}/lot-splits.yaml` (formerly inlined into a YAML companion file at `.user/context/accountant/investimentos/step-03-update.yaml` before the rename; consolidated here on 2026-05-05 per p1-15).
 
 **MANDATORY pre-script action.** Execute BEFORE the `python update_ledgers.py` command below. The splits modify the processed CSVs in `{INV_PROCESSED}/` so that the script picks up already-split rows and dedup behaves naturally on re-runs.
 

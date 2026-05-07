@@ -4,8 +4,8 @@
 Usage:
     python categorize.py <processed_dir> <config_folder> [output_folder]
 
-    processed_dir:  Normalized CSVs for the month (e.g., 3-resources/tools/finance/ledgers/expenses/2026-04)
-    config_folder:  Path to accountant config (e.g., .user/workflows/accountant/config)
+    processed_dir:  Normalized CSVs for the month (e.g., .user/finance/bookkeeper/ledgers/expenses/2026-04)
+    config_folder:  Path to bookkeeper config (e.g., .user/finance/bookkeeper/config)
     output_folder:  Optional. Where to write transactions.csv.
                     Defaults to processed_dir/categorized/ if omitted.
 
@@ -13,7 +13,7 @@ Reads:
   - All normalized CSVs from `<processed_dir>/*.csv`.
   - `<processed_dir>/fatura_totals.json` — per-fatura `payment_date`
     (data-model §9, Option B). Required for any row with `source_type='fatura'`.
-  - `3-resources/tools/finance/config/categories.json` — categories taxonomy,
+  - `<config_folder>/categories.json` — categories taxonomy,
     `value_based_mappings`, `recurrence_rules`, `self_transfer_patterns`,
     `reimbursement_mappings`. (Vendor → category attribution lives in
     suppliers.json now — single layer.)
@@ -28,7 +28,7 @@ Writes:
 Classification primitives are imported from `lib/`:
   - `lib.accrual` — compute_data_caixa, compute_data_competencia
   - `lib.suppliers` — load_suppliers, detect_supplier
-  - (`lib.tags` is consumed by the accountant Pass 1 workflow, not by this
+  - (`lib.tags` is consumed by the bookkeeper Pass 1 workflow, not by this
      script. categorize.py emits `tags` seeded from `supplier.default_tags`
      and reimbursement_mappings subcategory; Pass 1 may add/edit.)
 
@@ -47,7 +47,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from utils import NORMALIZED_COLUMNS
+from lib import audit
 from lib.accrual import compute_data_caixa, compute_data_competencia
+from lib.standing_rules import RuleFireCounter, load_standing_rules
 from lib.suppliers import detect_supplier, load_suppliers, SupplierIndex
 
 
@@ -139,6 +141,7 @@ def categorize_transaction(
     supplier_index: SupplierIndex | None,
     amount: float = 0.0,
     value_based_mappings: list | None = None,
+    rule_counter: "RuleFireCounter | None" = None,
 ) -> tuple[str, str, str, list[str]]:
     """Match a transaction to (category, match_confidence, supplier_canonical, tags).
 
@@ -166,6 +169,8 @@ def categorize_transaction(
                 rp.upper() in desc_upper for rp in reimbursement_mappings
             )
             if not is_reimbursement:
+                if rule_counter is not None:
+                    rule_counter.record("self_transfer")
                 return "ignorar", "exact", "", []
 
     # 2. Reimbursements (subcategory → tag)
@@ -175,6 +180,8 @@ def categorize_transaction(
             sub = _value_subcategory(value)
             tags = [sub] if sub else []
             canonical, _ = _resolve_supplier(description, supplier_index)
+            if rule_counter is not None:
+                rule_counter.record("reimbursement")
             return cat, "exact", canonical, tags
 
     # 3. Value-based mappings
@@ -190,17 +197,27 @@ def categorize_transaction(
                     sub = _value_subcategory(cat_value)
                     tags = [sub] if sub else []
                     canonical, _ = _resolve_supplier(description, supplier_index)
+                    if rule_counter is not None:
+                        rule_counter.record("value_based_splits")
                     return cat, "exact", canonical, tags
 
     # 4. Supplier resolution
     if supplier_index is None:
+        if rule_counter is not None:
+            rule_counter.record("fallback_a_identificar")
         return "a_identificar", "none", "", []
     canonical, confidence = detect_supplier(description, supplier_index)
     if not canonical:
+        if rule_counter is not None:
+            rule_counter.record("fallback_a_identificar")
         return "a_identificar", "none", "", []
     supplier = supplier_index.find_by_canonical(canonical)
     if supplier is None:
+        if rule_counter is not None:
+            rule_counter.record("vendor_mappings_unknown_canonical")
         return "a_identificar", confidence, canonical, []
+    if rule_counter is not None:
+        rule_counter.record("vendor_mappings")
     return (
         supplier.get("default_category", "a_identificar") or "a_identificar",
         confidence,
@@ -456,14 +473,20 @@ def main():
         print("Run normalize.py first.")
         sys.exit(1)
 
-    # categories.json lives in 3-resources/tools/finance/config/ (consumed by both accountant and dashboard).
+    # categories.json lives in .user/finance/bookkeeper/config/ (consumed by both bookkeeper and dashboard).
     vault_root = _find_vault_root()
-    categories_path = vault_root / "3-resources" / "tools" / "finance" / "config" / "categories.json"
+    bookkeeper_config = vault_root / ".user" / "finance" / "bookkeeper" / "config"
+    categories_path = bookkeeper_config / "categories.json"
     categories_config = load_json(categories_path)
     self_transfer_patterns = categories_config.get("self_transfer_patterns", [])
     reimbursement_mappings = categories_config.get("reimbursement_mappings", {})
     recurrence_rules = categories_config.get("recurrence_rules", {})
     value_based_mappings = categories_config.get("value_based_mappings", [])
+
+    # Standing-rules registry (declarative source of truth — fail loud if absent).
+    standing_rules = load_standing_rules(bookkeeper_config)
+    rule_set_version = (standing_rules.get("_meta") or {}).get("rule_set_version")
+    rule_counter = RuleFireCounter()
 
     suppliers_path = config_folder / "suppliers.json"
     supplier_index: SupplierIndex | None = None
@@ -521,11 +544,13 @@ def main():
             tx_amount = 0.0
 
         # Classification
+        rule_counter.observe_row()
         if i in auto_pairs:
             category = "intercontas"
             match_confidence = "exact"
             supplier_canonical, _ = _resolve_supplier(description, supplier_index)
             seed_tags: list[str] = []
+            rule_counter.record("intercontas_auto_pair")
         else:
             category, match_confidence, supplier_canonical, seed_tags = (
                 categorize_transaction(
@@ -535,6 +560,7 @@ def main():
                     supplier_index,
                     amount=tx_amount,
                     value_based_mappings=value_based_mappings,
+                    rule_counter=rule_counter,
                 )
             )
 
@@ -596,11 +622,25 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = output_dir / "transactions.csv"
 
-    with open(output_file, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=CATEGORIZED_COLUMNS)
-        writer.writeheader()
-        for row in categorized:
-            writer.writerow({col: row.get(col, "") for col in CATEGORIZED_COLUMNS})
+    with audit.track_write(
+        output_file,
+        materiality="high",
+        action="overwrite",
+        event_type="ledger_write",
+        source_function="categorize.main",
+        trigger_context={"input_dir": str(normalized_dir)},
+    ):
+        with open(output_file, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=CATEGORIZED_COLUMNS)
+            writer.writeheader()
+            for row in categorized:
+                writer.writerow({col: row.get(col, "") for col in CATEGORIZED_COLUMNS})
+
+    rule_counter.emit_summary(
+        source_function="categorize.main",
+        rule_set_version=rule_set_version,
+        trigger_context={"input_dir": str(normalized_dir)},
+    )
 
     # ----- Report -----
     print("=" * 60)

@@ -51,8 +51,8 @@ A categorização depende de revisão humana para itens desconhecidos. O agente 
 O workflow segue o PARA method do Obsidian e distribui arquivos em três locais:
 
 ```
-.user/workflows/accountant/   # WORKFLOW (permanent infrastructure)
-├── accountant.md               # Workflow entry point (path vars, activation, rules)
+3-resources/tools/sb-os/finance/workflows/bookkeeper/   # WORKFLOW (permanent infrastructure)
+├── bookkeeper.md               # Workflow entry point (path vars, activation, rules)
 ├── gastos/
 │   ├── step-01-preflight.md               # Pre-flight check and filename normalization
 │   ├── step-02-normalize.md               # Run normalize.py
@@ -82,8 +82,8 @@ O workflow segue o PARA method do Obsidian e distribui arquivos em três locais:
     ├── banks-template.json                # Template open source (sem dados pessoais)
     └── categories-template.json           # Template open source (categorias vazias)
 
-.user/workflows/accountant/                 # WORKFLOW DEFINITION + OPERATIONAL CONFIG
-├── accountant.md                            # Top-level workflow
+3-resources/tools/sb-os/finance/workflows/bookkeeper/                 # WORKFLOW DEFINITION + OPERATIONAL CONFIG
+├── bookkeeper.md                            # Top-level workflow
 ├── gastos/                                  # Gastos step files (.md)
 ├── investimentos/                           # Investimentos step files (.md) + tmp-processed/ scratch
 ├── config/banks.json                        # Bancos configurados + standard_filename
@@ -94,14 +94,14 @@ O workflow segue o PARA method do Obsidian e distribui arquivos em três locais:
 ├── config/lot-splits.yaml                   # Lot-split overrides
 └── data/assets.csv                          # Registro master de ativos
 
-3-resources/tools/finance/                              # PIPELINE (code + data + docs co-located)
+3-resources/tools/sb-os/finance/                              # PIPELINE (code + data + docs co-located)
 ├── dashboard.html
 ├── scripts/
 │   ├── dashboard/                           # Dashboard JS + CSS
-│   ├── accountant/{shared,gastos,investimentos}/  # Python scripts
+│   ├── {shared,gastos,investimentos}/        # Python scripts
 │   └── migrations/                          # One-shot migration scripts
 ├── config/
-│   └── categories.json                      # Shared between accountant + dashboard
+│   └── categories.json                      # Shared between bookkeeper + dashboard
 ├── raw/                                     # RAW DATA per month
 │   └── {YYYY-MM}/
 │       ├── expenses/                        # Renamed bank exports (CSV/PDF)
@@ -112,7 +112,7 @@ O workflow segue o PARA method do Obsidian e distribui arquivos em três locais:
 │   │   ├── months.json
 │   │   └── {YYYY-MM}/transactions.csv
 │   └── investimentos/                       # Consolidated investment ledgers
-└── docs/                                    # accountant.md, expenses-data.md, financial-dashboard.md, architecture.md
+└── docs/                                    # bookkeeper.md, expenses-data.md, financial-dashboard.md, architecture.md
 
 2-areas/finance/                            # PERSONAL FINANCE RECORDS (vault content)
 ├── finance.md
@@ -126,8 +126,8 @@ O workflow segue o PARA method do Obsidian e distribui arquivos em três locais:
 
 | Local | Razão |
 |---|---|
-| `.user/workflows/accountant/` | Workflow definition + operational config (credentials, asset registry) — never open-sourced |
-| `3-resources/tools/finance/` | Self-contained pipeline (scripts + data + docs co-located) |
+| `3-resources/tools/sb-os/finance/workflows/bookkeeper/` | Workflow definition + operational config (credentials, asset registry) — never open-sourced |
+| `3-resources/tools/sb-os/finance/` | Self-contained pipeline (scripts + data + docs co-located) |
 | `2-areas/finance/` | Personal finance records consumed by the `home` dashboard (`3-resources/tools/obsidian-dashboards/home.md`) |
 | `4-archives/finance/monthly-closings/` | Legacy fechamento reports (dashboard supersedes) |
 
@@ -179,7 +179,7 @@ O usuário faz upload dos arquivos com o nome original do banco (que varia entre
 1. Criar parser em `scripts/parsers/{bank_id}.py` herdando `BaseParser`
 2. Implementar `parse(filepath, password) → list[dict]`
 3. Definir `bank_id` e `source_type` como atributos de classe
-4. Adicionar entrada em `.user/workflows/accountant/config/banks.json` com `id`, `standard_filename`, `identification`, `password_required`
+4. Adicionar entrada em `.user/finance/bookkeeper/config/banks.json` com `id`, `standard_filename`, `identification`, `password_required`
 5. O registry (`__init__.py`) descobre o novo parser automaticamente
 
 ---
@@ -196,7 +196,7 @@ Quick orientation only:
   - **NEW columns** (post-redesign): `data_caixa` (immutable cash-flow date), `data_competencia` (analytical attribution date), `supplier_canonical` (normalized supplier name), `tags` (semicolon-separated cross-cutting tokens).
   - **DROPPED:** `subcategory` is no longer a stored column. Cross-cutting slicing is done via `tags` (multi-value); per-trip / per-context labels live in `tags.json` per data-model §4.
 
-The categorized CSV is the contract between `categorize.py` (and the one-shot `backfill.py`) and the dashboard. Path: `3-resources/tools/finance/ledgers/fechamento/{YYYY-MM}/transactions.csv`.
+The categorized CSV is the contract between `categorize.py` (and the one-shot `backfill.py`) and the dashboard. Path: `.user/finance/bookkeeper/ledgers/fechamento/{YYYY-MM}/transactions.csv`.
 
 ### Classificação de recorrência
 
@@ -410,7 +410,7 @@ Usam `pdfplumber` para extração de tabela/texto e `pikepdf` para decriptação
 
 ## Menu de entrada e roteamento
 
-A partir de 2026-04-26, `accountant.md` apresenta um menu na ativação:
+A partir de 2026-04-26, `bookkeeper.md` apresenta um menu na ativação:
 
 ```
 Qual fluxo? [1] Gastos / [2] Investimentos / [3] Ambos
@@ -422,11 +422,11 @@ Qual fluxo? [1] Gastos / [2] Investimentos / [3] Ambos
 | `investimentos` | `investimentos/step-01-preflight.md` | Fluxo de revisão mensal de investimentos (8 passos) |
 | `ambos` | `gastos/step-01-preflight.md` → `investimentos/step-01-preflight.md` | Gastos completo (Passos 1-8) e em seguida Investimentos. O encadeamento ocorre no Passo 8 (`gastos/step-08-manifest.md`) que verifica `{PATH}=ambos` e roteia para o preflight de investimentos |
 
-Path variables adicionais introduzidas: `GASTOS_WORKFLOW_DIR` (`{WORKFLOW_DIR}/gastos`), `INV_WORKFLOW_DIR`, `INV_SCRIPTS_DIR` (`3-resources/tools/finance/scripts/accountant/investimentos`), `INV_RAW_DIR` (`3-resources/tools/finance/raw/{MONTH}/investment`), `INV_LEDGER_DIR` (`3-resources/tools/finance/ledgers/investimentos`).
+Path variables adicionais introduzidas: `GASTOS_WORKFLOW_DIR` (`{WORKFLOW_DIR}/gastos`), `INV_WORKFLOW_DIR`, `INV_SCRIPTS_DIR` (`3-resources/tools/sb-os/finance/scripts/investimentos`), `INV_RAW_DIR` (`.user/finance/bookkeeper/raw-data/{MONTH}/investment`), `INV_LEDGER_DIR` (`.user/finance/bookkeeper/ledgers/investimentos`).
 
 ## Fluxo do agente — Gastos (8 passos)
 
-O workflow usa arquitetura micro-file BMAD. Entry point em `.user/workflows/accountant/accountant.md`, passos individuais em `.user/workflows/accountant/step-{NN}-{id}.md`.
+O workflow usa arquitetura micro-file BMAD. Entry point em `3-resources/tools/sb-os/finance/workflows/bookkeeper/bookkeeper.md`, passos individuais em `3-resources/tools/sb-os/finance/workflows/bookkeeper/step-{NN}-{id}.md`.
 
 | Passo | Arquivo | Objetivo | STOP? |
 |---|---|---|---|
@@ -464,7 +464,7 @@ O workflow usa arquitetura micro-file BMAD. Entry point em `.user/workflows/acco
 
 ## lib/ — shared primitives
 
-All five modules live under `3-resources/tools/finance/scripts/accountant/shared/lib/` and are MANDATORY shared infrastructure (spec T8). Both `categorize.py` (Phase 2) and the one-shot `backfill.py` (Phase 5) MUST import from these modules — duplication is forbidden. Functions are pure where possible (input → output, no I/O); side effects (file writes, prompts) live in callers. Full function signatures and contracts: [`./data-model.md`](./data-model.md) §5.
+All five modules live under `3-resources/tools/sb-os/finance/scripts/shared/lib/` and are MANDATORY shared infrastructure (spec T8). Both `categorize.py` (Phase 2) and the one-shot `backfill.py` (Phase 5) MUST import from these modules — duplication is forbidden. Functions are pure where possible (input → output, no I/O); side effects (file writes, prompts) live in callers. Full function signatures and contracts: [`./data-model.md`](./data-model.md) §5.
 
 | Module | Purpose |
 |--------|---------|
@@ -476,7 +476,7 @@ All five modules live under `3-resources/tools/finance/scripts/accountant/shared
 
 ## Config dictionaries
 
-Three JSON files under `.user/workflows/accountant/config/` drive categorization, supplier identity, and tag governance. Schemas authoritative in [`./data-model.md`](./data-model.md) §2–§4.
+Three JSON files under `.user/finance/bookkeeper/config/` drive categorization, supplier identity, and tag governance. Schemas authoritative in [`./data-model.md`](./data-model.md) §2–§4.
 
 | File | Purpose |
 |------|---------|
@@ -501,7 +501,7 @@ Three JSON files under `.user/workflows/accountant/config/` drive categorization
 | D11 | Splits só no relatório | Info de split não existe nos extratos — é regra de negócio |
 | D12 | ~~Subcategorias no CSV~~ → tags multi-valor | Subcategoria substituída por `tags` (semicolon-separated, cross-cutting, multi-valor). Coluna `subcategory` removida do schema. Slicing por trip/contexto vive em `tags.json` |
 | D13 | Passo 7 skip retroativo | Pagamentos recorrentes só fazem sentido para o mês corrente |
-| D14 | Pipeline em `3-resources/tools/finance/` | Self-contained — scripts + data + docs co-located para minimizar drift entre código e estrutura |
+| D14 | Pipeline em `3-resources/tools/sb-os/finance/` | Self-contained — scripts + data + docs co-located para minimizar drift entre código e estrutura |
 | D15 | `lib/` shared primitives mandate (T8) | `categorize.py` e `backfill.py` (one-shot Phase 5) DEVEM importar dos mesmos módulos `lib/`. Drift entre os dois consumidores é proibido — primitive-sharing impede divergência e regressões silenciosas |
 | D16 | Two-pass review queue (T5) | Pass 1 (cat/supplier/tag unknowns batched by item type) DEVE fechar antes de Pass 2 (boundary prompts). Boundary depende de `supplier.movable` resolvido em Pass 1 — `build_pass_2_queue` levanta `QueueOrderingError` se a ordem for violada, tornando misses silenciosos impossíveis por construção |
 | D17 | Render-time supplier rollup (T6) | `Outros` é uma camada de apresentação computada via `lib.suppliers.rollup_outros` (janela trailing 92 dias, threshold R$200). NUNCA gravado no CSV — supplier_canonical na storage layer só carrega valores reais ou string vazia |

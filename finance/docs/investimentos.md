@@ -1,8 +1,8 @@
 # Investimentos
 
-Design documentation for the investment tracking system. Workflow infrastructure lives in `.user/workflows/accountant/investimentos/`, ledgers in `3-resources/tools/finance/ledgers/investimentos/`, config in `.user/`.
+Design documentation for the investment tracking system. Workflow infrastructure lives in `3-resources/tools/sb-os/finance/workflows/bookkeeper/investimentos/`, ledgers in `.user/finance/bookkeeper/ledgers/investimentos/`, config in `.user/finance/bookkeeper/config/`.
 
-> **This doc is partially outdated and scheduled for rewrite.** When this doc disagrees with the implementation, the implementation wins — ledger CSVs in `3-resources/tools/finance/ledgers/investimentos/`, parsers in `3-resources/tools/finance/scripts/accountant/investimentos/parsers/`, and the dashboard documentation in `3-resources/tools/finance/docs/financial-dashboard.md` are authoritative.
+> **This doc is partially outdated and scheduled for rewrite.** When this doc disagrees with the implementation, the implementation wins — ledger CSVs in `.user/finance/bookkeeper/ledgers/investimentos/`, parsers in `3-resources/tools/sb-os/finance/scripts/investimentos/parsers/`, and the dashboard documentation in `3-resources/tools/sb-os/finance/docs/financial-dashboard.md` are authoritative.
 
 ## Architecture
 
@@ -14,7 +14,7 @@ Spreadsheet CSVs (historical)     Source files (ongoing)
         │                                │
         └──────────┬─────────────────────┘
                    ▼
-         3-resources/tools/finance/ledgers/investimentos/
+         .user/finance/bookkeeper/ledgers/investimentos/
          ├── orders.csv          (variable income trades)
          ├── proventos.csv       (dividends, JCP, rendimentos)
          ├── balcao.csv          (fixed income + fund transactions)
@@ -254,7 +254,7 @@ Future broker statements add their own parsers and register under `PARSERS` in `
 
 ### RF and Fund Metadata in `assets.csv`
 
-`assets.csv` (master registry at `.user/workflows/accountant/data/assets.csv`) is the single source of truth for all asset metadata. Class-specific columns coexist with empty values for non-applicable rows. Decision 2026-04-26: `asset_info.csv` retired — see plan §Scope changes (assets / asset_info consolidation).
+`assets.csv` (master registry at `.user/finance/bookkeeper/data/assets.csv`) is the single source of truth for all asset metadata. Class-specific columns coexist with empty values for non-applicable rows. Decision 2026-04-26: `asset_info.csv` retired — see plan §Scope changes (assets / asset_info consolidation).
 
 | Column | Class | Use |
 |--------|-------|-----|

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -173,10 +174,37 @@ def test_supplier_canonical_resolved_from_aliases(month_folder: Path,
 def test_tags_column_emitted_empty_by_categorize(month_folder: Path,
                                                    config_folder: Path,
                                                    tmp_path: Path):
-    """categorize.py emits tags='' on every row (the accountant Pass 1
+    """categorize.py emits tags='' on every row (the bookkeeper Pass 1
     workflow fills it interactively)."""
     output = tmp_path / "out"
     _run_categorize(month_folder, config_folder, output)
     _, rows = _load_csv(output / "transactions.csv")
     for row in rows:
         assert row["tags"] == ""
+
+
+def test_rule_fired_event_emitted_to_audit_log(month_folder: Path,
+                                                 config_folder: Path,
+                                                 tmp_path: Path):
+    """End-to-end check that categorize.py loads standing-rules.yaml and
+    emits a `rule_fired` summary event via the audit-event protocol."""
+    output = tmp_path / "out"
+    _run_categorize(month_folder, config_folder, output)
+    audit_dir = Path(os.environ["BOOKKEEPER_AUDIT_LOG_DIR"])
+    events: list[dict] = []
+    for p in sorted(audit_dir.glob("events-*.jsonl")):
+        events.extend(
+            json.loads(line)
+            for line in p.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        )
+    rule_events = [e for e in events if e["event_type"] == "rule_fired"]
+    assert rule_events, (
+        f"no rule_fired event in audit log; got types: "
+        f"{[e['event_type'] for e in events]}"
+    )
+    e = rule_events[0]
+    assert e["source"]["function"] == "categorize.main"
+    assert e["summary"]["rows_seen"] >= 1
+    assert e["summary"]["total_fires"] >= 1
+    assert isinstance(e["summary"]["fires_by_rule"], dict)

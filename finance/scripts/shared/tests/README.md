@@ -1,4 +1,4 @@
-# Accountant scripts — test suite
+# Bookkeeper scripts — test suite
 
 Pytest-based tests for the gastos pipeline primitives (`lib/`) and the
 end-to-end `categorize.py` runner. Stdlib + pytest only — no pandas, no
@@ -9,7 +9,7 @@ external deps.
 From the vault root:
 
 ```bash
-pytest 3-resources/tools/finance/scripts/accountant/shared/tests/ -v
+pytest 3-resources/tools/sb-os/finance/scripts/shared/tests/ -v
 ```
 
 Or, from this `tests/` directory:

@@ -19,8 +19,9 @@ def _find_vault_root() -> Path:
 
 VAULT_ROOT = _find_vault_root()
 
-LEDGER_DIR = VAULT_ROOT / "3-resources" / "tools" / "finance" / "ledgers" / "investimentos"
-ASSETS_PATH = VAULT_ROOT / ".user" / "workflows" / "accountant" / "data" / "assets.csv"
+LEDGER_DIR = VAULT_ROOT / ".user" / "finance" / "bookkeeper" / "ledgers" / "investimentos"
+ASSETS_PATH = VAULT_ROOT / ".user" / "finance" / "bookkeeper" / "data" / "assets.csv"
+CORRECTIONS_DIR = VAULT_ROOT / ".user" / "finance" / "bookkeeper" / "config" / "corrections"
 
 
 @dataclass
@@ -135,7 +136,7 @@ def load_code_migrations() -> dict[str, list[dict]]:
     The synthetic seed is injected on the latest from_date with amount =
     -from_total (an aplicacao-equivalent).
     """
-    path = LEDGER_DIR / 'code_migrations.csv'
+    path = CORRECTIONS_DIR / 'code_migrations.csv'
     if not path.exists():
         return {}
     out: dict[str, list[dict]] = {}
@@ -257,7 +258,7 @@ def _validate_no_rf_in_proventos(proventos: list[dict], assets: dict[str, dict])
         if len(violations) > 10:
             msg.append(f'  ... and {len(violations) - 10} more')
         msg.append('')
-        msg.append('Run: 3-resources/tools/finance/scripts/migrations/2026-05-01-migrate-rf-juros.py')
+        msg.append('Run: 3-resources/tools/sb-os/finance/scripts/migrations/2026-05-01-migrate-rf-juros.py')
         raise ValueError('\n'.join(msg))
 
 

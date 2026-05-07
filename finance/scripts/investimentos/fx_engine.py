@@ -18,7 +18,7 @@ def _find_vault_root() -> Path:
 
 VAULT_ROOT = _find_vault_root()
 
-LEDGER_DIR = VAULT_ROOT / "3-resources" / "tools" / "finance" / "ledgers" / "investimentos"
+LEDGER_DIR = VAULT_ROOT / ".user" / "finance" / "bookkeeper" / "ledgers" / "investimentos"
 
 
 @dataclass

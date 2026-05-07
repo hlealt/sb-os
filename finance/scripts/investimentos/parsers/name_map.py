@@ -15,7 +15,7 @@ VAULT_ROOT = _find_vault_root()
 
 # Default location of name_map.csv
 DEFAULT_NAME_MAP_PATH = (
-    VAULT_ROOT / "3-resources" / "tools" / "finance" / "ledgers" / "investimentos" / "name_map.csv"
+    VAULT_ROOT / ".user" / "finance" / "bookkeeper" / "ledgers" / "investimentos" / "name_map.csv"
 )
 
 
@@ -79,12 +79,28 @@ class NameMapResolver:
     def add_entry(self, source: str, field: str, raw_value: str,
                   canonical_value: str, asset_type: str = ''):
         """Add a new mapping and persist to CSV."""
+        # Lazy import to avoid loading audit at parser import time.
+        import sys as _sys
+        from pathlib import Path as _Path
+        _shared_lib = _Path(__file__).resolve().parents[3] / "shared"
+        if str(_shared_lib) not in _sys.path:
+            _sys.path.insert(0, str(_shared_lib))
+        from lib import audit  # noqa: E402
+
         key = (source, field, raw_value)
         self._map[key] = {
             'canonical_value': canonical_value,
             'asset_type': asset_type,
         }
         # Append to CSV
-        with open(self._filepath, 'a', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            writer.writerow([source, field, raw_value, canonical_value, asset_type])
+        with audit.track_write(
+            self._filepath,
+            materiality="medium",
+            action="append",
+            event_type="config_write",
+            source_function="name_map.add_entry",
+            trigger_context={"source": source, "field": field},
+        ):
+            with open(self._filepath, 'a', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow([source, field, raw_value, canonical_value, asset_type])

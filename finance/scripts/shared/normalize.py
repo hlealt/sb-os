@@ -4,9 +4,9 @@
 Usage:
     python normalize.py <raw_dir> <processed_dir> <config_folder>
 
-    raw_dir:       Raw bank exports for the month (e.g., 3-resources/tools/finance/raw/2026-04/expenses)
-    processed_dir: Where to write normalized CSVs (e.g., 3-resources/tools/finance/ledgers/expenses/2026-04)
-    config_folder: Path to accountant config (e.g., .user/workflows/accountant/config)
+    raw_dir:       Raw bank exports for the month (e.g., .user/finance/bookkeeper/raw-data/2026-04/expenses)
+    processed_dir: Where to write normalized CSVs (e.g., .user/finance/bookkeeper/ledgers/expenses/2026-04)
+    config_folder: Path to bookkeeper config (e.g., .user/finance/bookkeeper/config)
 
 Reads banks.json and passwords.json from config_folder.
 For each bank, finds matching files in raw_dir, parses them,
@@ -30,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from utils import derive_password, write_normalized_csv
 from parsers import get_parser
+from lib import audit
 
 
 def load_json(path: Path) -> dict:
@@ -217,9 +218,9 @@ def filter_by_date(rows: list[dict], date_range: tuple[date, date], bank_id: str
 def main():
     if len(sys.argv) < 4:
         print("Usage: python normalize.py <raw_dir> <processed_dir> <config_folder>")
-        print("  raw_dir:       Path to raw bank exports for the month (e.g., 3-resources/tools/finance/raw/2026-04/expenses)")
-        print("  processed_dir: Path to write normalized CSVs (e.g., 3-resources/tools/finance/ledgers/expenses/2026-04)")
-        print("  config_folder: Path to config (e.g., .user/workflows/accountant/config)")
+        print("  raw_dir:       Path to raw bank exports for the month (e.g., .user/finance/bookkeeper/raw-data/2026-04/expenses)")
+        print("  processed_dir: Path to write normalized CSVs (e.g., .user/finance/bookkeeper/ledgers/expenses/2026-04)")
+        print("  config_folder: Path to config (e.g., .user/finance/bookkeeper/config)")
         sys.exit(1)
 
     raw_dir = Path(sys.argv[1])
@@ -352,8 +353,15 @@ def main():
     # Write fatura totals
     if fatura_totals:
         totals_file = output_dir / "fatura_totals.json"
-        with open(totals_file, "w", encoding="utf-8") as f:
-            json.dump(fatura_totals, f, indent=2, ensure_ascii=False)
+        with audit.track_write(
+            totals_file,
+            materiality="medium",
+            action="overwrite",
+            event_type="state_write",
+            source_function="normalize.main",
+        ):
+            with open(totals_file, "w", encoding="utf-8") as f:
+                json.dump(fatura_totals, f, indent=2, ensure_ascii=False)
 
     print()
     print("-" * 60)

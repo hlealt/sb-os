@@ -2,7 +2,7 @@
 
 Pass 1 — UNKNOWNS resolution. Items: unknown category, unknown supplier,
 proposed-but-unconfirmed tag. Items are GROUPED by item_type so the
-accountant can clear easy classes fast (T2 — ≤15s per-item target via
+bookkeeper can clear easy classes fast (T2 — ≤15s per-item target via
 batching).
 
 Pass 2 — BOUNDARY prompts. Built ONLY after Pass 1 completes — boundary

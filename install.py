@@ -37,7 +37,7 @@ def _bootstrap_import_path() -> Path:
 
 
 def _validate_runtime_env(repo_root: Path) -> int:
-    install_pkg = repo_root / "admin" / "install"
+    install_pkg = repo_root / "install"
     expected = ("fresh.py", "upgrade.py", "cli.py", "manifest.py", "loaders.py")
     missing = [name for name in expected if not (install_pkg / name).is_file()]
     if missing:

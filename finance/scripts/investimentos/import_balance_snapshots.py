@@ -32,6 +32,9 @@ from parsers.safra_fundos_movimentacoes import SafraFundosMovimentacoesParser
 from parsers.safra_rf_movimentacoes import SafraRfMovimentacoesParser
 from parsers.name_map import NameMapResolver
 
+sys.path.append(str(Path(__file__).parent.parent / "shared"))
+from lib import field_ownership  # noqa: E402  (deliberate post-parsers import to avoid shared/parsers shadowing investimentos/parsers)
+
 
 def _find_vault_root() -> Path:
     for parent in Path(__file__).resolve().parents:
@@ -41,10 +44,11 @@ def _find_vault_root() -> Path:
 
 
 VAULT_ROOT = _find_vault_root()
-LEDGER_DIR = VAULT_ROOT / "3-resources" / "tools" / "finance" / "ledgers" / "investimentos"
+LEDGER_DIR = VAULT_ROOT / ".user" / "finance" / "bookkeeper" / "ledgers" / "investimentos"
 SNAPSHOTS_FILE = LEDGER_DIR / "balance-snapshots.csv"
 BALCAO_FILE = LEDGER_DIR / "balcao.csv"
-ASSETS_FILE = VAULT_ROOT / ".user" / "workflows" / "accountant" / "data" / "assets.csv"
+ASSETS_FILE = VAULT_ROOT / ".user" / "finance" / "bookkeeper" / "data" / "assets.csv"
+CONFIG_DIR = VAULT_ROOT / ".user" / "finance" / "bookkeeper" / "config"
 SNAPSHOTS_COLUMNS = ['date', 'product_id', 'balance', 'source']
 BALCAO_COLUMNS = ['date', 'operation', 'product_id', 'product_type', 'quantity',
                   'amount', 'irrf', 'iof', 'broker', 'source']
@@ -142,40 +146,66 @@ def upsert_balcao(new_rows: list[dict], seed_rows: list[dict]) -> tuple[int, int
     return inserted_tx, skipped_tx, inserted_seed, skipped_seed
 
 
-_INSERT_ONLY_FIELDS = {'name', 'issuer', 'cnpj'}
-
-
-def upsert_assets(new_rows: list[dict]) -> tuple[int, int]:
+def upsert_assets(new_rows: list[dict], *, source_id: str) -> tuple[int, int]:
     """Merge new asset metadata into assets.csv by `id`.
 
-    Existing rows are preserved; only fields explicitly set in new_rows overwrite
-    the existing values. Missing fields stay as-is — protects manual edits.
+    Existing rows are preserved; only fields explicitly set in new_rows
+    overwrite the existing values. Missing fields stay as-is — protects
+    manual edits.
 
-    Fields in `_INSERT_ONLY_FIELDS` are populated only on insert and never
-    overwritten on update — they are user-curated after the initial registration.
+    Per-field write permission is gated by the field-ownership manifest
+    at `.user/finance/bookkeeper/config/_field_ownership.yaml`:
+
+      - `curated`      Set on insert; never overwritten on update.
+      - `source_bound` Only listed `owners:` may write/overwrite.
+      - `derived`      Freely overwritable.
+
+    `source_id` MUST identify the parser producing `new_rows` (e.g.
+    `"safra_titulos"`). Unknown fields halt the upsert (fail-loud) until
+    the user classifies them in the manifest.
     """
     if not ASSETS_FILE.exists() or not new_rows:
         return 0, 0
+
+    manifest = field_ownership.load_field_ownership(CONFIG_DIR)
+    primary_key = (manifest.get("_meta") or {}).get("primary_key", "id")
 
     with open(ASSETS_FILE, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         columns = list(reader.fieldnames)
         existing = list(reader)
 
-    by_id = {r['id']: r for r in existing}
+    incoming_fields = set()
+    for row in new_rows:
+        incoming_fields.update(row.keys())
+    field_ownership.assert_known_fields(
+        manifest,
+        set(columns) | incoming_fields,
+        primary_key=primary_key,
+    )
+
+    by_id = {r[primary_key]: r for r in existing}
     inserted = 0
     updated = 0
     for row in new_rows:
-        pid = row['id']
+        pid = row[primary_key]
         if pid in by_id:
             target = by_id[pid]
             changed = False
             for k, v in row.items():
-                if k in _INSERT_ONLY_FIELDS:
+                if k == primary_key:
                     continue
-                if v and target.get(k, '') != v:
-                    target[k] = v
-                    changed = True
+                if not v or target.get(k, '') == v:
+                    continue
+                if not field_ownership.can_write(
+                    manifest, k,
+                    source_id=source_id,
+                    is_insert=False,
+                    primary_key=primary_key,
+                ):
+                    continue
+                target[k] = v
+                changed = True
             if changed:
                 updated += 1
         else:
@@ -216,7 +246,7 @@ def main():
 
     snap_inserted, snap_skipped, snap_total = upsert_snapshots(snap_rows)
     bal_inserted, bal_skipped, seed_inserted, seed_skipped = upsert_balcao(balcao_rows, seed_rows)
-    asset_inserted, asset_updated = upsert_assets(asset_rows)
+    asset_inserted, asset_updated = upsert_assets(asset_rows, source_id=args.parser)
 
     print(f"parser:        {args.parser}")
     print(f"source:        {source}")

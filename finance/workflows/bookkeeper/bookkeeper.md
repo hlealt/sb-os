@@ -1,29 +1,29 @@
 ---
-name: accountant
+name: bookkeeper
 description: Monthly financial closing — gastos, investimentos, or both.
 model: opus
 ---
 
-# Accountant
+# Bookkeeper
 
 Conduct the complete monthly financial closing. Three flows are supported: bank statement reconciliation (gastos), investment ledger update + portfolio refresh (investimentos), or both in sequence.
 
 ## Path Variables
 
 ```
-WORKFLOW_DIR     = .user/workflows/accountant
-SCRIPTS_DIR      = 3-resources/tools/finance/scripts/accountant/shared
+WORKFLOW_DIR     = 3-resources/tools/sb-os/finance/workflows/bookkeeper
+SCRIPTS_DIR      = 3-resources/tools/sb-os/finance/scripts/shared
 GASTOS_WORKFLOW_DIR = {WORKFLOW_DIR}/gastos
 INV_WORKFLOW_DIR = {WORKFLOW_DIR}/investimentos
-INV_SCRIPTS_DIR  = 3-resources/tools/finance/scripts/accountant/investimentos
-CONFIG_DIR       = .user/workflows/accountant/config
-CATEGORIES_FILE  = 3-resources/tools/finance/config/categories.json
-ASSETS_FILE      = .user/workflows/accountant/data/assets.csv
-RAW_ROOT         = 3-resources/tools/finance/raw
-PROCESSED_ROOT   = 3-resources/tools/finance/ledgers/expenses
-DASHBOARD_DATA   = 3-resources/tools/finance/ledgers/fechamento
-INV_LEDGER_DIR   = 3-resources/tools/finance/ledgers/investimentos
-INV_PROCESSED_DIR = {INV_WORKFLOW_DIR}/tmp-processed
+INV_SCRIPTS_DIR  = 3-resources/tools/sb-os/finance/scripts/investimentos
+CONFIG_DIR       = .user/finance/bookkeeper/config
+CATEGORIES_FILE  = .user/finance/bookkeeper/config/categories.json
+ASSETS_FILE      = .user/finance/bookkeeper/data/assets.csv
+RAW_ROOT         = .user/finance/bookkeeper/raw-data
+PROCESSED_ROOT   = .user/finance/bookkeeper/ledgers/expenses
+DASHBOARD_DATA   = .user/finance/bookkeeper/ledgers/fechamento
+INV_LEDGER_DIR   = .user/finance/bookkeeper/ledgers/investimentos
+INV_PROCESSED_DIR = .user/finance/bookkeeper/investimentos/tmp-processed
 ```
 
 ## Activation

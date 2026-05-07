@@ -22,7 +22,7 @@ nextStepFile: step-03-update.md
 | Avenue FX | `parsers.avenue_fx` | `raw/avenue-cambio/*.pdf` | `avenue_fx.csv` |
 | Bipa | `parsers.bipa` | `raw/bipa-extrato.csv` | `bipa_crypto.csv` |
 | Mercado Bitcoin | `parsers.mercado_bitcoin` | `raw/mb-extrato.csv` | `mb_crypto.csv` |
-| Mercado Pago (inv) | `parsers.mp_investimentos` | `3-resources/tools/finance/ledgers/expenses/{MONTH}/mp_extrato.csv` | `mp_balcao.csv` |
+| Mercado Pago (inv) | `parsers.mp_investimentos` | `.user/finance/bookkeeper/ledgers/expenses/{MONTH}/mp_extrato.csv` | `mp_balcao.csv` |
 
 Os parsers são independentes — podem rodar em qualquer ordem. Se um parser falhar com erro de formato, reporte o erro completo ao usuário e pergunte como proceder. Não bloqueie a execução dos demais.
 

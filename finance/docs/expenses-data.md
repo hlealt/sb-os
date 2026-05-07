@@ -1,14 +1,14 @@
 # Data Model — Expenses Redesign (2026-05)
 
 > **Status:** In build per `1-projects/finance-automation/expenses-redesign/expenses-redesign-plan.md` (Phase 1, task `p1-1`).
-> **Authoring convention:** This file is the SINGLE SOURCE OF TRUTH for the new schema. Every Phase 2+ consumer (categorize.py, normalize.py, lib/* modules, accountant workflow steps, dashboard, backfill workflow) reads this file. No consumer redefines schema — they reference here.
+> **Authoring convention:** This file is the SINGLE SOURCE OF TRUTH for the new schema. Every Phase 2+ consumer (categorize.py, normalize.py, lib/* modules, bookkeeper workflow steps, dashboard, backfill workflow) reads this file. No consumer redefines schema — they reference here.
 > **Scope:** Gastos (expenses) only. Investments (`investimentos/`, `inv-*.js`) are out of scope.
 
 ---
 
 ## 1. CSV Schema (categorized output)
 
-The categorized CSV (`3-resources/tools/finance/ledgers/fechamento/{YYYY-MM}/transactions.csv`) is the contract between `categorize.py` (and the one-shot `backfill.py`) and the dashboard. The new schema replaces the existing 16-column shape (12 normalized + 4 categorized) with **19 columns**: 12 normalized (unchanged), 3 retained from the previous categorized layer (`category`, `match_confidence`, `recurrence`), 4 new (`data_caixa`, `data_competencia`, `supplier_canonical`, `tags`), 1 dropped (`subcategory`).
+The categorized CSV (`.user/finance/bookkeeper/ledgers/fechamento/{YYYY-MM}/transactions.csv`) is the contract between `categorize.py` (and the one-shot `backfill.py`) and the dashboard. The new schema replaces the existing 16-column shape (12 normalized + 4 categorized) with **19 columns**: 12 normalized (unchanged), 3 retained from the previous categorized layer (`category`, `match_confidence`, `recurrence`), 4 new (`data_caixa`, `data_competencia`, `supplier_canonical`, `tags`), 1 dropped (`subcategory`).
 
 ### 1.1 Normalized columns (preserved from current schema, written by parsers)
 
@@ -58,7 +58,7 @@ The categorized CSV (`3-resources/tools/finance/ledgers/fechamento/{YYYY-MM}/tra
 
 ## 2. Dictionary: `categories.json`
 
-**Path:** `.user/workflows/accountant/config/categories.json`.
+**Path:** `.user/finance/bookkeeper/config/categories.json`.
 **Status:** Existing file. Extended by p1-9 with `movable_hint` per category. All other fields preserved unchanged.
 
 ### 2.1 Top-level shape (preserved)
@@ -75,7 +75,7 @@ The categorized CSV (`3-resources/tools/finance/ledgers/fechamento/{YYYY-MM}/tra
 
 ### 2.2 Per-category extension: `movable_hint`
 
-Each category in `categories` gains a `movable_hint` field with one of three values. The hint drives the DEFAULT for new suppliers under that category and the accountant's prompt behavior in Pass 2 of the review queue (T1).
+Each category in `categories` gains a `movable_hint` field with one of three values. The hint drives the DEFAULT for new suppliers under that category and the bookkeeper's prompt behavior in Pass 2 of the review queue (T1).
 
 ```json
 {
@@ -101,7 +101,7 @@ Each category in `categories` gains a `movable_hint` field with one of three val
 | `movable_hint` | Default for new supplier under this category | Pass 2 boundary prompt for suppliers with this hint and no explicit `movable` flag |
 |----------------|----------------------------------------------|------------------------------------------------------------------------------------|
 | `movable` | `movable: true` | Skip — flag is auto-set; prompt only fires when supplier is in boundary day window (per T5) |
-| `mixed` | none (no default) | **Always surface** — accountant must explicitly set `movable` on the supplier before classifier proceeds |
+| `mixed` | none (no default) | **Always surface** — bookkeeper must explicitly set `movable` on the supplier before classifier proceeds |
 | `non-movable` | `movable: false` | Skip — prompt never fires for this supplier in any window |
 
 **Seeding guidance from T1** (full mapping decided in p1-9):
@@ -128,8 +128,8 @@ Each category in `categories` gains a `movable_hint` field with one of three val
 
 ## 3. Dictionary: `suppliers.json`
 
-**Path:** `.user/workflows/accountant/config/suppliers.json`.
-**Status:** New file (created empty by p1-7, populated by the accountant Pass 1 review queue and the one-shot backfill).
+**Path:** `.user/finance/bookkeeper/config/suppliers.json`.
+**Status:** New file (created empty by p1-7, populated by the bookkeeper Pass 1 review queue and the one-shot backfill).
 
 ### 3.1 Shape
 
@@ -205,7 +205,7 @@ Each category in `categories` gains a `movable_hint` field with one of three val
 2. Reimbursement detection (`reimbursement_mappings`) — short-circuit; subcategory becomes a tag.
 3. Value-based mappings (`value_based_mappings`) — sets `category` if amount is within ±5%; supplier still resolved separately for display.
 4. **Supplier alias detection (`suppliers.py`)** — sets `supplier_canonical`, `category` (from `default_category`), `tags` (from `default_tags`), `movable` flag.
-5. No supplier hit → `category: a_identificar`, accountant Pass 1 surfaces it.
+5. No supplier hit → `category: a_identificar`, bookkeeper Pass 1 surfaces it.
 
 **`match_confidence`** is the supplier-layer confidence (`exact` | `partial` | `none`) when the supplier layer fires; `exact` when a higher-priority layer (1–3) fires.
 
@@ -215,7 +215,7 @@ Each category in `categories` gains a `movable_hint` field with one of three val
 
 ## 4. Dictionary: `tags.json`
 
-**Path:** `.user/workflows/accountant/config/tags.json`.
+**Path:** `.user/finance/bookkeeper/config/tags.json`.
 **Status:** New file (created empty by p1-8).
 
 ### 4.1 Shape
@@ -284,7 +284,7 @@ The `rejected` array is an APPEND-ONLY log of tokens the user rejected during Pa
 
 ## 5. Lib module contracts
 
-All five modules live under `3-resources/tools/finance/scripts/accountant/shared/lib/`. Both `categorize.py` (Phase 2) and `backfill.py` (Phase 5) MUST import from these — no duplication. Functions are PURE wherever possible (input → output, no I/O); side effects (file writes, prompts) live in callers.
+All five modules live under `3-resources/tools/sb-os/finance/scripts/shared/lib/`. Both `categorize.py` (Phase 2) and `backfill.py` (Phase 5) MUST import from these — no duplication. Functions are PURE wherever possible (input → output, no I/O); side effects (file writes, prompts) live in callers.
 
 ### 5.1 `lib/accrual.py` — caixa + competência computation
 
@@ -788,6 +788,6 @@ Option B keeps the surface in one place (`fatura_totals.json`, already a normali
 | Source spec (T1–T8 + behavior matrix) | `1-projects/finance-automation/expenses-redesign-2026-05-02.md` |
 | Plan + architectural constraints | `1-projects/finance-automation/expenses-redesign/expenses-redesign-plan.md` |
 | Shape (decisions + discoveries) | `1-projects/finance-automation/expenses-redesign/shape.md` |
-| Current accountant architecture (pre-redesign reference) | `3-resources/tools/finance/docs/accountant.md` |
-| Current categories.json | `3-resources/tools/finance/config/categories.json` |
-| Dashboard knowledge file (Phase 4 guard) | `3-resources/tools/finance/docs/financial-dashboard.md` |
+| Current bookkeeper architecture (pre-redesign reference) | `3-resources/tools/sb-os/finance/docs/bookkeeper.md` |
+| Current categories.json | `.user/finance/bookkeeper/config/categories.json` |
+| Dashboard knowledge file (Phase 4 guard) | `3-resources/tools/sb-os/finance/docs/financial-dashboard.md` |

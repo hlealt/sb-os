@@ -23,14 +23,14 @@ Exemplo do que o usuário deve ver (para `{MONTH}=2026-04`):
 ```
 | Fonte                                  | O que baixar                                 | Onde salvar                                                          |
 |----------------------------------------|----------------------------------------------|----------------------------------------------------------------------|
-| Bradesco — Extrato Conta Corrente      | App Bradesco > Extrato > Exportar CSV        | 3-resources/tools/finance/raw/2026-04/expenses/extrato-bradesco.csv |
-| Santander — Extrato Conta Corrente     | Internet Banking Santander > Extrato > PDF   | 3-resources/tools/finance/raw/2026-04/expenses/extrato-santander.pdf|
-| Santander — Fatura Cartão Visa         | Email ou app Santander > Fatura > Baixar PDF | 3-resources/tools/finance/raw/2026-04/expenses/fatura-santander.pdf |
-| Mercado Pago — Extrato Conta           | App Mercado Pago > Extrato > Exportar CSV    | 3-resources/tools/finance/raw/2026-04/expenses/extrato-mercado-pago.csv |
-| Wise — Extrato Multi-Moeda             | Wise > Statements > Export CSV (por moeda)   | 3-resources/tools/finance/raw/2026-04/expenses/wise/extrato-wise-{MOEDA}.csv |
-| Mercado Pago — Fatura Cartão           | Email Mercado Pago > Fatura anexa em PDF     | 3-resources/tools/finance/raw/2026-04/expenses/fatura-mercado-pago.pdf |
-| Nubank — Fatura Cartão                 | App Nubank > Fatura > Baixar PDF ou email    | 3-resources/tools/finance/raw/2026-04/expenses/fatura-nubank.pdf    |
-| XP — Fatura Cartão                     | App XP > Cartão > Fatura > Exportar CSV      | 3-resources/tools/finance/raw/2026-04/expenses/fatura-xp.csv        |
+| Bradesco — Extrato Conta Corrente      | App Bradesco > Extrato > Exportar CSV        | .user/finance/bookkeeper/raw-data/2026-04/expenses/extrato-bradesco.csv |
+| Santander — Extrato Conta Corrente     | Internet Banking Santander > Extrato > PDF   | .user/finance/bookkeeper/raw-data/2026-04/expenses/extrato-santander.pdf|
+| Santander — Fatura Cartão Visa         | Email ou app Santander > Fatura > Baixar PDF | .user/finance/bookkeeper/raw-data/2026-04/expenses/fatura-santander.pdf |
+| Mercado Pago — Extrato Conta           | App Mercado Pago > Extrato > Exportar CSV    | .user/finance/bookkeeper/raw-data/2026-04/expenses/extrato-mercado-pago.csv |
+| Wise — Extrato Multi-Moeda             | Wise > Statements > Export CSV (por moeda)   | .user/finance/bookkeeper/raw-data/2026-04/expenses/wise/extrato-wise-{MOEDA}.csv |
+| Mercado Pago — Fatura Cartão           | Email Mercado Pago > Fatura anexa em PDF     | .user/finance/bookkeeper/raw-data/2026-04/expenses/fatura-mercado-pago.pdf |
+| Nubank — Fatura Cartão                 | App Nubank > Fatura > Baixar PDF ou email    | .user/finance/bookkeeper/raw-data/2026-04/expenses/fatura-nubank.pdf    |
+| XP — Fatura Cartão                     | App XP > Cartão > Fatura > Exportar CSV      | .user/finance/bookkeeper/raw-data/2026-04/expenses/fatura-xp.csv        |
 ```
 
 Após renderizar a tabela, pergunte: "Já baixou todos os arquivos para `{RAW_DIR}/`? [S/N]".

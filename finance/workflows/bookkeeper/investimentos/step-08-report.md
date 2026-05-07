@@ -5,7 +5,7 @@ stepId: report
 
 # Step 8: Report — Removed
 
-The monthly investment closing report (`{MONTH}-fechamento-investimentos.md`) is no longer generated. The financial dashboard at `3-resources/tools/finance/dashboard.html` is the canonical view.
+The monthly investment closing report (`{MONTH}-fechamento-investimentos.md`) is no longer generated. The financial dashboard (template at `3-resources/tools/sb-os/finance/dashboard/dashboard.html.template`; install destination `.user/finance/dashboard.html` pending p1-13) is the canonical view.
 
 This step is a no-op. Workflow complete.
 

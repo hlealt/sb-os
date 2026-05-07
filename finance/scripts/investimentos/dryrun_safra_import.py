@@ -31,7 +31,7 @@ from import_balance_snapshots import (
     _INSERT_ONLY_FIELDS,
 )
 
-BOOTSTRAP_DIR = VAULT_ROOT / '3-resources' / 'tools' / 'finance' / 'raw' / 'safra-bootstrap-2024-2026'
+BOOTSTRAP_DIR = VAULT_ROOT / '.user' / 'finance' / 'bookkeeper' / 'raw-data' / 'safra-bootstrap-2024-2026'
 
 FILES = [
     ('fundos', 'safra-fundos-2024.csv'),

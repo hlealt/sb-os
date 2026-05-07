@@ -25,7 +25,7 @@ from parsers.safra_fundos_movimentacoes import SafraFundosMovimentacoesParser
 from parsers.safra_rf_movimentacoes import SafraRfMovimentacoesParser
 from parsers.name_map import NameMapResolver
 
-BOOTSTRAP_DIR = VAULT_ROOT / '3-resources' / 'tools' / 'finance' / 'raw' / 'safra-bootstrap-2024-2026'
+BOOTSTRAP_DIR = VAULT_ROOT / '.user' / 'finance' / 'bookkeeper' / 'raw-data' / 'safra-bootstrap-2024-2026'
 
 FILES = [
     ('fundos', 'safra-fundos-2024.csv'),
