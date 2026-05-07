@@ -59,6 +59,8 @@ No mid-flow user input during steps 1–9. All user interaction occurs at steps 
 
 Write `{wiki_root}/wiki/sources/{origin}/{date}-{slug}.md`. Filename mirrors the raw counterpart EXACTLY — preserve the date format the origin uses (`YYYY-MM-DD-slug.md`, `YYYY_MM_DD-slug.md`, etc.). Do NOT normalize date formats.
 
+**Substance-bullet granularity discipline.** Bullets MUST name entities/concepts at page-cluster granularity per `../shared/stub-policy.md` § "Page Granularity". Sub-cluster names (variants of a family, properties of a whole, sibling members of a group) appear in prose only — without wikilinks. The bullet writer is responsible for the implicit page-set the bullets define: every wikilinked name in a Substance bullet will trigger the mechanical stub-creation rule downstream in step 5. Cluster first, then write bullets at the chosen granularity.
+
 Frontmatter per `../shared/frontmatter-schemas.md` Source schema:
 
 ```yaml
@@ -89,13 +91,17 @@ Citations: emit inline `[^N]` markers at every claim derived from the raw, then 
 ### Step 3 — Identify entities and concepts
 
 1. Extract candidate entity and concept mentions from the raw source AND from the agent-written `Substance` and `Notable quotes` sections of the source page produced in step 2.
-2. For each candidate, classify as `entity` or `concept` per `../shared/page-types.md` discriminator rule.
-3. For each candidate, check existence under `{wiki_root}/wiki/concepts/{slug}.md` and `{wiki_root}/wiki/entities/{slug}.md`.
-4. Apply the stub-creation rule per `../shared/stub-policy.md`. The source-title branch and the `Substance`-bullet branch are MECHANICAL — fire on match. The Notable-Quote branch is AGENT DISCRETION — apply the relevance heuristic in `../shared/stub-policy.md` "Notable Quote Stub Creation" section before deciding to fire. A passing mention surfaced only in a Notable Quote does NOT compel a stub; demote to `candidate-mention` if the heuristic does not pass.
-5. Build three working sets for downstream steps:
+2. **Cluster candidates by page-granularity** per `../shared/stub-policy.md` § "Page Granularity". Apply the four decision tests (variants, whole+part, siblings, producer+work) to every pair of related candidates. Replace each cluster with a SINGLE representative name. Sub-cluster names dropped from the working set are NOT logged as `candidate-mention` — they are part of the cluster representative's page.
+3. For each cluster representative, classify as `entity` or `concept` per `../shared/page-types.md` discriminator rule.
+4. For each cluster representative, check existence under `{wiki_root}/wiki/concepts/{slug}.md` and `{wiki_root}/wiki/entities/{slug}.md`.
+5. Apply the stub-creation rule per `../shared/stub-policy.md`:
+   - The `Substance`-bullet branch is MECHANICAL — fire on match against the cluster representative.
+   - The Source-title branch is MECHANICAL ONLY when the title name also appears in a Substance bullet. Title-only names fall under DISCRETION per `../shared/stub-policy.md` § "Title-Branch Rule" — apply the relevance heuristic before firing.
+   - The Notable-Quote branch is AGENT DISCRETION per `../shared/stub-policy.md` § "Notable Quote Stub Creation" — apply the relevance heuristic before firing.
+6. Build three working sets for downstream steps:
    - `existing-pages` — pages that already exist (handled in step 4)
    - `stub-candidates` — new pages whose stub-creation rule fires (handled in step 5)
-   - `mention-only` — names that did NOT clear the stub rule, including Notable-Quote-only mentions that the discretion heuristic demoted (logged as `candidate-mention` in step 9)
+   - `mention-only` — names that did NOT clear the stub rule, including Title-only and Notable-Quote-only mentions that the discretion heuristic demoted (logged as `candidate-mention` in step 9)
 
 ### Step 4 — Update existing entity/concept pages
 
@@ -111,7 +117,7 @@ For each page in `existing-pages`:
 
 For each entry in `stub-candidates`:
 
-1. Resolve target path: `{wiki_root}/wiki/concepts/{slug}.md` (concept) or `{wiki_root}/wiki/entities/{slug}.md` (entity).
+1. Resolve target path. Default: `{wiki_root}/wiki/concepts/{slug}.md` (concept) or `{wiki_root}/wiki/entities/{slug}.md` (entity). **If the parent type folder has been subdivided** per schema § "Folder subdivision" (per-kind subfolders proposed and executed by `/sb-wiki-lint`), check the parent `{wiki_root}/wiki/{type}/CLAUDE.md` marker-block routing table for the kind's subfolder and write to `{wiki_root}/wiki/{type}/{subfolder}/{slug}.md` instead. Kinds without a subfolder write to the type-folder root. Subdivision read is best-effort — if the parent CLAUDE.md is absent or the marker block is missing, default to type-folder root.
 2. Slug per `../shared/naming-convention.md` — `lowercase-kebab.md`. Forbidden: same slug already present in a sibling type folder (concepts vs topics is forbidden per schema; concepts vs entities is allowed).
 3. Write frontmatter per `../shared/frontmatter-schemas.md` (Concept adds `kind:` free-form string; Entity adds `kind:` from enum `tool | person | company | product | model`).
 4. Write a 1–2 sentence preamble derived from the raw source.

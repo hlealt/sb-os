@@ -28,10 +28,10 @@ kind: <free-form string>
 ## Entity — adds `kind`
 
 ```yaml
-kind: tool | person | company | product | model
+kind: tool | person | company | product | model | benchmark | data-format
 ```
 
-`kind` is a predefined enum (small and stable). Enables Dataview filtering ("all tools", "all people I follow").
+`kind` is a predefined enum (small and stable). Enables Dataview filtering ("all tools", "all people I follow"). Each enum value MUST pass the blind-reader test — meaning is clear without reading the page. New values added only when multiple ill-fitting entities accumulate AND the proposed name passes the blind-reader test. Generic terms (`pattern`, `spec`, `dynamic`) FAIL the test. `data-format` covers data interchange formats and notations (JSON, TOON, YAML, Markdown). `protocol` is reserved for future use (MCP, HTTP, gRPC).
 
 ## Source — adds `raw`, `url`, `author`
 

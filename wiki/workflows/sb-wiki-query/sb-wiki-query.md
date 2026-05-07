@@ -147,13 +147,19 @@ Fires only if the user picked `[c]oncept`, `[e]ntity`, or `[t]opic` in step 6.
 If target type is `topic`:
 
 1. Derive a proposed topic slug from the question and the synthesized answer (lowercase-kebab per `../shared/naming-convention.md`).
-2. Invoke the `sb-wiki-create-topic` skill via the user-intent invocation mode. Pass:
+2. **Scope-overlap pre-check.** Before invoking `sb-wiki-create-topic`, read `{wiki_root}/wiki/topics/topics.md` and compare the proposed scope sentence to every existing row's `Scope` cell. If overlap is plausible (shared subject, shared sources, shared positions, sibling/sub-debate framing), halt and present the user with three options:
+   - `extend N` — append the synthesized answer's content to the existing topic page (as a new `Position` / `Angle` or sub-section). No new page is written; skill is not invoked.
+   - `new` — proceed to step 3 with sibling cross-linking (the existing topic gets a `related:` entry to the new one and vice versa).
+   - `abort` — skip step 7 entirely; only the `query` log entry from step 7c is written.
+   The skill's own scope-overlap check (Step 1.4) is the second safety net — but this pre-check fires first because the query workflow has the synthesized answer in hand and can frame the extend-vs-new decision better than the skill alone.
+3. Invoke the `sb-wiki-create-topic` skill via the user-intent invocation mode. Pass:
    - The proposed topic slug.
    - The triggering pages (the `picks` set from steps 2–4) for cross-linking.
    - The source filenames cited in step 5 for the `Sources` section.
    - A scope sentence derived from the synthesized answer.
-3. The `sb-wiki-create-topic` skill runs its own single confirmation checkpoint with the user (per `sb-wiki-create-topic.md` user-intent confirmation format) — DO NOT duplicate the confirmation here.
-4. The `sb-wiki-create-topic` skill appends its own `topic-created` log entry to `{wiki_root}/log.md`.
+   - An `overlap-checked: true` flag so the skill knows the pre-check ran.
+4. The `sb-wiki-create-topic` skill runs its own single confirmation checkpoint with the user (per `sb-wiki-create-topic.md` user-intent confirmation format) — DO NOT duplicate the confirmation here.
+5. The `sb-wiki-create-topic` skill appends its own `topic-created` log entry to `{wiki_root}/log.md`.
 
 #### 7b — File as Concept or Entity
 

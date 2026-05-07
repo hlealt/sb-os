@@ -96,3 +96,96 @@ The `My take` cell encodes one of three explicit states. **Blank is BANNED** as 
 ```
 
 `Description` and `Scope` are judgment-bearing. Scripts MAY create missing headers and report missing page rows. Scripts MUST NOT add rows with blank `Description` or `Scope`. The LLM reads each page and writes the semantic cell.
+
+## Type-Folder Router Index (post-subdivision)
+
+When a type folder (`wiki/concepts/` or `wiki/entities/`) has at least one per-kind subfolder, the parent index `{type}.md` is rewritten as a ROUTER pointing to the subfolder leaf indexes plus a flat-pages section. Per-kind subfolders are created by `/sb-wiki-lint` per schema § "Folder subdivision".
+
+**File:** `{wiki_root}/wiki/{type}/{type}.md` (e.g., `wiki/entities/entities.md`).
+
+**Format:**
+
+```markdown
+---
+type: index
+tags: [wiki, entities]
+---
+
+# entities
+
+Wiki entity pages — specific named things. Subfolders below group pages by `kind:` per schema § "Folder subdivision". Filenames `lowercase-kebab.md`.
+
+## Subfolders
+
+| Subfolder | Holds | Index |
+|-----------|-------|-------|
+| [[ai-models]] | `kind: model` | [[ai-models.md]] |
+| [[persons]] | `kind: person` | [[persons.md]] |
+| [[organizations]] | `kind: company` | [[organizations.md]] |
+
+## Flat pages
+
+Pages whose `kind:` has not graduated to a subfolder (count <10).
+
+| File | Description |
+|------|-------------|
+| [[json.md]] | JSON is a text-based structured data interchange format. |
+| [[toon.md]] | TOON is a JSON-compatible notation for LLM token reduction. |
+```
+
+**Ownership rules:**
+
+| Section | Written by | When |
+|---------|-----------|------|
+| Subfolders table | Lint | At step 7.5 subdivision execution; rewritten on every subsequent lint pass to reflect current subfolder set |
+| Flat pages table | Lint | Same — rebuilt every lint pass; rows for kinds without subfolders |
+
+Pre-subdivision, the type-folder index keeps the simple `| File | Description |` (or `| File | Scope |`) format from § "Wiki Leaf Indexes" above. The router format above replaces it ONLY after the first per-kind subfolder is created.
+
+## Type-Folder Managed CLAUDE.md (post-subdivision)
+
+When subdivision occurs, `/sb-wiki-lint` creates or updates `{wiki_root}/wiki/{type}/CLAUDE.md` with marker-block routing rules. Inside `<!-- sb:start v=1 -->...<!-- sb:end -->` is sb-os-managed (rewritten every lint pass); outside the markers is preserved verbatim.
+
+**File:** `{wiki_root}/wiki/{type}/CLAUDE.md` (e.g., `wiki/entities/CLAUDE.md`).
+
+**Format:**
+
+```markdown
+[User-authored content here is preserved across lint passes.]
+
+<!-- sb:start v=1 -->
+# entities/
+
+Per-kind subfolders host pages whose `kind:` has crossed the subdivision threshold (≥10 pages). Pages below the threshold stay flat at this folder's root.
+
+## Subfolder routing
+
+| Subfolder | Holds (`kind:` value) | Note |
+|-----------|----------------------|------|
+| `ai-models/` | `model` | Domain prefix — "models" is generic across domains |
+| `persons/` | `person` | — |
+| `organizations/` | `company` | Renamed from `companies/` for inclusivity |
+
+## Flat pages
+
+Pages with kinds not listed above (count <10) stay at this folder's root.
+
+## Indexes
+
+- `entities.md` — router (this folder); points to each subfolder's leaf index.
+- `{subfolder}/{subfolder}.md` — leaf index per subfolder (`| File | Description |`).
+
+## Ingest routing
+
+`/sb-wiki-ingest` step 5 reads this routing table to decide where new stubs go. Kinds with a subfolder write to `{type}/{subfolder}/{slug}.md`; other kinds write to `{type}/{slug}.md`.
+<!-- sb:end -->
+```
+
+**Ownership rules:**
+
+| Region | Written by | Updated when |
+|--------|-----------|--------------|
+| Inside markers (`<!-- sb:start v=1 -->...<!-- sb:end -->`) | Lint | Every subdivision execution; rebuilt on each lint pass to reflect current subfolders |
+| Outside markers | The user | Never touched by sb-os |
+
+The marker-block content is REGENERATED on every lint pass — direct edits inside the markers are lost. To customize, edit outside the markers.

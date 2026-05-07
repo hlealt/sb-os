@@ -93,7 +93,68 @@ Naming: filename mirrors the raw counterpart exactly.
             └── {date}-{slug}.md
 ```
 
-Type folders are stable. Topic-folder organization (e.g., `wiki/concepts/ai/`) is explicitly NOT pre-organized — let it emerge after ≥20 wiki pages.
+Type folders are stable — `concepts/`, `entities/`, `topics/`, `sources/` never rename or reorganize. Per-kind subfolders WITHIN a type folder are an opt-in subdivision pattern proposed by lint when one kind grows large enough to warrant separation (see "Folder subdivision" below). Pre-subdivision, every type folder is flat.
+
+## Folder subdivision
+
+Per-kind subfolders within a type folder are an opt-in pattern lint proposes when one kind crosses the proposal threshold. Subdivision is structural — pages physically move into the subfolder; wikilinks still resolve by filename (Obsidian Settings → Files & Links → "New link format" = Shortest path when possible — required, see README "Obsidian setup").
+
+### Threshold
+
+| Pages with one `kind:` value in a type folder | Lint behavior |
+|-----------------------------------------------|---------------|
+| <5 | Silent — no signal |
+| ≥5 | PROPOSE — surface a SUBDIVISION PROPOSAL block in the lint report; user accepts/rejects per kind |
+
+Single floor, no warning intermediate. Subdivision remains opt-in per-kind at the proposal block — the user can defer indefinitely. A subfolder that turns out to be misfragmented can be reverted by manual move-back; lint surfaces low-population subfolders in subsequent passes if a kind contracts.
+
+### Naming policy
+
+Subfolder name defaults to the kind value. Apply a domain prefix ONLY when the kind term is generic across domains the vault might cover.
+
+| Kind | Subfolder name | Rationale |
+|------|----------------|-----------|
+| `model` | `ai-models/` | Prefix — "models" is generic (statistical, financial, mental, ML). Vault covers AI today; prefix anticipates other domains. |
+| `person` | `persons/` | No prefix — universal. |
+| `company` | `organizations/` | No prefix; renamed for inclusivity (covers labs, institutions, governments). |
+| `tool` | `tools/` | No prefix initially. Promote to `ai-tools/` if the vault later hosts non-AI tools and ambiguity surfaces. |
+| `product` | `products/` | No prefix initially. |
+| `benchmark` | `ai-benchmarks/` | Prefix — "benchmark" spans domains (sports, finance). Today AI-only. |
+| `data-format` | `data-formats/` | No prefix — universal. |
+| `inference-scaffold` (concept) | `inference-scaffolds/` | No prefix. |
+| `automation-economics` (concept) | `automation-economics/` | No prefix; kind already plural-shaped — do NOT append `s`. |
+| `cognitive-displacement` (concept) | `cognitive-displacements/` | No prefix. |
+| `ai-collaboration-model` (concept) | `ai-collaboration-models/` | No prefix. |
+
+The prefix decision is reversible. Lint may propose a rename when a non-prefixed kind acquires its first cross-domain page (e.g., a non-AI tool surfaces — propose `tools/` → `ai-tools/` + new domain folder).
+
+### Subdivision artifacts (created on user accept)
+
+| Artifact | Owner | Notes |
+|----------|-------|-------|
+| `wiki/{type}/{subfolder}/` directory | Lint | Created when first page moves in |
+| `wiki/{type}/{subfolder}/{subfolder}.md` leaf index | Lint | Format `\| File \| Description \|`; same as type-folder leaf index |
+| `wiki/{type}/{type}.md` parent index (rewritten) | Lint | Becomes a ROUTER — `\| Subfolder \| Holds \| Index \|` plus a `## Flat pages` section listing pages whose kind has not graduated to a subfolder. Format detail in `wiki/workflows/shared/index-formats.md` "Type-Folder Router Index" section |
+| `wiki/{type}/CLAUDE.md` (created or updated) | Lint | Marker-block managed (`<!-- sb:start v=1 -->...<!-- sb:end -->`); inside markers lists subfolder routing rules; outside markers preserved as user content |
+| Page moves | Lint | Each moved page's frontmatter `last-touched:` is updated; body unchanged |
+| Inbound wikilinks | Lint | NOT rewritten — Obsidian's filename-based shortest-path resolution carries them across the move (required Obsidian config) |
+| `lint` log entry | Lint | Standard `lint` H2 entry plus a `subdivision:` field listing each subfolder created and page count |
+
+### Mixed structure is permitted
+
+Within one type folder, some kinds may have graduated to subfolders while others remain flat. Example: `entities/ai-models/` and `entities/persons/` exist; pages with `kind: product` (count <10) stay at `entities/` root. Agents follow the parent CLAUDE.md routing table to decide.
+
+### Ingest routing
+
+When a stub fires for a kind that already has a subfolder, the stub MUST be created at `wiki/{type}/{subfolder}/{slug}.md`, NOT at `wiki/{type}/{slug}.md`. Ingest step 5 reads the parent `wiki/{type}/CLAUDE.md` marker-block routing table to resolve the destination. Kinds without a subfolder write to the type-folder root.
+
+### Topics and sources are excluded
+
+| Type folder | Subdivision policy |
+|-------------|--------------------|
+| `concepts/`, `entities/` | Subject to subdivision per the thresholds above |
+| `topics/` | Subdivision deferred until ≥20 topic pages exist (the count is currently <5); review revisits when threshold approaches |
+| `sources/` | Already subdivided by `origin/` — no further subdivision proposed by this rule |
 
 ## Asset folder
 
@@ -170,9 +231,9 @@ Rationale: kinds don't drive schema behavior (no kind-conditional sections, no v
 
 ### Entity pages add
 ```yaml
-kind: tool | person | company | product | model
+kind: tool | person | company | product | model | benchmark | data-format
 ```
-Use case: Dataview filtering ("all tools" / "all people I follow"). Predefined because the enum is small and stable.
+Use case: Dataview filtering ("all tools" / "all people I follow"). Predefined because the enum is small and stable. Naming policy: each enum value MUST pass the blind-reader test — a reader with zero context understands what kind of thing the value names. Generic terms (`pattern`, `spec`, `dynamic`) FAIL this test and accumulate heterogeneous entries; specific terms (`benchmark`, `data-format`) succeed. New values are added only when the wiki acquires multiple ill-fitting occupants of an existing slot AND the proposed name passes the blind-reader test. Future additions: `protocol` is reserved for MCP/HTTP/gRPC when the first one ingests.
 
 ### Source pages add
 ```yaml
@@ -357,19 +418,46 @@ When Contradiction fires `same-scope-opposing`, the agent ALSO adds a `> [!warni
 
 ## Stub policy
 
+### Page granularity (apply BEFORE stub creation, at ingest step 3)
+
+Cluster candidate names into page-level units before deciding how many stubs to create. The mechanical fire rule operates on the cluster representative, NOT on every constituent name. Bullet writers in step 2 must name entities/concepts at page-cluster granularity — sub-cluster names appear in prose without wikilinks.
+
+Decision tests (apply in order, per pair of candidates):
+
+| # | Test | If YES | If NO |
+|---|------|--------|-------|
+| 1 | Are they instances of the same family/series differing only in a parameter (version, size, generation, edition, phase, period, era)? | ONE parent page covering variants. A variant gets its own stub ONLY when the source treats it as a standalone subject (≥1 dedicated paragraph or named section). | Continue to test 2. |
+| 2 | Is one a whole/system and the other a property/parameter/part that cannot stand independently of the whole? | ONE page (property becomes a section of the whole). | Continue to test 3. |
+| 3 | Are they co-members of a group (siblings) co-mentioned but not co-substantive in this source? | ONE group page. Per-member only when standalone treatment exists. | Continue to test 4. |
+| 4 | Is one a producer/maintainer/author and the other its product/work? | TWO pages — distinct identities. | TWO pages — independent. |
+
+The clustering decision is the AGENT'S RESPONSIBILITY upstream of mechanical fire. Step 2 substance-bullet writers must respect the cluster set: name only page-level entities/concepts; sub-cluster names go in prose without wikilinks.
+
+Domain-neutral examples and the operational reference: `wiki/workflows/shared/stub-policy.md` § "Page Granularity".
+
 ### Stub creation (ingest)
 
-The agent auto-creates a stub Concept or Entity page when the entity/concept name appears in EITHER:
-1. **Source title/headline**, OR
-2. **An extracted Notable Quote OR a `Substance` bullet** (the agent's own output from step 2 of the ingest workflow).
+The agent auto-creates a stub Concept or Entity page when the cluster representative appears in EITHER of the two mechanical branches OR fires the discretionary branches:
 
-Deterministic — tied to artifacts the agent has already produced, not to recounting the source. (The Notable-Quote branch is qualified by agent discretion — see "Notable Quote stub creation" below.)
+1. **A `Substance` bullet** (the agent's own output from step 2) — MECHANICAL fire on the cluster representative.
+2. **Source title/headline** — fires only when the title name ALSO appears in a `Substance` bullet (see "Title-branch rule" below). Title-only names go to discretion.
+3. **An extracted Notable Quote** — DISCRETIONARY (see "Notable Quote stub creation" below).
 
-Otherwise, the agent logs a `candidate-mention` in `log.md` for periodic review by lint.
+If none of the three branches fire, log a `candidate-mention` in `log.md` for periodic review by lint. Do NOT create a page.
+
+#### Title-branch rule
+
+The source title alone does NOT compel a stub. A title hook ("One X and you...", "How Y changed everything") often names something the source merely USES rather than discusses. Apply the relevance heuristic for any name that appears ONLY in the title (not in any `Substance` bullet):
+
+| Question | If YES | If NO |
+|----------|--------|-------|
+| Would this stub plausibly become a real concept/entity page given the source's actual content (recurrence, framing weight, the user's known interests)? | Create the stub | Log `candidate-mention` instead |
+
+Names appearing in BOTH the title AND a `Substance` bullet remain mechanical fire — the bullet branch carries them.
 
 #### Notable Quote stub creation (agent discretion)
 
-The Notable-Quote branch of the stub-creation rule is **agent discretion**, NOT mechanical extraction. A passing mention surfaced inside a Notable Quote does NOT compel a stub.
+The Notable-Quote branch is **agent discretion**, NOT mechanical extraction. A passing mention surfaced inside a Notable Quote does NOT compel a stub.
 
 For each entity/concept name surfaced ONLY by a Notable Quote (i.e., not by source title and not by a `Substance` bullet), the agent applies the relevance heuristic before creating a stub:
 
@@ -381,7 +469,7 @@ For each entity/concept name surfaced ONLY by a Notable Quote (i.e., not by sour
 
 **Discretion wins** because lint can later catch missing entity references via broken-wikilink detection (an under-stubbed name surfaces the moment another page tries to link to it), but lint cannot easily prune mass-produced shallow stubs without false positives.
 
-The source title branch and the `Substance`-bullet branch remain mechanical — those artifacts are short, agent-curated, and high-signal by construction. Only the Notable Quote branch carries discretion.
+The `Substance`-bullet branch remains mechanical — those artifacts are short, agent-curated, and high-signal by construction (and now subject to the page-granularity heuristic upstream). The Title and Notable Quote branches carry discretion.
 
 **Reference example.** At p6-6 of the sb-wiki-build plan, 5 stubs were created from Notable Quotes where 3 were warranted. Agent discretion would have prevented the 2 shallow stubs that the lint then had to flag as orphaned.
 
@@ -416,8 +504,8 @@ Single command: `/sb-wiki-ingest <slug>` where slug is a raw filename or unique 
 | Step | Operation | Owner |
 |------|-----------|-------|
 | 1 | Read raw file | Agent |
-| 2 | Write `wiki/sources/{origin}/{date}-{slug}.md` (`Substance` and `Connections` always; `Notable quotes` / `Methodology` / `Counterpoints` per source kind; user-half sections present as empty shells with headings only) | Agent |
-| 3 | Identify entities/concepts mentioned; for each, check stub-creation rule (title or `Notable Quote` / `Substance` bullet hit) | Agent |
+| 2 | Write `wiki/sources/{origin}/{date}-{slug}.md` (`Substance` and `Connections` always; `Notable quotes` / `Methodology` / `Counterpoints` per source kind; user-half sections present as empty shells with headings only). **Substance bullets MUST name entities/concepts at page-cluster granularity** per Page granularity § — sub-cluster names go in prose without wikilinks | Agent |
+| 3 | Identify entity/concept mentions; **cluster candidates by page-granularity** (variants, whole+part, siblings, producer+work — see Page granularity §); for each cluster representative, apply the stub-creation rule (Substance bullet = mechanical; title-only = discretion; Notable Quote = discretion) | Agent |
 | 4 | Update existing entity/concept pages with new perspective + citation; populate `Open variants / debates` section if Contradiction fires. **Agent NEVER overwrites a main section that already contains substantive content (>50 words) — only appends new sections, adds bullets to existing lists, or adds footnote definitions to Sources. User-fleshed content is treated as authoritative.** | Agent |
 | 5 | Create stubs for new entities/concepts that meet the rule | Agent |
 | 6 | Detect candidate-topic triggers (Contradiction, Evolution, Cross-application); add `> [!warning] Disputed` callouts on Contradiction-`same-scope-opposing` | Agent |
@@ -482,12 +570,13 @@ A skill agents can invoke mid-ingest (when the user accepts a PROPOSED TOPIC at 
 | Step | Operation | Owner |
 |------|-----------|-------|
 | 1 | Resolve topic name; if from a candidate, load the candidate-topic log entry (claim A, claim B, trigger, sources) | Agent |
-| 2 | Write `wiki/topics/{slug}.md` with frontmatter, `Scope` (required), `Sources` (required), and optional sections per topic shape (see Topic page menu) | Agent |
+| 1.5 | **Scope-overlap check (semantic, not slug).** Read `wiki/topics/topics.md` and compare the proposed scope sentence to every existing row's `Scope` cell. If overlap is plausible (shared subject, shared sources, shared positions, sibling/sub-debate framing), surface three options to the user: `extend N` (append a new `Position` / `Angle` to the existing topic; no new page), `new` (proceed with a new sibling-cross-linked topic), or `abort`. Skipped only when the caller (e.g., `/sb-wiki-query` Step 7a) passes `overlap-checked: true` proving the check already ran upstream. Slug-collision check from step 1 is necessary but NOT sufficient — both checks must pass. | Agent + User |
+| 2 | Write `wiki/topics/{slug}.md` with frontmatter, `Scope` (required), `Sources` (required), and optional sections per topic shape (see Topic page menu). On `new` from step 1.5, also append the new topic's wikilink to the overlapping topic's `related:` frontmatter (sibling cross-link). | Agent |
 | 3 | Cross-link from triggering concept/entity pages: add wikilink to the new topic in their `Related` section | Agent |
 | 4 | Append `topic-created` entry to `log.md`; if from a candidate, reference the original candidate by timestamp | Agent |
 | 5 | Update `wiki/topics/topics.md` leaf index with the new entry | Agent |
 
-When invoked mid-ingest, no separate user checkpoint — the parent `/sb-wiki-ingest` Stage 1 acceptance covers it. When auto-fired by user intent, the agent confirms the proposed sections + scope sentence with the user before writing (single checkpoint).
+When invoked mid-ingest, no separate user checkpoint — the parent `/sb-wiki-ingest` Stage 1 acceptance covers it AND the step 1.5 overlap prompt fires inline before commit. When auto-fired by user intent, the agent runs step 1.5 first, then confirms the proposed sections + scope sentence with the user before writing (single confirmation checkpoint, two distinct prompts when overlap is detected).
 
 ### `/sb-wiki-lint`
 
@@ -510,8 +599,9 @@ The script performs deterministic maintenance and emits `judgment_needed`. The a
 | 5 | Walk all wiki pages — verify wikilinks resolve (broken if target file missing); collect broken links |
 | 6 | For each `wiki/sources/{origin}/` — re-sync `My take` column from each source page's `My take` section per the three-state rule (`pending` / `—` / reflected preview — see "Wiki sources index format" §); renumber footnotes; remove stale footnote definitions |
 | 7 | For each `raw/{origin}/` — verify `{origin}.md` index exists; if missing, create it with the standard `\| File \| Title \| Date \| Wiki \|` columns. For each raw file in `{origin}/`, ensure a row exists with `Wiki = No` (default) or `Yes/Partial` (preserved). Same for `raw/studies/studies.md`. **Index creation and maintenance is the agent's job**, not the user's. |
-| 8 | Append `lint` entry to `log.md` summarizing findings: stubs aged, orphans, unresolved callouts, candidates aging, broken links, index sync count, raw indexes created/updated |
-| 9 | Present findings to the user (read-only summary; no diff to apply) |
+| 7.5 | Folder-subdivision detection. For `wiki/concepts/` and `wiki/entities/`, group pages by `kind:` frontmatter. Surface kinds at ≥5 pages as a SUBDIVISION PROPOSAL block. Skip `wiki/topics/` (count <20) and `wiki/sources/` (already subdivided by origin). On user accept at step 9, the agent creates `{type}/{subfolder}/`, leaf index, parent CLAUDE.md marker-block routing rules, moves pages, rewrites parent index as router, and appends a `subdivision:` field to the step-8 log entry. Naming and policy per schema § "Folder subdivision". |
+| 8 | Append `lint` entry to `log.md` summarizing findings: stubs aged, orphans, unresolved callouts, candidates aging, broken links, index sync count, raw indexes created/updated, plus subdivision proposals and executed moves from step 7.5 |
+| 9 | Present findings to the user (read-only summary for findings 1-7; SUBDIVISION PROPOSAL is the only interactive block — user accepts per kind or defers all) |
 
 #### Lint output format
 
@@ -557,7 +647,7 @@ Single command: `/sb-wiki-query <question>`. Returns a synthesized answer; optio
 | 4 | Read picked pages; if depth needed, follow wikilinks to neighbors | Agent |
 | 5 | Synthesize answer with inline citations to wiki pages (`[[page.md]]`) and source pages (footnote definitions) | Agent |
 | 6 | Present answer + offer to file as a wiki page (Concept / Entity / Topic) if "valuable enough" — the user picks file/skip | Agent + User |
-| 7 | If filed: invoke `sb-wiki-create-topic` skill (for Topic) or write directly to `wiki/concepts/` / `wiki/entities/` (for Concept / Entity); append `query` entry to `log.md` | Agent |
+| 7 | If filed: for Topic, run a scope-overlap pre-check against `wiki/topics/topics.md` (offering `extend N` / `new` / `abort` to the user) before invoking `sb-wiki-create-topic` with `overlap-checked: true` — `extend N` writes the synthesized answer as a new `Position` / `Angle` on the existing topic and skips skill invocation; for Concept / Entity, write directly to `wiki/concepts/` / `wiki/entities/`; append `query` entry to `log.md` | Agent + User |
 
 #### Query output format
 

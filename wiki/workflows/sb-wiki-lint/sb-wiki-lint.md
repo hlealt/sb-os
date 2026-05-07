@@ -27,13 +27,13 @@ These files codify rules referenced across multiple `sb-wiki-*` workflows. Load 
 
 | File | Used by step |
 |------|--------------|
-| `../shared/folder-structure.md` | 1, 2, 5, 7 |
+| `../shared/folder-structure.md` | 1, 2, 5, 7, 7.5 |
 | `../shared/stub-policy.md` | 1 |
 | `../shared/section-menus.md` | 1, 3 |
-| `../shared/frontmatter-schemas.md` | 1, 4 |
+| `../shared/frontmatter-schemas.md` | 1, 4, 7.5 |
 | `../shared/naming-convention.md` | 5 |
 | `../shared/citation-format.md` | 6 |
-| `../shared/index-formats.md` | 6, 7 |
+| `../shared/index-formats.md` | 6, 7, 7.5 |
 | `../shared/log-entry-shapes.md` | 4, 8 |
 
 ## Invocation
@@ -42,7 +42,7 @@ These files codify rules referenced across multiple `sb-wiki-*` workflows. Load 
 
 ## Read-Mostly Behavior
 
-This workflow is read-mostly by contract. Auto-applied writes are SCOPED to index sync only:
+This workflow is read-mostly by contract. Auto-applied writes are SCOPED to index sync only. Subdivision execution writes (step 7.5) are USER-GATED — only on explicit accept at step 9.
 
 | Write | Scope | Authorization |
 |-------|-------|--------------|
@@ -51,8 +51,9 @@ This workflow is read-mostly by contract. Auto-applied writes are SCOPED to inde
 | Create missing raw `{origin}.md` indexes; add missing rows with `Wiki = No` default (step 7) | `{wiki_root}/raw/{origin}/{origin}.md`, `{wiki_root}/raw/studies/studies.md` | Auto-applied — no user diff |
 | Create missing wiki leaf indexes (`concepts.md`, `entities.md`, `topics.md`) (step 7) | `{wiki_root}/wiki/concepts/concepts.md`, `entities/entities.md`, `topics/topics.md` | Auto-applied — no user diff |
 | Append `lint` entry to `log.md` (step 8) | `{wiki_root}/log.md` | Auto-applied — no user diff |
+| Folder subdivision execution (step 7.5) — create `{type}/{subfolder}/`, leaf index, marker-block CLAUDE.md, rewrite parent index as router, MOVE pages | `{wiki_root}/wiki/{concepts,entities}/...` | USER-GATED — executed only on `accept` at step 9 |
 
-NEVER edit page bodies, frontmatter (other than `last-touched` on indexes), or any user-authored content from this workflow. NEVER delete pages. NEVER modify candidate-topic, candidate-mention, concept-created, entity-created, topic-created, ingest, query, or prior lint entries in `log.md`.
+NEVER edit page bodies, frontmatter (other than `last-touched` on indexes and on pages moved by subdivision), or any user-authored content from this workflow. NEVER delete pages. NEVER modify candidate-topic, candidate-mention, concept-created, entity-created, topic-created, ingest, query, or prior lint entries in `log.md`.
 
 **`raw/assets/` is OUT OF SCOPE for this workflow.** No reads, no writes, no walks, no index creation, no orphan-detection participation, no filename validation. The folder is user-maintained via Obsidian's "Download attachments for current file" command (per `../shared/folder-structure.md` "Asset Folder" and schema § "Asset folder"). Treat it as if it were not present in the tree. Same exclusion applies to any pre-existing legacy asset folder nested under a specific origin (e.g., `raw/mails/assets/`) — user-owned, untouched.
 
@@ -70,7 +71,7 @@ The helper MUST NOT fill judgment-bearing cells. `Description`, `Scope`, and `Wh
 
 ## Flow
 
-No mid-flow user input. All 9 steps run unattended. The agent must perform the LLM judgment pass from the deterministic helper report before Step 8. Output is a single LINT REPORT presented at step 9.
+Steps 1-8 run unattended. Step 9 is read-only for findings 1-7; when step 7.5 produced a non-empty `subdivision-proposals` set, the LINT REPORT at step 9 includes a SUBDIVISION PROPOSAL block that requires a user decision (accept all / accept N / reject / defer). On user accept, the agent executes the subdivision per step 7.5 § "Subdivision execution" and appends an addendum log entry. The agent must perform the LLM judgment pass from the deterministic helper report before Step 8.
 
 ### Step 1 — Walk all wiki pages; detect stubs and record age
 
@@ -169,7 +170,56 @@ For each wiki leaf folder (`{wiki_root}/wiki/concepts/`, `entities/`, `topics/`)
 
 **Judgment-bearing cell rule:** Steps above never authorize blank semantic cells. `Description`, `Scope`, and `What it says` require LLM judgment. If the deterministic helper reports a missing row for those cells, the agent MUST read the referenced page and write the semantic cell before appending the lint log entry.
 
-### Step 8 — Append `lint` log entry
+### Step 7.5 — Folder-subdivision detection
+
+Detect kinds within `wiki/concepts/` and `wiki/entities/` that have grown large enough to warrant per-kind subfolders. Skip `wiki/topics/` and `wiki/sources/` per schema § "Folder subdivision" — Topics-Sources-Excluded.
+
+1. For `wiki/concepts/` and `wiki/entities/`:
+   1. Walk all pages (skip leaf indexes and any existing per-kind subfolder indexes — those pages have already graduated).
+   2. Group pages by `kind:` frontmatter value. Pages without a `kind:` value are tracked separately as `kind-missing` and surface in the LINT REPORT for the user to address.
+   3. For each `kind:` value, count pages.
+   4. Mark counts:
+      - <5 pages → silent.
+      - ≥5 pages → `subdivision-proposal` (kind name + count + suggested subfolder name per the naming policy in schema § "Folder subdivision" → "Naming policy"; sample first 5 page filenames).
+2. Build `subdivision-proposals` set for the LINT REPORT and step 8 log entry.
+3. **Subdivision execution gate.** Subdivision proposals are EXECUTED only on explicit user accept at step 9. Pre-step-9 lint runs silently in the background; step 7.5 only DETECTS — it never moves files. Execution at step 9 follows the procedure in "Subdivision execution" below.
+
+#### Subdivision proposal — naming policy lookup
+
+Resolve the suggested subfolder name from the `kind:` value per schema § "Folder subdivision" → "Naming policy":
+
+| `kind:` value | Suggested subfolder | Domain prefix? |
+|---------------|---------------------|----------------|
+| `model` | `ai-models/` | YES — "models" is generic across domains |
+| `person` | `persons/` | NO — universal |
+| `company` | `organizations/` | NO — universal (renamed for inclusivity) |
+| `tool` | `tools/` | NO initially; flag rename if a non-AI tool surfaces |
+| `product` | `products/` | NO initially |
+| `benchmark` | `ai-benchmarks/` | YES — "benchmark" spans domains |
+| `data-format` | `data-formats/` | NO — universal |
+| `inference-scaffold` | `inference-scaffolds/` | NO |
+| `automation-economics` | `automation-economics/` | NO — kind already plural-shaped, do NOT append `s` |
+| `cognitive-displacement` | `cognitive-displacements/` | NO |
+| `ai-collaboration-model` | `ai-collaboration-models/` | NO |
+| Other / new kind | `{kind}s/` | Apply heuristic: prefix when the term is generic across domains the vault might cover; otherwise plain. Kind names MUST pass the blind-reader test (a reader with zero context understands what the kind contains). Generic terms (`pattern`, `spec`, `dynamic`) FAIL — split into more specific kinds. |
+
+If a kind not in the table appears at threshold, surface the proposal with a `(naming heuristic applied)` annotation so the user can override.
+
+#### Subdivision execution (only on user accept at step 9)
+
+For each accepted subfolder:
+
+1. Resolve target path: `{wiki_root}/wiki/{type}/{subfolder}/`. Create the directory if absent.
+2. Create the leaf index `{wiki_root}/wiki/{type}/{subfolder}/{subfolder}.md` with header `| File | Description |` per `../shared/index-formats.md` "Wiki Leaf Indexes" section. For each page being moved, add a row with the same `Description` value the parent leaf index used; if the parent leaf row was missing or blank, generate a 1-sentence factual description from the page body (judgment-bearing).
+3. For each page with `kind: {kind-value}` matching this subfolder:
+   - Move the page from `{wiki_root}/wiki/{type}/{slug}.md` to `{wiki_root}/wiki/{type}/{subfolder}/{slug}.md`.
+   - Update the page's `last-touched:` frontmatter to today.
+   - Do NOT modify body content.
+   - Inbound wikilinks are NOT rewritten — Obsidian's filename-based shortest-path resolution carries them across the move (the user must have configured "New link format" = `Shortest path when possible` per README "Obsidian setup"; if not, lint surfaces a warning and aborts subdivision execution to avoid breaking links).
+4. Rewrite `{wiki_root}/wiki/{type}/{type}.md` (the parent index) as a ROUTER per `../shared/index-formats.md` "Type-Folder Router Index" section: `| Subfolder | Holds | Index |` table for each subfolder, plus a `## Flat pages` section listing pages whose kind has not graduated.
+5. Create or update `{wiki_root}/wiki/{type}/CLAUDE.md` with marker-block routing rules per `../shared/index-formats.md` "Type-Folder Managed CLAUDE.md" section. Inside the markers, the agent writes the `Subfolder routing` table and `Flat pages` policy. Outside the markers, preserve user content verbatim.
+6. Verify Obsidian-config precondition. If the vault's `.obsidian/app.json` exists and explicitly sets `newLinkFormat` to a value other than `shortest` (or empty), surface a warning in the LINT REPORT and ABORT this subdivision (no file moves committed). Default Obsidian behavior is shortest-path when the field is absent — that case proceeds.
+7. Capture `subdivision-executed` count for step 8 log entry: subfolder name + page count moved.
 
 Append a `lint` entry to `{wiki_root}/log.md` per `../shared/log-entry-shapes.md` (Active Types — `lint` row). Entry is an H2 heading: `## [YYYY-MM-DD HH:MM] lint | <brief>`.
 
@@ -188,12 +238,15 @@ Required body fields summarizing findings from steps 1-7:
 | `index sync (raw)` | `<raw-indexes-created> created, <raw-rows-added> rows added` |
 | `index sync (wiki leaf)` | `<wiki-leaf-indexes-created> created, <wiki-leaf-rows-added> rows added` (omit if both 0) |
 | `footnotes renumbered` | `<footnotes-renumbered>` pages |
+| `subdivision proposals (N)` | `<kind-name> → <subfolder> (<count> pages)` per kind in `subdivision-proposals`; omit when set is empty |
+| `subdivision executed (N)` | `<subfolder> (<count> pages moved)` per kind in `subdivision-executed`; omit when set is empty |
+| `kind missing (N)` | List of `[[filename.md]]` for pages without a `kind:` value; omit when set is empty |
 
 This log entry is `lint`-typed and standalone (NOT a sibling of any ingest entry) per `../shared/log-entry-shapes.md` sibling-rule table.
 
 ### Step 9 — Present findings to the user
 
-Present the LINT REPORT VERBATIM in the format below. Read-only output: no diff to accept; no file actions for the user to confirm; the auto-applied writes from steps 6-8 have already committed.
+Present the LINT REPORT VERBATIM in the format below. Read-only for findings 1-7; the SUBDIVISION PROPOSAL block (when present) is the only interactive part — auto-applied writes from steps 6-8 have already committed.
 
 ```
 LINT REPORT — YYYY-MM-DD HH:MM
@@ -207,11 +260,30 @@ Index sync — wiki/sources My take refreshed: <N> source pages
 Index sync — raw indexes: <N> created (raw/<origin>/<origin>.md), <M> rows added across raw/{origins}
 Index sync — wiki leaf indexes: <N> created (wiki/<type>/<type>.md), <M> rows added across wiki/{concepts,entities,topics}
 Footnotes renumbered: <N> source pages
+Pages without `kind:` (N): [[<file>.md]]
 
-No action required (lint is read-mostly; index sync writes auto-applied).
+SUBDIVISION PROPOSAL (omit block entirely when empty):
+| # | type | kind | count | suggested subfolder | sample pages |
+|---|------|------|-------|---------------------|--------------|
+| 1 | entities | person | 7 | persons/ | yann-lecun, mike-brown, … |
+| 2 | entities | benchmark | 5 | ai-benchmarks/ | browsecomp-plus, longbenchpro, … |
+
+Decisions: accept all | accept N (e.g. "accept 1") | reject | defer
+(Default if the user does not respond: defer all — proposals persist in the next lint run.)
+
+No action required for findings 1-7 (lint is read-mostly; index sync writes auto-applied).
 ```
 
-Omit any zero-count line with empty list (e.g., `Broken wikilinks (0)` may be elided when the body would be empty). The wiki leaf indexes line is omitted when both counts are 0. The trailing closing line is REQUIRED.
+Omit any zero-count line with empty list (e.g., `Broken wikilinks (0)` may be elided when the body would be empty). The wiki leaf indexes line is omitted when both counts are 0. The SUBDIVISION PROPOSAL block is omitted when the proposal set is empty. The trailing closing line is REQUIRED.
+
+User response handling for SUBDIVISION PROPOSAL:
+
+| Response | Behavior |
+|----------|----------|
+| `accept all` | Execute every proposed subdivision per the procedure in step 7.5 § "Subdivision execution". Append a `subdivision-executed` field to the step-8 log entry (already written; agent appends an addendum entry: `## [YYYY-MM-DD HH:MM] subdivision-executed | <type>/<subfolder> + …` referencing the parent lint timestamp). |
+| `accept N` (e.g. `accept 1,2`) | Execute the listed proposals only. Other proposals defer. |
+| `reject` | All proposals defer; surface as warnings in the next lint run. |
+| `defer` (default) | Same as `reject` for this run; proposals re-surface in subsequent runs as long as the kind remains ≥10 pages. |
 
 End of flow.
 

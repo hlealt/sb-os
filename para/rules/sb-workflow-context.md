@@ -1,6 +1,19 @@
 # Workflow Context Injection
 
-When the agent begins executing a workflow step file — a `.md` file under any workflow root that the agent has been instructed to follow as part of a workflow — check for a matching context YAML before acting on the step's instructions. This check fires per step file, not once per session — every time the agent loads a new step, re-check. If the file exists, read it and process entries top-to-bottom BEFORE the step's native logic. If it does not exist, skip silently and proceed with native workflow logic only.
+**MANDATORY. NO EXCEPTIONS.** Every workflow step file you execute MUST pass the Pre-Action Gate below before you act on any of the step's instructions. Skipping the gate is a rule violation, even for "single-file" workflows or steps that "obviously don't need user context."
+
+## Pre-Action Gate
+
+Before executing ANY instruction in a workflow step file, you MUST:
+
+| Step | Requirement |
+|------|-------------|
+| 1. Resolve | Compute the YAML path per Path Resolution below. NEVER hardcode `user_context_root` — read `sb-os.json`. |
+| 2. Probe | Attempt to read the resolved YAML. File not found → skip silently and proceed to step 4. |
+| 3. Process | If the file exists, process its `context:` entries top-to-bottom — load sources, apply each `instruction` — BEFORE any of the step's native logic runs. |
+| 4. Execute | Only now act on the step file's own instructions. |
+
+The gate fires PER STEP FILE — every time you load a new workflow step `.md`, re-check. A single workflow may load many step files in one run; each gets its own gate.
 
 A "workflow root" is any directory that contains workflow definitions. Two roots are valid:
 
@@ -9,7 +22,20 @@ A "workflow root" is any directory that contains workflow definitions. Two roots
 | sb-os repo per-module workflows directories (`{sb_os_path}/{module}/workflows/`, where `{module}` is `para` or `wiki`) | Shippable sb-os workflows installed via the sb-os installer |
 | Personal workflows directory (e.g., `.user/workflows/`) | User-owned workflows that ship with the vault but not with sb-os (accountant, mentor, sb-life-planner, therapy-summarizer, etc.) |
 
-This rule does NOT apply when merely reading a workflow file for reference, exploration, or analysis.
+The gate does NOT fire when merely reading a workflow file for reference, exploration, or analysis (no execution = no gate).
+
+## Red Flags — STOP and Run the Gate
+
+If you catch ANY of these thoughts, you are about to violate this rule. Delete the thought and run the gate.
+
+| Thought | Action |
+|---------|--------|
+| "This workflow is single-file, no per-step context needed" | STOP. Single-file workflows still have a YAML at `{user_context_root}/{workflow-name}/{workflow-name}.yaml`. Probe it. |
+| "I already loaded the YAML earlier in the session" | STOP. The gate fires per step file load, not once per session. Re-probe. |
+| "The step looks self-contained, the YAML probably doesn't apply" | STOP. The YAML's existence — not your judgment of relevance — decides. Probe it. |
+| "I'll execute the step now and check the YAML if something seems missing" | STOP. The YAML's `instruction` may add behaviors the step file never mentions. Probe FIRST. |
+| "There's no `.user/context/` folder visible in the repo" | STOP. Probe the resolved path anyway — graceful skip on file-not-found is the correct outcome, not preemptive skip. |
+| "The user just wants the result fast — gate adds latency" | STOP. The gate is one file read. Speed is not a waiver. |
 
 ## Path Resolution
 

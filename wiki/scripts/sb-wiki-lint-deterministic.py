@@ -211,6 +211,93 @@ def sync_source_my_take_and_queue(wiki_root: Path, report: Report, apply_changes
             write_text(index_path, "\n".join(lines) + "\n", report, apply_changes)
 
 
+SUBDIVISION_NAMING_POLICY: dict[str, tuple[str, bool]] = {
+    "model": ("ai-models", True),
+    "person": ("persons", False),
+    "company": ("organizations", False),
+    "tool": ("tools", False),
+    "product": ("products", False),
+    "benchmark": ("ai-benchmarks", True),
+    "data-format": ("data-formats", False),
+    "inference-scaffold": ("inference-scaffolds", False),
+    "automation-economics": ("automation-economics", False),
+    "cognitive-displacement": ("cognitive-displacements", False),
+    "ai-collaboration-model": ("ai-collaboration-models", False),
+}
+SUBDIVISION_PROPOSE_FLOOR = 5
+SUBDIVISION_TYPE_FOLDERS = ("concepts", "entities")
+
+
+def collect_kind_pages(type_dir: Path) -> tuple[dict[str, list[Path]], list[Path]]:
+    """Walk a type folder (flat root + per-kind subfolders) and group by `kind:`.
+
+    Returns (kinds_map, kind_missing_pages).
+    """
+    pages: list[Path] = []
+    leaf_index_names = {f"{type_dir.name}.md"}
+    for item in type_dir.iterdir():
+        if item.is_file() and item.suffix == ".md":
+            if item.name in leaf_index_names or item.name in NON_SOURCE_FILES:
+                continue
+            pages.append(item)
+        elif item.is_dir():
+            sub_index = f"{item.name}.md"
+            for sub in item.glob("*.md"):
+                if sub.name == sub_index or sub.name in NON_SOURCE_FILES:
+                    continue
+                pages.append(sub)
+
+    kinds: dict[str, list[Path]] = {}
+    missing: list[Path] = []
+    for page in pages:
+        fm = frontmatter(read_text(page))
+        kind = fm.get("kind", "").strip()
+        if not kind:
+            missing.append(page)
+            continue
+        kinds.setdefault(kind, []).append(page)
+    return kinds, missing
+
+
+def detect_subdivision(wiki_root: Path, report: Report) -> None:
+    """Detect kinds in concepts/ and entities/ that warrant subdivision.
+
+    Emits subdivision_proposals (count >=5) and kind_missing (pages without
+    a kind: value). Never moves files; the LLM lint workflow surfaces
+    proposals at step 9 and executes on user accept.
+    """
+    proposals: list[dict] = []
+    kind_missing: list[str] = []
+    for type_folder in SUBDIVISION_TYPE_FOLDERS:
+        type_dir = wiki_root / "wiki" / type_folder
+        if not type_dir.exists():
+            continue
+        kinds, missing = collect_kind_pages(type_dir)
+        for page in missing:
+            kind_missing.append(str(page.relative_to(wiki_root)).replace("\\", "/"))
+        for kind, pages in kinds.items():
+            count = len(pages)
+            if count < SUBDIVISION_PROPOSE_FLOOR:
+                continue
+            subfolder, prefixed = SUBDIVISION_NAMING_POLICY.get(
+                kind, (kind + "s" if not kind.endswith("s") else kind, False)
+            )
+            sample = sorted(p.stem for p in pages)[:5]
+            proposals.append(
+                {
+                    "type": type_folder,
+                    "kind": kind,
+                    "count": count,
+                    "suggested_subfolder": subfolder,
+                    "domain_prefix_applied": prefixed,
+                    "sample_pages": sample,
+                    "naming_heuristic_applied": kind not in SUBDIVISION_NAMING_POLICY,
+                }
+            )
+    report.detected["subdivision_proposals"] = proposals
+    report.detected["kind_missing"] = kind_missing
+
+
 def detect_broken_wikilinks(wiki_root: Path, report: Report) -> None:
     targets: set[str] = set()
     for root in [wiki_root / "wiki", wiki_root / "raw"]:
@@ -251,6 +338,7 @@ def main() -> int:
     sync_wiki_leaf_headers_and_queue(wiki_root, report, args.apply)
     sync_source_my_take_and_queue(wiki_root, report, args.apply)
     detect_broken_wikilinks(wiki_root, report)
+    detect_subdivision(wiki_root, report)
 
     payload = {
         "mode": report.mode,

@@ -106,7 +106,7 @@ Open Obsidian on the vault root and configure:
 | [Dataview](https://github.com/blacksmithgu/obsidian-dataview) (community) | — | Required if you build a Home dashboard |
 | [Templater](https://github.com/SilentVoid13/Templater) (community) | — | Required if you build a Home dashboard |
 
-In **Settings → Files & Links**: set "Default location for new notes" to `Same folder as current file` (avoid vault root); set "Attachment folder path" to a dedicated assets folder (e.g., `3-resources/assets/`); leave "Use [[Wikilinks]]" enabled.
+In **Settings → Files & Links**: set "Default location for new notes" to `Same folder as current file` (avoid vault root); set "Attachment folder path" to a dedicated assets folder (e.g., `3-resources/assets/`); leave "Use [[Wikilinks]]" enabled; set "New link format" to `Shortest path when possible` (REQUIRED — sb-os relies on filename-based wikilink resolution so pages remain linkable across folder reorganizations like wiki by-kind subdivision; without this, new wikilinks include path segments that break when pages move).
 
 ## Configurable paths
 
