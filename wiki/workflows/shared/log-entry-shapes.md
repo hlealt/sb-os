@@ -12,20 +12,22 @@ Every entry is an H2 heading:
 
 Use the SAME timestamp for every sibling entry emitted in one ingest run so cross-references resolve cleanly.
 
-## Active Types (8)
+## Active Types (10)
 
 | Type | Trigger | Sibling of |
 |------|---------|------------|
 | `ingest` | `/sb-wiki-ingest <slug>` — always emitted | — (anchor entry) |
 | `candidate-topic` | One of 3 triggers fires during ingest or lint | Sibling of parent `ingest`; referenced from it by timestamp |
 | `candidate-mention` | Entity/concept name surfaced in step 3 but stub-creation rule did NOT fire (per `stub-policy.md`); informational — lint reviews periodically | Sibling of parent `ingest`; referenced from it by timestamp |
+| `topic-coverage-candidate` | Speculative-tier (new-stub conceptual fit) topic-update match dropped by the per-ingest cap of 2 at step 3.7b; informational — lint reviews periodically | Sibling of parent `ingest`; referenced from it by timestamp |
 | `concept-created` | Stub Concept created during ingest step 5 | Sibling of parent `ingest`; referenced from it by timestamp |
 | `entity-created` | Stub Entity created during ingest step 5 | Sibling of parent `ingest`; referenced from it by timestamp |
 | `topic-created` | `sb-wiki-create-topic` skill — mid-ingest or user-intent-driven | Sibling of parent `ingest` (or standalone if user-intent-driven) |
+| `topic-updated` | Existing topic page accreted append-only content during ingest (Stage 1 user-accept of a PROPOSED TOPIC UPDATE row OR a SPECULATIVE TOPIC UPDATES row); `match` field records tier (`firm-*` / `speculative-token-overlap`) | Sibling of parent `ingest`; referenced from it by timestamp |
 | `lint` | `/sb-wiki-lint` | — (standalone) |
 | `query` | `/sb-wiki-query` — only if the user files the answer back | — (standalone) |
 
-**Sibling rule:** `candidate-topic`, `candidate-mention`, `concept-created`, `entity-created`, and `topic-created` entries are NEVER nested under the parent `ingest` entry. They are sibling H2 entries in `log.md`, referenced from the parent `ingest` entry by timestamp.
+**Sibling rule:** `candidate-topic`, `candidate-mention`, `topic-coverage-candidate`, `concept-created`, `entity-created`, `topic-created`, and `topic-updated` entries are NEVER nested under the parent `ingest` entry. They are sibling H2 entries in `log.md`, referenced from the parent `ingest` entry by timestamp.
 
 ## Entry Shapes
 
@@ -50,6 +52,12 @@ Use the SAME timestamp for every sibling entry emitted in one ingest run so cros
 - reason: stub rule did not fire (name not in source title, Notable Quote, or Substance bullet)
 - from-ingest: 2026-04-30 14:32
 
+## [2026-04-30 14:32] topic-coverage-candidate | mcp-evolution × code-execution-pattern
+- topic: [[mcp-evolution.md]]
+- new-stub: [[code-execution-pattern.md]]
+- match: speculative-token-overlap (tokens: code, execution, mcp; rank 3 dropped by cap of 2)
+- from-ingest: 2026-04-30 14:32
+
 ## [2026-04-30 14:32] concept-created | code-execution-pattern
 - page: [[code-execution-pattern.md]]
 - kind: pattern
@@ -64,6 +72,12 @@ Use the SAME timestamp for every sibling entry emitted in one ingest run so cros
 - resolves: candidate from 2026-04-30 14:32
 - page: [[mcp-debate.md]]
 - framing: "When MCP earns its complexity vs. when it doesn't"
+
+## [2026-04-30 14:32] topic-updated | mcp-evolution
+- page: [[mcp-evolution.md]]
+- match: key-concept overlap ([[model-context-protocol.md]])
+- change: + bullet under "Timeline" + footnote citation
+- from-ingest: 2026-04-30 14:32
 
 ## [2026-05-07 09:00] lint | weekly health-check
 - stubs aged >30d (3): [[X.md]], [[Y.md]], [[Z.md]]

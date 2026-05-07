@@ -5,7 +5,7 @@ description: Distill a raw source into wiki pages — write source page, update 
 
 # sb-wiki-ingest
 
-End-to-end ingest of a single raw source into the Karpathy-style wiki layer. Implements the 11-step flow defined in the wiki schema. All user interaction is gated to Stage 1 (step 10) and Stage 2 (step 11). Steps 1–9 run without mid-flow user input.
+End-to-end ingest of a single raw source into the Karpathy-style wiki layer. Implements the 11-step flow defined in the wiki schema. Stage 1 (step 10) is the commit gate; Stage 2 (step 11) is an optional post-commit reflection pass. Steps 1–9 run without mid-flow user input.
 
 ## Schema Source
 
@@ -44,7 +44,7 @@ These files codify rules referenced across multiple `sb-wiki-*` workflows. Load 
 
 ## Flow
 
-No mid-flow user input during steps 1–9. All user interaction occurs at steps 10 (Stage 1) and 11 (Stage 2).
+No mid-flow user input during steps 1–9. Stage 1 commits approved changes before Stage 2 begins. Stage 2 is optional and can be ignored without blocking the committed ingest.
 
 ### Step 1 — Read raw file
 
@@ -98,10 +98,30 @@ Citations: emit inline `[^N]` markers at every claim derived from the raw, then 
    - The `Substance`-bullet branch is MECHANICAL — fire on match against the cluster representative.
    - The Source-title branch is MECHANICAL ONLY when the title name also appears in a Substance bullet. Title-only names fall under DISCRETION per `../shared/stub-policy.md` § "Title-Branch Rule" — apply the relevance heuristic before firing.
    - The Notable-Quote branch is AGENT DISCRETION per `../shared/stub-policy.md` § "Notable Quote Stub Creation" — apply the relevance heuristic before firing.
-6. Build three working sets for downstream steps:
-   - `existing-pages` — pages that already exist (handled in step 4)
-   - `stub-candidates` — new pages whose stub-creation rule fires (handled in step 5)
+6. Build five working sets for downstream steps:
+   - `existing-pages` — concept/entity pages that already exist (handled in step 4)
+   - `stub-candidates` — new concept/entity pages whose stub-creation rule fires (handled in step 5)
    - `mention-only` — names that did NOT clear the stub rule, including Title-only and Notable-Quote-only mentions that the discretion heuristic demoted (logged as `candidate-mention` in step 9)
+   - `candidate-topic-updates` — FIRM tier: existing topic pages whose relevance to this source matches per the mechanical rule below (proposed at Stage 1; applied in step 4.5 only on user accept)
+   - `candidate-topic-updates-speculative` — SPECULATIVE tier: NEW stubs from this ingest paired with existing topic pages by token overlap (proposed at Stage 1 in a separate block; applied in step 4.5 only on user accept; capped at 2)
+7. **Firm tier.** Walk `{wiki_root}/wiki/topics/*.md`. For each topic page, fire a candidate-topic-update if AT LEAST ONE of these mechanical matches holds:
+
+| Match | Detection |
+|-------|-----------|
+| Key-concept/entity overlap | Topic's `Key concepts` or `Key entities` section wikilinks ≥1 page that ALSO appears as a wikilink in this source's `Substance` bullets |
+| Related-frontmatter overlap | Topic's `related:` frontmatter wikilinks overlap (≥1) with the source's substance entities/concepts |
+| Topic slug match | Topic slug appears in the source title OR in a `Substance` bullet (exact substring, kebab-case match) |
+
+   For each fire, capture: topic page path, the matching match-type (key-concept overlap / related overlap / slug match), and the matched name(s). Semantic-only "feels relevant" matches do NOT fire. NEVER apply the update at this step — populate `candidate-topic-updates` only.
+
+7b. **Speculative tier (new-stub conceptual fit).** For EACH entry in `stub-candidates` and EACH topic page in `{wiki_root}/wiki/topics/*.md`, fire a speculative candidate when ALL of these hold:
+
+| Condition | Detection |
+|-----------|-----------|
+| Token overlap | The stub's preamble (the 1–2-sentence factual sentence the agent will write at step 5) shares ≥2 substantive tokens with the topic's `Scope` section text. Tokenize both: lowercase, strip stopwords (`the/a/an/of/for/in/on/and/or/to/is/are/with/by/that/this/it/as`), preserve kebab-case as a single token AND its hyphen-split parts (e.g., `marginal-returns-to-intelligence` contributes `marginal-returns-to-intelligence`, `marginal`, `returns`, `intelligence`). Threshold: ≥2 distinct substantive tokens shared. |
+| Dedupe with firm | The (topic, source) pair must NOT already appear in firm `candidate-topic-updates` — firm wins; suppress speculative for the same topic. |
+
+   Rank candidates by token-overlap count (descending). Cap to TOP 2. The remaining candidates are dropped to `topic-coverage-candidate` log entries at step 9 (informational; lint reviews periodically). For each kept entry, capture: topic page path, the stub's slug, the matched tokens, and the topic-shape-appropriate proposed body bullet (per the same routing as firm-tier in step 4.5).
 
 ### Step 4 — Update existing entity/concept pages
 
@@ -112,6 +132,26 @@ For each page in `existing-pages`:
 3. If Contradiction-`same-scope-opposing` fires (detected in step 6 against this page's existing claims), populate the `Open variants / debates` section AND prepend a `> [!warning] Disputed` callout per `../shared/section-menus.md` "Contradiction — Disputed Callout" section.
 4. Update `last-touched: <today>` in frontmatter.
 5. Append inline `[^N]` markers in any newly-written prose tied to this source, with matching `[^N]: [[<raw-filename>]]` definition in `Sources`. Number footnotes locally per page; lint renumbers across pages later. Format per `../shared/citation-format.md`.
+
+### Step 4.5 — Stage existing topic-update proposals
+
+Process BOTH tiers built at step 3: `candidate-topic-updates` (firm) and `candidate-topic-updates-speculative` (speculative). The staging logic is identical — both produce staged proposals applied only on user accept at step 10. The two tiers are surfaced in SEPARATE blocks at Stage 1 (`PROPOSED TOPIC UPDATES` for firm, `SPECULATIVE TOPIC UPDATES` for speculative).
+
+For each entry in EITHER tier:
+
+1. Read the topic page in full.
+2. Determine the topic shape from its sections (debate / comparison / landscape / decision-frame / evolution / cross-application). Use existing section presence as the signal: `Key positions / Angles` → debate; `Timeline` → evolution; `Key concepts` / `Key entities` only → landscape; etc.
+3. Determine the proposed change (staged ONLY — NEVER apply yet):
+   - Footnote: a new `[^N]: [[<raw-filename>]]` entry to be appended to the topic's `Sources` section. Number locally; lint normalizes globally.
+   - Body bullet: ONE bullet under the topic-shape-appropriate section per the schema § "Existing topic updates" Update behavior table:
+     - debate-shaped → `Key positions / Angles`
+     - evolution-shaped → `Timeline`
+     - cross-application-shaped → `Key concepts` or `Key entities` (whichever holds the source's substance overlap)
+     - other shapes → `Key concepts` / `Key entities` if the source introduces a new wikilinkable page; otherwise no body bullet (citation-only update)
+   - Frontmatter: `last-touched: <today>`.
+4. Surface the staged proposal at Stage 1 (step 10) as a row in PROPOSED TOPIC UPDATES. Default user behavior is reject — the user must explicitly `accept N` to apply.
+
+This step prepares but does NOT write. Apply happens at step 10 commit, only for accepted rows.
 
 ### Step 5 — Create stubs
 
@@ -165,6 +205,8 @@ Append entries to `{wiki_root}/log.md` per `../shared/log-entry-shapes.md`. Entr
 | `entity-created` | Once per stub Entity created in step 5 | back-references parent `ingest` timestamp |
 | `candidate-topic` | Once per trigger fire from step 6 | back-references parent `ingest` timestamp; promotion via `sb-wiki-create-topic` skill |
 | `candidate-mention` | Once per name in `mention-only` set from step 3 | informational; lint reviews periodically |
+| `topic-updated` | Once per ACCEPTED row in PROPOSED TOPIC UPDATES OR SPECULATIVE TOPIC UPDATES at step 10 (rejected/defaulted rows produce NO log entry); `match` field records tier (`firm-*` / `speculative-token-overlap`) | back-references parent `ingest` timestamp |
+| `topic-coverage-candidate` | Once per OVERFLOW speculative match (rank >2) dropped by the cap at step 3.7b | back-references parent `ingest` timestamp; lint reviews periodically |
 
 Use the same `[YYYY-MM-DD HH:MM]` timestamp for every sibling emitted in this run so cross-references resolve cleanly.
 
@@ -190,53 +232,83 @@ PROPOSED TOPICS:
 |---|------|---------|---------|
 | 1 | <topic-slug> | <contradiction (same-scope-opposing) | evolution | cross-application> | [[<src1>]], [[<src2>]] |
 
+PROPOSED TOPIC UPDATES:
+| # | topic | match | proposed change |
+|---|-------|-------|-----------------|
+| 1 | [[<topic-slug>.md]] | <key-concept overlap | related overlap | slug match> ([[<matched-page>]]) | + bullet under "<section-name>" + citation |
+
+SPECULATIVE TOPIC UPDATES (low-confidence, default reject):
+| # | topic | overlap | proposed change |
+|---|-------|---------|-----------------|
+| 1 | [[<topic-slug>.md]] | tokens: <token1>, <token2> ([[<new-stub-slug>.md]]) | + bullet under "<section-name>" + citation |
+
 File changes: accept-all | reject N (e.g. "reject 3,4") | abort
 Topic decisions: accept N (creates now) | defer N (logs as candidate) | (default: defer all)
+Topic updates: accept N (applies append-only update) | reject N (skip) | (default: reject all)
+Speculative updates: accept N (applies append-only update) | reject N (skip) | (default: reject all)
 ```
 
-Omit the PROPOSED TOPICS block entirely if no triggers fired in step 6.
+Omit the PROPOSED TOPICS block entirely if no triggers fired in step 6. Omit the PROPOSED TOPIC UPDATES block entirely if `candidate-topic-updates` is empty after step 3. Omit the SPECULATIVE TOPIC UPDATES block entirely if `candidate-topic-updates-speculative` is empty after step 3.
 
 User response handling:
 
 | Response | Behavior |
 |----------|----------|
-| `accept-all` | Commit all file changes. Proceed to step 11. |
-| `reject N` (or comma list, e.g. `reject 3,4`) | Roll back ONLY the listed numbered items: delete new files for those rows, revert edits, remove log entries scoped to those changes. Other changes commit. If a downstream page (e.g., row 3) is rejected but the source page (row 1) is not, downgrade the raw index update from `Wiki = Yes` to `Wiki = Partial` in row 6. |
+| `accept-all` | Commit all file changes immediately. Then present step 11 as an optional post-commit prompt. |
+| `reject N` (or comma list, e.g. `reject 3,4`) | Roll back ONLY the listed numbered items: delete new files for those rows, revert edits, remove log entries scoped to those changes. Other changes commit immediately. If a downstream page (e.g., row 3) is rejected but the source page (row 1) is not, downgrade the raw index update from `Wiki = Yes` to `Wiki = Partial` in row 6. If the source page remains committed, present step 11 as an optional post-commit prompt. |
 | `abort` | Roll back EVERYTHING. Raw index `Wiki` stays `No`. Source page is not created. Log entries removed. Skip step 11. |
 | Topic `accept N` (per topic row) | Invoke the `sb-wiki-create-topic` skill mid-run with the proposed topic name. The skill writes the topic page, updates `wiki/topics/topics.md`, cross-links from triggering concept/entity pages, and appends a `topic-created` log entry referencing the candidate timestamp. |
 | Topic `defer N` (per topic row, default if user omits a topic decision) | The `candidate-topic` log entry persists. The user may promote later by expressing intent — Claude Code auto-fires the `sb-wiki-create-topic` skill. |
+| Topic update `accept N` (per firm topic-update row) | Apply the staged append-only update from step 4.5: append `[^N]: [[<raw-filename>]]` to the topic's `Sources`; append the staged body bullet under the topic-shape-appropriate section (with inline `[^N]` marker); bump `last-touched: <today>`. Append-only protection per `../shared/stub-policy.md` "Append-Only Protection" applies — NEVER overwrite existing prose. Append a `topic-updated` log entry referencing the parent ingest timestamp. The `match` field on the log entry records the firm match-type (`firm-key-concept` / `firm-related-frontmatter` / `firm-slug`). |
+| Topic update `reject N` (per firm topic-update row, default if user omits) | No change to the topic page. No log entry. The detection is not preserved as a candidate — re-detected on future ingests if relevance recurs. |
+| Speculative update `accept N` (per speculative topic-update row) | Same write semantics as firm `accept N` above. The `match` field on the log entry records `speculative-token-overlap` and lists the matched tokens. ALSO append the new stub's wikilink to the topic's `related:` frontmatter (so future firm-tier detection picks up the connection mechanically). |
+| Speculative update `reject N` (per speculative topic-update row, default if user omits) | No change to the topic page. No log entry. The detection is not preserved — re-detected on future ingests of related sources if token overlap recurs. |
 
-Default behavior when the user omits per-topic decisions: defer all topics.
+Default behavior when the user omits per-topic decisions: defer all topics, reject all topic updates (firm AND speculative).
 
 ### Step 11 — Stage 2 checkpoint
 
-Optional reflection pass. Skip entirely if Stage 1 was aborted. Format VERBATIM:
+Optional post-commit reflection pass. Skip entirely if Stage 1 was aborted OR the source page was rejected at Stage 1. The ingest is already complete when this prompt appears. If the user ignores the prompt and sends an unrelated next command, do not treat that next command as a reflection response. Format VERBATIM:
 
 ```
-Reflect on this source? (y/n)
+Committed approved ingest changes.
 
-[If y, agent presents the source page user-half (empty) and prompts each section in turn:]
+Reflect on this source? (y/n, or write any reflection now)
 
-My take — why did this matter? (type or speak; "skip" to leave blank)
-Open questions — what's unclear? (type or speak; "skip")
-Dive deeper — what to follow up on? (type or speak; "skip")
+You can answer in any order:
+- My take — why this mattered
+- Open questions — what's unclear
+- Dive deeper — follow-ups to pursue
 ```
 
 Handling:
 
 | User response | Behavior |
 |---------------|----------|
-| `n` to reflection prompt | Skip step 11 entirely. Source page user-half stays empty. Wiki sources index `My take` cell stays `pending` (set at step 8). End run. |
-| `skip` at any per-section prompt | Leave that section empty. Continue to next prompt. |
-| Any other text at a per-section prompt | Write the text under that section heading on the source page. |
+| No response / unrelated next command | Do nothing. Source page user-half stays empty. Wiki sources index `My take` cell stays `pending` (set at step 8). |
+| `n`, `no`, `skip`, or equivalent no-reflection response | Skip reflection. Source page user-half stays empty. Wiki sources index `My take` cell stays `pending` (set at step 8). |
+| Freeform reflection text | Route the text into `My take`, `Open questions`, and/or `Dive deeper` by intent, regardless of order. |
 
-After all three section prompts, re-sync the wiki sources index `My take` cell per `../shared/index-formats.md` "`My take` Cell — Three States" section. Source page is canonical; index is derived. **NEVER leave the cell blank.**
+Reflection routing:
+
+1. Treat the first substantive response to the Stage 2 prompt as a routing bundle. The user does NOT need to answer section prompts in order.
+2. Split explicitly labeled spans by section markers:
+   - `My take`: "my take", "take", "why it mattered", "o que eu achei", "minha visão", "minha leitura".
+   - `Open questions`: "open questions", "question", "dúvida", "pergunta", "unclear", "não entendi".
+   - `Dive deeper`: "dive deeper", "deep dive", "deep diver", "dive deepr", "follow up", "aprofundar", "quero dive deeper em", "quero me aprofundar em".
+3. Route semantically clear unlabeled clauses to the matching section even if they arrive while another section is displayed. Example: "quero dive deeper em graph databases" goes under `Dive deeper`, never under `My take`.
+4. If a response contains multiple routed spans, write each span under its matching heading in the source page.
+5. If a response contains substantive text with no routing signal, write it under `My take`.
+6. If a span could reasonably belong to multiple sections and misrouting would change meaning, ask one targeted clarification instead of writing it.
+7. Do not prompt for empty remaining sections after routing a freeform bundle. Empty sections can be filled later in Obsidian.
+
+After handling the Stage 2 response, re-sync the wiki sources index `My take` cell per `../shared/index-formats.md` "`My take` Cell — Three States" section. Source page is canonical; index is derived. **NEVER leave the cell blank.**
 
 | Stage 2 outcome | Index `My take` cell value |
 |-----------------|----------------------------|
-| `My take` per-section prompt was filled with text | 1-sentence reflected preview derived from the source page's `My take` section (≤280 chars; truncate with ellipsis) |
-| `My take` per-section prompt was `skip`-ed AND at least one of `Open questions` or `Dive deeper` was filled (Stage 2 finalization rule — user reflected but chose to record no take) | `—` (em-dash, U+2014) |
-| All three per-section prompts were `skip`-ed (Stage 2 entered but no content captured) | `pending` (no change from step 8 — Stage 2 did not produce a finalization signal) |
+| `My take` received text after routing | 1-sentence reflected preview derived from the source page's `My take` section (≤280 chars; truncate with ellipsis) |
+| `My take` stayed empty AND at least one of `Open questions` or `Dive deeper` received text (Stage 2 finalization rule — user reflected but chose to record no take) | `—` (em-dash, U+2014) |
+| No reflection response, no-reflection response, or no routed content | `pending` (no change from step 8 — Stage 2 did not produce a finalization signal) |
 
 End of flow.
 

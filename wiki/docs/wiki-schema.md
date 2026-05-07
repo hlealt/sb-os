@@ -370,8 +370,8 @@ The `My take` cell distinguishes **pre-reflect** (the user has not yet been prom
 
 | State | Token in cell | Meaning | Source page state |
 |-------|---------------|---------|-------------------|
-| Pre-reflect | `pending` | Stage 2 was skipped (or never reached) — the source page's `My take` section is an empty shell awaiting user action. | `My take` heading present, body empty |
-| Post-reflect-empty | `—` (em-dash, U+2014) | Stage 2 ran and the user explicitly recorded no take. Finalized. | `My take` heading present, body explicitly empty after a Stage 2 run (lint can recognize this state via the source page's reflection-status — see below) |
+| Pre-reflect | `pending` | Stage 2 was skipped, ignored, or never reached — the source page's `My take` section is an empty shell awaiting user action. | `My take` heading present, body empty |
+| Post-reflect-empty | `—` (em-dash, U+2014) | Stage 2 ran and the user explicitly recorded reflection content without a take. Finalized. | `My take` heading present, body empty while `Open questions` or `Dive deeper` has substantive content |
 | Reflected | 1-sentence opinion derived from the source page's `My take` section (≤280 chars; truncate with ellipsis if longer) | The user filled `My take` on the source page. Index cell mirrors the take. | `My take` heading present, body has substantive content |
 
 **Rationale.** The two empty states have different downstream behaviors (see below) and different remediations from the user's standpoint. Blank conflates them. Two human-readable, typographically distinct tokens preserve the distinction at a glance and let lint detect each state programmatically. `pending` was chosen for its action-pending semantics (a verb-shaped keyword the user reads as "needs me to act"); `—` (em-dash) was chosen for its long-standing convention as a typographic null marker (the user reads it as "nothing here, intentionally").
@@ -380,15 +380,11 @@ The `My take` cell distinguishes **pre-reflect** (the user has not yet been prom
 
 | State | Written by | When | Lint behavior |
 |-------|-----------|------|---------------|
-| `pending` | `sb-wiki-ingest` step 8 (initial) AND step 11 if Stage 2 is skipped (`n` to reflection prompt OR `skip` at every per-section prompt) | At end of ingest when no take was captured | The 7-day staleness rule applies — lint may re-sync (no-op if source page's `My take` body is still empty) |
-| `—` | `sb-wiki-ingest` step 11 if Stage 2 ran AND the user explicitly recorded no take (Stage 2 reached but `My take` per-section prompt was skipped while at least one OTHER user-half section was filled — see Stage 2 finalization rule below) | At end of Stage 2 | Final. The 7-day staleness rule does NOT apply — `—` rows do NOT age out. Lint preserves `—` on every pass (no-op). |
+| `pending` | `sb-wiki-ingest` step 8 (initial) AND step 11 if Stage 2 is skipped, ignored, or receives no routed content | At end of ingest when no take was captured | The 7-day staleness rule applies — lint may re-sync (no-op if source page's `My take` body is still empty) |
+| `—` | `sb-wiki-ingest` step 11 if Stage 2 receives `Open questions` or `Dive deeper` content while `My take` remains empty — see Stage 2 finalization rule below | At end of Stage 2 | Final. The 7-day staleness rule does NOT apply — `—` rows do NOT age out. Lint preserves `—` on every pass (no-op). |
 | Reflected (1-sentence preview) | `sb-wiki-ingest` step 11 if the user filled `My take`; refreshed by `sb-wiki-lint` step 6 on every run | At end of Stage 2 / on every lint pass | Re-sync from the source page's `My take` section on every run, preserving the three-state distinction (if the source page's `My take` body is now empty after previously having content, the lint downgrades the cell to `—` only if a `pending` state cannot be inferred — see "Re-sync algorithm" below) |
 
-**Stage 2 finalization rule.** The `—` token is written ONLY when the user explicitly engaged Stage 2. The signal is:
-1. The user answered `y` to the reflection prompt (Stage 2 entered), AND
-2. The user typed `skip` at the `My take` per-section prompt (the `My take` was deliberately left empty while the user was actively reflecting).
-
-If the user answered `n` to the reflection prompt, the cell stays `pending` — the user did not engage and no finalization signal exists.
+**Stage 2 finalization rule.** The `—` token is written ONLY when the user explicitly engaged Stage 2 and routed reflection content to `Open questions` or `Dive deeper` while leaving `My take` empty. If the user answered `n`, ignored the prompt, or sent an unrelated next command, the cell stays `pending` — the user did not produce a finalization signal.
 
 **Re-sync algorithm (lint step 6).** For each row:
 - If the source page's `My take` section has substantive content → write the 1-sentence preview (overwriting the prior cell value).
@@ -405,6 +401,44 @@ The raw index (`raw/{origin}/{origin}.md`) keeps its existing format with `Wiki`
 The agent detects 3 candidate-topic triggers and:
 1. Logs them in `log.md` as `candidate-topic` H2 entries.
 2. Surfaces them inline at the Stage 1 ingest checkpoint as **PROPOSED TOPICS** — the user can accept-now (agent invokes `sb-wiki-create-topic` skill mid-run) or defer (the candidate-topic log entry persists; the user may promote later by expressing intent, which auto-fires the `sb-wiki-create-topic` skill).
+
+### Existing topic updates (ingest)
+
+Topic pages are plural-framed and accrete substance over time as new sources land in their scope. During ingest, the agent detects which existing topic pages this source plausibly extends, and proposes those updates at Stage 1 alongside PROPOSED TOPICS. The user accepts/rejects per topic; the agent NEVER auto-appends to a topic page without explicit acceptance.
+
+**Relevance detection — two tiers.** A source is a candidate update for an existing topic page in either the FIRM tier (mechanical wikilink/slug match — high confidence) or the SPECULATIVE tier (new-stub conceptual fit — low confidence, capped, default-reject).
+
+**Firm tier.** Fires when AT LEAST ONE of these mechanical matches holds:
+
+| Match | Definition |
+|-------|------------|
+| Key-concept/entity overlap | The source's `Substance` bullets wikilink ≥1 page that the topic page wikilinks in its `Key concepts` or `Key entities` section |
+| Related-frontmatter overlap | The source's substance entities/concepts overlap (≥1) with the topic's `related:` frontmatter wikilinks |
+| Topic slug match | The topic slug appears in the source title OR in a `Substance` bullet |
+
+Firm-tier detection is mechanical — exact wikilink comparison or exact slug match. Semantic-only matches do NOT fire firm.
+
+**Speculative tier (new-stub conceptual fit).** Fires when ALL of these hold:
+
+| Condition | Definition |
+|-----------|------------|
+| New stub | Candidate is a `stub-candidates` entry created in THIS ingest run — never an existing page |
+| Token overlap | The stub's preamble (1–2 sentence factual sentence written at step 5) shares ≥2 substantive tokens with the topic's `Scope` section text. Tokenization: lowercase, strip stopwords (`the/a/an/of/for/in/on/and/or/to/is/are/with/by/that/this/it/as`), preserve kebab-case as a single token (`marginal-returns-to-intelligence` matches `marginal returns` if both tokens appear in scope) |
+| Cap | Maximum 2 speculative fires per ingest. If >2 candidates qualify, rank by token-overlap count (descending), keep top 2, drop the rest as `topic-coverage-candidate` log entries (sibling of parent `ingest`, informational, lint reviews periodically) |
+| Dedupe | If a topic already fires firm for this source, suppress its speculative fire (firm wins) |
+
+Speculative tier is mechanical (token overlap is computed, not LLM-judged) but heuristic in confidence. It is rendered in a SEPARATE block at Stage 1 (`SPECULATIVE TOPIC UPDATES (low-confidence, default reject)`) and defaults to reject — same default as firm, but the separation signals confidence to the user.
+
+**Update behavior on user accept (append-only).** The agent updates the topic page following the same append-only protection used for entity/concept pages:
+
+| Operation | Detail |
+|-----------|--------|
+| Add citation | Append `[^N]: [[<raw-filename>]]` to the topic's `Sources` section (renumber locally; lint normalizes globally) |
+| Append section entry | Add ONE bullet under the topic-shape-appropriate section (`Key positions / Angles` for debate-shaped topics; `Timeline` for evolution-shaped; otherwise `Key concepts` / `Key entities` if the source introduces a new wikilinkable page; otherwise no body bullet — citation-only update) with inline `[^N]` marker |
+| Bump frontmatter | Update `last-touched: <today>` |
+| NEVER overwrite | Existing prose, `Scope`, position bullets, or `Open questions` content stays untouched. Append-only, per stub-policy "Append-Only Protection" |
+
+**Log entry.** Each accepted topic update emits a sibling `topic-updated` H2 entry in `log.md`, referenced from the parent `ingest` by timestamp.
 
 | Trigger | Structural anchor | Status |
 |---------|-------------------|--------|
@@ -505,15 +539,15 @@ Single command: `/sb-wiki-ingest <slug>` where slug is a raw filename or unique 
 |------|-----------|-------|
 | 1 | Read raw file | Agent |
 | 2 | Write `wiki/sources/{origin}/{date}-{slug}.md` (`Substance` and `Connections` always; `Notable quotes` / `Methodology` / `Counterpoints` per source kind; user-half sections present as empty shells with headings only). **Substance bullets MUST name entities/concepts at page-cluster granularity** per Page granularity § — sub-cluster names go in prose without wikilinks | Agent |
-| 3 | Identify entity/concept mentions; **cluster candidates by page-granularity** (variants, whole+part, siblings, producer+work — see Page granularity §); for each cluster representative, apply the stub-creation rule (Substance bullet = mechanical; title-only = discretion; Notable Quote = discretion) | Agent |
-| 4 | Update existing entity/concept pages with new perspective + citation; populate `Open variants / debates` section if Contradiction fires. **Agent NEVER overwrites a main section that already contains substantive content (>50 words) — only appends new sections, adds bullets to existing lists, or adds footnote definitions to Sources. User-fleshed content is treated as authoritative.** | Agent |
+| 3 | Identify entity/concept mentions; **cluster candidates by page-granularity** (variants, whole+part, siblings, producer+work — see Page granularity §); for each cluster representative, apply the stub-creation rule (Substance bullet = mechanical; title-only = discretion; Notable Quote = discretion). ALSO walk `wiki/topics/*.md` and identify existing topic pages relevant to this source per the relevance-detection rule (see "Existing topic updates" §) — build a `candidate-topic-updates` set | Agent |
+| 4 | Update existing entity/concept pages with new perspective + citation; populate `Open variants / debates` section if Contradiction fires. **Agent NEVER overwrites a main section that already contains substantive content (>50 words) — only appends new sections, adds bullets to existing lists, or adds footnote definitions to Sources. User-fleshed content is treated as authoritative.** Existing topic pages are NOT updated at this step — they go through the Stage 1 user gate per "Existing topic updates" § | Agent |
 | 5 | Create stubs for new entities/concepts that meet the rule | Agent |
 | 6 | Detect candidate-topic triggers (Contradiction, Evolution, Cross-application); add `> [!warning] Disputed` callouts on Contradiction-`same-scope-opposing` | Agent |
 | 7 | Update raw index: `Wiki = Yes` | Agent |
 | 8 | Update wiki sources index (`What it says` filled; `My take` set to `pending` — populated post Stage 2 per the three-state rule) | Agent |
 | 9 | Append `ingest` entry to `log.md` summarizing operations + candidates (separate `candidate-topic`, `concept-created`, `entity-created` H2 entries when triggered) | Agent |
-| 10 | **Stage 1 checkpoint**: present structured table + PROPOSED TOPICS block; the user accepts-all / rejects N / aborts file changes; per topic: accept (agent invokes `sb-wiki-create-topic` skill now) / defer (keeps as candidate in log) | Agent + User |
-| 11 | **Stage 2 checkpoint** (optional): present source page draft; agent prompts for `My take` / `Open questions` / `Dive deeper`. The user can fill or skip. If filled, agent writes user-half sections AND syncs the `My take` column to the wiki sources index. | Agent + User |
+| 10 | **Stage 1 checkpoint**: present structured table + PROPOSED TOPICS block; the user accepts-all / rejects N / aborts file changes; per topic: accept (agent invokes `sb-wiki-create-topic` skill now) / defer (keeps as candidate in log). Approved changes commit before Stage 2 begins. | Agent + User |
+| 11 | **Stage 2 checkpoint** (optional, post-commit): present reflection prompt after approved changes are committed. The user can ignore it, decline it, or answer with freeform reflection content in any order. The agent routes content to `My take` / `Open questions` / `Dive deeper` by intent, writes routed sections, and syncs the `My take` column to the wiki sources index. | Agent + User |
 
 **No mid-flow user input during steps 1–9.** All user interaction happens at steps 10–11.
 
@@ -537,31 +571,56 @@ PROPOSED TOPICS:
 |---|------|---------|---------|
 | 1 | mcp-debate | contradiction (same-scope-opposing) | [[2026-XX-XX-code-mode-mcp.md]], [[2026-XX-XX-bye-bye-mcp.md]] |
 
+PROPOSED TOPIC UPDATES:
+| # | topic | match | proposed change |
+|---|-------|-------|-----------------|
+| 1 | [[mcp-evolution.md]] | key-concept overlap ([[model-context-protocol.md]]) | + bullet under "Timeline" + citation |
+
+SPECULATIVE TOPIC UPDATES (low-confidence, default reject):
+| # | topic | overlap | proposed change |
+|---|-------|---------|-----------------|
+| 1 | [[ai-capability-skepticism.md]] | tokens: bottleneck, intelligence ([[marginal-returns-to-intelligence.md]]) | + bullet under "Key positions / Angles" + citation |
+
 File changes: accept-all | reject N (e.g. "reject 3,4") | abort
 Topic decisions: accept N (creates now) | defer N (logs as candidate) | (default: defer all)
+Topic updates: accept N (applies append-only update) | reject N (skip) | (default: reject all)
+Speculative updates: accept N (applies append-only update) | reject N (skip) | (default: reject all)
 ```
 
-- `accept-all`: all file changes commit.
-- `reject N`: the agent rolls back the listed numbered items only (deletes new files, reverts edits, removes log entries scoped to those changes). Other changes commit. The `Wiki = Yes` row update may be downgraded to `Wiki = Partial` if the source page itself is not rejected but downstream pages were.
+- `accept-all`: all file changes commit immediately; then the agent presents Stage 2 as an optional post-commit prompt.
+- `reject N`: the agent rolls back the listed numbered items only (deletes new files, reverts edits, removes log entries scoped to those changes). Other changes commit immediately. The `Wiki = Yes` row update may be downgraded to `Wiki = Partial` if the source page itself is not rejected but downstream pages were. If the source page remains committed, the agent presents Stage 2 as an optional post-commit prompt.
 - `abort`: the agent rolls back everything. Raw index `Wiki` stays `No`. The source page is not created.
 - Topic `accept N`: agent invokes the `sb-wiki-create-topic` skill mid-run with the proposed topic name; appends `topic-created` entry to log.
 - Topic `defer N`: candidate-topic entry persists in log; the user may promote later by expressing intent (auto-fires the `sb-wiki-create-topic` skill).
+- Topic update `accept N`: agent applies the append-only update to the topic page per "Existing topic updates" §; appends `topic-updated` entry to log.
+- Topic update `reject N` (default when omitted): no change to the topic page; no log entry. The detection is not preserved as a candidate — re-detected on future ingests if relevance recurs.
 
 #### Stage 2 checkpoint format
 
-After Stage 1 acceptance:
+After Stage 1 acceptance and commit:
 
 ```
-Reflect on this source? (y/n)
+Committed approved ingest changes.
 
-[If y, agent presents the source page user-half (empty) and prompts each section in turn:]
+Reflect on this source? (y/n, or write any reflection now)
 
-My take — why did this matter? (type or speak; "skip" to leave blank)
-Open questions — what's unclear? (type or speak; "skip")
-Dive deeper — what to follow up on? (type or speak; "skip")
+You can answer in any order:
+- My take — why this mattered
+- Open questions — what's unclear
+- Dive deeper — follow-ups to pursue
 ```
 
-Skip is allowed at any prompt. Skipped sections remain empty; the user can fill later in Obsidian editor. The agent re-syncs the `My take` index cell per the three-state rule defined under "Wiki sources index format" — write the 1-sentence preview if `My take` was filled; write `—` if Stage 2 ran but `My take` was skipped while at least one other user-half section was filled (Stage 2 finalization rule); leave `pending` if Stage 2 was declined entirely (`n` to reflection prompt).
+Stage 2 is non-blocking: the ingest is already complete when this prompt appears. If the user ignores it and sends an unrelated next command, treat that command as the next task, not as reflection.
+
+The user can answer with a bundled, out-of-order reflection. The agent routes by intent:
+
+- `My take`: "my take", "take", "why it mattered", "o que eu achei", "minha visão", "minha leitura".
+- `Open questions`: "open questions", "question", "dúvida", "pergunta", "unclear", "não entendi".
+- `Dive deeper`: "dive deeper", "deep dive", "deep diver", "dive deepr", "follow up", "aprofundar", "quero dive deeper em", "quero me aprofundar em".
+
+Explicit or semantically clear content MUST go to its matching section even if it arrives while another section is displayed. Example: "quero dive deeper em graph databases" goes under `Dive deeper`, never under `My take`. If a response contains multiple routed spans, write each span under its matching heading. If a response contains substantive text with no routing signal, write it under `My take`. If routing is ambiguous and misrouting would change meaning, ask one targeted clarification.
+
+The agent re-syncs the `My take` index cell per the three-state rule defined under "Wiki sources index format" — write the 1-sentence preview if `My take` was filled; write `—` if Stage 2 produced `Open questions` or `Dive deeper` while `My take` stayed empty; leave `pending` if Stage 2 was declined, ignored, or produced no routed content.
 
 ### `sb-wiki-create-topic`
 
@@ -669,16 +728,18 @@ If filed as Topic, the agent invokes `sb-wiki-create-topic` with the proposed na
 
 ## Log entry types
 
-8 types active at v1. Each entry is an H2 heading: `## [YYYY-MM-DD HH:MM] type | brief`.
+10 types active at v1. Each entry is an H2 heading: `## [YYYY-MM-DD HH:MM] type | brief`.
 
 | Type | Trigger | User action surfaced |
 |------|---------|----------------------|
 | `ingest` | `/sb-wiki-ingest <slug>` | Review diff at Stage 1; reflect at Stage 2 if desired |
 | `candidate-topic` | Auto-fired during `ingest` or `lint` when 1 of 3 triggers fires. **Always a sibling H2 entry** (not nested under the parent ingest), referenced from the parent ingest entry by timestamp | Decide whether to promote via the `sb-wiki-create-topic` skill (express intent to fire it) |
 | `candidate-mention` | Auto-fired during `ingest` step 3 when an entity/concept name surfaces but the stub-creation rule does NOT fire (per Stub policy). **Sibling H2 entry**, referenced from the parent ingest by timestamp | None — informational; lint reviews periodically and may promote to a stub if the name recurs |
+| `topic-coverage-candidate` | Auto-fired during `ingest` step 3.7 speculative tier when more than 2 new-stub conceptual-fit matches exist for a given ingest (the cap drops the lower-ranked candidates). **Sibling H2 entry**, referenced from the parent ingest by timestamp | None — informational; lint reviews periodically and may surface them as topic-update suggestions on a future ingest of a related source |
 | `concept-created` | Auto-fired during `ingest` when a stub Concept is created. **Sibling H2 entry**, referenced from the parent ingest by timestamp | None — informational; greppable by type |
 | `entity-created` | Auto-fired during `ingest` when a stub Entity is created. **Sibling H2 entry**, referenced from the parent ingest by timestamp | None — informational; greppable by type |
 | `topic-created` | `sb-wiki-create-topic` skill (mid-ingest acceptance OR user-intent-driven invocation) | None — closes the loop. Lets lint know which candidates are spent |
+| `topic-updated` | `/sb-wiki-ingest` Stage 1 acceptance of a PROPOSED TOPIC UPDATE row (firm OR speculative tier). **Sibling H2 entry**, referenced from the parent ingest by timestamp. The entry's `match` field records which tier fired (`firm-{type}` or `speculative-token-overlap`) | None — informational; lint can audit accreted topics |
 | `lint` | `/sb-wiki-lint` | Review findings: stubs aged, orphans, unresolved contradictions, candidates aging, raw index sync |
 | `query` | `/sb-wiki-query`, only if the user files the answer back | None unless filed back as a wiki page |
 
@@ -719,6 +780,12 @@ If filed as Topic, the agent invokes `sb-wiki-create-topic` with the proposed na
 - resolves: candidate from 2026-04-30 14:32
 - page: [[mcp-debate.md]]
 - framing: "When MCP earns its complexity vs. when it doesn't"
+
+## [2026-04-30 14:32] topic-updated | mcp-evolution
+- page: [[mcp-evolution.md]]
+- match: key-concept overlap ([[model-context-protocol.md]])
+- change: + bullet under "Timeline" + footnote citation
+- from-ingest: 2026-04-30 14:32
 
 ## [2026-05-07 09:00] lint | weekly health-check
 - stubs aged >30d (3): [[X.md]], [[Y.md]], [[Z.md]]

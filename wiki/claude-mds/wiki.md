@@ -110,7 +110,7 @@ If a leaf index exists with a user-customized column layout, lint preserves it â
 
 | Path | Contents |
 |------|----------|
-| `{wiki_root}/log.md` | Single append-only event log (8 entry types: `ingest`, `candidate-topic`, `candidate-mention`, `concept-created`, `entity-created`, `topic-created`, `lint`, `query`) |
+| `{wiki_root}/log.md` | Single append-only event log (10 entry types: `ingest`, `candidate-topic`, `candidate-mention`, `topic-coverage-candidate`, `concept-created`, `entity-created`, `topic-created`, `topic-updated`, `lint`, `query`) |
 | `{wiki_root}/raw/{origin}/` | Verbatim source files by origin (immutable â€” never edit) |
 | `{wiki_root}/raw/studies/` | Study sessions (`/sb-tutor` outputs, multi-source notes) |
 | `{wiki_root}/wiki/concepts/`, `wiki/entities/`, `wiki/topics/`, `wiki/sources/{origin}/` | Synthesized pages |
