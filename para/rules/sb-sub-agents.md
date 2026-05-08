@@ -23,8 +23,10 @@ If the planned sub-agent task or prompt contains ANY trigger in a row below, you
 
 | Trigger family — keywords or task type | Matching sb-os skill |
 |----------------------------------------|----------------------|
-| Vault content edits, moves, renames, new files in PARA folders or `.user/` | `sb-vault-ops` |
-| Creating, moving, renaming, or deleting any vault file (post-op structural sweep) | `sb-vault-integrity` |
+| Creating/routing tasks; creating/moving/renaming/deleting vault content; creating project/area/resource directories; editing CLAUDE.md; modifying sb-os/.claude/.agents system components | `sb-vault-ops` |
+| Moving, renaming, or deleting vault files; creating project/area/resource directories; creating vault files that change routing or dependencies | `sb-vault-integrity` |
+
+Ordinary edits to existing routed files are non-triggers when path, filename, frontmatter type, task format, routing, links, and directory structure are unchanged.
 
 If multiple installed skills match a trigger family, name every match. If no installed skill matches a trigger family for the current dispatch, the family is inactive — do not invent skill names.
 

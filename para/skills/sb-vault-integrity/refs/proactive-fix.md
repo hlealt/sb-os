@@ -1,6 +1,8 @@
 # Proactive Fix
 
-Same-file fix scope when editing any file in the vault or `.user/` and the file violates a rule from `.claude/rules/` or its parent CLAUDE.md chain.
+Same-file fix scope for explicit one-file cleanup or when `sb-vault-integrity` is already active for a structural mutation.
+
+This reference is NOT an invocation trigger. Ordinary edits to existing routed files must not invoke `sb-vault-integrity` just to scan for possible cleanup.
 
 ## Verifiable (auto-fix in the same edit)
 

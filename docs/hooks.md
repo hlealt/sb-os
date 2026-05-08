@@ -14,9 +14,13 @@ This document gives example shapes that complement sb-os workflows. The authorit
 
 ## Recommended hooks for sb-os
 
-### 1. Run `sb-vault-integrity` after vault file mutations
+### 1. Run `sb-vault-integrity` only after structural vault mutations
 
-Trigger the structural sweep after any tool call that creates, moves, renames, or deletes a vault file. Example shape:
+Trigger the structural sweep only after operations that move, rename, or delete vault files; create project/area/resource directories; or create vault files that change routing or dependencies.
+
+Do NOT invoke `sb-vault-integrity` on every `Edit`, `Write`, or `MultiEdit`. If your harness cannot filter by operation/path, do not install this hook.
+
+Example shape:
 
 ```json
 {
@@ -27,6 +31,7 @@ Trigger the structural sweep after any tool call that creates, moves, renames, o
         "hooks": [
           {
             "type": "command",
+            "if": "<structural vault mutation predicate>",
             "command": "claude skill invoke sb-vault-integrity"
           }
         ]
