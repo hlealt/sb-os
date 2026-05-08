@@ -266,14 +266,15 @@ def prompt_modules(
     modules: dict,
     previously_selected: list[str] | None = None,
 ) -> list[str]:
-    """Numbered opt-out / opt-in for modules.
+    """Keyboard checkbox selector for modules.
 
     Always-installed modules are listed but cannot be deselected. On re-install
     the previous selection is the default; on first install all optional
     modules default to selected. Atomic modules are toggled as a unit (the
     customization pass below skips them).
     """
-    print_section("Modules")
+    from .tui import checkbox
+
     names = list(modules.keys())
     always = {n for n, m in modules.items() if m.get("always_installed")}
     if previously_selected is None:
@@ -281,48 +282,55 @@ def prompt_modules(
     else:
         defaults = set(previously_selected) | always
 
-    for i, name in enumerate(names, start=1):
+    items = []
+    for name in names:
         mod = modules[name]
         marks = []
         if name in always:
             marks.append("always")
         if mod.get("atomic"):
             marks.append("atomic")
-        tag = f" [{', '.join(marks)}]" if marks else ""
-        check = "x" if name in defaults else " "
-        desc = f"  {dim(mod.get('description', ''))}"
-        print(f"  {i:>2}. [{check}] {bold(name)}{tag}{desc}")
-
-    print(
-        dim(
-            "\nEnter indices to TOGGLE (comma-separated), or press Enter to "
-            "accept defaults shown above."
+        suffix = f" [{', '.join(marks)}]" if marks else ""
+        items.append(
+            {
+                "label": f"{name}{suffix}",
+                "hint": mod.get("description", ""),
+                "selected": name in defaults,
+                "disabled": name in always,
+            }
         )
-    )
-    while True:
-        raw = _read_input("Toggle: ").strip().lower()
-        if not raw:
-            chosen = sorted(defaults, key=names.index)
-            return chosen
-        try:
-            indices = {int(tok) for tok in raw.replace(" ", "").split(",") if tok}
-        except ValueError:
-            print(yellow("  Please enter integers separated by commas."))
-            continue
-        if any(i < 1 or i > len(names) for i in indices):
-            print(yellow(f"  Indices must be between 1 and {len(names)}."))
-            continue
-        toggled = set(defaults)
-        for i in indices:
-            n = names[i - 1]
-            if n in always:
-                print(yellow(f"  '{n}' is always installed; cannot deselect."))
-                continue
-            if n in toggled:
-                toggled.remove(n)
+
+    def detail_cb(index: int) -> str:
+        name = names[index]
+        mod = modules[name]
+        lines = [f"  {name} - {mod.get('description', '')}", ""]
+        for group_name, key in (
+            ("Skills", "skills"),
+            ("Commands", "commands"),
+            ("Rules", "rules"),
+        ):
+            entries = mod.get(key, [])
+            lines.append(f"  {group_name} ({len(entries)}):")
+            if entries:
+                for entry in entries:
+                    lines.append(f"    - {entry.get('name', entry.get('target', ''))}")
             else:
-                toggled.add(n)
-        return sorted(toggled, key=names.index)
+                lines.append("    - (none)")
+            lines.append("")
+        return "\n".join(lines)
+
+    selected_indices = checkbox(
+        "\nSelect modules to install:",
+        items,
+        min_selected=1,
+        detail_callback=detail_cb,
+    )
+
+    chosen = [names[i] for i in selected_indices]
+    for name in always:
+        if name not in chosen:
+            chosen.insert(0, name)
+    return sorted(chosen, key=names.index)
 
 
 def prompt_module_components(
@@ -330,9 +338,9 @@ def prompt_module_components(
     selected_modules: list[str],
     previously_excluded: list[str] | None = None,
 ) -> list[str]:
-    """Per-module component opt-out for non-atomic modules. Returns the list
-    of excluded target paths (forward-slash normalized).
-    """
+    """Keyboard checkbox selector for per-module component opt-out."""
+    from .tui import checkbox
+
     if not confirm("\nCustomize individual components?", default=False):
         return list(previously_excluded or [])
 
@@ -352,25 +360,22 @@ def prompt_module_components(
             all_entries.append(("rule", entry["name"], entry["target"].replace("\\", "/")))
         if not all_entries:
             continue
-        print_section(f"Components in '{name}'")
-        for i, (kind, cname, target) in enumerate(all_entries, start=1):
-            check = " " if target in excluded else "x"
-            print(f"  {i:>2}. [{check}] {kind:<5} {cname}  {dim('->')} {target}")
-        print(dim("\n  Enter indices to TOGGLE, or Enter to keep as shown."))
-        raw = _read_input("Toggle: ").strip().lower()
-        if not raw:
-            continue
-        try:
-            indices = {int(tok) for tok in raw.replace(" ", "").split(",") if tok}
-        except ValueError:
-            print(yellow("  Skipped — invalid input."))
-            continue
-        for i in indices:
-            if i < 1 or i > len(all_entries):
-                continue
-            target = all_entries[i - 1][2]
-            if target in excluded:
-                excluded.remove(target)
+        items = [
+            {
+                "label": f"{kind:<5} {cname}",
+                "hint": target,
+                "selected": target not in excluded,
+            }
+            for kind, cname, target in all_entries
+        ]
+        selected_indices = checkbox(
+            f"\nComponents in '{name}':",
+            items,
+        )
+        selected_set = set(selected_indices)
+        for i, (_kind, _cname, target) in enumerate(all_entries):
+            if i in selected_set:
+                excluded.discard(target)
             else:
                 excluded.add(target)
 

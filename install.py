@@ -10,7 +10,8 @@ Interactive bootstrap or refresh of an sb-os vault. The installer:
 * On fresh, offers a dry-run preview before any writes, then bootstraps a
   clean PARA vault and relocates the running sb-os clone into
   ``{target}/3-resources/tools/sb-os/`` as the final step.
-* Lets the user select which modules and individual components to install.
+* Lets the user select which modules and individual components to install
+  with keyboard navigation (arrow keys + space to toggle).
   ``wiki`` is atomic — selecting it installs all wiki components plus the
   wiki folder + wiki CLAUDE.md; deselecting it skips all of them.
 
