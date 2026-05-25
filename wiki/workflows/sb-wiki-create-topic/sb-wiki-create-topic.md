@@ -1,6 +1,6 @@
 ---
 name: sb-wiki-create-topic
-description: Create a topic page from a candidate or freshly-proposed topic — write `wiki/topics/{slug}.md`, cross-link from triggering pages, append `topic-created` log entry, update topics leaf index. Two invocation modes: mid-ingest acceptance (no separate checkpoint) and user-intent-driven auto-fire (single confirmation checkpoint).
+description: Create a topic page from a candidate or freshly-proposed topic — write `wiki/topics/{slug}.md`, cross-link from triggering pages, remove the resolved `candidate-topic` entry from the log, update topics leaf index. Two invocation modes: mid-ingest acceptance (no separate checkpoint) and user-intent-driven auto-fire (single confirmation checkpoint).
 ---
 
 # sb-wiki-create-topic
@@ -22,7 +22,7 @@ Read `3-resources/tools/sb-os/docs/wiki-schema.md` — Operations § "sb-wiki-cr
 | `{user_context_root}` | Read from `sb-os.json` → `user_context_root`. Never hardcode. |
 | `{wiki_root}/wiki/topics/` | Topic page tree. |
 | `{wiki_root}/wiki/topics/topics.md` | Topics leaf index. |
-| `{wiki_root}/log.md` | Single append-only event log. |
+| `{wiki_root}/log.md` | Actionable queue — `candidate-topic` + `candidate-mention` entries only. |
 
 ## Shared Data Files
 
@@ -101,22 +101,14 @@ For each triggering concept/entity page (sources of the candidate, or pages expl
 
 If a triggering page does not exist (rare — usually the topic emerges from existing pages, but possible for user-intent invocations naming a not-yet-created concept), skip the cross-link silently for that page. Do NOT create the missing page from this workflow — page creation is `/sb-wiki-ingest`'s responsibility.
 
-### Step 4 — Append `topic-created` log entry
+### Step 4 — Resolve the candidate in the log
 
-Append a `topic-created` entry to `{wiki_root}/log.md` per `../shared/log-entry-shapes.md`. Entry is an H2 heading: `## [YYYY-MM-DD HH:MM] topic-created | <slug>`.
+The log is an actionable queue; resolution = the topic page now exists. Do NOT write a `topic-created` entry.
 
-Required body fields:
+- **Promoted from a candidate** — DELETE the matching `candidate-topic` H2 entry (header + body) from `{wiki_root}/log.md`. Locate it by the slug and timestamp resolved in step 1. The newly created topic page is now the record.
+- **Fresh proposal (no candidate)** — nothing to remove; the log is untouched.
 
-| Field | Value |
-|-------|-------|
-| `page` | `[[<slug>.md]]` |
-| `framing` | The `Scope` sentence written in step 2 |
-| `resolves` | `candidate from <YYYY-MM-DD HH:MM>` — ONLY if invoked from a candidate; omit for fresh proposals |
-| `from-ingest` | Parent ingest timestamp — ONLY if invoked mid-ingest; omit for user-intent-driven invocations |
-
-Sibling rule per `../shared/log-entry-shapes.md`:
-- **Mid-ingest invocation** — use the SAME `[YYYY-MM-DD HH:MM]` timestamp as the parent `ingest` entry so cross-references resolve cleanly.
-- **User-intent-driven invocation** — use the current timestamp; the entry stands alone (no parent ingest sibling).
+Never write any other entry type. Per `../shared/log-entry-shapes.md`, only `candidate-topic` and `candidate-mention` are active types.
 
 ### Step 5 — Update topics leaf index
 

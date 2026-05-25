@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -31,18 +32,32 @@ class Report:
     detected: dict[str, list[str]] = field(default_factory=dict)
 
 
+def _fspath(path: Path) -> str:
+    """Return an OS path safe to open on Windows past the 260-char MAX_PATH.
+
+    Local-drive paths at/over the limit get the extended-length prefix so the
+    standard file APIs can open them. Non-Windows and short paths pass through.
+    """
+    raw = os.path.abspath(os.fspath(path))
+    if os.name == "nt" and len(raw) >= 260 and not raw.startswith("\\\\?\\"):
+        return "\\\\?\\" + raw
+    return raw
+
+
 def read_text(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
+    with open(_fspath(path), "r", encoding="utf-8") as handle:
+        return handle.read()
 
 
 def write_text(path: Path, content: str, report: Report, apply_changes: bool) -> None:
-    old = path.read_text(encoding="utf-8") if path.exists() else None
+    old = read_text(path) if os.path.exists(_fspath(path)) else None
     if old == content:
         return
     report.writes.append(str(path))
     if apply_changes:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
+        os.makedirs(_fspath(path.parent), exist_ok=True)
+        with open(_fspath(path), "w", encoding="utf-8") as handle:
+            handle.write(content)
 
 
 def frontmatter(text: str) -> dict[str, str]:
@@ -194,7 +209,7 @@ def sync_source_my_take_and_queue(wiki_root: Path, report: Report, apply_changes
             if not match:
                 continue
             source_path = origin_dir / match.group(1)
-            if not source_path.exists():
+            if not os.path.exists(_fspath(source_path)):
                 continue
             body = section_body(read_text(source_path), "My take")
             if body:

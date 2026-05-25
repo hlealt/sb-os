@@ -6,7 +6,7 @@ Directory layout for `{wiki_root}/`. All paths are relative to `{wiki_root}`. Re
 
 ```
 {wiki_root}/
-├── log.md                              single append-only event log
+├── log.md                              actionable queue (candidate-topic + candidate-mention)
 ├── raw/
 │   ├── assets/                         local images / attachments (flat, shared) — user-maintained via Obsidian's "Download attachments for current file"
 │   ├── {origin}/                       articles, podcasts, papers — by source origin

@@ -66,7 +66,7 @@ Naming: filename mirrors the raw counterpart exactly.
 
 ```
 3. Resources/knowledge-base/
-├── log.md                        single append-only event log
+├── log.md                        actionable queue (candidate-topic + candidate-mention)
 ├── raw/
 │   ├── {origin}/                 articles, podcasts, papers — by source origin
 │   │   ├── {origin}.md           leaf index (factual, with Wiki column)
@@ -244,7 +244,7 @@ author: "..."
 Rationale: `read-date` is not used — `created` covers the same intent (ingest = read in practice). Add a separate field only if a "read but not yet ingested" workflow surfaces.
 
 ### Topic pages
-No additional frontmatter. The trigger that produced the topic is recorded in `log.md` (the `candidate-topic` and `topic-created` entries).
+No additional frontmatter. While unpromoted, a topic candidate lives in `log.md` as a `candidate-topic` entry; once the page exists, that entry is removed (resolution = page exists).
 
 ### Status field — DEFERRED
 
@@ -424,7 +424,7 @@ Firm-tier detection is mechanical — exact wikilink comparison or exact slug ma
 |-----------|------------|
 | New stub | Candidate is a `stub-candidates` entry created in THIS ingest run — never an existing page |
 | Token overlap | The stub's preamble (1–2 sentence factual sentence written at step 5) shares ≥2 substantive tokens with the topic's `Scope` section text. Tokenization: lowercase, strip stopwords (`the/a/an/of/for/in/on/and/or/to/is/are/with/by/that/this/it/as`), preserve kebab-case as a single token (`marginal-returns-to-intelligence` matches `marginal returns` if both tokens appear in scope) |
-| Cap | Maximum 2 speculative fires per ingest. If >2 candidates qualify, rank by token-overlap count (descending), keep top 2, drop the rest as `topic-coverage-candidate` log entries (sibling of parent `ingest`, informational, lint reviews periodically) |
+| Cap | Maximum 2 speculative fires per ingest. If >2 candidates qualify, rank by token-overlap count (descending), keep top 2, drop the rest silently — re-detected on future ingests of related sources (no log entry) |
 | Dedupe | If a topic already fires firm for this source, suppress its speculative fire (firm wins) |
 
 Speculative tier is mechanical (token overlap is computed, not LLM-judged) but heuristic in confidence. It is rendered in a SEPARATE block at Stage 1 (`SPECULATIVE TOPIC UPDATES (low-confidence, default reject)`) and defaults to reject — same default as firm, but the separation signals confidence to the user.
@@ -438,7 +438,7 @@ Speculative tier is mechanical (token overlap is computed, not LLM-judged) but h
 | Bump frontmatter | Update `last-touched: <today>` |
 | NEVER overwrite | Existing prose, `Scope`, position bullets, or `Open questions` content stays untouched. Append-only, per stub-policy "Append-Only Protection" |
 
-**Log entry.** Each accepted topic update emits a sibling `topic-updated` H2 entry in `log.md`, referenced from the parent `ingest` by timestamp.
+**No log entry.** Topic updates are recorded by the page content itself (append-only edits). The log is an actionable queue, not an accretion history.
 
 | Trigger | Structural anchor | Status |
 |---------|-------------------|--------|
@@ -545,7 +545,7 @@ Single command: `/sb-wiki-ingest <slug>` where slug is a raw filename or unique 
 | 6 | Detect candidate-topic triggers (Contradiction, Evolution, Cross-application); add `> [!warning] Disputed` callouts on Contradiction-`same-scope-opposing` | Agent |
 | 7 | Update raw index: `Wiki = Yes` | Agent |
 | 8 | Update wiki sources index (`What it says` filled; `My take` set to `pending` — populated post Stage 2 per the three-state rule) | Agent |
-| 9 | Append `ingest` entry to `log.md` summarizing operations + candidates (separate `candidate-topic`, `concept-created`, `entity-created` H2 entries when triggered) | Agent |
+| 9 | Append `candidate-topic` and `candidate-mention` entries to `log.md` when triggered (the actionable queue). NO `ingest` / `concept-created` / `entity-created` / `topic-updated` entries — created pages and updates are recorded by the pages themselves | Agent |
 | 10 | **Stage 1 checkpoint**: present structured table + PROPOSED TOPICS block; the user accepts-all / rejects N / aborts file changes; per topic: accept (agent invokes `sb-wiki-create-topic` skill now) / defer (keeps as candidate in log). Approved changes commit before Stage 2 begins. | Agent + User |
 | 11 | **Stage 2 checkpoint** (optional, post-commit): present reflection prompt after approved changes are committed. The user can ignore it, decline it, or answer with freeform reflection content in any order. The agent routes content to `My take` / `Open questions` / `Dive deeper` by intent, writes routed sections, and syncs the `My take` column to the wiki sources index. | Agent + User |
 
@@ -562,7 +562,7 @@ INGEST PREVIEW — <source slug>
 | 2 | wiki/concepts/model-context-protocol.md | updated | + section "Code Mode perspective" |
 | 3 | wiki/concepts/code-execution-pattern.md | new (stub) | <preamble first sentence> |
 | 4 | wiki/entities/cloudflare.md | new (stub) | <preamble first sentence> |
-| 5 | log.md | appended | ingest + concept-created + entity-created + candidate-topic entries |
+| 5 | log.md | appended | candidate-topic + candidate-mention entries (only if triggered) |
 | 6 | raw/blog-cloudflare/blog-cloudflare.md | row updated | Wiki = Yes |
 | 7 | wiki/sources/blog-cloudflare/blog-cloudflare.md | row added | new entry |
 
@@ -590,9 +590,9 @@ Speculative updates: accept N (applies append-only update) | reject N (skip) | (
 - `accept-all`: all file changes commit immediately; then the agent presents Stage 2 as an optional post-commit prompt.
 - `reject N`: the agent rolls back the listed numbered items only (deletes new files, reverts edits, removes log entries scoped to those changes). Other changes commit immediately. The `Wiki = Yes` row update may be downgraded to `Wiki = Partial` if the source page itself is not rejected but downstream pages were. If the source page remains committed, the agent presents Stage 2 as an optional post-commit prompt.
 - `abort`: the agent rolls back everything. Raw index `Wiki` stays `No`. The source page is not created.
-- Topic `accept N`: agent invokes the `sb-wiki-create-topic` skill mid-run with the proposed topic name; appends `topic-created` entry to log.
+- Topic `accept N`: agent invokes the `sb-wiki-create-topic` skill mid-run with the proposed topic name; the skill removes the promoted `candidate-topic` entry from the log (the topic page is now the record).
 - Topic `defer N`: candidate-topic entry persists in log; the user may promote later by expressing intent (auto-fires the `sb-wiki-create-topic` skill).
-- Topic update `accept N`: agent applies the append-only update to the topic page per "Existing topic updates" §; appends `topic-updated` entry to log.
+- Topic update `accept N`: agent applies the append-only update to the topic page per "Existing topic updates" §. No log entry — the page records its own content.
 - Topic update `reject N` (default when omitted): no change to the topic page; no log entry. The detection is not preserved as a candidate — re-detected on future ingests if relevance recurs.
 
 #### Stage 2 checkpoint format
@@ -632,7 +632,7 @@ A skill agents can invoke mid-ingest (when the user accepts a PROPOSED TOPIC at 
 | 1.5 | **Scope-overlap check (semantic, not slug).** Read `wiki/topics/topics.md` and compare the proposed scope sentence to every existing row's `Scope` cell. If overlap is plausible (shared subject, shared sources, shared positions, sibling/sub-debate framing), surface three options to the user: `extend N` (append a new `Position` / `Angle` to the existing topic; no new page), `new` (proceed with a new sibling-cross-linked topic), or `abort`. Skipped only when the caller (e.g., `/sb-wiki-query` Step 7a) passes `overlap-checked: true` proving the check already ran upstream. Slug-collision check from step 1 is necessary but NOT sufficient — both checks must pass. | Agent + User |
 | 2 | Write `wiki/topics/{slug}.md` with frontmatter, `Scope` (required), `Sources` (required), and optional sections per topic shape (see Topic page menu). On `new` from step 1.5, also append the new topic's wikilink to the overlapping topic's `related:` frontmatter (sibling cross-link). | Agent |
 | 3 | Cross-link from triggering concept/entity pages: add wikilink to the new topic in their `Related` section | Agent |
-| 4 | Append `topic-created` entry to `log.md`; if from a candidate, reference the original candidate by timestamp | Agent |
+| 4 | If promoted from a candidate, REMOVE that `candidate-topic` entry from `log.md` (the topic page is now the record — resolution = page exists). No `topic-created` entry is written | Agent |
 | 5 | Update `wiki/topics/topics.md` leaf index with the new entry | Agent |
 
 When invoked mid-ingest, no separate user checkpoint — the parent `/sb-wiki-ingest` Stage 1 acceptance covers it AND the step 1.5 overlap prompt fires inline before commit. When auto-fired by user intent, the agent runs step 1.5 first, then confirms the proposed sections + scope sentence with the user before writing (single confirmation checkpoint, two distinct prompts when overlap is detected).
@@ -654,13 +654,13 @@ The script performs deterministic maintenance and emits `judgment_needed`. The a
 | 1 | Walk all wiki pages — detect stubs (structural rule) and record age via `created` |
 | 2 | Walk all wiki pages — detect orphans (no inbound wikilinks). **Orphan-detection scope is STRICT** — see "Orphan-detection scope" below |
 | 3 | Walk wiki concept/entity pages — detect unresolved Disputed callouts (older than 30 days without resolution) |
-| 4 | Walk `log.md` — detect candidate-topics aging without promotion (>30 days) |
+| 4 | Walk `log.md` — flag `candidate-topic` entries aged >30 days whose topic page does NOT yet exist (resolution = page exists, so a candidate with a live page is not "aging", it is spent and pruned at step 8) |
 | 5 | Walk all wiki pages — verify wikilinks resolve (broken if target file missing); collect broken links |
 | 6 | For each `wiki/sources/{origin}/` — re-sync `My take` column from each source page's `My take` section per the three-state rule (`pending` / `—` / reflected preview — see "Wiki sources index format" §); renumber footnotes; remove stale footnote definitions |
 | 7 | For each `raw/{origin}/` — verify `{origin}.md` index exists; if missing, create it with the standard `\| File \| Title \| Date \| Wiki \|` columns. For each raw file in `{origin}/`, ensure a row exists with `Wiki = No` (default) or `Yes/Partial` (preserved). Same for `raw/studies/studies.md`. **Index creation and maintenance is the agent's job**, not the user's. |
-| 7.5 | Folder-subdivision detection. For `wiki/concepts/` and `wiki/entities/`, group pages by `kind:` frontmatter. Surface kinds at ≥5 pages as a SUBDIVISION PROPOSAL block. Skip `wiki/topics/` (count <20) and `wiki/sources/` (already subdivided by origin). On user accept at step 9, the agent creates `{type}/{subfolder}/`, leaf index, parent CLAUDE.md marker-block routing rules, moves pages, rewrites parent index as router, and appends a `subdivision:` field to the step-8 log entry. Naming and policy per schema § "Folder subdivision". |
-| 8 | Append `lint` entry to `log.md` summarizing findings: stubs aged, orphans, unresolved callouts, candidates aging, broken links, index sync count, raw indexes created/updated, plus subdivision proposals and executed moves from step 7.5 |
-| 9 | Present findings to the user (read-only summary for findings 1-7; SUBDIVISION PROPOSAL is the only interactive block — user accepts per kind or defers all) |
+| 7.5 | Folder-subdivision detection. For `wiki/concepts/` and `wiki/entities/`, group pages by `kind:` frontmatter. Surface kinds at ≥5 pages as a SUBDIVISION PROPOSAL block. Skip `wiki/topics/` (count <20) and `wiki/sources/` (already subdivided by origin). On user accept at step 9, the agent creates `{type}/{subfolder}/`, leaf index, parent CLAUDE.md marker-block routing rules, moves pages, and rewrites parent index as router. The folder structure and indexes are the record — NO log entry. Naming and policy per schema § "Folder subdivision". |
+| 8 | Prune `log.md`: DELETE every `candidate-topic` / `candidate-mention` entry whose matching page now exists (resolution = page exists), and DELETE any retired history entries (`ingest`, `concept-created`, `entity-created`, `topic-created`, `topic-updated`, `topic-coverage-candidate`, `lint`, `query`). NO `lint` entry is written — findings live in the report only. `candidate-mention` entries with no matching page are NEVER auto-aged; they persist until the page exists or the user dismisses them |
+| 9 | Present findings to the user (read-only summary for findings 1-7; the `candidate-mention` review queue is surfaced here; SUBDIVISION PROPOSAL is the only interactive block — user accepts per kind or defers all) |
 
 #### Lint output format
 
@@ -728,31 +728,20 @@ If filed as Topic, the agent invokes `sb-wiki-create-topic` with the proposed na
 
 ## Log entry types
 
-10 types active at v1. Each entry is an H2 heading: `## [YYYY-MM-DD HH:MM] type | brief`.
+The log is an ACTIONABLE QUEUE, not an event history. It holds ONLY items awaiting a user action. Completed events (ingests, page creations, topic updates, lint runs, filed queries) are NEVER logged — their provenance already lives in the source pages, the raw indexes, and the wiki pages themselves.
 
-| Type | Trigger | User action surfaced |
-|------|---------|----------------------|
-| `ingest` | `/sb-wiki-ingest <slug>` | Review diff at Stage 1; reflect at Stage 2 if desired |
-| `candidate-topic` | Auto-fired during `ingest` or `lint` when 1 of 3 triggers fires. **Always a sibling H2 entry** (not nested under the parent ingest), referenced from the parent ingest entry by timestamp | Decide whether to promote via the `sb-wiki-create-topic` skill (express intent to fire it) |
-| `candidate-mention` | Auto-fired during `ingest` step 3 when an entity/concept name surfaces but the stub-creation rule does NOT fire (per Stub policy). **Sibling H2 entry**, referenced from the parent ingest by timestamp | None — informational; lint reviews periodically and may promote to a stub if the name recurs |
-| `topic-coverage-candidate` | Auto-fired during `ingest` step 3.7 speculative tier when more than 2 new-stub conceptual-fit matches exist for a given ingest (the cap drops the lower-ranked candidates). **Sibling H2 entry**, referenced from the parent ingest by timestamp | None — informational; lint reviews periodically and may surface them as topic-update suggestions on a future ingest of a related source |
-| `concept-created` | Auto-fired during `ingest` when a stub Concept is created. **Sibling H2 entry**, referenced from the parent ingest by timestamp | None — informational; greppable by type |
-| `entity-created` | Auto-fired during `ingest` when a stub Entity is created. **Sibling H2 entry**, referenced from the parent ingest by timestamp | None — informational; greppable by type |
-| `topic-created` | `sb-wiki-create-topic` skill (mid-ingest acceptance OR user-intent-driven invocation) | None — closes the loop. Lets lint know which candidates are spent |
-| `topic-updated` | `/sb-wiki-ingest` Stage 1 acceptance of a PROPOSED TOPIC UPDATE row (firm OR speculative tier). **Sibling H2 entry**, referenced from the parent ingest by timestamp. The entry's `match` field records which tier fired (`firm-{type}` or `speculative-token-overlap`) | None — informational; lint can audit accreted topics |
-| `lint` | `/sb-wiki-lint` | Review findings: stubs aged, orphans, unresolved contradictions, candidates aging, raw index sync |
-| `query` | `/sb-wiki-query`, only if the user files the answer back | None unless filed back as a wiki page |
+2 types active at v1. Each entry is an H2 heading: `## [YYYY-MM-DD HH:MM] type | brief`.
+
+| Type | Trigger | Awaiting action | Leaves the queue when |
+|------|---------|-----------------|------------------------|
+| `candidate-topic` | Auto-fired during `ingest` or `lint` when 1 of 3 triggers fires. Standalone H2 entry — does NOT reference a parent ingest | Decide whether to promote via the `sb-wiki-create-topic` skill | The topic page exists (create-topic removes the entry on promotion; lint prunes any candidate whose topic page exists) |
+| `candidate-mention` | Auto-fired during `ingest` step 3 when an entity/concept name surfaces but the stub-creation rule does NOT fire (per Stub policy). Standalone H2 entry | Review → promote to a stub, or dismiss | The matching page exists (lint prunes), or the user dismisses it. NEVER auto-aged — mentions persist until actioned |
+
+**Resolution signal = the page exists.** There is no `topic-created` / `concept-created` / `entity-created` / `ingest` / `topic-updated` / `query` / `lint` entry. A candidate is "spent" the moment its page exists; lint detects this by filename and removes the entry. This replaces the old `topic-created`-as-resolution-signal model.
 
 ### Entry shapes
 
 ```markdown
-## [2026-04-30 14:32] ingest | Code Mode (Cloudflare)
-- source: [[2026-XX-XX-code-mode-mcp.md]] (new)
-- updated: [[model-context-protocol.md]] (+ Code Mode perspective)
-- candidate-topic: see entry at 14:32
-- concept-created: see entry at 14:32
-- entity-created: see entry at 14:32
-
 ## [2026-04-30 14:32] candidate-topic | mcp-debate
 - trigger: contradiction (same-scope-opposing)
 - between: [[2026-XX-XX-code-mode-mcp.md]] and [[2026-XX-XX-bye-bye-mcp.md]]
@@ -764,37 +753,23 @@ If filed as Topic, the agent invokes `sb-wiki-create-topic` with the proposed na
 - name: sandboxing
 - classification: concept
 - reason: stub rule did not fire (name not in source title, Notable Quote, or Substance bullet)
-- from-ingest: 2026-04-30 14:32
-
-## [2026-04-30 14:32] concept-created | code-execution-pattern
-- page: [[code-execution-pattern.md]]
-- kind: pattern
-- from-ingest: 2026-04-30 14:32
-
-## [2026-04-30 14:32] entity-created | cloudflare
-- page: [[cloudflare.md]]
-- kind: company
-- from-ingest: 2026-04-30 14:32
-
-## [2026-04-30 16:10] topic-created | mcp-debate
-- resolves: candidate from 2026-04-30 14:32
-- page: [[mcp-debate.md]]
-- framing: "When MCP earns its complexity vs. when it doesn't"
-
-## [2026-04-30 14:32] topic-updated | mcp-evolution
-- page: [[mcp-evolution.md]]
-- match: key-concept overlap ([[model-context-protocol.md]])
-- change: + bullet under "Timeline" + footnote citation
-- from-ingest: 2026-04-30 14:32
-
-## [2026-05-07 09:00] lint | weekly health-check
-- stubs aged >30d (3): [[X.md]], [[Y.md]], [[Z.md]]
-- orphans (no inbound) (2): [[A.md]], [[B.md]]
-- candidates aging (1): "mcp-debate" (logged 2026-04-12)
-- broken wikilinks (0)
-- index sync (wiki sources My take): 4 pages
-- index sync (raw): 1 created, 3 rows added
 ```
+
+Pre-v1 logs may contain retired history types (`ingest`, `concept-created`, `entity-created`, `topic-created`, `topic-updated`, `topic-coverage-candidate`, `lint`, `query`). Lint removes them on its next pass.
+
+## Retired log entry types (pre-v1)
+
+These types were logged in earlier versions and are NO LONGER written. Lint prunes them from existing logs.
+
+| Retired type | Was | Why removed |
+|------|-----|-------------|
+| `ingest` | Anchor entry per source | Provenance lives in the source page `raw:` field + raw index |
+| `concept-created` / `entity-created` | Stub-creation record | The page is the record |
+| `topic-created` | Topic-creation + candidate resolution signal | Replaced by "page exists" resolution |
+| `topic-updated` | Append-only accretion record | Page history lives in the page |
+| `topic-coverage-candidate` | Dropped speculative match | Low-signal; re-detected on future ingests |
+| `lint` | Lint-run summary | Lint surfaces findings in its report, not the log |
+| `query` | Filed-answer record | The filed page is the record |
 
 ## Component structure
 

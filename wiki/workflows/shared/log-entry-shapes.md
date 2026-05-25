@@ -12,33 +12,20 @@ Every entry is an H2 heading:
 
 Use the SAME timestamp for every sibling entry emitted in one ingest run so cross-references resolve cleanly.
 
-## Active Types (10)
+## Active Types (2)
 
-| Type | Trigger | Sibling of |
-|------|---------|------------|
-| `ingest` | `/sb-wiki-ingest <slug>` — always emitted | — (anchor entry) |
-| `candidate-topic` | One of 3 triggers fires during ingest or lint | Sibling of parent `ingest`; referenced from it by timestamp |
-| `candidate-mention` | Entity/concept name surfaced in step 3 but stub-creation rule did NOT fire (per `stub-policy.md`); informational — lint reviews periodically | Sibling of parent `ingest`; referenced from it by timestamp |
-| `topic-coverage-candidate` | Speculative-tier (new-stub conceptual fit) topic-update match dropped by the per-ingest cap of 2 at step 3.7b; informational — lint reviews periodically | Sibling of parent `ingest`; referenced from it by timestamp |
-| `concept-created` | Stub Concept created during ingest step 5 | Sibling of parent `ingest`; referenced from it by timestamp |
-| `entity-created` | Stub Entity created during ingest step 5 | Sibling of parent `ingest`; referenced from it by timestamp |
-| `topic-created` | `sb-wiki-create-topic` skill — mid-ingest or user-intent-driven | Sibling of parent `ingest` (or standalone if user-intent-driven) |
-| `topic-updated` | Existing topic page accreted append-only content during ingest (Stage 1 user-accept of a PROPOSED TOPIC UPDATE row OR a SPECULATIVE TOPIC UPDATES row); `match` field records tier (`firm-*` / `speculative-token-overlap`) | Sibling of parent `ingest`; referenced from it by timestamp |
-| `lint` | `/sb-wiki-lint` | — (standalone) |
-| `query` | `/sb-wiki-query` — only if the user files the answer back | — (standalone) |
+The log is an ACTIONABLE QUEUE — it holds ONLY items awaiting a user action. Each entry is a STANDALONE H2 entry; entries do NOT reference a parent ingest.
 
-**Sibling rule:** `candidate-topic`, `candidate-mention`, `topic-coverage-candidate`, `concept-created`, `entity-created`, `topic-created`, and `topic-updated` entries are NEVER nested under the parent `ingest` entry. They are sibling H2 entries in `log.md`, referenced from the parent `ingest` entry by timestamp.
+| Type | Trigger | Awaiting action | Leaves the queue when |
+|------|---------|-----------------|------------------------|
+| `candidate-topic` | One of 3 triggers fires during ingest or lint | Promote via `sb-wiki-create-topic`, or dismiss | The topic page exists (create-topic removes it on promotion; lint prunes any candidate whose page exists) |
+| `candidate-mention` | Entity/concept name surfaced in ingest step 3 but the stub-creation rule did NOT fire (per `stub-policy.md`) | Review → promote to a stub, or dismiss | The matching page exists (lint prunes), or the user dismisses it. NEVER auto-aged |
+
+**Resolution = page exists.** A candidate is spent the moment its page exists; lint detects this by filename and removes the entry. There is no separate resolution entry.
 
 ## Entry Shapes
 
 ```markdown
-## [2026-04-30 14:32] ingest | Code Mode (Cloudflare)
-- source: [[2026-04-30-code-mode-mcp.md]] (new)
-- updated: [[model-context-protocol.md]] (+ Code Mode perspective)
-- candidate-topic: see entry at 14:32
-- concept-created: see entry at 14:32
-- entity-created: see entry at 14:32
-
 ## [2026-04-30 14:32] candidate-topic | mcp-debate
 - trigger: contradiction (same-scope-opposing)
 - between: [[2026-04-30-code-mode-mcp.md]] and [[2026-04-29-bye-bye-mcp.md]]
@@ -50,44 +37,8 @@ Use the SAME timestamp for every sibling entry emitted in one ingest run so cros
 - name: sandboxing
 - classification: concept
 - reason: stub rule did not fire (name not in source title, Notable Quote, or Substance bullet)
-- from-ingest: 2026-04-30 14:32
-
-## [2026-04-30 14:32] topic-coverage-candidate | mcp-evolution × code-execution-pattern
-- topic: [[mcp-evolution.md]]
-- new-stub: [[code-execution-pattern.md]]
-- match: speculative-token-overlap (tokens: code, execution, mcp; rank 3 dropped by cap of 2)
-- from-ingest: 2026-04-30 14:32
-
-## [2026-04-30 14:32] concept-created | code-execution-pattern
-- page: [[code-execution-pattern.md]]
-- kind: pattern
-- from-ingest: 2026-04-30 14:32
-
-## [2026-04-30 14:32] entity-created | cloudflare
-- page: [[cloudflare.md]]
-- kind: company
-- from-ingest: 2026-04-30 14:32
-
-## [2026-04-30 16:10] topic-created | mcp-debate
-- resolves: candidate from 2026-04-30 14:32
-- page: [[mcp-debate.md]]
-- framing: "When MCP earns its complexity vs. when it doesn't"
-
-## [2026-04-30 14:32] topic-updated | mcp-evolution
-- page: [[mcp-evolution.md]]
-- match: key-concept overlap ([[model-context-protocol.md]])
-- change: + bullet under "Timeline" + footnote citation
-- from-ingest: 2026-04-30 14:32
-
-## [2026-05-07 09:00] lint | weekly health-check
-- stubs aged >30d (3): [[X.md]], [[Y.md]], [[Z.md]]
-- orphans (no inbound) (2): [[A.md]], [[B.md]]
-- candidates aging (1): "mcp-debate" (logged 2026-04-12)
-- broken wikilinks (0)
-- index sync (wiki sources My take): 4 pages
-- index sync (raw): 1 created, 3 rows added
-
-## [2026-05-07 10:15] query | filed answer on MCP contradiction
-- question: "What's the contradiction between code-mode and bye-bye-mcp on MCP?"
-- filed as: [[mcp-debate.md]] (topic)
 ```
+
+## Retired Types (NO LONGER written)
+
+`ingest`, `concept-created`, `entity-created`, `topic-created`, `topic-updated`, `topic-coverage-candidate`, `lint`, and `query` were logged pre-v1. They are no longer emitted — the source pages, raw indexes, and wiki pages are the record. Lint deletes any surviving instances on its next pass.

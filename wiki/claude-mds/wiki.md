@@ -14,7 +14,7 @@ behavior changes; this file follows.
 
 Karpathy-style wiki layer — synthesis space for consumed external content. Path configured at install time (`wiki_root` in `sb-os.json`).
 
-Raw consumption (articles, papers, transcripts, study sessions) lives under `{wiki_root}/raw/`; synthesized pages live under `{wiki_root}/wiki/`; a single append-only event log lives at `{wiki_root}/log.md`.
+Raw consumption (articles, papers, transcripts, study sessions) lives under `{wiki_root}/raw/`; synthesized pages live under `{wiki_root}/wiki/`; a single actionable queue (open `candidate-topic` + `candidate-mention` items) lives at `{wiki_root}/log.md`.
 
 Locked schema: `3-resources/tools/sb-os/docs/wiki-schema.md`. Operational details below summarize the schema — read the schema for the canonical spec.
 
@@ -110,7 +110,7 @@ If a leaf index exists with a user-customized column layout, lint preserves it �
 
 | Path | Contents |
 |------|----------|
-| `{wiki_root}/log.md` | Single append-only event log (10 entry types: `ingest`, `candidate-topic`, `candidate-mention`, `topic-coverage-candidate`, `concept-created`, `entity-created`, `topic-created`, `topic-updated`, `lint`, `query`) |
+| `{wiki_root}/log.md` | Actionable queue — 2 entry types: `candidate-topic` (promote or dismiss) and `candidate-mention` (review → stub or dismiss). Completed history is NOT logged; resolution = the page exists. Lint prunes spent entries |
 | `{wiki_root}/raw/{origin}/` | Verbatim source files by origin (immutable — never edit) |
 | `{wiki_root}/raw/studies/` | Study sessions (`/sb-tutor` outputs, multi-source notes) |
 | `{wiki_root}/wiki/concepts/`, `wiki/entities/`, `wiki/topics/`, `wiki/sources/{origin}/` | Synthesized pages |

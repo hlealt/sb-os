@@ -19,7 +19,7 @@ Read `3-resources/tools/sb-os/wiki/docs/wiki-schema.md` — Operations § "/sb-w
 | `{user_context_root}` | Read from `sb-os.json` → `user_context_root`. Never hardcode. |
 | `{wiki_root}/wiki/` | Wiki page tree (concepts, entities, topics, sources). |
 | `{wiki_root}/raw/` | Raw source tree. |
-| `{wiki_root}/log.md` | Single append-only event log. |
+| `{wiki_root}/log.md` | Actionable queue — `candidate-topic` + `candidate-mention` entries only. |
 
 ## Shared Data Files
 
@@ -50,10 +50,10 @@ This workflow is read-mostly by contract. Auto-applied writes are SCOPED to inde
 | Renumber footnotes; remove stale footnote definitions (step 6) | Per source page touched | Auto-applied — no user diff |
 | Create missing raw `{origin}.md` indexes; add missing rows with `Wiki = No` default (step 7) | `{wiki_root}/raw/{origin}/{origin}.md`, `{wiki_root}/raw/studies/studies.md` | Auto-applied — no user diff |
 | Create missing wiki leaf indexes (`concepts.md`, `entities.md`, `topics.md`) (step 7) | `{wiki_root}/wiki/concepts/concepts.md`, `entities/entities.md`, `topics/topics.md` | Auto-applied — no user diff |
-| Append `lint` entry to `log.md` (step 8) | `{wiki_root}/log.md` | Auto-applied — no user diff |
+| Prune spent/retired entries from `log.md` (step 8) — delete `candidate-topic`/`candidate-mention` entries whose page now exists, and delete retired history entries | `{wiki_root}/log.md` | Auto-applied — no user diff |
 | Folder subdivision execution (step 7.5) — create `{type}/{subfolder}/`, leaf index, marker-block CLAUDE.md, rewrite parent index as router, MOVE pages | `{wiki_root}/wiki/{concepts,entities}/...` | USER-GATED — executed only on `accept` at step 9 |
 
-NEVER edit page bodies, frontmatter (other than `last-touched` on indexes and on pages moved by subdivision), or any user-authored content from this workflow. NEVER delete pages. NEVER modify candidate-topic, candidate-mention, concept-created, entity-created, topic-created, ingest, query, or prior lint entries in `log.md`.
+NEVER edit page bodies, frontmatter (other than `last-touched` on indexes and on pages moved by subdivision), or any user-authored content from this workflow. NEVER delete pages. NEVER write a `lint` entry — lint findings live in the report only. The log is an actionable queue (`candidate-topic` + `candidate-mention` only); lint MAY delete entries that are spent (page exists) or retired (history types), but NEVER edits the body of a `candidate-topic`/`candidate-mention` it keeps, and NEVER auto-deletes a `candidate-mention` whose page does not yet exist.
 
 **`raw/assets/` is OUT OF SCOPE for this workflow.** No reads, no writes, no walks, no index creation, no orphan-detection participation, no filename validation. The folder is user-maintained via Obsidian's "Download attachments for current file" command (per `../shared/folder-structure.md` "Asset Folder" and schema § "Asset folder"). Treat it as if it were not present in the tree. Same exclusion applies to any pre-existing legacy asset folder nested under a specific origin (e.g., `raw/mails/assets/`) — user-owned, untouched.
 
@@ -71,7 +71,7 @@ The helper MUST NOT fill judgment-bearing cells. `Description`, `Scope`, and `Wh
 
 ## Flow
 
-Steps 1-8 run unattended. Step 9 is read-only for findings 1-7; when step 7.5 produced a non-empty `subdivision-proposals` set, the LINT REPORT at step 9 includes a SUBDIVISION PROPOSAL block that requires a user decision (accept all / accept N / reject / defer). On user accept, the agent executes the subdivision per step 7.5 § "Subdivision execution" and appends an addendum log entry. The agent must perform the LLM judgment pass from the deterministic helper report before Step 8.
+Steps 1-8 run unattended. Step 8 PRUNES `log.md` (deletes spent candidates + retired history; writes NO `lint` entry). Step 9 is read-only for findings 1-7 and surfaces the `candidate-mention` review queue; when step 7.5 produced a non-empty `subdivision-proposals` set, the LINT REPORT at step 9 includes a SUBDIVISION PROPOSAL block that requires a user decision (accept all / accept N / reject / defer). On user accept, the agent executes the subdivision per step 7.5 § "Subdivision execution" (no log entry). The agent must perform the LLM judgment pass from the deterministic helper report before Step 8.
 
 ### Step 1 — Walk all wiki pages; detect stubs and record age
 
@@ -102,7 +102,7 @@ Steps 1-8 run unattended. Step 9 is read-only for findings 1-7; when step 7.5 pr
 1. Walk `{wiki_root}/wiki/concepts/` and `{wiki_root}/wiki/entities/`. Skip leaf indexes.
 2. Detect `> [!warning] Disputed` callouts per `../shared/section-menus.md` "Contradiction — Disputed Callout" section.
 3. For each callout, parse the referenced candidate-topic timestamp (e.g., `[YYYY-MM-DD HH:MM]`) embedded in the callout body. Compute age in days from that timestamp.
-4. Mark a callout as `unresolved` if age >30 days AND no `topic-created` log entry references the same candidate timestamp (resolution signal).
+4. Mark a callout as `unresolved` if age >30 days AND the candidate-topic it references has not been promoted (no topic page exists resolving the dispute — resolution = page exists).
 5. Build `unresolved-disputed` set: page filename + flagged date for the LINT REPORT.
 
 ### Step 4 — Walk `log.md`; detect aging candidate-topics
@@ -110,8 +110,9 @@ Steps 1-8 run unattended. Step 9 is read-only for findings 1-7; when step 7.5 pr
 1. Read `{wiki_root}/log.md` in full.
 2. Locate every `candidate-topic` H2 entry per `../shared/log-entry-shapes.md`.
 3. For each, parse the entry timestamp from the H2 header. Compute age in days.
-4. Mark a candidate as `aging` if age >30 days AND no `topic-created` entry exists referencing the same candidate timestamp via the `resolves: candidate from <timestamp>` field.
-5. Build `candidates-aging` set: candidate slug + logged date for the LINT REPORT.
+4. Resolution = page exists. A candidate is SPENT if a topic page matching its slug exists at `{wiki_root}/wiki/topics/` (flat or any subfolder). Spent candidates are pruned at step 8, NOT reported as aging.
+5. Mark a candidate as `aging` if age >30 days AND its topic page does NOT exist.
+6. Build `candidates-aging` set: candidate slug + logged date for the LINT REPORT.
 
 ### Step 5 — Walk all wiki pages; verify wikilinks resolve
 
@@ -168,7 +169,7 @@ For each wiki leaf folder (`{wiki_root}/wiki/concepts/`, `entities/`, `topics/`)
 5. For each page in the leaf folder, ensure a row exists for that page. If missing, read the page and add a row with a semantic `Description` or `Scope`; never leave judgment-bearing columns blank.
 6. Capture `wiki-leaf-indexes-created` count and `wiki-leaf-rows-added` total for the LINT REPORT.
 
-**Judgment-bearing cell rule:** Steps above never authorize blank semantic cells. `Description`, `Scope`, and `What it says` require LLM judgment. If the deterministic helper reports a missing row for those cells, the agent MUST read the referenced page and write the semantic cell before appending the lint log entry.
+**Judgment-bearing cell rule:** Steps above never authorize blank semantic cells. `Description`, `Scope`, and `What it says` require LLM judgment. If the deterministic helper reports a missing row for those cells, the agent MUST read the referenced page and write the semantic cell before Step 8 (the log-prune pass).
 
 ### Step 7.5 — Folder-subdivision detection
 
@@ -219,30 +220,18 @@ For each accepted subfolder:
 4. Rewrite `{wiki_root}/wiki/{type}/{type}.md` (the parent index) as a ROUTER per `../shared/index-formats.md` "Type-Folder Router Index" section: `| Subfolder | Holds | Index |` table for each subfolder, plus a `## Flat pages` section listing pages whose kind has not graduated.
 5. Create or update `{wiki_root}/wiki/{type}/CLAUDE.md` with marker-block routing rules per `../shared/index-formats.md` "Type-Folder Managed CLAUDE.md" section. Inside the markers, the agent writes the `Subfolder routing` table and `Flat pages` policy. Outside the markers, preserve user content verbatim.
 6. Verify Obsidian-config precondition. If the vault's `.obsidian/app.json` exists and explicitly sets `newLinkFormat` to a value other than `shortest` (or empty), surface a warning in the LINT REPORT and ABORT this subdivision (no file moves committed). Default Obsidian behavior is shortest-path when the field is absent — that case proceeds.
-7. Capture `subdivision-executed` count for step 8 log entry: subfolder name + page count moved.
+7. Capture `subdivision-executed` count for the LINT REPORT: subfolder name + page count moved. No log entry is written for subdivision — the folder structure and indexes are the record.
 
-Append a `lint` entry to `{wiki_root}/log.md` per `../shared/log-entry-shapes.md` (Active Types — `lint` row). Entry is an H2 heading: `## [YYYY-MM-DD HH:MM] lint | <brief>`.
+### Step 8 — Prune the log
 
-`<brief>` is a short label (e.g., `weekly health-check`, `manual run`). Default: `manual run`.
+The log is an actionable queue. Lint NEVER writes a `lint` entry — findings live in the LINT REPORT (step 9) only. Lint's only write to `log.md` is PRUNING:
 
-Required body fields summarizing findings from steps 1-7:
-
-| Field | Value |
-|-------|-------|
-| `stubs aged >30d (N)` | List of `[[filename.md]]` from `stubs-aged` |
-| `orphans (no inbound) (N)` | List of `[[filename.md]]` from `orphans` |
-| `unresolved Disputed callouts (N)` | List of `[[filename.md]] — flagged YYYY-MM-DD` from `unresolved-disputed` |
-| `candidates aging (N)` | List of `"<slug>" (logged YYYY-MM-DD)` from `candidates-aging` |
-| `broken wikilinks (N)` | Count from `broken-wikilinks` (omit list if 0) |
-| `index sync (wiki sources My take)` | `<sources-resynced>` pages |
-| `index sync (raw)` | `<raw-indexes-created> created, <raw-rows-added> rows added` |
-| `index sync (wiki leaf)` | `<wiki-leaf-indexes-created> created, <wiki-leaf-rows-added> rows added` (omit if both 0) |
-| `footnotes renumbered` | `<footnotes-renumbered>` pages |
-| `subdivision proposals (N)` | `<kind-name> → <subfolder> (<count> pages)` per kind in `subdivision-proposals`; omit when set is empty |
-| `subdivision executed (N)` | `<subfolder> (<count> pages moved)` per kind in `subdivision-executed`; omit when set is empty |
-| `kind missing (N)` | List of `[[filename.md]]` for pages without a `kind:` value; omit when set is empty |
-
-This log entry is `lint`-typed and standalone (NOT a sibling of any ingest entry) per `../shared/log-entry-shapes.md` sibling-rule table.
+1. Read `{wiki_root}/log.md` in full. Parse H2 entries per `../shared/log-entry-shapes.md`.
+2. DELETE every retired-type entry (`ingest`, `concept-created`, `entity-created`, `topic-created`, `topic-updated`, `topic-coverage-candidate`, `lint`, `query`) — these are no longer active. Remove the full entry (header + body).
+3. DELETE every `candidate-topic` whose matching topic page exists at `{wiki_root}/wiki/topics/` (flat or subfolder) — spent (resolution = page exists).
+4. DELETE every `candidate-mention` whose matching page exists anywhere under `{wiki_root}/wiki/` (any type, flat or subfolder) — spent. Match by the entry's slug/`name:` normalized to the page filename.
+5. KEEP every `candidate-topic` and `candidate-mention` whose page does NOT yet exist. NEVER auto-age a `candidate-mention` — it persists until its page exists or the user dismisses it. NEVER edit the body of a kept entry.
+6. Preserve the file preamble. Capture `entries-pruned` count (by reason: spent vs retired) for the LINT REPORT.
 
 ### Step 9 — Present findings to the user
 
@@ -261,6 +250,8 @@ Index sync — raw indexes: <N> created (raw/<origin>/<origin>.md), <M> rows add
 Index sync — wiki leaf indexes: <N> created (wiki/<type>/<type>.md), <M> rows added across wiki/{concepts,entities,topics}
 Footnotes renumbered: <N> source pages
 Pages without `kind:` (N): [[<file>.md]]
+Log pruned: <N> spent (page now exists), <M> retired history entries removed
+Candidate-mentions to review (N): "<slug>", "<slug>", … (the actionable queue — promote to a stub or dismiss)
 
 SUBDIVISION PROPOSAL (omit block entirely when empty):
 | # | type | kind | count | suggested subfolder | sample pages |
@@ -271,7 +262,7 @@ SUBDIVISION PROPOSAL (omit block entirely when empty):
 Decisions: accept all | accept N (e.g. "accept 1") | reject | defer
 (Default if the user does not respond: defer all — proposals persist in the next lint run.)
 
-No action required for findings 1-7 (lint is read-mostly; index sync writes auto-applied).
+No action required for findings 1-7 (lint is read-mostly; index sync + log prune auto-applied). The candidate-mention queue is yours to work through at your pace — nothing is auto-deleted.
 ```
 
 Omit any zero-count line with empty list (e.g., `Broken wikilinks (0)` may be elided when the body would be empty). The wiki leaf indexes line is omitted when both counts are 0. The SUBDIVISION PROPOSAL block is omitted when the proposal set is empty. The trailing closing line is REQUIRED.
@@ -280,7 +271,7 @@ User response handling for SUBDIVISION PROPOSAL:
 
 | Response | Behavior |
 |----------|----------|
-| `accept all` | Execute every proposed subdivision per the procedure in step 7.5 § "Subdivision execution". Append a `subdivision-executed` field to the step-8 log entry (already written; agent appends an addendum entry: `## [YYYY-MM-DD HH:MM] subdivision-executed | <type>/<subfolder> + …` referencing the parent lint timestamp). |
+| `accept all` | Execute every proposed subdivision per the procedure in step 7.5 § "Subdivision execution". No log entry — the new folder structure and indexes are the record. |
 | `accept N` (e.g. `accept 1,2`) | Execute the listed proposals only. Other proposals defer. |
 | `reject` | All proposals defer; surface as warnings in the next lint run. |
 | `defer` (default) | Same as `reject` for this run; proposals re-surface in subsequent runs as long as the kind remains ≥10 pages. |
@@ -292,7 +283,7 @@ End of flow.
 | Failure | Behavior |
 |---------|----------|
 | `{wiki_root}` cannot be resolved from `sb-os.json` | Halt before step 1; surface error. No writes. |
-| `{wiki_root}/log.md` missing | Skip step 4 candidate-topic detection; capture `candidates-aging = 0`. Step 8 still appends — creating `log.md` if absent. |
+| `{wiki_root}/log.md` missing | Skip step 4 candidate-topic detection; capture `candidates-aging = 0`. Step 8 prunes only — if `log.md` is absent there is nothing to prune; skip it (do NOT create the file). |
 | `{wiki_root}/wiki/` or `{wiki_root}/raw/` missing | Skip walks for the missing tree; capture zero counts for affected sets. Continue with remaining steps. |
 | Source page referenced by a `wiki/sources/{origin}/{origin}.md` row does not exist | Skip the row at step 6 `My take` re-sync; do NOT remove the row (user may resolve manually). Capture in `sources-resynced` only when the page exists. |
 | Raw file referenced by a `raw/{origin}/{origin}.md` row does not exist | Leave the row in place at step 7; do NOT remove it (user may have moved the raw file). |

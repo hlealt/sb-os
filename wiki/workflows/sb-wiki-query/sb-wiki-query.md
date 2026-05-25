@@ -23,7 +23,7 @@ This workflow uses `grep` / `ripgrep` for substring search across `{wiki_root}/w
 | `{user_context_root}` | Read from `sb-os.json` → `user_context_root`. Never hardcode. |
 | `{wiki_root}/wiki/` | Wiki page tree (concepts, entities, topics, sources). |
 | `{wiki_root}/raw/` | Raw source tree. |
-| `{wiki_root}/log.md` | Single append-only event log. |
+| `{wiki_root}/log.md` | Actionable queue — `candidate-topic` + `candidate-mention` entries only. |
 
 ## Shared Data Files
 
@@ -159,7 +159,7 @@ If target type is `topic`:
    - A scope sentence derived from the synthesized answer.
    - An `overlap-checked: true` flag so the skill knows the pre-check ran.
 4. The `sb-wiki-create-topic` skill runs its own single confirmation checkpoint with the user (per `sb-wiki-create-topic.md` user-intent confirmation format) — DO NOT duplicate the confirmation here.
-5. The `sb-wiki-create-topic` skill appends its own `topic-created` log entry to `{wiki_root}/log.md`.
+5. The `sb-wiki-create-topic` skill removes the resolved `candidate-topic` entry from `{wiki_root}/log.md` if the topic was promoted from one (no `topic-created` entry is written).
 
 #### 7b — File as Concept or Entity
 
@@ -178,22 +178,11 @@ If target type is `concept` or `entity`:
    - Optional sections — agent picks per source signal. The synthesized answer's prose informs whether to include `How it works`, `Why it matters`, `Notable facts`, `Related`, etc. Do NOT include all optional sections by default.
 6. Citations per `../shared/citation-format.md`: copy the inline `[^N]` markers and matching `[^N]: [[<source-filename>.md]]` definitions from the step 5 answer into the new page's body and `Sources` section.
 
-#### 7c — Append `query` log entry
+#### 7c — No log entry
 
-Always append a `query` entry to `{wiki_root}/log.md` per `../shared/log-entry-shapes.md`. Entry is an H2 heading: `## [YYYY-MM-DD HH:MM] query | <brief>`.
+Do NOT write a `query` log entry. The log is an actionable queue, not a history; the filed page IS the record of the answer. Per `../shared/log-entry-shapes.md`, only `candidate-topic` and `candidate-mention` are active types.
 
-`<brief>` is a short label derived from the question (e.g., `filed answer on MCP contradiction`).
-
-Required body fields:
-
-| Field | Value |
-|-------|-------|
-| `question` | The verbatim `<question>` from invocation |
-| `filed as` | `[[<slug>.md]] (<type>)` — the new page filename and its type (`concept`, `entity`, or `topic`) |
-
-Per `../shared/log-entry-shapes.md`, a `query` entry is standalone (NOT a sibling of any ingest entry). Use the current timestamp.
-
-If target type was `topic`, the `topic-created` entry is written by `sb-wiki-create-topic` (per step 7a); the `query` entry written here references the topic page filename and is sibling-independent.
+If the target type was `topic`, `sb-wiki-create-topic` (per step 7a) removes the resolved `candidate-topic` entry if one existed; nothing else is logged.
 
 End of flow.
 
@@ -210,4 +199,4 @@ End of flow.
 | User response at step 6 file-back menu ambiguous | Re-prompt with the same menu. Do NOT default to skip. |
 | Step 7 slug collision (slug already exists at `wiki/{type}/`) | Halt at step 7b; surface conflict. No writes. The user may rename or merge manually. |
 | Step 7 forbidden type collision (concept ↔ topic or entity ↔ topic) | Halt at step 7b; surface forbidden collision. No writes. |
-| `sb-wiki-create-topic` skill fails mid-step-7a | Surface the failure; the `query` log entry in step 7c is NOT written (since no page was filed). The user may retry the topic creation manually via intent. |
+| `sb-wiki-create-topic` skill fails mid-step-7a | Surface the failure; no page was filed and the log is untouched. The user may retry the topic creation manually via intent. |

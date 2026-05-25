@@ -19,7 +19,7 @@ Read `3-resources/tools/sb-os/docs/wiki-schema.md` — Operations § "/sb-wiki-i
 | `{user_context_root}` | Read from `sb-os.json` → `user_context_root`. Never hardcode. |
 | `{wiki_root}/wiki/` | Wiki page tree (concepts, entities, topics, sources). |
 | `{wiki_root}/raw/` | Raw source tree. **EXCLUDES `raw/assets/`** (user-maintained binary attachments — per `../shared/folder-structure.md` "Asset Folder"). This workflow NEVER reads or writes `raw/assets/`. |
-| `{wiki_root}/log.md` | Single append-only event log. |
+| `{wiki_root}/log.md` | Actionable queue — `candidate-topic` + `candidate-mention` entries only. |
 
 ## Shared Data Files
 
@@ -121,7 +121,7 @@ Citations: emit inline `[^N]` markers at every claim derived from the raw, then 
 | Token overlap | The stub's preamble (the 1–2-sentence factual sentence the agent will write at step 5) shares ≥2 substantive tokens with the topic's `Scope` section text. Tokenize both: lowercase, strip stopwords (`the/a/an/of/for/in/on/and/or/to/is/are/with/by/that/this/it/as`), preserve kebab-case as a single token AND its hyphen-split parts (e.g., `marginal-returns-to-intelligence` contributes `marginal-returns-to-intelligence`, `marginal`, `returns`, `intelligence`). Threshold: ≥2 distinct substantive tokens shared. |
 | Dedupe with firm | The (topic, source) pair must NOT already appear in firm `candidate-topic-updates` — firm wins; suppress speculative for the same topic. |
 
-   Rank candidates by token-overlap count (descending). Cap to TOP 2. The remaining candidates are dropped to `topic-coverage-candidate` log entries at step 9 (informational; lint reviews periodically). For each kept entry, capture: topic page path, the stub's slug, the matched tokens, and the topic-shape-appropriate proposed body bullet (per the same routing as firm-tier in step 4.5).
+   Rank candidates by token-overlap count (descending). Cap to TOP 2. The remaining candidates are dropped silently (NOT logged — they re-detect on future ingests of related sources). For each kept entry, capture: topic page path, the stub's slug, the matched tokens, and the topic-shape-appropriate proposed body bullet (per the same routing as firm-tier in step 4.5).
 
 ### Step 4 — Update existing entity/concept pages
 
@@ -196,19 +196,14 @@ If no triggers fire, leave the candidate set empty — Stage 1 omits the PROPOSE
 
 ### Step 9 — Append log entries
 
-Append entries to `{wiki_root}/log.md` per `../shared/log-entry-shapes.md`. Entries are H2 headings: `## [YYYY-MM-DD HH:MM] <type> | <brief>`. Multiple entries from one ingest are siblings (NOT nested), each referenceable by timestamp.
+Append entries to `{wiki_root}/log.md` per `../shared/log-entry-shapes.md`. The log is an ACTIONABLE QUEUE — emit ONLY the two types below, each a STANDALONE H2 entry (`## [YYYY-MM-DD HH:MM] <type> | <brief>`). Do NOT cross-reference a parent ingest.
 
-| Entry | When emitted | Sibling entries cross-referenced from |
-|-------|--------------|----------------------------------------|
-| `ingest` | Always — anchor entry summarizing source + downstream entries by timestamp | parent of all below |
-| `concept-created` | Once per stub Concept created in step 5 | back-references parent `ingest` timestamp |
-| `entity-created` | Once per stub Entity created in step 5 | back-references parent `ingest` timestamp |
-| `candidate-topic` | Once per trigger fire from step 6 | back-references parent `ingest` timestamp; promotion via `sb-wiki-create-topic` skill |
-| `candidate-mention` | Once per name in `mention-only` set from step 3 | informational; lint reviews periodically |
-| `topic-updated` | Once per ACCEPTED row in PROPOSED TOPIC UPDATES OR SPECULATIVE TOPIC UPDATES at step 10 (rejected/defaulted rows produce NO log entry); `match` field records tier (`firm-*` / `speculative-token-overlap`) | back-references parent `ingest` timestamp |
-| `topic-coverage-candidate` | Once per OVERFLOW speculative match (rank >2) dropped by the cap at step 3.7b | back-references parent `ingest` timestamp; lint reviews periodically |
+| Entry | When emitted |
+|-------|--------------|
+| `candidate-topic` | Once per trigger fire from step 6 |
+| `candidate-mention` | Once per name in the `mention-only` set from step 3 |
 
-Use the same `[YYYY-MM-DD HH:MM]` timestamp for every sibling emitted in this run so cross-references resolve cleanly.
+Emit NOTHING for the ingest itself, for stubs created in step 5, or for topic updates from step 10. Those are recorded by the pages themselves (the source page's `raw:` field, the raw index `Wiki = Yes` row, the stub/topic pages). Overflow speculative matches dropped at step 3.7b are NOT logged — they re-detect on future ingests. Resolution = page exists: a candidate leaves the queue when its page is created (lint prunes it). See `../shared/log-entry-shapes.md` § "Retired Types".
 
 ### Step 10 — Stage 1 checkpoint
 
@@ -223,7 +218,7 @@ INGEST PREVIEW — <source slug>
 | 2 | wiki/concepts/<slug>.md | updated | + section "<new section name>" |
 | 3 | wiki/concepts/<slug>.md | new (stub) | <preamble first sentence, ≤80 chars, truncate with …> |
 | 4 | wiki/entities/<slug>.md | new (stub) | <preamble first sentence, ≤80 chars, truncate with …> |
-| 5 | log.md | appended | ingest + concept-created + entity-created + candidate-topic entries |
+| 5 | log.md | appended | candidate-topic + candidate-mention entries (only if triggered) |
 | 6 | raw/<origin>/<origin>.md | row updated | Wiki = Yes |
 | 7 | wiki/sources/<origin>/<origin>.md | row added | new entry |
 
@@ -257,11 +252,11 @@ User response handling:
 | `accept-all` | Commit all file changes immediately. Then present step 11 as an optional post-commit prompt. |
 | `reject N` (or comma list, e.g. `reject 3,4`) | Roll back ONLY the listed numbered items: delete new files for those rows, revert edits, remove log entries scoped to those changes. Other changes commit immediately. If a downstream page (e.g., row 3) is rejected but the source page (row 1) is not, downgrade the raw index update from `Wiki = Yes` to `Wiki = Partial` in row 6. If the source page remains committed, present step 11 as an optional post-commit prompt. |
 | `abort` | Roll back EVERYTHING. Raw index `Wiki` stays `No`. Source page is not created. Log entries removed. Skip step 11. |
-| Topic `accept N` (per topic row) | Invoke the `sb-wiki-create-topic` skill mid-run with the proposed topic name. The skill writes the topic page, updates `wiki/topics/topics.md`, cross-links from triggering concept/entity pages, and appends a `topic-created` log entry referencing the candidate timestamp. |
+| Topic `accept N` (per topic row) | Invoke the `sb-wiki-create-topic` skill mid-run with the proposed topic name. The skill writes the topic page, updates `wiki/topics/topics.md`, cross-links from triggering concept/entity pages, and REMOVES the promoted `candidate-topic` log entry (the topic page is now the record — no `topic-created` entry). |
 | Topic `defer N` (per topic row, default if user omits a topic decision) | The `candidate-topic` log entry persists. The user may promote later by expressing intent — Claude Code auto-fires the `sb-wiki-create-topic` skill. |
-| Topic update `accept N` (per firm topic-update row) | Apply the staged append-only update from step 4.5: append `[^N]: [[<raw-filename>]]` to the topic's `Sources`; append the staged body bullet under the topic-shape-appropriate section (with inline `[^N]` marker); bump `last-touched: <today>`. Append-only protection per `../shared/stub-policy.md` "Append-Only Protection" applies — NEVER overwrite existing prose. Append a `topic-updated` log entry referencing the parent ingest timestamp. The `match` field on the log entry records the firm match-type (`firm-key-concept` / `firm-related-frontmatter` / `firm-slug`). |
+| Topic update `accept N` (per firm topic-update row) | Apply the staged append-only update from step 4.5: append `[^N]: [[<raw-filename>]]` to the topic's `Sources`; append the staged body bullet under the topic-shape-appropriate section (with inline `[^N]` marker); bump `last-touched: <today>`. Append-only protection per `../shared/stub-policy.md` "Append-Only Protection" applies — NEVER overwrite existing prose. No log entry — the topic page records its own updated content. |
 | Topic update `reject N` (per firm topic-update row, default if user omits) | No change to the topic page. No log entry. The detection is not preserved as a candidate — re-detected on future ingests if relevance recurs. |
-| Speculative update `accept N` (per speculative topic-update row) | Same write semantics as firm `accept N` above. The `match` field on the log entry records `speculative-token-overlap` and lists the matched tokens. ALSO append the new stub's wikilink to the topic's `related:` frontmatter (so future firm-tier detection picks up the connection mechanically). |
+| Speculative update `accept N` (per speculative topic-update row) | Same write semantics as firm `accept N` above (no log entry). ALSO append the new stub's wikilink to the topic's `related:` frontmatter (so future firm-tier detection picks up the connection mechanically). |
 | Speculative update `reject N` (per speculative topic-update row, default if user omits) | No change to the topic page. No log entry. The detection is not preserved — re-detected on future ingests of related sources if token overlap recurs. |
 
 Default behavior when the user omits per-topic decisions: defer all topics, reject all topic updates (firm AND speculative).
