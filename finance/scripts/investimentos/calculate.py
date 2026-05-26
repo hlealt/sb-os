@@ -226,8 +226,8 @@ def build_portfolio(cut_date: str = None, skip_prices: bool = False) -> dict:
             ticker_list.append({'id': p.id, 'currency': p.currency,
                                 'asset_class': p.asset_class, 'type': p.type})
         if ticker_list:
-            price_data = fetch_prices(ticker_list, usd_brl_rate)
-        indicators = fetch_market_indicators()
+            price_data = fetch_prices(ticker_list, usd_brl_rate, as_of_date=cut_date)
+        indicators = fetch_market_indicators(as_of_date=cut_date)
         # Update USD/BRL from market data
         if 'USD_BRL' in indicators:
             usd_brl_rate = indicators['USD_BRL']['value'] or usd_brl_rate
@@ -671,8 +671,12 @@ def _build_income(proventos: list[dict], positions: list, fx_state) -> dict:
     }
 
 
-def write_portfolio(portfolio: dict, cut_date: str = None):
-    """Write portfolio.json and optionally a dated snapshot."""
+def write_portfolio(portfolio: dict, cut_date: str = None, force: bool = False):
+    """Write portfolio.json and optionally a dated snapshot.
+
+    When cut_date is set, refuses to overwrite an existing dated snapshot
+    unless force=True is explicitly passed (D14 immutability invariant).
+    """
     # Write main portfolio.json
     output_path = OUTPUT_DIR / 'portfolio.json'
     with audit.track_write(
@@ -690,13 +694,24 @@ def write_portfolio(portfolio: dict, cut_date: str = None):
     # If cut_date, also write dated snapshot
     if cut_date:
         snapshot_path = OUTPUT_DIR / f'portfolio-{cut_date}.json'
+
+        # D14 immutability invariant: refuse to overwrite without --force
+        if snapshot_path.exists() and not force:
+            print(
+                f'ERROR: Snapshot {snapshot_path.name} already exists. '
+                f'Pass --force to overwrite an existing dated snapshot.',
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+
+        audit_action = "overwrite" if snapshot_path.exists() else "create"
         with audit.track_write(
             snapshot_path,
             materiality="high",
-            action="create",
+            action=audit_action,
             event_type="ledger_write",
             source_function="calculate.write_portfolio",
-            trigger_context={"cut_date": cut_date, "snapshot": True},
+            trigger_context={"cut_date": cut_date, "snapshot": True, "force": force},
         ):
             with open(snapshot_path, 'w', encoding='utf-8') as f:
                 json.dump(portfolio, f, indent=2, ensure_ascii=False)
@@ -735,6 +750,8 @@ def main():
     parser.add_argument('--cut-date', help='Calculate positions as of this date (YYYY-MM-DD)')
     parser.add_argument('--no-prices', action='store_true',
                         help='Skip API price fetching (faster, for testing)')
+    parser.add_argument('--force', action='store_true',
+                        help='Overwrite an existing dated snapshot (required to regenerate a past snapshot)')
     args = parser.parse_args()
 
     print(f'Calculating portfolio...')
@@ -752,7 +769,7 @@ def main():
     if s['irr']['total'] is not None:
         print(f'IRR (XIRR):  {s["irr"]["total"]*100:.2f}%')
 
-    write_portfolio(portfolio, args.cut_date)
+    write_portfolio(portfolio, args.cut_date, force=args.force)
 
 
 if __name__ == '__main__':

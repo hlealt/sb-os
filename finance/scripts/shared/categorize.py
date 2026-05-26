@@ -2,12 +2,14 @@
 """Categorize normalized transactions into the new caixa/competência schema.
 
 Usage:
-    python categorize.py <processed_dir> <config_folder> [output_folder]
+    python categorize.py <processed_dir> <config_folder> [output_folder] [--force]
 
     processed_dir:  Normalized CSVs for the month (e.g., .user/finance/bookkeeper/ledgers/expenses/2026-04)
     config_folder:  Path to bookkeeper config (e.g., .user/finance/bookkeeper/config)
     output_folder:  Optional. Where to write transactions.csv.
                     Defaults to processed_dir/categorized/ if omitted.
+    --force:        Overwrite an existing transactions.csv (freeze gate; a month
+                    whose transactions.csv already exists is treated as closed).
 
 Reads:
   - All normalized CSVs from `<processed_dir>/*.csv`.
@@ -30,7 +32,7 @@ Classification primitives are imported from `lib/`:
   - `lib.suppliers` — load_suppliers, detect_supplier
   - (`lib.tags` is consumed by the bookkeeper Pass 1 workflow, not by this
      script. categorize.py emits `tags` seeded from `supplier.default_tags`
-     and reimbursement_mappings subcategory; Pass 1 may add/edit.)
+     and the reimbursement_mappings `tag` key; Pass 1 may add/edit.)
 
 Hard invariants enforced here (data-model §6):
   - `data_caixa` is computed once and never mutated by competência logic.
@@ -109,13 +111,13 @@ def _category_only(value) -> str:
 
 
 def _value_subcategory(value) -> str:
-    """Return the subcategory if present (dict-form), else empty string.
+    """Return the tag if present (dict-form), else empty string.
 
-    In the new schema, subcategory is gone as a column — the value, when
-    present, becomes a tag in the output `tags` column.
+    Config key is `tag` (renamed from the legacy `subcategory` fossil).
+    The value populates the `tags` column in the output — never a subcategory column.
     """
     if isinstance(value, dict):
-        return value.get("subcategory", "") or ""
+        return value.get("tag", "") or value.get("subcategory", "") or ""
     return ""
 
 
@@ -460,13 +462,16 @@ def _format_tags(tags: list[str]) -> str:
 
 
 def main():
-    if len(sys.argv) < 3:
-        print("Usage: python categorize.py <processed_dir> <config_folder> [output_folder]")
+    args = [a for a in sys.argv[1:] if a != "--force"]
+    force = "--force" in sys.argv[1:]
+
+    if len(args) < 2:
+        print("Usage: python categorize.py <processed_dir> <config_folder> [output_folder] [--force]")
         sys.exit(1)
 
-    normalized_dir = Path(sys.argv[1])
-    config_folder = Path(sys.argv[2])
-    output_folder = Path(sys.argv[3]) if len(sys.argv) > 3 else None
+    normalized_dir = Path(args[0])
+    config_folder = Path(args[1])
+    output_folder = Path(args[2]) if len(args) > 2 else None
 
     if not normalized_dir.exists():
         print(f"ERROR: Processed folder not found: {normalized_dir}")
@@ -622,13 +627,19 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = output_dir / "transactions.csv"
 
+    if output_file.exists() and not force:
+        raise SystemExit(
+            f"FREEZE GATE: {output_file} already exists.\n"
+            f"This month appears to be closed. Pass --force to overwrite."
+        )
+
     with audit.track_write(
         output_file,
         materiality="high",
         action="overwrite",
         event_type="ledger_write",
         source_function="categorize.main",
-        trigger_context={"input_dir": str(normalized_dir)},
+        trigger_context={"input_dir": str(normalized_dir), "forced": force},
     ):
         with open(output_file, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=CATEGORIZED_COLUMNS)

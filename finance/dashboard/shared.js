@@ -40,7 +40,6 @@ function buildColorMap(data) {
   const allValues = new Set();
   Object.values(data).flat().forEach(r => {
     if (r.category) allValues.add(r.category);
-    if (r.subcategory) allValues.add(r.subcategory);
   });
   const sorted = [...allValues].sort();
   categoryColorMap = {};
@@ -70,7 +69,6 @@ function catLabel(c, sub) {
 }
 
 function fullCatKey(r) {
-  if (r.subcategory) return r.category + ':' + r.subcategory;
   return r.category || 'a_identificar';
 }
 
