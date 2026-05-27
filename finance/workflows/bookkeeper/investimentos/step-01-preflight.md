@@ -15,7 +15,7 @@ Apresente esta tabela ao usuário ANTES de qualquer scan:
 | Fonte | O que baixar | Onde salvar |
 |-------|--------------|-------------|
 | B3 | Área do Investidor (investidor.b3.com.br) → Extrato de Movimentação → xlsx | `{INV_RAW_DIR}/b3-movimentacao.xlsx` |
-| Safra (movimentações — todos os ativos) | Logue no Internet Banking PF → Meus Investimentos → aba **Histórico Mensal**. Cole o prompt `3-resources/tools/prompts/safra-extrair-movimentacoes-v2.md` na extensão Claude do Chrome e informe o ano. O agente gera **dois CSVs** por ano: um de fundos (com cota e quantidade) e um de RF (CRA/Deb/LCA/CDB/Tesouro). Ambos consumidos pelos parsers `safra_fundos_movimentacoes` e `safra_rf_movimentacoes` no step-02 | `{INV_RAW_DIR}/safra-fundos-{ANO}.csv` e `{INV_RAW_DIR}/safra-rf-{ANO}.csv` |
+| Safra (movimentações — todos os ativos) | Logue no Internet Banking PF → Meus Investimentos → aba **Histórico Mensal**. Cole o prompt `3-resources/tools/prompts/safra-extrair-movimentacoes.md` na extensão Claude do Chrome e informe o ano. O agente gera **dois CSVs** por ano: um de fundos (com cota e quantidade) e um de RF (CRA/Deb/LCA/CDB/Tesouro). Ambos consumidos pelos parsers `safra_fundos_movimentacoes` e `safra_rf_movimentacoes` no step-02 | `{INV_RAW_DIR}/safra-fundos-{ANO}.csv` e `{INV_RAW_DIR}/safra-rf-{ANO}.csv` |
 | Avenue (operações) | App/site Avenue → Notas de corretagem (PDFs) — apenas se houve operação | `{INV_RAW_DIR}/avenue-notas/*.pdf` |
 | Avenue (câmbio) | App/site Avenue → Recibos de câmbio (PDFs) — apenas se houve câmbio no mês | `{INV_RAW_DIR}/avenue-cambio/*.pdf` |
 | Bipa | App Bipa → Extrato (CSV) | `{INV_RAW_DIR}/bipa-extrato.csv` |

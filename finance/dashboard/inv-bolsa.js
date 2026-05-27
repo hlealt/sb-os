@@ -87,7 +87,9 @@ function invBolsaFilterBar(brokers, totalCount, filteredCount) {
       <select id="inv-bolsa-broker-filter" style="${selStyle}">${brokerOpts}</select>
       <span style="font-size:0.8rem;color:var(--text-muted)">${note}</span>
       <span style="flex:1"></span>
-      <button id="inv-bolsa-refresh" style="${btnStyle}" title="Busca preços atuais via API (brapi/yfinance/CoinGecko) e regrava portfolio.json">
+      <button id="inv-bolsa-refresh" style="${btnStyle}${invGetCurrentSnapshot() !== 'current' ? ';opacity:0.4;cursor:not-allowed' : ''}"
+        ${invGetCurrentSnapshot() !== 'current' ? 'disabled' : ''}
+        title="${invGetCurrentSnapshot() !== 'current' ? 'Não disponível em snapshots históricos — selecione \'Atual\' para atualizar preços' : 'Busca preços atuais via API (brapi/yfinance/CoinGecko) e regrava portfolio.json'}">
         <span id="inv-bolsa-refresh-icon">↻</span>
         <span id="inv-bolsa-refresh-label">Atualizar preços</span>
       </button>
@@ -274,17 +276,20 @@ function invBolsaSectorSummary(positions) {
 // --- Positions table (with price variation) ---
 
 const INV_BOLSA_COLUMNS = [
-  { key: 'id',              label: 'Ticker',       align: 'left' },
-  { key: 'quantity',        label: 'Qtd',          align: 'right', privacy: true,  format: 'qty' },
-  { key: 'current_price',   label: 'Preço',        align: 'right', privacy: false, format: 'money' },
-  { key: 'avg_cost',        label: 'PM',           align: 'right', privacy: true,  format: 'money' },
-  { key: 'current_value',   label: 'Valor',        align: 'right', privacy: true,  format: 'money' },
-  { key: 'pnl_absolute',    label: 'P&L',          align: 'right', privacy: true,  format: 'pnl' },
-  { key: 'pnl_pct',         label: 'Retorno %',    align: 'right', privacy: true,  format: 'pct' },
-  { key: 'total_dividends', label: 'Proventos',    align: 'right', privacy: true,  format: 'money' },
-  { key: 'yoc_lifetime',    label: 'YoC LT',       align: 'right', privacy: false, format: 'pct' },
-  { key: 'yoc_ttm',         label: 'YoC TTM',      align: 'right', privacy: false, format: 'pct' },
-  { key: 'first_purchase',  label: '1ª compra',    align: 'left',  format: 'date' }
+  { key: 'id',               label: 'Ticker',       align: 'left' },
+  { key: 'quantity',         label: 'Qtd',          align: 'right', privacy: true,  format: 'qty' },
+  { key: 'current_price',    label: 'Preço',        align: 'right', privacy: false, format: 'money' },
+  { key: 'avg_cost',         label: 'PM',           align: 'right', privacy: true,  format: 'money' },
+  { key: 'current_value',    label: 'Valor',        align: 'right', privacy: true,  format: 'money' },
+  { key: 'pnl_absolute',     label: 'P&L',          align: 'right', privacy: true,  format: 'pnl' },
+  { key: 'pnl_pct',          label: 'Retorno %',    align: 'right', privacy: true,  format: 'pct' },
+  { key: 'return_usd',       label: 'Ret. USD',     align: 'right', privacy: true,  format: 'pnl_usd',  currency_filter: true },
+  { key: 'return_fx_brl',    label: 'FX',           align: 'right', privacy: true,  format: 'pnl_brl',  currency_filter: true },
+  { key: 'return_total_brl', label: 'BRL All-in',   align: 'right', privacy: true,  format: 'pnl_brl',  currency_filter: true },
+  { key: 'total_dividends',  label: 'Proventos',    align: 'right', privacy: true,  format: 'money' },
+  { key: 'yoc_lifetime',     label: 'YoC LT',       align: 'right', privacy: false, format: 'pct' },
+  { key: 'yoc_ttm',          label: 'YoC TTM',      align: 'right', privacy: false, format: 'pct' },
+  { key: 'first_purchase',   label: '1ª compra',    align: 'left',  format: 'date' }
 ];
 
 function invBolsaPositionsTable(rows) {
@@ -324,6 +329,14 @@ function invBolsaFormatCell(p, col) {
   if (col.key === 'id') return `<strong>${p.id}</strong>${p.name ? `<div style="font-size:0.75rem;color:var(--text-muted)">${p.name}</div>` : ''}`;
   if (col.key === 'first_purchase') return p.first_purchase_date ? invFormatBrDate(p.first_purchase_date) : '—';
   if (p.price_source === 'missing' && (col.key === 'current_price' || col.key === 'current_value' || col.key === 'pnl_absolute' || col.key === 'pnl_pct')) return '—';
+  // Returns decomposition columns: BRL positions and price-missing → em-dash.
+  if (col.currency_filter) {
+    if (p.currency === 'BRL' || p.price_source === 'missing' || p[col.key] == null) return '—';
+    const v = p[col.key];
+    const color = v >= 0 ? 'var(--green)' : 'var(--red)';
+    if (col.format === 'pnl_usd') return `<span style="color:${color}">${invBolsaFormatMoney(v, 'USD')}</span>`;
+    if (col.format === 'pnl_brl') return `<span style="color:${color}">${formatBRL(v)}</span>`;
+  }
   // Resolve value + display currency based on currency-view toggle.
   const v = (col.format === 'money' || col.format === 'pnl') ? invBolsaDisplayValue(p, col.key) : p[col.key];
   const displayCcy = invBolsaDisplayCurrency(p);

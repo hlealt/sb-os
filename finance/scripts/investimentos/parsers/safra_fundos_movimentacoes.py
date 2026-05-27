@@ -1,7 +1,7 @@
 """Safra fund movimentacoes CSV parser (browser-extracted Histórico Mensal).
 
 Consumes the 12-column CSV produced by the prompt
-`safra-extrair-movimentacoes-v2` (or the bootstrap variant). Covers fund
+`safra-extrair-movimentacoes` (or the bootstrap variant). Covers fund
 panels only (RF goes through `safra_rf_movimentacoes`).
 
 Source schema:

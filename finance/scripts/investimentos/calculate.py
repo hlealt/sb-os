@@ -35,6 +35,7 @@ from fx_engine import build_fx_state
 from price_fetcher import fetch_prices, fetch_market_indicators
 from irr_calculator import compute_xirr
 from lib import audit  # noqa: E402
+from lib.safe_write import atomic_write_json  # noqa: E402
 
 OUTPUT_DIR = VAULT_ROOT / ".user" / "finance" / "bookkeeper" / "ledgers" / "investimentos"
 SNAPSHOTS_JSON = OUTPUT_DIR / 'snapshots.json'
@@ -50,6 +51,88 @@ _RF_TRADICIONAL_TYPES = {'cra', 'deb', 'lca', 'lci', 'cdb', 'cdb_mp',
 # per-class IRR. type='di' is here even though asset_class='fixed_income'
 # (open-ended cota; behaves like a fund for IRR purposes).
 _FUND_TYPES = {'fia_br', 'fia_usa', 'fim_br', 'firf_br', 'fidc', 'coe', 'di'}
+
+# Indexer tokens that mean "no index — flat prefixed rate". safra_titulos emits
+# 'PRE' for prefixados; treat the no-index variants as the prefixed signal.
+_PREFIXED_INDEXER_TOKENS = {'', 'PRE', 'PRÉ', 'PREFIXADO', 'PREFIXADA'}
+
+
+def _parse_rate_field(raw) -> float:
+    """Parse a rate / indexer_pct field from assets.csv to a float.
+
+    assets.csv stores these as the literal percent written by safra_titulos
+    (`_parse_ptbr`): rate '14.35' → 14.35 (annual %), indexer_pct '110.0' → 110.0
+    (% of indexer). Empty / blank → 0.0. Same unit convention as the source —
+    never a decimal fraction (0.06) nor a ratio (1.10).
+    """
+    if raw is None:
+        return 0.0
+    s = str(raw).strip()
+    if not s:
+        return 0.0
+    try:
+        return float(s)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def classify_rate_type(indexer, rate, indexer_pct) -> str:
+    """Classify a fixed-income position into one of three Brazilian rate forms.
+
+    Deterministic discriminator over the EXISTING assets.csv fields
+    (`indexer`, `rate`, `indexer_pct`), conforming to the units safra_titulos
+    writes (rate = annual %, e.g. 14.35; indexer_pct = % of indexer, e.g. 110.0;
+    spread instruments carry the neutral default indexer_pct=100.0).
+
+      prefixed            — flat annual rate, no index. indexer ∈ {'', PRE, PRÉ}
+                            and rate > 0.
+      spread              — index + spread (e.g. IPCA+3.7%). indexer is a real
+                            index and rate > 0 (indexer_pct is the neutral
+                            100.0 default or empty).
+      percent_of_indexer  — % of an index (e.g. 110% CDI). indexer is a real
+                            index, no spread rate, and indexer_pct ≠ 100 (and > 0).
+
+    Fail-loud: a combination matching none of the three shapes raises
+    ValueError. The caller MUST only invoke this for an RF position whose
+    metadata is present (at least one of rate/indexer_pct populated); a
+    metadata-less RF row (all three blank) is NOT classified and never reaches
+    here.
+    """
+    idx = (indexer or '').strip()
+    rate_v = _parse_rate_field(rate)
+    pct_v = _parse_rate_field(indexer_pct)
+    is_indexed = idx.upper() not in _PREFIXED_INDEXER_TOKENS
+
+    if not is_indexed:
+        # No index → must be a flat prefixed rate.
+        if rate_v > 0:
+            return 'prefixed'
+        raise ValueError(
+            f"rate_type unclassifiable (prefixed shape with no rate): "
+            f"indexer={indexer!r} rate={rate!r} indexer_pct={indexer_pct!r}"
+        )
+
+    # Real index present.
+    if rate_v > 0:
+        # index + spread (e.g. IPCA+3.7%). indexer_pct is the 100.0 neutral
+        # default (or empty) for spread instruments; a multiplier ≠ 100
+        # alongside a spread is contradictory.
+        if pct_v and pct_v != 100:
+            raise ValueError(
+                f"rate_type unclassifiable (spread rate AND multiplier ≠ 100): "
+                f"indexer={indexer!r} rate={rate!r} indexer_pct={indexer_pct!r}"
+            )
+        return 'spread'
+
+    if pct_v > 0 and pct_v != 100:
+        # % of an index (e.g. 110% CDI), no spread.
+        return 'percent_of_indexer'
+
+    raise ValueError(
+        f"rate_type unclassifiable (indexed position with no spread and no "
+        f"meaningful multiplier): indexer={indexer!r} rate={rate!r} "
+        f"indexer_pct={indexer_pct!r}"
+    )
 
 
 def _irr_class_bucket(asset_id: str, assets: dict[str, dict]) -> str:
@@ -368,6 +451,32 @@ def _build_position_entry(pos, price_data, fx_state, usd_brl_rate, assets,
             entry['pnl_absolute_brl'] = entry['pnl_absolute']
             entry['total_dividends_brl'] = entry['total_dividends']
 
+        # --- Returns decomposition (non-BRL positions only; p3-5 / D11) ---
+        # BRL positions omit these fields entirely (not zeroed).
+        # Price missing → emit null for all four (parallel to balcao null pattern).
+        # Formula (cost-basis FX lens; Decision 2026-05-27 in shape.md):
+        #   return_usd      = native_value − native_cost
+        #   return_fx_brl   = native_cost × current_fx − cost_basis_brl
+        #   return_total_brl = return_usd × current_fx + return_fx_brl
+        # Identity: return_total_brl = native_value × current_fx − cost_basis_brl
+        #                            = current_value_brl − cost_basis_brl
+        #                            = pnl_absolute_brl  (exact, all lot structures)
+        if pos.currency != 'BRL' and fx_state is not None:
+            if prices.get('price_source') == 'missing' or current_price == 0:
+                entry['return_usd'] = None
+                entry['return_fx_brl'] = None
+                entry['return_total_brl'] = None
+                entry['funding_fx'] = None
+            else:
+                funding_fx = fx_state.get_ticker_fx_rate(pos.id)
+                return_usd_val = round(native_value - native_cost, 2)
+                return_fx_brl_val = round(native_cost * usd_brl_rate - cost_brl, 2)
+                return_total_brl_val = round(return_usd_val * usd_brl_rate + return_fx_brl_val, 2)
+                entry['return_usd'] = return_usd_val
+                entry['return_fx_brl'] = return_fx_brl_val
+                entry['return_total_brl'] = return_total_brl_val
+                entry['funding_fx'] = round(funding_fx, 4)
+
         # IRR per-asset (native currency) — flows from orders + proventos.
         flows = position_flows.get(pos.id, [])
         if flows:
@@ -443,6 +552,18 @@ def _build_position_entry(pos, price_data, fx_state, usd_brl_rate, assets,
             v = asset_meta.get(k, '')
             if v:
                 entry[k] = v
+
+        # rate_type discriminator (S8) — classify the rate form for RF positions
+        # that carry rate metadata. Only fires for BRL fixed-income positions
+        # with at least one of rate/indexer_pct populated; metadata-less RF rows
+        # (all blank) get no rate_type. Fail-loud: an unclassifiable combination
+        # raises (never a silent default / misclassification).
+        rate_raw = asset_meta.get('rate', '')
+        pct_raw = asset_meta.get('indexer_pct', '')
+        if (pos.currency or 'BRL') == 'BRL' and (
+                _parse_rate_field(rate_raw) or _parse_rate_field(pct_raw)):
+            entry['rate_type'] = classify_rate_type(
+                asset_meta.get('indexer', ''), rate_raw, pct_raw)
 
     return entry
 
@@ -687,8 +808,7 @@ def write_portfolio(portfolio: dict, cut_date: str = None, force: bool = False):
         source_function="calculate.write_portfolio",
         trigger_context={"cut_date": cut_date} if cut_date else None,
     ):
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(portfolio, f, indent=2, ensure_ascii=False)
+        atomic_write_json(output_path, portfolio)
     print(f'Written: {output_path}')
 
     # If cut_date, also write dated snapshot
@@ -713,8 +833,7 @@ def write_portfolio(portfolio: dict, cut_date: str = None, force: bool = False):
             source_function="calculate.write_portfolio",
             trigger_context={"cut_date": cut_date, "snapshot": True, "force": force},
         ):
-            with open(snapshot_path, 'w', encoding='utf-8') as f:
-                json.dump(portfolio, f, indent=2, ensure_ascii=False)
+            atomic_write_json(snapshot_path, portfolio)
         print(f'Written: {snapshot_path}')
 
         # Update snapshots.json
@@ -740,8 +859,7 @@ def _update_snapshots_manifest(cut_date: str):
         source_function="calculate._update_snapshots_manifest",
         trigger_context={"cut_date": cut_date},
     ):
-        with open(SNAPSHOTS_JSON, 'w', encoding='utf-8') as f:
-            json.dump(snapshots, f, indent=2)
+        atomic_write_json(SNAPSHOTS_JSON, snapshots)
     print(f'Updated: {SNAPSHOTS_JSON}')
 
 

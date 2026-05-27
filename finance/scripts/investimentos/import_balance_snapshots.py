@@ -34,6 +34,7 @@ from parsers.name_map import NameMapResolver
 
 sys.path.append(str(Path(__file__).parent.parent / "shared"))
 from lib import field_ownership  # noqa: E402  (deliberate post-parsers import to avoid shared/parsers shadowing investimentos/parsers)
+from lib.safe_write import atomic_write  # noqa: E402
 
 
 def _find_vault_root() -> Path:
@@ -69,11 +70,13 @@ def load_existing(path: Path) -> list[dict]:
 
 
 def write_all(path: Path, rows: list[dict], columns: list[str]):
-    with open(path, 'w', newline='', encoding='utf-8') as f:
+    def _write(f):
         writer = csv.DictWriter(f, fieldnames=columns)
         writer.writeheader()
         for r in rows:
             writer.writerow({k: r.get(k, '') for k in columns})
+
+    atomic_write(path, _write)
 
 
 def upsert_snapshots(new_rows: list[dict]) -> tuple[int, int, int]:
@@ -215,11 +218,13 @@ def upsert_assets(new_rows: list[dict], *, source_id: str) -> tuple[int, int]:
             by_id[pid] = row
             inserted += 1
 
-    with open(ASSETS_FILE, 'w', newline='', encoding='utf-8') as f:
+    def _write_assets(f):
         writer = csv.DictWriter(f, fieldnames=columns)
         writer.writeheader()
         for r in existing:
             writer.writerow({k: r.get(k, '') for k in columns})
+
+    atomic_write(ASSETS_FILE, _write_assets)
 
     return inserted, updated
 

@@ -66,6 +66,7 @@ async function invRenderCarteira(container) {
     invCarteiraHeader(portfolio),
     invCarteiraSummaryCards(summary, positions),
     invCarteiraIrrBreakdown(summary),
+    invCarteiraRvEuaReturns(positions),
     invCarteiraAllocationSection(summary),
     invCarteiraMarketIndicators(meta)
   ].join('');
@@ -214,6 +215,53 @@ function invCarteiraIrrBreakdown(summary) {
     <div style="margin-top:16px;">
       <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:8px;">TIR por classe</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">${cells}</div>
+    </div>
+  `;
+}
+
+// --- RV EUA returns decomposition roll-up (p3-6 / D11) ---
+// Sums return_usd, return_fx_brl, return_total_brl across all USD positions
+// that have the decomposition fields. Only shown when at least one position
+// emits these fields (non-BRL, price not missing).
+
+function invCarteiraRvEuaReturns(positions) {
+  const usdPositions = positions.filter(
+    p => p.currency === 'USD' && p.return_total_brl != null
+  );
+  if (usdPositions.length === 0) return '';
+
+  const totRetUsd = usdPositions.reduce((s, p) => s + (p.return_usd || 0), 0);
+  const totFxBrl  = usdPositions.reduce((s, p) => s + (p.return_fx_brl || 0), 0);
+  const totAllIn  = usdPositions.reduce((s, p) => s + (p.return_total_brl || 0), 0);
+  const count = usdPositions.length;
+
+  function pnlCell(v, fmtFn) {
+    const color = v >= 0 ? 'var(--green)' : 'var(--red)';
+    return `<span class="privacy-hide" style="color:${color}">${fmtFn(v)}</span>`;
+  }
+  function fmtUsd(v) {
+    const abs = Math.abs(v);
+    const formatted = abs.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return (v < 0 ? '-' : '') + 'US$ ' + formatted;
+  }
+
+  return `
+    <div style="margin-top:16px;">
+      <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:8px;">Retorno RV EUA (${count} posições)</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:120px;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);">
+          <div style="font-size:0.78rem;color:var(--text-muted);">Ret. USD</div>
+          <div style="font-size:1.05rem;font-weight:600;margin-top:2px;">${pnlCell(totRetUsd, fmtUsd)}</div>
+        </div>
+        <div style="flex:1;min-width:120px;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);">
+          <div style="font-size:0.78rem;color:var(--text-muted);">FX</div>
+          <div style="font-size:1.05rem;font-weight:600;margin-top:2px;">${pnlCell(totFxBrl, formatBRL)}</div>
+        </div>
+        <div style="flex:1;min-width:120px;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);">
+          <div style="font-size:0.78rem;color:var(--text-muted);">BRL All-in</div>
+          <div style="font-size:1.05rem;font-weight:600;margin-top:2px;">${pnlCell(totAllIn, formatBRL)}</div>
+        </div>
+      </div>
     </div>
   `;
 }

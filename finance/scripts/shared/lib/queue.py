@@ -10,6 +10,18 @@ depends on supplier.movable, which Pass 1 resolves. `build_pass_2_queue`
 raises `QueueOrderingError` if any transaction lacks a resolved supplier
 or category. This makes silent misses impossible by construction.
 
+Pass 3 — CROSS-MONTH REIMBURSEMENT competência overrides (p3-2 / decision S4).
+A reimbursement received in a different calendar month than the expense it
+refunds collapses to the received month under the extrato skip-default
+(`compute_data_competencia` returns `data_caixa`). Pass 3 detects each
+reimbursement-matched row whose `data_competencia` month still equals its
+`data_caixa` month and queues a prompt for the originating-expense month.
+`apply_pass_3_resolution` sets `data_competencia` to the user's answer; the
+durable provenance is the append-only `competencia-overrides.csv` corrections
+side-ledger (the same S5 substrate pattern, keyed by the same composite
+`tx_date | tx_description | tx_amount` identity), re-stamped by categorize.py
+on every regeneration. `data_caixa` NEVER moves (spec Q12 / invariant 4).
+
 Pure module: no file I/O. Apply functions return NEW transaction lists;
 they do not mutate the input list.
 """
@@ -26,7 +38,9 @@ from .suppliers import SupplierIndex, UnresolvedMovableError, get_supplier_movab
 from .tags import TagIndex, parse_tag_column, serialize_tag_column
 
 Transaction = dict[str, Any]
-ItemType = Literal["category", "supplier", "tag", "boundary"]
+ItemType = Literal[
+    "category", "supplier", "tag", "boundary", "reimbursement_competencia"
+]
 
 
 class QueueOrderingError(RuntimeError):
@@ -65,6 +79,23 @@ def _tx_date(tx: Transaction) -> date:
             except ValueError:
                 continue
     return date.min
+
+
+def _parse_date_field(value: Any) -> date | None:
+    """Parse a date-bearing field to a `date`, or None when absent/unparsable.
+
+    Accepts a `date` as-is or an ISO `YYYY-MM-DD` string. Used by Pass 3 to
+    compare the caixa/competência months without raising on a row that has no
+    basis dates yet.
+    """
+    if isinstance(value, date):
+        return value
+    if value in (None, ""):
+        return None
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError:
+        return None
 
 
 def build_pass_1_queue(
@@ -334,3 +365,123 @@ def apply_pass_2_resolution(
         return new_txs
 
     raise ValueError(f"unknown boundary action: {action!r}")
+
+
+# ---------------------------------------------------------------------------
+# Pass 3 — cross-month reimbursement competência override (p3-2 / S4)
+# ---------------------------------------------------------------------------
+
+
+def _matches_reimbursement(
+    description: str, reimbursement_mappings: dict[str, Any]
+) -> bool:
+    """True when `description` matches any reimbursement_mappings pattern.
+
+    Mirrors the layer-2 match in `categorize.py::categorize_transaction`
+    (case-insensitive substring on the uppercased description) so Pass 3
+    detects exactly the rows the reimbursement layer fired on.
+    """
+    desc_upper = (description or "").upper().strip()
+    return any(
+        str(pattern).upper() in desc_upper for pattern in reimbursement_mappings
+    )
+
+
+def build_pass_3_queue(
+    transactions: list[Transaction],
+    reimbursement_mappings: dict[str, Any],
+) -> list[QueueItem]:
+    """Build Pass 3 queue: cross-month reimbursement competência overrides.
+
+    For each transaction that:
+      - matches a `reimbursement_mappings` pattern (the layer-2 reimbursement
+        signal — `match_confidence == 'exact'` for these rows), AND
+      - has a resolvable `data_caixa` and `data_competencia`, AND
+      - whose `data_competencia` month STILL equals its `data_caixa` month
+        (the extrato skip-default has not yet been overridden — i.e., the
+        originating-expense month has not been attributed)
+
+    emit a `QueueItem(item_type='reimbursement_competencia')` carrying the
+    received month so the prompt can ask the user for the originating-expense
+    month. Rows whose `data_competencia` already differs from `data_caixa`
+    (an override is already in effect, re-stamped from the corrections log)
+    are NOT re-queued — Pass 3 is idempotent across regenerations.
+
+    Pure. No file I/O. Does not mutate the input list.
+    """
+    items: list[QueueItem] = []
+
+    for idx, tx in enumerate(transactions):
+        if not _matches_reimbursement(
+            tx.get("description", ""), reimbursement_mappings
+        ):
+            continue
+
+        caixa = _parse_date_field(tx.get("data_caixa"))
+        comp = _parse_date_field(tx.get("data_competencia"))
+        if caixa is None or comp is None:
+            # No basis dates yet (accrual must run first) — skip rather than
+            # raise: a reimbursement row with unparsable dates is surfaced by
+            # the categorize pipeline, not by the Pass 3 queue builder.
+            continue
+
+        # Already attributed to a different month (override in effect) → skip.
+        if (comp.year, comp.month) != (caixa.year, caixa.month):
+            continue
+
+        items.append(
+            QueueItem(
+                transaction_id=idx,
+                item_type="reimbursement_competencia",
+                context={
+                    "description": tx.get("description", ""),
+                    "amount": tx.get("amount", ""),
+                    "data_caixa": caixa.isoformat(),
+                    "current_data_competencia": comp.isoformat(),
+                    "received_month": f"{caixa.year:04d}-{caixa.month:02d}",
+                },
+            )
+        )
+
+    items.sort(key=lambda item: _tx_date(transactions[item.transaction_id]))
+    return items
+
+
+def apply_pass_3_resolution(
+    transactions: list[Transaction],
+    item: QueueItem,
+    user_answer: dict[str, Any],
+) -> list[Transaction]:
+    """Apply a user's Pass 3 reimbursement-competência answer.
+
+    user_answer:
+      - {'data_competencia': date | 'YYYY-MM-DD'}
+            → set data_competencia to the originating-expense date.
+
+    The caller (bookkeeper workflow) separately appends the override to the
+    append-only `competencia-overrides.csv` corrections side-ledger keyed by
+    `tx_date | tx_description | tx_amount` so the attribution survives the
+    next wholesale regeneration of transactions.csv (categorize.py re-stamps
+    it). This function performs only the in-memory edit.
+
+    Invariants:
+      - data_caixa is NEVER mutated (spec Q12 / invariant 4).
+      - Only the targeted transaction is updated.
+
+    Pure (input → output).
+    """
+    if item.item_type != "reimbursement_competencia":
+        raise ValueError(
+            "apply_pass_3_resolution called on non-Pass-3 item: "
+            f"{item.item_type!r}"
+        )
+
+    new_txs = [copy.deepcopy(t) for t in transactions]
+    tx = new_txs[item.transaction_id]
+    new_comp = user_answer["data_competencia"]
+    if isinstance(new_comp, date):
+        tx["data_competencia"] = new_comp.isoformat()
+    else:
+        # Validate ISO string by round-tripping.
+        tx["data_competencia"] = date.fromisoformat(str(new_comp)).isoformat()
+    return new_txs

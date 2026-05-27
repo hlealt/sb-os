@@ -44,6 +44,9 @@ class FXState:
     # BRL-equivalent records for USD proventos, computed at the ticker's
     # weighted FX rate at dividend time (PRD §"Dividendos USD").
     provento_brl_records: list[dict] = field(default_factory=list)
+    # FIFO tranches from transfer_in events; consumed by process_transfer_out
+    # to correctly shift weighted_avg_rate after withdrawals (D10).
+    transfer_lots: list[dict] = field(default_factory=list)
 
     def process_transfer_in(self, usd_amount: float, fx_rate: float):
         """BRL → USD transfer. Increases USD balance, updates weighted avg.
@@ -56,6 +59,9 @@ class FXState:
         new_balance = self.usd_balance + usd_amount
         if new_balance > 0:
             if self.usd_balance <= 0:
+                # Prior balance non-positive: incoming rate replaces avg.
+                # Clear any stale transfer tranches before recording this one.
+                self.transfer_lots = []
                 self.weighted_avg_rate = fx_rate
             else:
                 self.weighted_avg_rate = (
@@ -64,10 +70,44 @@ class FXState:
                     / new_balance
                 )
         self.usd_balance = new_balance
+        if usd_amount > 0:
+            self.transfer_lots.append({'usd': usd_amount, 'fx_rate': fx_rate})
 
     def process_transfer_out(self, usd_amount: float):
-        """USD → BRL transfer. Reduces USD balance, rate unchanged."""
+        """USD → BRL transfer. FIFO-consumes transfer tranches (D10).
+
+        Consumes USD from the earliest transfer_in tranche first, then
+        recomputes weighted_avg_rate from the remaining tranches.
+        """
         self.usd_balance -= usd_amount
+
+        # FIFO-consume transfer tranches
+        remaining = usd_amount
+        new_transfer_lots = []
+        for tranche in self.transfer_lots:
+            if remaining <= 0:
+                new_transfer_lots.append(tranche)
+                continue
+            if tranche['usd'] <= remaining:
+                remaining -= tranche['usd']
+                # Entire tranche consumed — drop it
+            else:
+                new_transfer_lots.append({
+                    'usd': tranche['usd'] - remaining,
+                    'fx_rate': tranche['fx_rate'],
+                })
+                remaining = 0
+        self.transfer_lots = new_transfer_lots
+
+        # Recompute weighted_avg_rate from remaining tranches
+        total_usd = sum(t['usd'] for t in self.transfer_lots)
+        if total_usd > 0:
+            self.weighted_avg_rate = (
+                sum(t['usd'] * t['fx_rate'] for t in self.transfer_lots)
+                / total_usd
+            )
+        elif self.usd_balance <= 0:
+            self.weighted_avg_rate = 0.0
 
     def process_provento(self, ticker: str, date: str, usd_amount: float) -> float:
         """USD dividend/income received. Per PRD §"Dividendos USD":

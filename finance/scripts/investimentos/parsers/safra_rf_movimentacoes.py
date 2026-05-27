@@ -1,7 +1,7 @@
 """Safra RF movimentacoes CSV parser (browser-extracted Histórico Mensal).
 
 Consumes the 11-column CSV produced by the prompt
-`safra-extrair-movimentacoes-v2`. Covers RF panels only (CRA, CRI, Debênture,
+`safra-extrair-movimentacoes`. Covers RF panels only (CRA, CRI, Debênture,
 LCA, LCI, CDB non-automático, Tesouro). Fund panels go through
 `safra_fundos_movimentacoes`.
 

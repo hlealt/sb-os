@@ -204,6 +204,50 @@ def load_manual_overrides(corrections_dir: Path) -> dict[tuple[str, str, str], d
     return out
 
 
+def load_competencia_overrides(
+    corrections_dir: Path,
+) -> dict[tuple[str, str, str], dict]:
+    """Load competencia-overrides.csv keyed by composite row identity (p3-2 / S4).
+
+    Cross-month reimbursement competência overrides (decision S4, finding #6).
+    The corrections log is the durable source of truth; categorize.py re-stamps
+    `data_competencia` onto each regenerated row by passing the override date to
+    `accrual.compute_data_competencia(manual_override=...)`.
+
+    Reuses the SAME composite key (`tx_date | tx_description | tx_amount`) and
+    the SAME append-only-truth pattern as `load_manual_overrides` (S5). Returns
+    {(tx_date, tx_description, tx_amount_key): override_row}. Fail-soft on a
+    missing file (no overrides → empty dict); fail-loud on a present-but-
+    malformed file (missing required identity/override columns raises).
+    """
+    path = corrections_dir / "competencia-overrides.csv"
+    if not path.exists():
+        return {}
+    out: dict[tuple[str, str, str], dict] = {}
+    with open(path, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        required = {
+            "tx_date", "tx_description", "tx_amount", "override_data_competencia",
+        }
+        fields = set(reader.fieldnames or [])
+        if not required.issubset(fields):
+            raise RuntimeError(
+                f"CORRECTIONS ERROR (p3-2): {path} is missing required "
+                f"column(s) {sorted(required - fields)}. Expected header: "
+                f"tx_date,tx_description,tx_amount,override_data_competencia,"
+                f"reason,month,added_at,source,note"
+            )
+        for row in reader:
+            key = (
+                str(row.get("tx_date", "")).strip(),
+                str(row.get("tx_description", "")).strip(),
+                _tx_amount_key(row.get("tx_amount", "")),
+            )
+            # Last row wins on duplicate identity (append-only revoke pattern).
+            out[key] = row
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Category / tag attribution
 # ---------------------------------------------------------------------------
@@ -525,6 +569,7 @@ def _parse_iso(value: str) -> date | None:
 def compute_basis_dates(
     tx: dict,
     fatura_payment_dates: dict[str, date],
+    competencia_override: date | None = None,
 ) -> tuple[date, date]:
     """Compute (data_caixa, data_competencia) for one transaction.
 
@@ -536,6 +581,12 @@ def compute_basis_dates(
     (per data-model §1.1: parser-emitted `date` for CC = purchase date).
     For installments, every parcela of the same purchase shares the same
     `date`, so all parcelas naturally collapse to the same competência.
+
+    `competencia_override` (p3-2 / S4): when set, it is passed to
+    `accrual.compute_data_competencia` as `manual_override` and wins over the
+    extrato skip-default. This is the cross-month reimbursement attribution
+    (finding #6) — `data_caixa` is unaffected (spec Q12 / invariant 4). The
+    override applies to the extrato branch; reimbursements are extrato rows.
     """
     source_type = str(tx.get("source_type", "")).lower()
     if source_type == "fatura":
@@ -558,9 +609,12 @@ def compute_basis_dates(
         )
         return d_caixa, d_comp
 
-    # extrato / Cash / blank → caixa = date, competência = caixa (skip-default).
+    # extrato / Cash / blank → caixa = date, competência = caixa (skip-default),
+    # unless a cross-month reimbursement override is supplied (p3-2 / S4).
     d_caixa = compute_data_caixa(tx)
-    d_comp = compute_data_competencia(tx, d_caixa)
+    d_comp = compute_data_competencia(
+        tx, d_caixa, manual_override=competencia_override,
+    )
     return d_caixa, d_comp
 
 
@@ -777,6 +831,12 @@ def main():
     corrections_dir = bookkeeper_config / "corrections"
     manual_overrides = load_manual_overrides(corrections_dir)
 
+    # Cross-month reimbursement competência overrides (p3-2 / S4). Durable
+    # source of truth for the originating-expense-month attribution; re-stamped
+    # onto each row's data_competencia below. Fail-soft on absence; fail-loud on
+    # a malformed file (load raises).
+    competencia_overrides = load_competencia_overrides(corrections_dir)
+
     fatura_payment_dates = load_fatura_payment_dates(normalized_dir)
 
     # Read all normalized CSVs
@@ -827,6 +887,9 @@ def main():
     # manual override. The override is PRESERVED (never silently rewritten);
     # the conflict is surfaced for the user to resolve.
     override_conflicts: list[dict] = []
+    # p3-2 / S4: cross-month reimbursement competência overrides applied this
+    # run. One competencia_override audit event is emitted per entry below.
+    competencia_overrides_applied: list[dict] = []
 
     for i, tx in enumerate(all_transactions):
         description = tx.get("description", "")
@@ -865,10 +928,32 @@ def main():
             recurrence_rules,
         )
 
+        # p3-2 / S4: resolve a cross-month reimbursement competência override
+        # for this row (durable provenance in competencia-overrides.csv, keyed
+        # by the same composite identity as the S5 substrate). When present, it
+        # is threaded into compute_data_competencia as manual_override — it wins
+        # over the extrato skip-default. data_caixa is unaffected (invariant 4).
+        _comp_override_row = competencia_overrides.get(tx_identity(tx))
+        comp_override_date: date | None = None
+        if _comp_override_row is not None:
+            _raw_override = (
+                _comp_override_row.get("override_data_competencia") or ""
+            ).strip()
+            comp_override_date = _parse_iso(_raw_override)
+            if comp_override_date is None:
+                raise RuntimeError(
+                    f"CORRECTIONS ERROR (p3-2): competencia-overrides.csv row "
+                    f"for {tx_identity(tx)} has an unparsable "
+                    f"override_data_competencia: {_raw_override!r} "
+                    f"(expected ISO YYYY-MM-DD)."
+                )
+
         # Basis dates (lib.accrual). Skip for intercontas/ignorar — they are
         # zeroed in reports anyway, but still need columns populated.
         try:
-            d_caixa, d_comp = compute_basis_dates(tx, fatura_payment_dates)
+            d_caixa, d_comp = compute_basis_dates(
+                tx, fatura_payment_dates, competencia_override=comp_override_date,
+            )
             data_caixa_str = d_caixa.isoformat()
             data_competencia_str = d_comp.isoformat()
         except ValueError as e:
@@ -878,6 +963,22 @@ def main():
                 raise
             data_caixa_str = tx.get("date", "")
             data_competencia_str = tx.get("date", "")
+
+        # p3-2 / S4: record the applied override for the per-override audit
+        # event. The original (pre-override) competência for an extrato row is
+        # its data_caixa (the skip-default this override replaces).
+        if comp_override_date is not None:
+            competencia_overrides_applied.append({
+                "tx_date": str(tx.get("date", "")).strip(),
+                "description": str(tx.get("description", "")).strip(),
+                "amount": tx.get("amount", ""),
+                "original_data_competencia": data_caixa_str,
+                "overridden_data_competencia": data_competencia_str,
+                "override_reason": (
+                    (_comp_override_row.get("reason") or "").strip()
+                    or "cross_month_reimbursement"
+                ),
+            })
 
         # p2-12: apply name canonicalization to the resolved supplier name.
         if supplier_canonical:
@@ -1041,6 +1142,26 @@ def main():
             summary={
                 "conflict_count": len(override_conflicts),
                 "conflicts": override_conflicts,
+            },
+            trigger_context={"input_dir": str(normalized_dir)},
+        )
+
+    # p3-2 / S4: one competencia_override audit event PER applied cross-month
+    # reimbursement override (finding #6). Materiality high — it moves
+    # competência-basis reporting. Audit emission never raises into the caller.
+    for _ov in competencia_overrides_applied:
+        audit.emit(
+            "competencia_override",
+            source_function="categorize.main",
+            destination=output_file,
+            materiality="high",
+            summary={
+                "transaction_id": (
+                    f"{_ov['tx_date']}|{_ov['description']}|{_ov['amount']}"
+                ),
+                "original_data_competencia": _ov["original_data_competencia"],
+                "overridden_data_competencia": _ov["overridden_data_competencia"],
+                "override_reason": _ov["override_reason"],
             },
             trigger_context={"input_dir": str(normalized_dir)},
         )
