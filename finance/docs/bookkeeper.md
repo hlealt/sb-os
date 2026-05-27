@@ -1,5 +1,7 @@
 # Fechamento Financeiro Mensal
 
+> **RETIRED — não é mais a descrição canônica.** Este documento descreve um layout pré-restruturação (paths `scripts/` co-localizados que não existem mais) e está desatualizado. A descrição canônica de "o que o workflow `bookkeeper` faz" é a seção `## What This Workflow Does` em [`../workflows/bookkeeper/bookkeeper.md`](../workflows/bookkeeper/bookkeeper.md). Para schemas de ledger e referência de design do subsistema de investimentos, ver [`./investimentos.md`](./investimentos.md). O conteúdo abaixo é mantido apenas como registro histórico.
+
 Workflow automatizado de fechamento financeiro mensal para um Second Brain baseado em Obsidian. Processa extratos bancários e faturas de cartão de crédito (PDF/CSV), categoriza transações, e gera um relatório markdown — com revisão humana para itens não categorizados.
 
 ## Como funciona

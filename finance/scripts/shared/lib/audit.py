@@ -71,8 +71,16 @@ def _actor() -> str:
 
 
 def _vault_relative(p: Path | str) -> str:
+    # A path that is already RELATIVE is vault-relative by this helper's
+    # contract — return it as a clean POSIX string WITHOUT resolving it against
+    # cwd (resolving a relative input would wrongly anchor it to the process's
+    # working directory). Only absolute inputs (caller source filenames, ledger
+    # destinations built from VAULT_ROOT) are made relative to the vault root.
+    pp = Path(p)
+    if not pp.is_absolute():
+        return pp.as_posix()
     root = _vault_root()
-    pp = Path(p).resolve()
+    pp = pp.resolve()
     if root is None:
         return str(pp)
     try:
@@ -386,3 +394,138 @@ def emit_gate(
         trigger_context=trigger_context,
         _stack_depth=3,
     )
+
+
+# ---------------------------------------------------------------------------
+# Documentation-currency signal (layer 2 of the Option D Hybrid mechanism)
+# ---------------------------------------------------------------------------
+#
+# When a structural change (a write to a data store / config / dashboard-script
+# surface) lands without a matching doc update, the pipeline emits a
+# `docs_potentially_stale` event so the staleness is visible and persistent.
+# The `doc-maintainer` companion CLEARS this signal by making the docs current
+# (it never emits it). The coupling between code/config surfaces and the docs
+# that describe them lives in the shared manifest
+# `sb-os/finance/docs/doc-currency-manifest.yaml`.
+#
+# Mechanism source:
+#   1-projects/finance-system/finance-system-v2-foundation/phase-2/decision-prep/p2-19-documentation-currency.md
+
+_DOC_CURRENCY_MANIFEST_REL = "3-resources/tools/sb-os/finance/docs/doc-currency-manifest.yaml"
+_FINANCE_PREFIX = "3-resources/tools/sb-os/finance/"
+
+
+def _doc_currency_manifest_path() -> Path | None:
+    """Resolve the shared node-doc manifest path, or None if unresolvable.
+
+    Honors BOOKKEEPER_DOC_CURRENCY_MANIFEST for test isolation; otherwise
+    resolves vault-relative to the vault root.
+    """
+    override = os.environ.get("BOOKKEEPER_DOC_CURRENCY_MANIFEST")
+    if override:
+        return Path(override)
+    root = _vault_root()
+    if root is None:
+        return None
+    return root / _DOC_CURRENCY_MANIFEST_REL
+
+
+def _to_finance_relative(dest: str) -> str:
+    """Return a destination as a path relative to `sb-os/finance/` when it lives
+    there; otherwise return the vault-relative path unchanged. Used to match a
+    written surface against the manifest's finance-relative `code` patterns."""
+    if dest.startswith(_FINANCE_PREFIX):
+        return dest[len(_FINANCE_PREFIX):]
+    return dest
+
+
+def lookup_stale_docs(destination: str | Path) -> list[dict[str, Any]]:
+    """Look up which doc surfaces a write to `destination` puts at risk.
+
+    Reads the shared node-doc manifest and returns the list of
+    `{node_id, doc_sections_at_risk}` couplings whose `code` patterns match the
+    written surface. Returns an empty list when the surface is not coupled to
+    any doc, or when the manifest is missing / unreadable (fail-soft — a missing
+    manifest must never break a pipeline write).
+    """
+    try:
+        import fnmatch
+
+        import yaml  # imported lazily — audit.py must import even without PyYAML
+
+        manifest_path = _doc_currency_manifest_path()
+        if manifest_path is None or not manifest_path.exists():
+            return []
+        data = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+        couplings = data.get("couplings") or []
+
+        rel = _to_finance_relative(_vault_relative(destination))
+        hits: list[dict[str, Any]] = []
+        for coupling in couplings:
+            if not isinstance(coupling, dict):
+                continue
+            patterns = coupling.get("code") or []
+            if not any(fnmatch.fnmatch(rel, pat) for pat in patterns):
+                continue
+            sections: list[str] = []
+            for doc in coupling.get("docs") or []:
+                if isinstance(doc, dict):
+                    for sec in doc.get("sections") or []:
+                        sections.append(f"{doc.get('path')}#{sec}")
+            hits.append(
+                {
+                    "node_id": coupling.get("node_id"),
+                    "doc_sections_at_risk": sections,
+                }
+            )
+        return hits
+    except Exception:  # never raise into the caller (fail-soft invariant)
+        return []
+
+
+def emit_docs_potentially_stale(
+    destination: str | Path,
+    *,
+    source_function: str,
+    actor: str | None = None,
+    trigger_context: dict[str, Any] | None = None,
+) -> None:
+    """Emit a `docs_potentially_stale` signal for a structural write to
+    `destination` IFF that surface is coupled to a doc in the shared manifest.
+
+    Carries `{destination, node_id, doc_sections_at_risk}` — the payload the
+    `doc-maintainer` companion reads (its Dispatch Contract `stale_events`
+    field) to know which surfaces to reconcile. When the destination is not
+    coupled to any doc, NOTHING is emitted (no noise for unmapped writes).
+
+    Best-effort; never raises into the caller (the layer-2 fail-soft invariant).
+    A caller's extra `trigger_context` is merged under the looked-up coupling
+    so call-site context (e.g. the run's month) is preserved.
+    """
+    try:
+        hits = lookup_stale_docs(destination)
+        if not hits:
+            return
+        # Store the vault-relative form so the event's `destination` matches the
+        # surface that was matched against the manifest (consistent for both an
+        # absolute path and an already-vault-relative string input).
+        dest_rel = _vault_relative(destination)
+        # One event per coupled surface; each names its node + at-risk sections.
+        for hit in hits:
+            ctx: dict[str, Any] = {
+                "node_id": hit.get("node_id"),
+                "doc_sections_at_risk": hit.get("doc_sections_at_risk"),
+            }
+            if trigger_context:
+                ctx.update(trigger_context)
+            emit(
+                "docs_potentially_stale",
+                source_function=source_function,
+                actor=actor,
+                destination=dest_rel,
+                materiality="high",
+                trigger_context=ctx,
+                _stack_depth=3,
+            )
+    except Exception as e:  # never raise
+        print(f"[audit] emit_docs_potentially_stale failed: {e}", file=sys.stderr)

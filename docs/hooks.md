@@ -86,6 +86,51 @@ Run `sb-inject-context` on every user prompt so the configured `user_context_roo
 
 These snippets show the **shape** of the config; adapt the `command` field to whatever invocation form your harness supports.
 
+### 4. Finance — structural non-overlap (ME) gate (pre-commit + quarterly)
+
+If the finance module is installed, run the structural non-overlap gate as a pre-commit check so a commit that introduces a **second store for an already-tracked concept** (a new vendor→category dict when `suppliers.json` already owns it, a parallel tag file, etc.) is refused before it lands. The gate detects overlap at the SEMANTIC level against the 23 p2-7 sources-of-truth domains — not a filesystem existence check. Exit 0 = no overlap (allow), exit 1 = overlap (block).
+
+Pre-commit, sweeping a manifest of the stores a change proposes (a JSON list of `{ "concept": "...", "target": "...", "keys": [...], "store_name": "..." }`):
+
+```bash
+python 3-resources/tools/sb-os/finance/scripts/shared/me_gate.py --manifest proposed-stores.json
+```
+
+The same command is the **quarterly** drift sweep: run it over the full set of stores/configs to confirm no overlapping store crept in between closes. Pair it with the deferred cross-config duplicate auditor (`audit-data-duplication.py`, plan task p5-12) once that ships — the gate composes it automatically and reports it as not-yet-built until then. This is distinct from the doc-currency hard-block hook (§5 below), which blocks on stale docs, not on store overlap.
+
+### 5. Finance — doc-currency HARD BLOCK (pre-commit)
+
+If the finance module is installed, run the doc-currency check as a pre-commit hook so a commit that changes a **coupled code/config surface without updating the doc that describes it** is refused before it lands. This is **layer 3** of the documentation-currency Option D Hybrid mechanism (`finance/CLAUDE.md` § Documentation Currency). It is a HARD block, not advisory: an advisory hook lets documentation drift accumulate exactly when it matters. The block message names the stale doc + the fix; the only pass-path is reconciling the doc (run the `doc-maintainer` companion, stage the doc, re-commit) — there is no per-hook bypass flag.
+
+The checker reads the shared coupling manifest (`finance/docs/doc-currency-manifest.yaml` — the same manifest the layer-2 `docs_potentially_stale` audit signal reads) and the staged diff. Exit 0 = no coupled change is missing its doc (allow); exit 1 = a coupled code/config change has no staged doc (block); exit 2 = the manifest is unreadable (block — a broken gate must not silently allow).
+
+A TRACKED hook wrapper ships at `hooks/pre-commit-doc-currency`. As with every sb-os hook, the installer **never** writes to `.git/hooks/` — activate it deliberately:
+
+```bash
+# from the sb-os repo root:
+chmod +x hooks/pre-commit-doc-currency
+ln -s ../../hooks/pre-commit-doc-currency .git/hooks/pre-commit
+```
+
+Or invoke the checker directly (what the wrapper runs):
+
+```bash
+python finance/scripts/shared/doc_currency_check.py
+```
+
+**If a pre-commit hook already exists** (e.g. the ME gate from §4), do NOT overwrite it — chain both from a single `.git/hooks/pre-commit` so each runs and any non-zero exit blocks:
+
+```sh
+#!/usr/bin/env sh
+# .git/hooks/pre-commit — run both finance gates; first failure blocks.
+REPO_ROOT=$(git rev-parse --show-toplevel) || exit 2
+# ME structural non-overlap gate (§4) — pass it the manifest your change proposes:
+# python "$REPO_ROOT/finance/scripts/shared/me_gate.py" --manifest proposed-stores.json || exit $?
+sh "$REPO_ROOT/hooks/pre-commit-doc-currency" || exit $?
+```
+
+> **Activation safety.** Before activating this hook, verify the CURRENT working tree passes it (`python finance/scripts/shared/doc_currency_check.py`); a stale doc would otherwise block your next commit until reconciled. The hook only inspects STAGED changes, so it never blocks a commit that touches no coupled code/config surface (a docs-only or unrelated commit always passes).
+
 ---
 
 ## Maintenance

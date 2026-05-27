@@ -11,4 +11,5 @@ This step is a no-op. Workflow complete.
 
 ## Step Menu
 
+- **Gatekeeper checkpoint** → before completing, run § Per-Step Checkpoint in `../gatekeeper-loop.md`. At close end, surface any deferrable-issue list to the user and route it to review-mode per Rule C.
 - **[D] Done** → workflow complete

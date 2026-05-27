@@ -13,7 +13,7 @@ The architectural divide is **Write vs Read**. Sub-uses live below each class. T
 | Class | Mutates data? | Sub-uses (the `use` field) | Quality bar |
 |-------|---------------|----------------------------|-------------|
 | **write** | Yes | `parser` — ingests from a source into a ledger / config. `retro-rewrite` — renames, merges, canonical corrections, code-migrations. `upsert` — asset-metadata writes via the field-ownership manifest. | Mandatory `--dry-run` mode. For `retro-rewrite`: mandatory **fix-impact preview** enumerating every affected location (rows, configs, dashboard joins, tag namespaces) BEFORE any write; rollback path. Every write tool ships a schema-validation test against the destination artifact's current schema. A registry entry AND a doc-maintainer documentation update are part of definition-of-done. |
-| **read** | No | `audit-diagnostic` — interactive Q&A for an agent or user ("show all transactions over R$500"; "list every place vendor X appears"). `validation-gate` — pass/fail check consumed by the workflow / pre-commit / CI ("coverage ≥ 80%?"; "rf_balcao within 9–12%?"). | `audit-diagnostic` — human-readable output (pretty-printed tables, summaries). `validation-gate` — clean pass/fail **exit codes** (0 = pass, non-zero = fail) for machine consumption. A registry entry AND a doc-maintainer documentation update are part of definition-of-done. |
+| **read** | No | `audit-diagnostic` — interactive Q&A for an agent or user ("show all transactions over R$500"; "list every place vendor X appears"). `validation-gate` — pass/fail check consumed by the workflow / pre-commit / CI (e.g. the ANDed tag-coverage gate "R$-coverage ≥ 90% AND row-coverage ≥ 90% AND no untagged despesa > R$100"; "rf_balcao within 7–15%?"). | `audit-diagnostic` — human-readable output (pretty-printed tables, summaries). `validation-gate` — clean pass/fail **exit codes** (0 = pass, non-zero = fail) for machine consumption. A registry entry AND a doc-maintainer documentation update are part of definition-of-done. |
 
 **Why Read has two sub-uses despite being one class:** they share the read primitive but have different *output contracts*. Audit-diagnostic output is read by a human or an agent in conversation, so it must be human-readable. Validation-gate output is read by a hook or workflow, so it must be a machine-parseable pass/fail exit code. The sub-use determines which contract the tool must satisfy.
 
@@ -391,6 +391,19 @@ use: validation-gate
 expected_inputs: optional --orders-path PATH to one orders.csv, OR --orders-dir PATH to scan *orders*.csv; default: .user/finance/bookkeeper/ledgers/investimentos/orders.csv; env override BOOKKEEPER_ORDERS_PATH; reads CSV columns quantity/price/total/fees_exchange/fees_brokerage/fees_irrf
 outputs: Violation table (row_num, date, ticker, stored vs expected total, deviation%); PASS (exit 0) all within 0.5%; FAIL (exit 1) any row exceeds tolerance; exit 2 on missing file; emits gate_pass/gate_fail event.
 canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/investimentos/orders.csv (no write)
+dry_run: not-applicable
+last_validated: 2026-05-27
+```
+
+```yaml
+tool: me_gate (python shared/me_gate.py --concept "DESC" [--target PATH] [--keys k1,k2] [--store-name NAME] | --manifest PATH)
+purpose: Structural non-overlap (ME) semantic gate — fires on any data-store/config/dashboard-script edit and refuses a SECOND store for a concept the 23 p2-7 sources-of-truth domains already own (e.g. a new vendor->category dict when suppliers.json::default_category exists). Detects overlap at the semantic level, not by filesystem existence; surfaces reuse/justify-new/consolidate options on overlap.
+owner_script: shared/me_gate.py
+class: read
+use: validation-gate
+expected_inputs: --concept "plain description of the data" (required unless --manifest); optional --target PATH (store/config/script being edited; only basename used as a signal), --keys comma-separated config keys/columns, --store-name NAME; OR --manifest PATH to a JSON list of {concept,target,keys,store_name} for pre-commit/quarterly sweep; reads shared/lib/source_of_truth_registry.py (the 23 p2-7 domains); composes optional shared/audit_data_duplication.py (deferred, plan p5-12) as a tertiary net when present
+outputs: PASS (exit 0) when the concept is genuinely new (no overlap); REFUSE (exit 1) with the matching canonical store(s) + p2-7 section number(s) + the three pt-BR options (Reusar/Justificar nova/Consolidar); exit 2 on bad args or unreadable manifest; emits gate_pass/gate_fail event (gate.name me_non_overlap). Never blocks on the missing tertiary net.
+canonical_reader_writer: reads shared/lib/source_of_truth_registry.py (the p2-7 inventory transcription); no store write
 dry_run: not-applicable
 last_validated: 2026-05-27
 ```

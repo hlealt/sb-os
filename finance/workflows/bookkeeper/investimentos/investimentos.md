@@ -1,5 +1,7 @@
 # Investimentos
 
+> **RETIRED — este índice de passos está desatualizado.** Lista 3 passos com nomes pré-restruturação; existem 8 passos em disco (`step-01-preflight.md` … `step-08-report.md`). A descrição canônica de "o que o workflow `bookkeeper` faz" — incluindo o modo investimentos — é a seção `## What This Workflow Does` em [`../bookkeeper.md`](../bookkeeper.md). Para os passos individuais, ler diretamente os arquivos `step-NN-*.md` nesta pasta. O conteúdo abaixo é mantido apenas como registro histórico.
+
 Investment tracking workflow — import historical data, ingest new source files, compute positions, validate against brokerage statements.
 
 ## Path Variables

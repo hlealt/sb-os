@@ -20,8 +20,7 @@ Max-loop guard: after 3 iterations, surfaces Portuguese user prompt instead.
 
 Config sources:
   gates.step_5_5_coverage.threshold (0.90) — R$ and row coverage threshold.
-  tag_coverage.gate.untagged_amount_threshold_brl (100) — CANONICAL floor.
-  gates.step_5_5_coverage.untagged_amount_threshold (100) — alias only.
+  tag_coverage.gate.untagged_amount_threshold_brl (100) — CANONICAL (and only) floor key.
 
 Usage:
     python gate_coverage.py \\
@@ -87,24 +86,18 @@ def _load_threshold(config_dir: Path) -> float:
 def _load_untagged_floor(config_dir: Path) -> float:
     """Read the untagged-amount floor from standing-rules.yaml.
 
-    Canonical source: tag_coverage.gate.untagged_amount_threshold_brl.
-    Falls back to gates.step_5_5_coverage.untagged_amount_threshold (alias).
-    Returns _UNTAGGED_FLOOR_FALLBACK if config is unavailable.
+    Canonical (and only) source: tag_coverage.gate.untagged_amount_threshold_brl.
+    p5-8 removed the former gates.step_5_5_coverage.untagged_amount_threshold alias,
+    so this reads the single canonical key. Returns _UNTAGGED_FLOOR_FALLBACK if
+    config is unavailable.
     """
     try:
         rules = sr.load_standing_rules(config_dir)
-        # Canonical source first.
         tag_cov = rules.get("tag_coverage", {})
         gate_section = tag_cov.get("gate", {}) if isinstance(tag_cov, dict) else {}
         canonical = gate_section.get("untagged_amount_threshold_brl")
         if canonical is not None and isinstance(canonical, (int, float)):
             return float(canonical)
-        # Alias fallback.
-        gates_cfg = sr.load_gates(rules)
-        step_5_5 = gates_cfg.get("step_5_5_coverage", {})
-        alias = step_5_5.get("untagged_amount_threshold")
-        if alias is not None and isinstance(alias, (int, float)):
-            return float(alias)
     except sr.StandingRulesError:
         pass
     return _UNTAGGED_FLOOR_FALLBACK

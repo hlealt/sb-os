@@ -44,10 +44,36 @@ Discrepâncias: nenhuma | OU lista
    - Se bug de parser: ledgers são append-only — remoção manual + correção do parser + re-execução do Step 02-03 para o arquivo afetado.
    - Não prossiga para Step 05 enquanto houver discrepâncias não resolvidas.
 
-5. STOP. Aguarde confirmação.
+5. **Completion gate — cobertura de spot-check (`gate_spot_check_coverage.py`, gate #7 — auto-halt).** Mecaniza a "Cobertura mínima" do passo 2: garante que toda classe mandatória foi de fato spot-checada antes do Step 05.
+
+   a. Escreva o coverage-record JSON em `{INV_PROCESSED}/.spot-check-coverage.json` com EXATAMENTE estas chaves (o gate #7 lê apenas estas):
+
+      ```json
+      {
+        "checked": ["b3_orders", "b3_proventos", "safra_balcao", "avenue_orders", "avenue_fx", "crypto_exchange"],
+        "present_sources": ["b3", "safra_balcao", "avenue", "crypto"]
+      }
+      ```
+
+      - `checked`: os tokens de classe que VOCÊ de fato spot-checou no passo 1 (use os literais que o gate reconhece: `b3_orders`, `b3_proventos`, `safra_balcao`, `avenue_orders`, `avenue_fx`, `crypto_exchange`).
+      - `present_sources`: quais fontes existem neste mês — determina quais classes condicionais são exigidas. Inclua `avenue` se houver arquivos Avenue; `crypto` se houver exchange de crypto. `b3` e `safra_balcao` são sempre exigidos.
+
+   b. Rode o gate:
+
+      ```bash
+      python "{SCRIPTS_DIR}/gate_spot_check_coverage.py" --coverage-record "{INV_PROCESSED}/.spot-check-coverage.json"
+      ```
+
+      Classes sempre exigidas: `b3_orders`, `b3_proventos`, `safra_balcao`. Condicionais: `avenue_orders`/`avenue_fx` (se `avenue` presente), `crypto_exchange` (se `crypto` presente). Exit 0 = todas cobertas; exit 1 = uma ou mais classes mandatórias não checadas; exit 2 = record ausente/malformado.
+
+   - **Exit 0** → registre o pass e prossiga.
+   - **Exit 1 (FAIL)** → Rule C **blocking** (`../gatekeeper-loop.md`). NÃO avance ao Step 05. Faça o spot-check das classes faltantes, reescreva o coverage-record e rode o gate de novo. O step não avança até exit 0.
+
+6. STOP. Aguarde confirmação.
 
 ## Step Menu
 
+- **Gatekeeper checkpoint** → before advancing, run § Per-Step Checkpoint in `../gatekeeper-loop.md`. A spot-check discrepancy (source vs ledger) is a Rule C blocking issue — surface inline with a proposed fix (parser bug → fix + re-parse; source error; accept). Do the spot-check by reading sample rows through a `tools-index.md` tool (`sample_from_ledger` / `position_summary`), not by opening ledger CSVs directly. The spot-check coverage gate (#7) above auto-halts before Step 05 if any mandatory class was skipped.
 - **[C] Continue** → proceed to Step 05 (Portfolio)
 - **[B] Back] → voltar para Step 02/03 para corrigir
 - **[X] Exit** → halt workflow

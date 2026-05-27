@@ -32,5 +32,6 @@ Snapshot persistido:
 
 ## Step Menu
 
+- **Gatekeeper checkpoint** → before advancing, run § Per-Step Checkpoint in `../gatekeeper-loop.md` (out-of-structure → Rule A; detected issue, e.g. snapshot-triplet drift → Rule C blocking; direct data read → re-route through a `tools-index.md` tool).
 - **[C] Continue** → proceed to Step 08 (Report)
 - **[X] Exit] → halt workflow

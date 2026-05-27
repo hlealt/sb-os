@@ -49,5 +49,6 @@ Update pagamentos-recorrentes.md? (Y/N)
 
 ## Step Menu
 
+- **Gatekeeper checkpoint** → before advancing, run § Per-Step Checkpoint in `../gatekeeper-loop.md` (out-of-structure → Rule A; detected issue → Rule C blocking/deferrable; direct data read → re-route through a `tools-index.md` tool).
 - **[C] Continue** → proceed to Step 08 (Update Manifest)
 - **[X] Exit** → halt workflow

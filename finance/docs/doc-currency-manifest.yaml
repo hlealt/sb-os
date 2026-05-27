@@ -1,0 +1,150 @@
+# Doc-Currency Node-Doc Lookup Manifest
+#
+# The shared artifact of the documentation-currency mechanism (Option D Hybrid).
+# Maps each coupled CODE/CONFIG surface (a path or glob, repo-relative to
+# `sb-os/finance/`) to the DOC file(s) and section(s) that describe it.
+#
+# Read by:
+#   - layer 2: `scripts/shared/lib/audit.py::emit_docs_potentially_stale`
+#     (looks up which docs are at risk when a coupled surface is written)
+#   - layer 3: `scripts/shared/doc_currency_check.py` (the pre-commit HARD BLOCK
+#     — a staged change to a `code` path with no staged change to a coupled
+#     `docs` path blocks the commit)
+#
+# This file is the machine-readable form of the coupling declared in prose in
+# `finance/CLAUDE.md` § Documentation Currency. When the two disagree, this
+# manifest is reconciled to match the prose declaration. `doc-maintainer` owns
+# maintenance: a new store/transformation adds a row here in the same reconcile.
+#
+# Mechanism source:
+#   1-projects/finance-system/finance-system-v2-foundation/phase-2/decision-prep/p2-19-documentation-currency.md
+#
+# Schema (per coupling entry):
+#   node_id : stable identifier for this coupled surface (snake_case)
+#   code    : list of paths/globs (repo-relative to sb-os/finance/, or rooted at
+#             `.user/` for personal config) whose change makes the docs stale
+#   docs    : list of {path, sections} the `code` change couples to. `path` is
+#             repo-relative to sb-os/finance/ unless rooted at `1-projects/` (a
+#             foundation doc reconciled by doc-maintainer, not gated here).
+#             `sections` lists the heading names at risk (informational; the
+#             hook gates at file granularity, the signal reports the sections).
+
+version: "1.0"
+last_updated: "2026-05-27"
+
+couplings:
+  # enforcement: hard-block (default) | signal-only
+  #   hard-block  — the pre-commit hook (layer 3) BLOCKS a commit that changes a
+  #                 `code` surface without staging an in-repo coupled doc.
+  #   signal-only — declared coupling that emits the layer-2 `docs_potentially_stale`
+  #                 signal and is reconciled by `doc-maintainer` (layer 4), but is
+  #                 NOT commit-gated. Use for couplings whose staleness needs
+  #                 JUDGMENT (does the change alter the pipeline SHAPE?) rather than
+  #                 a path match — per p2-19 ("the hook is coarse; the companion
+  #                 judges"). A coupling whose docs all live OUTSIDE this repo is
+  #                 likewise never commit-gated (the doc can't be staged here).
+  - node_id: pipeline_shape
+    enforcement: signal-only
+    code:
+      - "scripts/shared/normalize.py"
+      - "scripts/shared/categorize.py"
+      - "scripts/investimentos/calculate.py"
+      - "scripts/investimentos/update_ledgers.py"
+    docs:
+      - path: "docs/architecture.md"
+        sections:
+          - "Two parallel pipelines"
+          - "Roles by directory"
+          - "What lives where"
+      - path: "1-projects/finance-system/finance-system-v2-foundation/phase-2/data-flow-map-target.md"
+        sections:
+          - "Gastos Pipeline — TARGET"
+          - "Investimentos Pipeline — TARGET"
+
+  - node_id: expenses_schema_and_classifier
+    code:
+      - "scripts/shared/categorize.py"
+      - "scripts/shared/normalize.py"
+      - "scripts/shared/utils.py"
+      - ".user/finance/bookkeeper/config/categories.json"
+      - ".user/finance/bookkeeper/config/suppliers.json"
+      - ".user/finance/bookkeeper/config/tags.json"
+    docs:
+      - path: "docs/expenses-data.md"
+        sections:
+          - "Schema"
+          - "Classifier"
+
+  - node_id: investimentos_schema
+    code:
+      - "scripts/investimentos/calculate.py"
+      - "scripts/investimentos/import_balance_snapshots.py"
+      - "scripts/investimentos/fx_engine.py"
+    docs:
+      - path: "docs/investimentos.md"
+        sections:
+          - "Ledger schemas"
+          - "portfolio.json"
+
+  - node_id: dashboard_views
+    code:
+      - "dashboard/*.js"
+      - "scripts/investimentos/calculate.py"
+      - "scripts/shared/categorize.py"
+    docs:
+      - path: "docs/financial-dashboard.md"
+        sections:
+          - "Views"
+          - "Data sources"
+
+  - node_id: sources_and_parsers
+    code:
+      - "scripts/shared/*_extrato.py"
+      - "scripts/shared/*_fatura.py"
+      - "scripts/investimentos/safra_*.py"
+      - "scripts/investimentos/avenue_extrato.py"
+      - "scripts/investimentos/mercado_bitcoin.py"
+      - "scripts/investimentos/bipa.py"
+      - ".user/finance/bookkeeper/config/sources.yaml"
+    docs:
+      - path: "docs/sources-manifest.md"
+        sections:
+          - "Expense Sources"
+          - "Investment Sources"
+
+  - node_id: tool_registry
+    code:
+      - "scripts/shared/sample_from_ledger.py"
+      - "scripts/shared/query_corrections.py"
+      - "scripts/shared/query_name_map.py"
+      - "scripts/shared/task_status_check.py"
+      - "scripts/shared/audit-aliases.py"
+      - "scripts/shared/me_gate.py"
+      - "scripts/shared/gate_*.py"
+      - "scripts/investimentos/position_summary.py"
+      - "scripts/investimentos/validate_calculate.py"
+      - "scripts/investimentos/position_table.py"
+      - "scripts/investimentos/bucket_sanity_check.py"
+      - "scripts/investimentos/fx_impact_report.py"
+      - "scripts/investimentos/audit_balcao_dups.py"
+      - "scripts/investimentos/find_phantom_application.py"
+      - "scripts/investimentos/audit_active_vs_maturity.py"
+      - "scripts/investimentos/detect_snapshot_contamination.py"
+      - "scripts/investimentos/dryrun_safra_import.py"
+      - "scripts/investimentos/dryrun_safra_movimentacoes.py"
+      - "scripts/migrations/rename_tags.py"
+      - "scripts/migrations/rename_canonical.py"
+      - "scripts/migrations/merge_categories.py"
+    docs:
+      - path: "scripts/tools-index.md"
+        sections:
+          - "Registered Tools"
+
+  - node_id: standing_rules
+    code:
+      - "scripts/shared/lib/standing_rules.py"
+      - ".user/finance/bookkeeper/config/standing-rules.yaml"
+    docs:
+      - path: "docs/bookkeeper.md"
+        sections:
+          - "standing-rules"

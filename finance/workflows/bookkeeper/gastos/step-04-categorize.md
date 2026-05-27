@@ -38,5 +38,6 @@ nextStepFile: step-05-review.md
 
 ## Step Menu
 
+- **Gatekeeper checkpoint** → before advancing, run § Per-Step Checkpoint in `../gatekeeper-loop.md` (out-of-structure → Rule A; detected issue → Rule C blocking/deferrable; direct data read → re-route through a `tools-index.md` tool). The unknowns surfaced here (categorias/fornecedores/tags) are the deviation-to-structure protocol's input — Step 05 resolves them per Rule B.
 - **[C] Continuar** → seguir para o Step 05 (Pass 1 — Resolução de desconhecidos)
 - **[X] Sair** → encerrar workflow

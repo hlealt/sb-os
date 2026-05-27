@@ -25,4 +25,5 @@ After saving the manifest:
 
 ## Step Menu
 
+- **Gatekeeper checkpoint** → before completing (or chaining to investimentos), run § Per-Step Checkpoint in `../gatekeeper-loop.md`. At close end, surface any deferrable-issue list to the user and route it to review-mode per Rule C.
 - **[D] Done** → if `{PATH}` ≠ `ambos`, workflow complete; if `{PATH}` = `ambos`, continue to investimentos preflight

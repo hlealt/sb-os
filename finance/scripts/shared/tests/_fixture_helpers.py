@@ -120,7 +120,6 @@ gates:
     action: enumerate_all_unmatched
   step_5_5_coverage:
     threshold: 0.80
-    untagged_amount_threshold: 200
     action_if_below: auto_loop_to_step_4b
 batch_ui:
   status: active

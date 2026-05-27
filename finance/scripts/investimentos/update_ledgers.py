@@ -1,14 +1,16 @@
 """Dedup engine for updating investment ledgers from normalized parser output.
 
 Usage:
-    python update_ledgers.py <processed_dir> [--tolerance N] [--update-fees]
+    python update_ledgers.py <processed_dir> [--tolerance N] [--update-fees] [--report-out PATH]
 
 Reads all CSVs in <processed_dir>, matches them to ledger files by filename
 prefix, and inserts new rows while deduplicating against existing data.
+--report-out writes the per-ledger upsert report as JSON for gate_ledger_tolerance.py.
 """
 
 import argparse
 import csv
+import json
 import sys
 from pathlib import Path
 
@@ -382,6 +384,14 @@ def main():
         '--update-fees', action='store_true',
         help="Update fee columns on exact matches in orders.csv."
     )
+    parser.add_argument(
+        '--report-out', metavar='PATH', default=None,
+        help=(
+            "Write the per-ledger upsert report (the same dict format printed to "
+            "stdout) as JSON to PATH. Consumed by gate_ledger_tolerance.py (gate #6) "
+            "to verify tolerance=0 produced no fuzzy matches."
+        )
+    )
 
     args = parser.parse_args()
     processed_dir = Path(args.processed_dir)
@@ -455,6 +465,16 @@ def main():
     print(f"\n{'='*60}")
     print(f"  TOTAL: {total_inserted} inserted, {total_fuzzy} fuzzy matches to review")
     print(f"{'='*60}")
+
+    # Persist the per-ledger report for gate_ledger_tolerance.py (gate #6) if requested.
+    # The shape matches what the gate reads: {ledger_name: {inserted, skipped_exact,
+    # skipped_fuzzy: [...], ...}}.
+    if args.report_out:
+        report_path = Path(args.report_out)
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(report_path, "w", encoding="utf-8") as f:
+            json.dump(all_reports, f, ensure_ascii=False, indent=2)
+        print(f"  Report written to {report_path}")
 
 
 if __name__ == '__main__':

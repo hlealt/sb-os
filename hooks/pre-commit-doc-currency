@@ -1,0 +1,29 @@
+#!/usr/bin/env sh
+#
+# Doc-currency pre-commit HARD BLOCK — layer 3 of the documentation-currency
+# Option D Hybrid mechanism. Refuses a commit that changes a coupled code/config
+# surface without staging the doc that describes it.
+#
+# This is a TRACKED hook script. It is NOT auto-installed — the sb-os installer
+# never writes to `.git/hooks/`. Activate it deliberately (see docs/hooks.md
+# § "Finance — doc-currency hard block"):
+#
+#   # from the sb-os repo root:
+#   ln -s ../../hooks/pre-commit-doc-currency .git/hooks/pre-commit
+#   chmod +x hooks/pre-commit-doc-currency
+#
+# If a pre-commit hook already exists (e.g. the ME gate from docs/hooks.md §4),
+# chain both from a single .git/hooks/pre-commit wrapper instead of symlinking —
+# see docs/hooks.md.
+#
+# Pass-path when blocked: reconcile the named doc via the `doc-maintainer`
+# companion, `git add` it, re-commit. There is no per-hook bypass flag.
+
+# Resolve the sb-os repo root (the top level of the working tree this hook runs in).
+REPO_ROOT=$(git rev-parse --show-toplevel) || {
+    echo "[doc-currency] could not resolve repo root via git; blocking." >&2
+    exit 2
+}
+
+python "$REPO_ROOT/finance/scripts/shared/doc_currency_check.py" --repo-root "$REPO_ROOT"
+exit $?

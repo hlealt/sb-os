@@ -60,7 +60,32 @@ nextStepFile: step-06-report.md
 
 4. Quando todas as três filas zerarem, **declarar Pass 1 fechado**. Salvar o CSV intermediário (`transactions.csv`) com as resoluções aplicadas. Confirmar ao usuário: `Pass 1 fechado. {N_cat} categorias, {N_sup} fornecedores, {N_tag} tags resolvidos.`
 
-> ⛔ **Gate:** Não prosseguir para Section 3 (Pass 2) até este ponto. A chamada a `lib.queue.build_pass_2_queue` levanta `QueueOrderingError` se houver qualquer transação com categoria/fornecedor não resolvido.
+5. **Completion gate — Pass-1-queue closure (`gate_pass_1_queue.py`, gate #11 — auto-halt).** Antes de qualquer chamada a Pass 2, escreva o arquivo de estado da fila e rode o gate. Mecaniza o invariante de ordenação (data-model §6 invariant 8) como um gate de exit-code, em vez de depender só do `QueueOrderingError` em runtime.
+
+   a. Escreva o queue-state JSON em `{DASHBOARD_DATA}/{MONTH}/.pass-queue-state.json` com EXATAMENTE estas duas chaves (o gate #11 lê apenas estas — não invente outros campos):
+
+      ```json
+      {
+        "pass_1_items": [],
+        "pass_2_items": ["<um marcador por item de fronteira candidato a Pass 2>"]
+      }
+      ```
+
+      - `pass_1_items`: a lista de itens Pass 1 AINDA não resolvidos (categorias/fornecedores/tags pendentes). Após o passo 4, esta lista DEVE estar vazia (`[]`).
+      - `pass_2_items`: a lista de candidatos a Pass 2 — as transações que satisfazem `is_boundary_day(data_caixa) AND supplier.movable == true AND source_type != 'fatura'` (a mesma filtragem da Section 3). Um item por candidato (um identificador estável de linha, e.g. `tx_date|tx_description|tx_amount`, basta como marcador). Se não houver candidatos, use `[]`.
+
+   b. Rode o gate:
+
+      ```bash
+      python "{SCRIPTS_DIR}/gate_pass_1_queue.py" --queue-state "{DASHBOARD_DATA}/{MONTH}/.pass-queue-state.json"
+      ```
+
+      O gate dispara (exit 1) somente quando `pass_2_items` é não-vazio E `pass_1_items` é não-vazio (a condição `QueueOrderingError`). Exit 0 = Pass 1 fechado (ou nenhum trabalho de Pass 2 pendente); exit 2 = arquivo ausente/malformado.
+
+   - **Exit 0** → registre o pass e prossiga para Section 2.
+   - **Exit 1 (FAIL)** → Rule C **blocking** (`../gatekeeper-loop.md`). NÃO prossiga para Pass 2. Volte ao passo 3 e zere os itens Pass 1 restantes; reescreva o queue-state JSON e rode o gate novamente. O step não avança enquanto o gate não retornar exit 0.
+
+> ⛔ **Gate:** Não prosseguir para Section 3 (Pass 2) até `gate_pass_1_queue.py` retornar exit 0. A chamada a `lib.queue.build_pass_2_queue` também levanta `QueueOrderingError` se houver qualquer transação com categoria/fornecedor não resolvido — o gate #11 é a forma exit-code do mesmo invariante.
 
 ### Section 2 — Gastos em dinheiro
 
@@ -111,10 +136,25 @@ Salvar o CSV.
 ### Section 4 — Salvar e continuar
 
 1. Escrever o CSV final em `{DASHBOARD_DATA}/{MONTH}/transactions.csv` (sobrescreve o intermediário).
-2. Confirmar ao usuário em PT-BR: `Revisão concluída. {N_pass1} resoluções (Pass 1) + {N_cash} gastos em dinheiro + {N_pass2_moved} competências movidas (Pass 2). CSV salvo.`
-3. STOP. Aguardar confirmação para seguir.
+
+2. **Completion gate — cobertura de tags antes do commit (`gate_coverage.py`, gates #1/#2/#3 ANDed — auto-LOOP).** Rode sobre o CSV final:
+
+   ```bash
+   python "{SCRIPTS_DIR}/gate_coverage.py" --transactions "{DASHBOARD_DATA}/{MONTH}/transactions.csv" --loop-count {LOOP_COUNT}
+   ```
+
+   Os três gates são ANDed numa única chamada (exit 0 só se TODOS passarem): #1 cobertura R$ ≥ 90%, #2 cobertura de linhas ≥ 90%, #3 nenhuma despesa sem tag com `abs(amount) > R$100`. Exclui `receitas`/`intercontas`/`ignorar`/`venda`. `{LOOP_COUNT}` começa em `0`.
+
+   - **Exit 0** → todos os três gates passaram. Registre o pass e prossiga ao passo 3.
+   - **Exit 1 (FAIL) com `{LOOP_COUNT} < 3`** → este gate **auto-loopa** (não é um halt inline). Volte ao batch de tags (Section 1 § Batch — tags) e ao tagging das despesas que faltam cobertura, incremente `{LOOP_COUNT}` em 1, reescreva o CSV e rode o gate de novo. Isto repete até exit 0 ou até `{LOOP_COUNT}` chegar a 3.
+   - **Exit 1 (FAIL) com `{LOOP_COUNT} == 3`** → o guard de max-loop do gate imprime o prompt pt-BR "Prosseguir mesmo assim? [S/N]". Trate como Rule C **blocking**: surface o prompt ao usuário; `[S]` → registre a exceção e prossiga; `[N]` → continue corrigindo ou pare o fechamento.
+   - **Exit 2** → CSV ausente/malformado; reporte e pergunte como proceder.
+
+3. Confirmar ao usuário em PT-BR: `Revisão concluída. {N_pass1} resoluções (Pass 1) + {N_cash} gastos em dinheiro + {N_pass2_moved} competências movidas (Pass 2). Cobertura de tags aprovada. CSV salvo.`
+4. STOP. Aguardar confirmação para seguir.
 
 ## Step Menu
 
+- **Gatekeeper checkpoint** → before advancing, run § Per-Step Checkpoint in `../gatekeeper-loop.md`. This step's two-pass review queue IS the deviation-to-structure protocol (Rule B) for new categorias/fornecedores/tags; a deviation needing a new tool or parser routes to Rule B Seam 1 (`tool-builder`), and a structure change routes to Seam 2 (`doc-maintainer`). Two completion gates fire in this step: `gate_pass_1_queue.py` (#11, auto-halt, before Pass 2) and `gate_coverage.py` (#1/#2/#3, auto-loop to the tag batch, before commit).
 - **[C] Continuar** → seguir para o Step 06 (Gerar Relatório)
 - **[X] Sair** → encerrar workflow

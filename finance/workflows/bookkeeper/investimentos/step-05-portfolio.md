@@ -45,6 +45,7 @@ balance-snapshots.csv: +N linhas
 
 ## Step Menu
 
+- **Gatekeeper checkpoint** → before advancing, run § Per-Step Checkpoint in `../gatekeeper-loop.md`. Missing prices (`price_source: "missing"`) on relevant positions are a Rule C issue — surface and let the user decide proceed vs wait; a rate shape `calculate.py` cannot classify is a deviation (Rule A → Rule B).
 - **[C] Continue** → proceed to Step 06 (Review)
 - **[R] Re-run] → re-executar calculate.py
 - **[X] Exit** → halt workflow

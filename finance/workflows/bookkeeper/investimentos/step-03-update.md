@@ -36,10 +36,10 @@ If `splits:` is empty or no processed file contains matching rows, skip silently
 
 ## Mandatory Sequence
 
-1. Execute o script:
+1. Execute o script (com `--report-out` para alimentar o gate #6 no passo 7):
 
 ```
-python {INV_SCRIPTS_DIR}/update_ledgers.py "{INV_PROCESSED}" --tolerance 0
+python {INV_SCRIPTS_DIR}/update_ledgers.py "{INV_PROCESSED}" --tolerance 0 --report-out "{INV_PROCESSED}/.upsert-report.json"
 ```
 
 2. O script:
@@ -68,10 +68,23 @@ Casos especiais: nenhum | OU lista detalhada
 
 6. **Atualização de fees por fonte autoritativa** (`--update-fees`) — NÃO usar no fluxo mensal por padrão. Reservado para reconciliação histórica quando uma fonte mais autoritativa (B3) corrige fees imprecisos de fonte anterior (planilha). Mencione a opção apenas se o usuário pedir.
 
-7. STOP. Aguarde confirmação do usuário antes de prosseguir.
+7. **Completion gate — tolerância de match = 0 (`gate_ledger_tolerance.py`, gate #6 — auto-halt).** Rode o gate sobre o relatório de upsert escrito no passo 1:
+
+   ```bash
+   python "{SCRIPTS_DIR}/gate_ledger_tolerance.py" --report "{INV_PROCESSED}/.upsert-report.json"
+   ```
+
+   O gate falha (exit 1) se QUALQUER ledger tiver `skipped_fuzzy` não-vazio — com `--tolerance 0` um match fuzzy indica bug de parser ou de dados. Exit 0 = nenhum match fuzzy; exit 2 = relatório ausente/malformado.
+
+   - **Exit 0** → registre o pass e prossiga.
+   - **Exit 1 (FAIL)** → Rule C **blocking** (`../gatekeeper-loop.md`). Mecaniza o passo 5 acima como gate de exit-code. Surface os matches fuzzy inline (pt-BR), proponha o fix (confirmar duplicata real → registrar; ou flag como bug → corrigir parser e re-rodar Step 02-03), e ofereça `[S]`/`[N]`. NÃO prossiga ao Step 04 enquanto houver match fuzzy não resolvido.
+   - **Exit 2** → relatório ausente; re-rode o passo 1 com `--report-out` e tente de novo.
+
+8. STOP. Aguarde confirmação do usuário antes de prosseguir.
 
 ## Step Menu
 
+- **Gatekeeper checkpoint** → before advancing, run § Per-Step Checkpoint in `../gatekeeper-loop.md`. A fuzzy match or forced duplicate (should not occur at tolerance 0) is a Rule C blocking issue — surface inline with a proposed fix; a lot-split ratio mismatch is a deviation (Rule A). The ledger-tolerance gate (#6) above is the exit-code form of this blocking check.
 - **[C] Continue** → proceed to Step 04 (Validate)
 - **[R] Re-run] → re-executar update_ledgers.py
 - **[X] Exit** → halt workflow

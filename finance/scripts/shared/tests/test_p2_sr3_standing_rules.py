@@ -200,12 +200,16 @@ class TestOptionsRules:
 class TestGates:
     """Consumer: load_gates reads gate sub-sections from YAML.
 
-    S7 note: step_5_5_coverage.untagged_amount_threshold is a placeholder
-    value (200). The real number is resolved at S7 (batch B4-GATE1).
-    check_gates_coverage_threshold() returns None when the value is absent
-    (fail-by-default per revolving plan rule).
+    S7 RESOLVED (B4-GATE2): coverage ratio 90%, untagged floor R$100. p5-8 collapsed
+    the former gates.step_5_5_coverage.untagged_amount_threshold alias into the single
+    canonical key tag_coverage.gate.untagged_amount_threshold_brl, so
+    check_gates_coverage_threshold() now takes the full standing_rules dict and reads
+    that canonical key. It returns None (fail-by-default) when the canonical key is
+    absent or non-numeric.
     """
 
+    # The gates section no longer carries the untagged floor; the canonical floor lives
+    # under tag_coverage.gate.untagged_amount_threshold_brl (added in _TAG_COVERAGE below).
     _SECTION = (
         "gates:\n"
         "  status: active\n"
@@ -215,8 +219,16 @@ class TestGates:
         "    enforcement: no_silent_skip\n"
         "    action: enumerate_all_unmatched\n"
         "  step_5_5_coverage:\n"
-        "    threshold: 0.80\n"
-        "    untagged_amount_threshold: 200\n"
+        "    threshold: 0.90\n"
+        "    action_if_below: auto_loop_to_step_4b\n"
+    )
+
+    # Canonical floor key, appended to _SECTION when a test exercises the floor.
+    _TAG_COVERAGE = (
+        "tag_coverage:\n"
+        "  status: active\n"
+        "  gate:\n"
+        "    untagged_amount_threshold_brl: 100\n"
         "    action_if_below: auto_loop_to_step_4b\n"
     )
 
@@ -237,34 +249,20 @@ class TestGates:
         cfg = load_gates(sr)
         assert cfg["step_3d_unmatched_rows"]["enforcement"] == "no_silent_skip"
 
-    def test_coverage_threshold_readable(self, tmp_path):
-        """The placeholder threshold value is readable from config."""
-        sr = _load(tmp_path, self._SECTION)
-        cfg = load_gates(sr)
+    def test_coverage_threshold_readable_from_canonical_key(self, tmp_path):
+        """The untagged floor is read from the canonical tag_coverage key (p5-8)."""
+        sr = _load(tmp_path, self._SECTION + self._TAG_COVERAGE)
         counter = RuleFireCounter()
-        threshold = check_gates_coverage_threshold(cfg, rule_counter=counter)
-        assert threshold == 200.0
+        threshold = check_gates_coverage_threshold(sr, rule_counter=counter)
+        assert threshold == 100.0
         assert counter.as_dict().get("gates_coverage_threshold_read") == 1
 
-    def test_s7_pending_threshold_absent_returns_none(self, tmp_path):
-        """When untagged_amount_threshold is absent (S7 pending), returns None."""
-        section_no_threshold = (
-            "gates:\n"
-            "  status: active\n"
-            "  step_01_file_identification:\n"
-            "    user_confirmation_required: true\n"
-            "  step_3d_unmatched_rows:\n"
-            "    enforcement: no_silent_skip\n"
-            "    action: enumerate_all_unmatched\n"
-            "  step_5_5_coverage:\n"
-            "    threshold: 0.80\n"
-            "    action_if_below: auto_loop_to_step_4b\n"
-            # untagged_amount_threshold deliberately absent
-        )
-        sr = _load(tmp_path, section_no_threshold)
-        cfg = load_gates(sr)
+    def test_canonical_key_absent_returns_none(self, tmp_path):
+        """When the canonical floor key is absent, returns None (fail-by-default)."""
+        # gates present but no tag_coverage section at all → canonical key unreachable.
+        sr = _load(tmp_path, self._SECTION)
         counter = RuleFireCounter()
-        result = check_gates_coverage_threshold(cfg, rule_counter=counter)
+        result = check_gates_coverage_threshold(sr, rule_counter=counter)
         assert result is None
         assert counter.as_dict().get("gates_coverage_threshold_s7_pending") == 1
 
@@ -276,7 +274,7 @@ class TestGates:
             "  step_01_file_identification:\n"
             "    user_confirmation_required: true\n"
             "  step_5_5_coverage:\n"
-            "    threshold: 0.80\n"
+            "    threshold: 0.90\n"
             # step_3d_unmatched_rows deliberately omitted
         )
         sr = _load(tmp_path, section_missing)
@@ -288,21 +286,16 @@ class TestGates:
         with pytest.raises(StandingRulesError, match="gates"):
             load_gates(sr)
 
-    def test_reads_threshold_from_config(self, tmp_path):
-        """Threshold value is driven by YAML — different value changes behavior."""
-        custom_section = (
-            "gates:\n"
+    def test_reads_floor_from_canonical_config(self, tmp_path):
+        """Floor value is driven by the canonical YAML key — a different value changes it."""
+        custom_tag_coverage = (
+            "tag_coverage:\n"
             "  status: active\n"
-            "  step_01_file_identification:\n"
-            "    user_confirmation_required: false\n"
-            "  step_3d_unmatched_rows:\n"
-            "    enforcement: no_silent_skip\n"
-            "  step_5_5_coverage:\n"
-            "    untagged_amount_threshold: 500\n"
+            "  gate:\n"
+            "    untagged_amount_threshold_brl: 500\n"
         )
-        sr = _load(tmp_path, custom_section)
-        cfg = load_gates(sr)
-        assert check_gates_coverage_threshold(cfg) == 500.0
+        sr = _load(tmp_path, self._SECTION + custom_tag_coverage)
+        assert check_gates_coverage_threshold(sr) == 500.0
 
 
 # ---------------------------------------------------------------------------

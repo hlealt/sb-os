@@ -75,7 +75,18 @@ Confirm mapping?
 6. After confirmation, rename all files in `{RAW_DIR}/` to their corresponding `standard_filename`.
 7. Verify that all files were renamed correctly.
 
+## Completion Gate — Expected-Source Coverage (auto-halt)
+
+Before advancing, confirm every source expected for a close is actually present. Read `{CONFIG_DIR}/sources.yaml` and collect every entry with `enabled_for_close: true`. For the gastos flow, the expected SET is the bank/card sources among them (the entries whose `id` matches a bank in `banks.json`: e.g. `bradesco_extrato`, `santander_extrato`, `santander_fatura`, `mp_extrato`, `mp_fatura`, `wise_extrato`, `manual_cash`). An entry with `enabled_for_close: false` (e.g. `nubank_fatura`, `xp_fatura` — historical only) is NOT expected and its absence is fine.
+
+Compare the expected set against the files identified in step 4. If an expected source has NO file:
+
+- This is a Rule C **blocking** issue (`../gatekeeper-loop.md`). The close cannot proceed with a silently-missing expected source — a missing month of bank data would understate spending without any signal (silent-wrong is the worst outcome).
+- Surface it inline (pt-BR): name the missing source(s), propose the fix (download the missing file into `{RAW_DIR}/`, or — if the source is genuinely not expected this month — set `enabled_for_close: false` for it in `sources.yaml`), and offer `[S]` aprovar / `[N]` rejeitar.
+- **STOP. Do NOT advance to step-02 while an expected source is missing and unresolved.** `manual_cash` is satisfied if the user confirms there were no cash expenses (it is reconciled in step-05 Section 2, not a file in `{RAW_DIR}/`).
+
 ## Step Menu
 
+- **Gatekeeper checkpoint** → before advancing, run § Per-Step Checkpoint in `../gatekeeper-loop.md` (out-of-structure → Rule A; detected issue → Rule C blocking/deferrable; direct data read → re-route through a `tools-index.md` tool). The expected-source coverage gate above is this step's Rule C blocking check.
 - **[C] Continue** → proceed to Step 02 (Normalize)
 - **[X] Exit** → halt workflow

@@ -12,5 +12,6 @@ This step is a no-op. Proceed directly to step-07-recurring.
 
 ## Step Menu
 
+- **Gatekeeper checkpoint** → before advancing, run § Per-Step Checkpoint in `../gatekeeper-loop.md` (out-of-structure → Rule A; detected issue → Rule C blocking/deferrable; direct data read → re-route through a `tools-index.md` tool).
 - **[C] Continue** → proceed to Step 07 (Pagamentos Recorrentes)
 - **[X] Exit** → halt workflow

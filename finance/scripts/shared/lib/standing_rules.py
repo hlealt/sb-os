@@ -353,13 +353,11 @@ def load_tag_coverage(standing_rules: dict[str, Any]) -> dict[str, Any]:
 
     Raises StandingRulesError if the section is missing or malformed.
 
-    NOTE — THRESHOLD DEFERRED (S7): the `gate.untagged_amount_threshold_brl`
-    value in standing-rules.yaml is a placeholder (200). The real R$ band is
-    resolved at S7 (batch B4-GATE1, p4 gate tasks). Until S7 lands,
-    `check_tag_coverage_gate()` returns `False` (gate fails by default) when
-    the threshold is not yet a concrete numeric value from config. This
-    enforces the "failing-by-default gate" invariant without inventing a
-    number. See shape.md Open design decisions S7.
+    `gate.untagged_amount_threshold_brl` is the SINGLE canonical R$ floor for
+    untagged despesas (S7 RESOLVED = R$100; p5-8 removed the duplicate alias that
+    formerly lived under gates.step_5_5_coverage). `check_tag_coverage_gate()`
+    returns `False` (gate fails by default) when this key is absent or non-numeric,
+    enforcing the "failing-by-default gate" invariant without inventing a number.
     """
     section = standing_rules.get("tag_coverage")
     if not isinstance(section, dict):
@@ -638,14 +636,11 @@ def load_gates(standing_rules: dict[str, Any]) -> dict[str, Any]:
 
     Validates that the key gate sub-sections are present.
 
-    THRESHOLD NOTE — S7 DEFERRED:
-    `step_5_5_coverage.untagged_amount_threshold` and any rate-band thresholds
-    for `rf_balcao` are PLACEHOLDER values. The real numbers are resolved at
-    decision S7 (batch B4-GATE1, p4 gate tasks). Until S7 lands, gate checks
-    that depend on these numbers MUST fail by default (never silently pass).
-    See shape.md Open design decisions S7.
-
-    HUMAN REVIEW REQUIRED — flag details in the HR block at batch B2-SR3 close.
+    THRESHOLD NOTE: the untagged-despesa floor is NOT stored under this section.
+    p5-8 collapsed the former `step_5_5_coverage.untagged_amount_threshold` alias
+    into the single canonical key `tag_coverage.gate.untagged_amount_threshold_brl`;
+    `check_gates_coverage_threshold(standing_rules)` reads that canonical key.
+    `step_5_5_coverage.threshold` (the 90% coverage ratio) remains here.
     """
     section = standing_rules.get("gates")
     if not isinstance(section, dict):
@@ -666,17 +661,24 @@ def load_gates(standing_rules: dict[str, Any]) -> dict[str, Any]:
 
 
 def check_gates_coverage_threshold(
-    gates_cfg: dict[str, Any],
+    standing_rules: dict[str, Any],
     rule_counter: "RuleFireCounter | None" = None,
 ) -> float | None:
-    """p2-25: return the step_5_5_coverage threshold or None when S7 is pending.
+    """p2-25: return the untagged-despesa floor (R$), or None when it is unset.
+
+    Reads the floor from the CANONICAL key
+    `tag_coverage.gate.untagged_amount_threshold_brl`. p5-8 collapsed the former
+    `gates.step_5_5_coverage.untagged_amount_threshold` alias into that one key, so
+    this function now takes the full `standing_rules` mapping (not just the gates
+    section) to reach `tag_coverage`.
 
     Returns the numeric threshold from config when present; None otherwise.
     Callers MUST treat None as "gate cannot yet be evaluated — fail by default."
-    Per the revolving plan rule: threshold gates fail-by-default until S7 lands.
+    Per the revolving plan rule: threshold gates fail-by-default until their value lands.
     """
-    cov = (gates_cfg.get("step_5_5_coverage") or {})
-    threshold = cov.get("untagged_amount_threshold")
+    tag_cov = (standing_rules.get("tag_coverage") or {})
+    gate_section = (tag_cov.get("gate") or {}) if isinstance(tag_cov, dict) else {}
+    threshold = gate_section.get("untagged_amount_threshold_brl")
     if threshold is None or not isinstance(threshold, (int, float)):
         if rule_counter is not None:
             rule_counter.record("gates_coverage_threshold_s7_pending")

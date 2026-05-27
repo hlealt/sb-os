@@ -77,4 +77,44 @@ Any page MAY carry `watchlist: true` in frontmatter, but an agent MAY set it ONL
 
 The `investor` agent (the runtime consumer of the read-rules above) is DEFERRED and built last. `./commands/investor.md` is a reserved stub until then. This file is the canonical statement of the read-rules NOW; the `investor` build wires them into runtime behavior LATER. No agent currently enforces them — they bind when the `investor` agent ships.
 
+---
+
+## Documentation Currency
+
+The finance module's living docs describe what its code and config actually do. When code or config changes and the matching doc does not, the doc becomes a lie — and because verification of this module happens THROUGH its docs, a stale doc is a correctness defect, not a cosmetic one. This section is the **canonical declaration of the doc↔code/config coupling**: which living doc is bound to which code/config surface. The three enforcement layers below (and the `doc-maintainer` companion) act on THIS declaration — it is the single statement they all read the coupling from. Mechanism rationale and the failure modes it closes: `1-projects/finance-system/finance-system-v2-foundation/phase-2/decision-prep/p2-19-documentation-currency.md` (Option D Hybrid).
+
+### Coupling map (the binding declaration)
+
+Each row binds a **living doc surface** to the **code/config surfaces** whose change makes that doc stale. A change to a surface in the right column REQUIRES a matching update to the doc in the left column, in the SAME commit. Paths are repo-relative to `sb-os/finance/` unless rooted at `.user/`.
+
+| Living doc surface | Coupled code/config surfaces (change here ⇒ doc may be stale) |
+|--------------------|---------------------------------------------------------------|
+| `docs/architecture.md` — pipeline shape, roles-by-directory, what-lives-where (**judgment coupling — `signal-only`**, see note below) | `scripts/shared/normalize.py`, `scripts/shared/categorize.py`, `scripts/investimentos/calculate.py`, `scripts/investimentos/update_ledgers.py` (a change to the producer→store→consumer chain or a directory's role) |
+| `docs/expenses-data.md` — gastos schemas, column contracts, classifier layers | `scripts/shared/categorize.py` (`CATEGORIZED_COLUMNS`, classifier layers), `scripts/shared/normalize.py` (`NORMALIZED_COLUMNS`), `scripts/shared/utils.py` (shared column constants), `.user/finance/bookkeeper/config/{categories,suppliers,tags}.json` (classifier config contracts) |
+| `docs/investimentos.md` — investment ledger schemas, portfolio.json shape, calculate chain | `scripts/investimentos/calculate.py`, `scripts/investimentos/import_balance_snapshots.py`, `scripts/investimentos/fx_engine.py`, the per-asset ledger schemas (`assets.csv`, `balcao.csv`, `portfolio.json` fields) |
+| `docs/financial-dashboard.md` — dashboard views + which store feeds which view | `dashboard/*.js` (any view's data source or rendered field), `scripts/investimentos/calculate.py` (`portfolio.json` fields the dashboard reads), `scripts/shared/categorize.py` (`transactions.csv` fields `expenses.js` reads) |
+| `docs/sources-manifest.md` — active/historical sources + parser entry points | any parser under `scripts/` (added / renamed / retired), `.user/finance/bookkeeper/config/sources.yaml` (when it ships at `p5-6`) |
+| `scripts/tools-index.md` — tool registry narrative + per-tool entries | any registered tool's `owner_script` under `scripts/` (a tool added / behavior-changed / retired ⇒ its entry's `outputs`/`expected_inputs`/`last_validated` may be stale) |
+| `.user/finance/bookkeeper/config/standing-rules.yaml` accompanying prose (per-section rule docs) | `scripts/shared/lib/standing_rules.py` (a section's loader/consumer changed), the `standing-rules.yaml` section values |
+| the field-class registry doc (`_field_ownership.yaml` documentation) | `scripts/investimentos/calculate.py` and any parser that adds/changes an owned field |
+
+The authoritative end-to-end pipeline map is the foundation artifact `1-projects/finance-system/finance-system-v2-foundation/phase-2/data-flow-map-target.md`; `doc-maintainer` keeps that target map current as part of the same coupling (it is a doc surface, not an sb-os-shipped file, so it is reconciled by the companion rather than gated by the commit-time hook in this repo).
+
+**Hard-block vs signal-only couplings.** Most couplings are **hard-block**: a change to the code/config surface with no matching doc in the same commit is refused at commit time (layer 3). The `pipeline_shape` row (`docs/architecture.md`) is **`signal-only`**: whether a given edit to a pipeline script actually changed the pipeline SHAPE (the producer→store→consumer structure `architecture.md` describes) versus an internal/additive change (a new CLI flag, a refactor) is a JUDGMENT, not a path match — so it is NOT commit-gated. It still emits the layer-2 signal and is reconciled by `doc-maintainer` (layer 4). This follows p2-19's design: the commit hook is a coarse, deterministic gate; the companion makes the judgment calls. A change to a store SCHEMA or a dashboard field IS path-expressible and stays hard-block via the `*_schema` and `dashboard_views` rows.
+
+### The shared manifest
+
+The coupling above is also encoded, machine-readable, in `docs/doc-currency-manifest.yaml` — a static lookup mapping each code/config path (or glob) to the doc file(s) and section(s) that describe it, plus a per-coupling `enforcement` field (`hard-block` default, or `signal-only`). The manifest is the SINGLE artifact the signal emitter (layer 2) and the pre-commit hard block (layer 3) both read, so the coupling is declared once and enforced consistently. When this prose declaration and the manifest disagree, the manifest is the machine-read source of truth and MUST be reconciled to match this declaration. The commit-time hook blocks ONLY on `hard-block` couplings that have at least one in-repo doc (a doc the commit could stage); a coupling whose docs all live outside this repo is reconciled by the companion, never commit-gated. Maintaining the manifest is `doc-maintainer`'s job: when a new store/transformation is added, the manifest gains a row in the same reconcile that updates the docs.
+
+### The four enforcement layers
+
+| Layer | What it is | Where |
+|-------|-----------|-------|
+| **1 — Narrative (this section)** | Declares the coupling and the rule "never change a coupled surface without updating its doc in the same commit." The other layers enforce THIS. | `finance/CLAUDE.md` (here) |
+| **2 — Signal (`docs_potentially_stale`)** | An audit event emitted when a structural change (data-store / config / dashboard-script edit) lands without a matching doc update, so the staleness is visible and persistent. Fail-soft (never raises into the caller). | `scripts/shared/lib/audit.py` (`emit_docs_potentially_stale`) |
+| **3 — Hard block (pre-commit)** | A pre-commit hook that HARD-BLOCKS (not advisory) any commit changing a coupled code/config surface without staging the matching doc. The block message names the stale doc + the fix. The only pass-path is reconciling the doc — there is no bypass flag. | `scripts/shared/doc_currency_check.py` + `hooks/pre-commit-doc-currency` (activation in `docs/hooks.md`) |
+| **4 — Reconciliation (`doc-maintainer`)** | The companion sub-agent that brings the docs current after an approved change and thereby CLEARS the layer-2 signal and lets the layer-3 block pass. It is the legitimate way through the hard block. | `workflows/doc-maintainer/doc-maintainer.md` |
+
+Layers 2 and 3 both read the manifest; layer 4 clears what layers 2 and 3 detect. A commit blocked by layer 3 is resolved by running `doc-maintainer` (layer 4) to reconcile the doc, then re-committing — NOT by bypassing the hook.
+
 > Codex mirror note: do not read the sibling `AGENTS.md`. It is an auto-generated mirror for Codex agents. This `CLAUDE.md` file is the source of truth.

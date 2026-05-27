@@ -64,7 +64,17 @@ Confirmar mapeamento?
 8. Após confirmação, renomeie todos os arquivos para os nomes-padrão. Para Avenue, garanta que os PDFs estejam em `avenue-notas/` ou `avenue-cambio/`.
 9. Verifique que a renomeação completou sem erros.
 
+## Completion Gate — Expected-Source Coverage (auto-halt)
+
+Read `{CONFIG_DIR}/sources.yaml` and collect every entry with `enabled_for_close: true`. For the investimentos flow, split the enabled sources into two groups:
+
+- **Always-expected** (a file/feed every close): `b3` and `safra` (plus `funds` if the user maintains a funds feed). A missing always-expected source is a Rule C **blocking** issue — surface it inline (pt-BR), propose the fix (download the file into `{INV_RAW_DIR}/`, or — if genuinely not expected this month — set `enabled_for_close: false` in `sources.yaml`), offer `[S]`/`[N]`, and **STOP**. Do NOT advance to step-02 while an always-expected source is missing and unresolved. (`safra` is exempt only when the user confirms the known Safra download outage — record the pendency instead of halting, per the Safra note above.)
+- **Intermittent** (only when there was activity): `avenue`, `mercado_bitcoin`, `bipa`. Their absence is NOT a halt — it is the "Ausentes (confirmar)" prompt in step 6. When such a source IS present, its rows are gated downstream by `gate_spot_check_coverage.py` (#7) in step-04.
+
+This is the investimentos counterpart of the gastos step-01 expected-source gate; it respects that broker/exchange activity is intermittent while still halting on a silently-missing always-expected source.
+
 ## Step Menu
 
+- **Gatekeeper checkpoint** → before advancing, run § Per-Step Checkpoint in `../gatekeeper-loop.md` (out-of-structure, e.g. an unrecognized source file → Rule A; detected issue → Rule C blocking/deferrable; direct data read → re-route through a `tools-index.md` tool). The expected-source coverage gate above is this step's Rule C blocking check.
 - **[C] Continue** → proceed to Step 02 (Parse)
 - **[X] Exit** → halt workflow
