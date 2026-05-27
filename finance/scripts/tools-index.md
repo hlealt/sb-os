@@ -1,0 +1,435 @@
+# Finance Tool Registry (`tools-index.md`)
+
+> Canonical registry of the finance module's **tool layer** under `sb-os/finance/scripts/`. Sibling agents (`bookkeeper`, `investor`) read this index to discover available tools by class and use; companion agents (`tool-builder`, `doc-maintainer`) maintain it. This file is the single source of truth for "what tools exist, what class they are, and how to invoke them."
+
+> **Scope — what belongs here.** A registry entry is a **registered tool**: a parser, retro-rewrite, upsert, audit-diagnostic, or validation-gate that an agent reaches for to read or mutate data on the user's behalf. The deterministic pipeline scripts (`calculate.py`, `categorize.py`, `fx_engine.py`, `normalize.py`, the per-source parser modules, and the `shared/lib/` helpers) are NOT registry tools — they are the pipeline whose ledger data is read THROUGH tools, and they already emit audit events on every ledger write. Do NOT register a pipeline script as a tool. Register the diagnostic/validation/dry-run/retro-rewrite tools that observe or correct that pipeline.
+
+---
+
+## Three-Class Taxonomy + Quality Bars
+
+The architectural divide is **Write vs Read**. Sub-uses live below each class. The taxonomy and quality bars are authoritative; every entry's `class` and `use` fields MUST come from this table. (Source: `structured-problem.md` § Tool Registry; foundation `shape.md` Tool-taxonomy decision; tool-builder authority boundary 2026-05-05.)
+
+| Class | Mutates data? | Sub-uses (the `use` field) | Quality bar |
+|-------|---------------|----------------------------|-------------|
+| **write** | Yes | `parser` — ingests from a source into a ledger / config. `retro-rewrite` — renames, merges, canonical corrections, code-migrations. `upsert` — asset-metadata writes via the field-ownership manifest. | Mandatory `--dry-run` mode. For `retro-rewrite`: mandatory **fix-impact preview** enumerating every affected location (rows, configs, dashboard joins, tag namespaces) BEFORE any write; rollback path. Every write tool ships a schema-validation test against the destination artifact's current schema. A registry entry AND a doc-maintainer documentation update are part of definition-of-done. |
+| **read** | No | `audit-diagnostic` — interactive Q&A for an agent or user ("show all transactions over R$500"; "list every place vendor X appears"). `validation-gate` — pass/fail check consumed by the workflow / pre-commit / CI ("coverage ≥ 80%?"; "rf_balcao within 9–12%?"). | `audit-diagnostic` — human-readable output (pretty-printed tables, summaries). `validation-gate` — clean pass/fail **exit codes** (0 = pass, non-zero = fail) for machine consumption. A registry entry AND a doc-maintainer documentation update are part of definition-of-done. |
+
+**Why Read has two sub-uses despite being one class:** they share the read primitive but have different *output contracts*. Audit-diagnostic output is read by a human or an agent in conversation, so it must be human-readable. Validation-gate output is read by a hook or workflow, so it must be a machine-parseable pass/fail exit code. The sub-use determines which contract the tool must satisfy.
+
+**Tool-builder authority boundary (applies to every `write` entry):** the tool-builder companion NEVER writes ledgers / `portfolio.json` / dashboard directly — its output is *tools* only. Generated tools conform to the destination artifact's existing schema by default; a legitimate schema gap is surfaced to the user (a `schema_gap_finding` audit event + a user-facing prompt), never flattened away or unilaterally migrated.
+
+---
+
+## Per-Entry Schema (YAML front-matter per entry)
+
+Each tool is one fenced ```yaml block below the `## Registered Tools` heading. The block is a flat map of labeled fields — NOT a row in a wide table. This format was chosen (decision S6, 2026-05-27) so that: sibling agents parse each entry reliably; the `doc-maintainer` companion (`p5-5`) updates a single field as a one-line diff; and the ~10 fields per tool stay readable.
+
+Every entry MUST carry exactly these keys, in this order:
+
+| Field | Meaning |
+|-------|---------|
+| `tool` | Invocation name (the CLI name or `python -m` target the agent calls). |
+| `purpose` | One sentence: what question the tool answers or what mutation it performs. |
+| `owner_script` | Repo-relative path (from `sb-os/finance/scripts/`) to the script that implements the tool. |
+| `class` | `write` or `read` — from the taxonomy table. |
+| `use` | One of `parser` / `retro-rewrite` / `upsert` / `audit-diagnostic` / `validation-gate` — from the taxonomy table. |
+| `expected_inputs` | The arguments and the data stores / files the tool reads. |
+| `outputs` | What the tool emits (report shape, or the store it writes). |
+| `canonical_reader_writer` | The canonical store(s) this tool reads from or writes to. For read tools, the store(s) read; for write tools, the store(s) written. |
+| `dry_run` | `available` / `not-applicable` / `default`. `write` tools MUST be `available` or `default`. Read tools are `not-applicable` (they never mutate). |
+| `last_validated` | ISO date (`YYYY-MM-DD`) the tool was last confirmed working against real data, or `pending` if not yet validated post-build. |
+
+### Discoverability conventions (machine-readable)
+
+A sibling agent lists tools by class or use without parsing prose. To keep that reliable:
+
+- Keys are lowercase snake_case, identical across every entry, always all ten present.
+- `class` is exactly `write` or `read`. `use` is exactly one of the five literals above. No synonyms, no free text in these two fields.
+- To "list every validation-gate tool," an agent scans the YAML blocks for `use: validation-gate`. To "list every write tool," it scans for `class: write`.
+- One tool per block. Never combine two tools in one block.
+
+### Append convention (binding on `p4-2`…`p4-26`)
+
+This index is seeded below with the tools that already exist. **Every subsequent Phase-4 tool task (`p4-2` through `p4-26`) MUST append its own entry to `## Registered Tools` as part of its definition-of-done** — a tool is not "done" until its registry entry exists with all ten fields populated. The `doc-maintainer` companion (`p5-5`) maintains entries thereafter (e.g. re-stamping `last_validated`). Append new blocks; never rewrite seeded ones except to update a field.
+
+---
+
+## Registered Tools
+
+```yaml
+tool: audit_cli  (python -m lib.audit_cli tail [--last N] [--since DATE] [--actor A] [--run ID] [--type T])
+purpose: Print a compact human-readable tail of the audit-event stream so the user/agent can review what the pipeline and bookkeeper have written.
+owner_script: shared/lib/audit_cli.py
+class: read
+use: audit-diagnostic
+expected_inputs: CLI flags (--last/--since/--actor/--run/--type); reads .user/finance/bookkeeper/audit/events-{YYYY}.jsonl
+outputs: One formatted line per event (timestamp, actor, event_type, materiality, source -> destination, row/byte deltas; gate events show metric=value vs threshold). Human-readable; not JSON.
+canonical_reader_writer: reads .user/finance/bookkeeper/audit/events-{YYYY}.jsonl
+dry_run: not-applicable
+last_validated: pending
+```
+
+```yaml
+tool: detect_snapshot_contamination (python detect_snapshot_contamination.py [--snapshots-dir PATH])
+purpose: Flag any dated portfolio snapshot whose api-priced positions carry a price_date different from meta.cut_date (mixed-date contamination per p2-24).
+owner_script: investimentos/detect_snapshot_contamination.py
+class: read
+use: validation-gate
+expected_inputs: optional --snapshots-dir; reads portfolio-{date}.json snapshots under .user/finance/bookkeeper/ledgers/investimentos/
+outputs: Per-snapshot result (cut_date, contaminated bool, offenders list, clean/missing counts). Exit 0 = no contamination; exit 1 = one or more snapshots contaminated.
+canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/investimentos/portfolio-{date}.json
+dry_run: not-applicable
+last_validated: 2026-05-26
+```
+
+```yaml
+tool: dryrun_safra_import (python dryrun_safra_import.py)
+purpose: Simulate importing the 6 Safra bootstrap CSVs into balcao.csv / balance-snapshots.csv / assets.csv WITHOUT writing, reporting per-file diffs so anomalies surface before a real import.
+owner_script: investimentos/dryrun_safra_import.py
+class: read
+use: validation-gate
+expected_inputs: no args; reads .user/finance/bookkeeper/raw-data/safra-bootstrap-2024-2026/*.csv and the current ledger stores via the real upsert logic
+outputs: Inserted-vs-skipped per file per bucket; inserted rows grouped by (product_id, operation); any product_id that would change its earliest-flow date (IRR risk). Writes nothing.
+canonical_reader_writer: reads raw-data/safra-bootstrap-2024-2026/*.csv + ledgers/investimentos/{balcao.csv,balance-snapshots.csv,assets.csv} (no write)
+dry_run: not-applicable
+last_validated: pending
+```
+
+```yaml
+tool: dryrun_safra_movimentacoes (python dryrun_safra_movimentacoes.py)
+purpose: Dry-run the Safra movimentacoes parsers (fundos + RF) against the bootstrap CSVs, printing per-file/per-bucket summary stats and any flagged unknown lancamentos, writing nothing to ledgers.
+owner_script: investimentos/dryrun_safra_movimentacoes.py
+class: read
+use: validation-gate
+expected_inputs: no args; reads .user/finance/bookkeeper/raw-data/safra-bootstrap-2024-2026/*.csv
+outputs: Summary stats per file and per output bucket; surfaced unknown-lancamento flags. Writes nothing.
+canonical_reader_writer: reads raw-data/safra-bootstrap-2024-2026/*.csv (no write)
+dry_run: not-applicable
+last_validated: pending
+```
+
+```yaml
+tool: sample_from_ledger (python shared/sample_from_ledger.py <ledger> [--month] [--category] [--vendor] [--amount-min] [--amount-max] [--limit] [--offset])
+purpose: Return a small, bounded spot-checkable row slice from a normalized per-bank extrato CSV or a fechamento transactions.csv so bookkeeper can validate by judgment without reading raw CSVs/JSONs directly (P0 tools-only access gap, p4-2).
+owner_script: shared/sample_from_ledger.py
+class: read
+use: audit-diagnostic
+expected_inputs: ledger path relative to .user/finance/bookkeeper/ledgers/ (or absolute); optional filters --month YYYY-MM, --category, --vendor PATTERN, --amount-min, --amount-max; --limit (capped at 50), --offset; reads ledgers/expenses/{YYYY-MM}/{bank}_extrato.csv or ledgers/fechamento/{YYYY-MM}/transactions.csv
+outputs: Pretty-printed table of matching rows (key columns only); slice-guardrail footer showing cap. Never returns the full ledger (hard cap 50 rows per call).
+canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/expenses/{YYYY-MM}/*.csv and .user/finance/bookkeeper/ledgers/fechamento/{YYYY-MM}/transactions.csv (no write)
+dry_run: not-applicable
+last_validated: 2026-05-27
+```
+
+```yaml
+tool: query_corrections (python shared/query_corrections.py [--file NAME] [--month] [--category] [--identity] [--pattern] [--limit])
+purpose: Query the append-only corrections side-ledgers under .user/finance/bookkeeper/config/corrections/ and return human-readable rows answering what corrections exist for a given transaction, month, category, or identity key.
+owner_script: shared/query_corrections.py
+class: read
+use: audit-diagnostic
+expected_inputs: optional --file to target one corrections file; optional --month YYYY-MM, --category, --identity tx_date|tx_description|tx_amount, --pattern; --limit (hard cap 100); reads all *.csv under .user/finance/bookkeeper/config/corrections/ (manual-overrides.csv, competencia-overrides.csv, category-migrations.csv, code_migrations.csv, vendor-canonicals.csv, tag-renames.csv, per-asset-type files)
+outputs: Per-file section with matching rows pretty-printed; total count footer. Writes nothing.
+canonical_reader_writer: reads .user/finance/bookkeeper/config/corrections/*.csv (no write)
+dry_run: not-applicable
+last_validated: 2026-05-27
+```
+
+```yaml
+tool: query_name_map (python shared/query_name_map.py [--source] [--field] [--raw] [--canonical] [--asset-type] [--limit] [--name-map-path])
+purpose: Surface the ticker/instrument name-map entries from name_map.csv in human-readable form so bookkeeper can inspect canonical mappings without reading the raw ledger CSV directly.
+owner_script: shared/query_name_map.py
+class: read
+use: audit-diagnostic
+expected_inputs: optional --source (b3/safra/bipa/…), --field (fundo/produto/…), --raw PATTERN, --canonical PATTERN, --asset-type; --limit (hard cap 200); --name-map-path to override default; reads .user/finance/bookkeeper/ledgers/investimentos/name_map.csv
+outputs: Pretty-printed table of matching name-map entries (source, field, raw_value, canonical_value, asset_type). Writes nothing.
+canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/investimentos/name_map.csv (no write)
+dry_run: not-applicable
+last_validated: 2026-05-27
+```
+
+```yaml
+tool: position_summary (python investimentos/position_summary.py PRODUCT_ID [--ledger-dir PATH] [--assets-path PATH])
+purpose: All-in-one diagnostic for a single investment position — metadata, balcão summary, balance-snapshot trajectory, and inline sub-detector results (phantom application, stale-active maturity, cross-source duplicate detection).
+owner_script: investimentos/position_summary.py
+class: read
+use: audit-diagnostic
+expected_inputs: product_id string; optional --ledger-dir PATH, --assets-path PATH; reads balcao.csv, assets.csv, balance-snapshots.csv; env overrides BOOKKEEPER_INVESTIMENTOS_DIR, BOOKKEEPER_ASSETS_PATH
+outputs: Structured plain-text report with sections for metadata, balcao summary, snapshot trajectory, and per-anomaly blocks headed by === [ANOMALY TYPE] ===. Exit 0 = clean; exit 1 = anomaly found.
+canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/investimentos/balcao.csv + assets.csv + balance-snapshots.csv (no write)
+dry_run: not-applicable
+last_validated: 2026-05-27
+```
+
+```yaml
+tool: validate_calculate (python investimentos/validate_calculate.py [--portfolio-path PATH] [--strict])
+purpose: Re-reads portfolio.json and checks IRR sanity — per-class IRR table, irr_quality histogram, and violation detection (|irr| > 200%, missing irr_quality on valued balcão position). --strict exits non-zero on any violation.
+owner_script: investimentos/validate_calculate.py
+class: read
+use: audit-diagnostic
+expected_inputs: optional --portfolio-path PATH (default portfolio.json); optional --strict flag; env override BOOKKEEPER_PORTFOLIO_PATH; reads .user/finance/bookkeeper/ledgers/investimentos/portfolio.json
+outputs: Human-readable report: total IRR + value, per-class IRR table, irr_quality histogram, violation list. Exit 0 always in verbose mode; exit 0/1 in --strict mode (0=clean, 1=violation).
+canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/investimentos/portfolio.json (no write)
+dry_run: not-applicable
+last_validated: 2026-05-27
+```
+
+```yaml
+tool: position_table (python investimentos/position_table.py [--bucket rv_eua] [--currency USD] [--type cra] [--portfolio-path PATH])
+purpose: Tabular CLI dump of all active positions from portfolio.json filtered by class bucket, currency, or type — equivalent to reading the dashboard table offline with totals row.
+owner_script: investimentos/position_table.py
+class: read
+use: audit-diagnostic
+expected_inputs: optional --bucket (rv_br|rv_eua|rf_balcao|fundos|crypto), --currency (USD|BRL), --type (acao|cra|…), --portfolio-path; env override BOOKKEEPER_PORTFOLIO_PATH; reads portfolio.json
+outputs: ASCII table — one row per position (id, bucket, qty, avg_cost, price, pnl%, cost_brl, value_brl, pnl_brl, irr, quality) plus TOTAL row. Exit 0 always; exit 1 if portfolio.json not found.
+canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/investimentos/portfolio.json (no write)
+dry_run: not-applicable
+last_validated: 2026-05-27
+```
+
+```yaml
+tool: bucket_sanity_check (python investimentos/bucket_sanity_check.py [--bucket rv_eua] [--threshold 0.05] [--portfolio-path PATH])
+purpose: For each IRR class bucket, compare the simple average of per-asset IRRs against the stored portfolio bucket IRR and flag divergences exceeding the threshold — catches unexpected bucket-vs-per-asset mismatches.
+owner_script: investimentos/bucket_sanity_check.py
+class: read
+use: audit-diagnostic
+expected_inputs: optional --bucket (rv_br|rv_eua|rf_balcao|fundos|crypto), --threshold float (default 0.05 = 5%), --portfolio-path; env override BOOKKEEPER_PORTFOLIO_PATH; reads portfolio.json
+outputs: Per-bucket section with per-asset IRR table, simple-avg vs stored-bucket delta, and >>> DIVERGENCE <<< flag when threshold exceeded. Exit 0 always (informational — time-weighting divergence is expected).
+canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/investimentos/portfolio.json (no write)
+dry_run: not-applicable
+last_validated: 2026-05-27
+```
+
+```yaml
+tool: task_status_check (python shared/task_status_check.py PROJECT TASK [--subtasks 3,4] [--vault-root PATH])
+purpose: Given a project name and task title substring, reads the tasks file, extracts _Ref_ code-anchor references, greps those anchors in the codebase, and reports per-anchor SHIPPED/STALE/NOT_YET/UNCLEAR status — prevents redundant re-implementation of already-shipped subtasks.
+owner_script: shared/task_status_check.py
+class: read
+use: audit-diagnostic
+expected_inputs: PROJECT (folder name or direct path to tasks file), TASK (title substring, case-insensitive); optional --subtasks comma-separated indices, --vault-root PATH; reads {project}-tasks.md + greps codebase files
+outputs: Markdown-style table per code anchor (status, ref, detail) + subtask summary + shipped/not-yet count. Exit 0 if all anchors SHIPPED or UNCLEAR; exit 1 if any NOT_YET or task/project not found.
+canonical_reader_writer: reads {project}-tasks.md + codebase .py files (no write)
+dry_run: not-applicable
+last_validated: 2026-05-27
+```
+
+```yaml
+tool: fx_impact_report (python investimentos/fx_impact_report.py [--portfolio-path PATH])
+purpose: For all USD (rv_eua) positions, decomposes total BRL P&L into native asset gain (price appreciation in USD) and FX gain (USD/BRL rate change on cost basis) — answers "how much of rv_eua performance is the company vs the dollar appreciating?"
+owner_script: investimentos/fx_impact_report.py
+class: read
+use: audit-diagnostic
+expected_inputs: optional --portfolio-path PATH; env override BOOKKEEPER_PORTFOLIO_PATH; reads portfolio.json and fx_engine.py FX state (per-ticker weighted rates)
+outputs: Per-position table (id, cost_brl, value_brl, native_pnl_brl, fx_gain_brl, total_pnl_brl, fx_rate_at_cost) with TOTAL row; footer with portfolio-level FX attribution (e.g. "FX added R$X of the R$Y total rv_eua gain"). Exit 0 always; exit 1 if portfolio.json not found.
+canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/investimentos/portfolio.json + avenue_fx.csv/orders.csv/proventos.csv via fx_engine (no write)
+dry_run: not-applicable
+last_validated: 2026-05-27
+```
+
+```yaml
+tool: audit_balcao_dups (python investimentos/audit_balcao_dups.py [--product-id ID] [--ledger-dir PATH])
+purpose: Scan balcao.csv for rows sharing the same (date, operation, |amount|) triple across different source values, flagging cross-source duplication (e.g. b3_manual and safra_movimentacoes both recorded the same amortization event).
+owner_script: investimentos/audit_balcao_dups.py
+class: read
+use: audit-diagnostic
+expected_inputs: optional --product-id to narrow to one asset; optional --ledger-dir PATH; env override BOOKKEEPER_INVESTIMENTOS_DIR; reads balcao.csv
+outputs: Per-asset duplicate groups (date, operation, amount, source list) with resolution recommendation (safra_movimentacoes > b3 > b3_manual). Exit 0 = clean; exit 1 = duplicates found or balcao.csv missing.
+canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/investimentos/balcao.csv (no write)
+dry_run: not-applicable
+last_validated: 2026-05-27
+```
+
+```yaml
+tool: find_phantom_application (python investimentos/find_phantom_application.py [--ledger-dir PATH] [--assets-path PATH])
+purpose: Scan balcao.csv for positions where juros_amort_total > 0 but aplicado_total = 0, indicating a phantom income stream with no recorded principal investment (common when parser data window starts after the actual investment date).
+owner_script: investimentos/find_phantom_application.py
+class: read
+use: audit-diagnostic
+expected_inputs: optional --ledger-dir PATH, --assets-path PATH; env overrides BOOKKEEPER_INVESTIMENTOS_DIR, BOOKKEEPER_ASSETS_PATH; reads balcao.csv + assets.csv
+outputs: Table of flagged product_ids (juros_amort_total, first_balcao_date, application_date, active); total phantom income summary. Exit 0 = clean; exit 1 = phantoms found or balcao.csv missing.
+canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/investimentos/balcao.csv + .user/finance/bookkeeper/data/assets.csv (no write)
+dry_run: not-applicable
+last_validated: 2026-05-27
+```
+
+```yaml
+tool: audit_active_vs_maturity (python investimentos/audit_active_vs_maturity.py [--assets-path PATH] [--ledger-dir PATH] [--activity-days N])
+purpose: Scan assets.csv for STALE-ACTIVE assets (active=true but maturity_date < today, inflating portfolio value) and STALE-INACTIVE assets (active=false but recent balcao activity within N days — converse anomaly).
+owner_script: investimentos/audit_active_vs_maturity.py
+class: read
+use: audit-diagnostic
+expected_inputs: optional --assets-path PATH, --ledger-dir PATH, --activity-days N (default 90); env overrides BOOKKEEPER_ASSETS_PATH, BOOKKEEPER_INVESTIMENTOS_DIR; reads assets.csv + optionally balcao.csv
+outputs: Two sections: stale-active table (product_id, maturity_date, days_past_maturity, last_balcao_date) and stale-inactive table (product_id, last_balcao_date, days_since_activity). Exit 0 = clean; exit 1 = anomalies found or assets.csv missing.
+canonical_reader_writer: reads .user/finance/bookkeeper/data/assets.csv + .user/finance/bookkeeper/ledgers/investimentos/balcao.csv (no write)
+dry_run: not-applicable
+last_validated: 2026-05-27
+```
+
+```yaml
+tool: audit-aliases (python shared/audit-aliases.py [--suppliers-path PATH] [--duplicates-only])
+purpose: Scan suppliers.json for alias strings that appear under more than one supplier entry — duplicate aliases are a silent ambiguity because categorize.py's first-match-wins lookup resolves to different suppliers depending on iteration order.
+owner_script: shared/audit-aliases.py
+class: read
+use: validation-gate
+expected_inputs: optional --suppliers-path PATH; optional --duplicates-only flag (omit stats header); env override BOOKKEEPER_SUPPLIERS_PATH; reads suppliers.json
+outputs: Table of duplicate aliases with the supplier slugs they appear under; count of affected aliases and suppliers; recommended action. Exit 0 = clean; exit 1 = duplicates found or suppliers.json missing (suitable as pre-commit hook).
+canonical_reader_writer: reads .user/finance/bookkeeper/config/suppliers.json (no write)
+dry_run: not-applicable
+last_validated: 2026-05-27
+```
+
+```yaml
+tool: gate_pass_1_queue (python shared/gate_pass_1_queue.py [--queue-state PATH])
+purpose: Gate #11 (P0) — verify Pass-1 review queue is fully resolved (zero items) before Pass 2 is dispatched; raises QueueOrderingError condition as a pass/fail exit code.
+owner_script: shared/gate_pass_1_queue.py
+class: read
+use: validation-gate
+expected_inputs: optional --queue-state PATH to queue state JSON {pass_1_items: [...], pass_2_items: [...]} written by bookkeeper step-05; no-arg call = vacuous pass
+outputs: PASS (exit 0) when pass_1_items is empty or pass_2 is not yet queued; FAIL (exit 1) when pass_1 items remain while pass_2 is pending; emits gate_pass/gate_fail event.
+canonical_reader_writer: reads queue state JSON (no ledger write)
+dry_run: not-applicable
+last_validated: 2026-05-27
+```
+
+```yaml
+tool: gate_ledger_tolerance (python shared/gate_ledger_tolerance.py --report PATH)
+purpose: Gate #6 (P0) — verify the ledger upsert used tolerance=0 (exact-match dedup only); fail-loud if any fuzzy match appears in the update_ledgers report.
+owner_script: shared/gate_ledger_tolerance.py
+class: read
+use: validation-gate
+expected_inputs: --report PATH to upsert report JSON {ledger_name: {inserted, skipped_exact, skipped_fuzzy, ...}} from update_ledgers.py; env override BOOKKEEPER_AUDIT_DISABLED
+outputs: PASS (exit 0) when skipped_fuzzy is empty across all ledgers; FAIL (exit 1) when any fuzzy match found; emits gate_pass/gate_fail event.
+canonical_reader_writer: reads update_ledgers report JSON (no ledger write)
+dry_run: not-applicable
+last_validated: 2026-05-27
+```
+
+```yaml
+tool: gate_transaction_count (python shared/gate_transaction_count.py [--expenses-dir PATH] [--month YYYY-MM])
+purpose: Gate #4 (P1) — transaction-count sanity per bank file; fail-loud if any present file has zero rows or if >10% of rows fall outside the expected month ±5 days.
+owner_script: shared/gate_transaction_count.py
+class: read
+use: validation-gate
+expected_inputs: optional --expenses-dir PATH to normalized expenses/{YYYY-MM}/ directory; optional --month YYYY-MM; defaults to most-recent month under .user/finance/bookkeeper/ledgers/expenses/; reads *.csv files
+outputs: Per-file PASS/FAIL table; PASS (exit 0) all files have rows and within tolerance; FAIL (exit 1) any file fails; exit 2 on missing directory; emits gate_pass/gate_fail event.
+canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/expenses/{YYYY-MM}/*.csv (no write)
+dry_run: not-applicable
+last_validated: 2026-05-27
+```
+
+```yaml
+tool: gate_spot_check_coverage (python shared/gate_spot_check_coverage.py --coverage-record PATH)
+purpose: Gate #7 (P1) — mandatory spot-check source classes (B3 orders+proventos, Safra balcao, Avenue orders+fx if present, 1 crypto if present) must all be covered; auto-halt before step-05 if any mandatory class was skipped.
+owner_script: shared/gate_spot_check_coverage.py
+class: read
+use: validation-gate
+expected_inputs: --coverage-record PATH to JSON {checked: [...], present_sources: [...]} written by bookkeeper step-04 after spot-checking
+outputs: PASS (exit 0) all mandatory classes for present sources are covered; FAIL (exit 1) any mandatory class missing; exit 2 on missing record; emits gate_pass/gate_fail event.
+canonical_reader_writer: reads coverage record JSON (no ledger write)
+dry_run: not-applicable
+last_validated: 2026-05-27
+```
+
+```yaml
+tool: gate_portfolio_delta (python shared/gate_portfolio_delta.py [--portfolio PATH] [--prior-snapshot PATH] [--flagged-ids IDS] [--flagged FILE])
+purpose: Gate #8 (P1) — portfolio delta anomaly detector; auto-halt if any UNFLAGGED anomaly exists (per-position variacao >20%, position zeroed unexpectedly, or new unknown ticker vs prior snapshot).
+owner_script: shared/gate_portfolio_delta.py
+class: read
+use: validation-gate
+expected_inputs: optional --portfolio PATH (default portfolio.json); optional --prior-snapshot PATH (default latest dated snapshot); optional --flagged-ids comma-separated IDs or --flagged FILE with JSON list of user-acknowledged anomaly IDs; reads portfolio.json + prior portfolio-{date}.json
+outputs: Anomaly table with FLAGGED/UNFLAGGED markers; PASS (exit 0) when all anomalies are flagged or none exist; FAIL (exit 1) when unflagged anomalies remain; exit 2 on missing files; emits gate_pass/gate_fail event.
+canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/investimentos/portfolio*.json (no write)
+dry_run: not-applicable
+last_validated: 2026-05-27
+```
+
+```yaml
+tool: gate_coverage (python shared/gate_coverage.py [--transactions PATH] [--loop-count N] [--config-dir PATH])
+purpose: Gates #1/#2/#3 (ANDed, P2, S7) — R$-coverage >= 90%, row-coverage >= 90%, no untagged despesa > R$100 before commit; auto-loops up to 3 times then surfaces Portuguese user prompt.
+owner_script: shared/gate_coverage.py
+class: read
+use: validation-gate
+expected_inputs: optional --transactions PATH to transactions.csv (default: latest fechamento month); optional --loop-count N (current auto-loop iteration, default 0); optional --config-dir PATH; reads standing-rules.yaml for threshold (90%) and R$100 floor (tag_coverage.gate.untagged_amount_threshold_brl); excludes receitas/intercontas/ignorar/venda
+outputs: R$ coverage % + row coverage % + large-untagged list; PASS (exit 0) all three gates pass; FAIL (exit 1) any gate fails; exit 2 on missing file; emits coverage_progress (x2) + gate_pass/gate_fail events. Max-loop guard at 3 iterations.
+canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/fechamento/{YYYY-MM}/transactions.csv (no write)
+dry_run: not-applicable
+last_validated: 2026-05-27
+```
+
+```yaml
+tool: gate_irr_sanity (python shared/gate_irr_sanity.py [--portfolio-path PATH] [--config-dir PATH])
+purpose: Gate #9 (P3, S7-2) — IRR strict sanity: |irr|>200% → fail; irr_quality missing on valued balcão → fail; rf_balcao annualized return outside [7%,15%] band (config-driven) → fail. Fail-loud; auto-halt before snapshot.
+owner_script: shared/gate_irr_sanity.py
+class: read
+use: validation-gate
+expected_inputs: optional --portfolio-path PATH (default portfolio.json); optional --config-dir PATH; reads portfolio.json + standing-rules.yaml (investment_rules.sanity_bands.rf_balcao.expected_return_pct_min/max for the 7–15% band); env override BOOKKEEPER_PORTFOLIO_PATH
+outputs: Violation list on stderr; PASS (exit 0) no violations; FAIL (exit 1) one or more violations; exit 2 if portfolio.json missing; emits gate_pass/gate_fail event.
+canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/investimentos/portfolio.json (no write)
+dry_run: not-applicable
+last_validated: 2026-05-27
+```
+
+```yaml
+tool: gate_bucket_divergence (python shared/gate_bucket_divergence.py [--portfolio-path PATH] [--bucket BUCKET] [--threshold FLOAT])
+purpose: Gate #10 (P3) — per-class IRR vs weighted avg of per-asset IRRs; |delta|>5% across any bucket → fail-loud and auto-halt; surfaces per-asset breakdown. User decides next action.
+owner_script: shared/gate_bucket_divergence.py
+class: read
+use: validation-gate
+expected_inputs: optional --portfolio-path PATH (default portfolio.json); optional --bucket (rv_br|rv_eua|rf_balcao|fundos|crypto) to narrow check; optional --threshold float (default 0.05 = 5%); env override BOOKKEEPER_PORTFOLIO_PATH; reads portfolio.json
+outputs: Per-bucket section with per-asset IRR table, simple-avg vs stored-bucket delta, DIVERGENCE flag; PASS (exit 0) all within threshold; FAIL (exit 1) any bucket diverges; exit 2 if portfolio.json missing; emits gate_pass/gate_fail event.
+canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/investimentos/portfolio.json (no write)
+dry_run: not-applicable
+last_validated: 2026-05-27
+```
+
+```yaml
+tool: gate_parser_total_sanity (python shared/gate_parser_total_sanity.py [--orders-path PATH | --orders-dir PATH])
+purpose: Gate #5 (P4) — parser total sanity for *_orders.csv rows; total ≈ quantity×price+fees with 0.5% tolerance; fail-loud listing all violating rows; user decides halt vs accept; no auto-loop.
+owner_script: shared/gate_parser_total_sanity.py
+class: read
+use: validation-gate
+expected_inputs: optional --orders-path PATH to one orders.csv, OR --orders-dir PATH to scan *orders*.csv; default: .user/finance/bookkeeper/ledgers/investimentos/orders.csv; env override BOOKKEEPER_ORDERS_PATH; reads CSV columns quantity/price/total/fees_exchange/fees_brokerage/fees_irrf
+outputs: Violation table (row_num, date, ticker, stored vs expected total, deviation%); PASS (exit 0) all within 0.5%; FAIL (exit 1) any row exceeds tolerance; exit 2 on missing file; emits gate_pass/gate_fail event.
+canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/investimentos/orders.csv (no write)
+dry_run: not-applicable
+last_validated: 2026-05-27
+```
+
+```yaml
+tool: rename_tags (python migrations/rename_tags.py --from OLD --to NEW [--apply] [--merge-into-existing] [--rollback TOKEN])
+purpose: Retro-rewrite a tag across the tag namespace — renames a tag in tags.json (and records the old name in `rejected`), updates suppliers.json default_tags and categories.json reimbursement_mappings.*.tag, and appends the durable record to the append-only corrections/tag-renames.csv. NEVER edits historical ledger rows (transactions.csv tags regenerate via categorize.py).
+owner_script: migrations/rename_tags.py
+class: write
+use: retro-rewrite
+expected_inputs: --from OLD --to NEW (required); --apply to execute (DRY-RUN is the DEFAULT); --merge-into-existing to fold into an existing tag; --rollback TOKEN to undo a prior apply; env overrides BOOKKEEPER_CONFIG_DIR/BOOKKEEPER_LEDGER_DIR/BOOKKEEPER_ROOT; reads tags.json, suppliers.json, categories.json, all fechamento transactions.csv (enumeration only)
+outputs: Fix-impact preview enumerating every affected location (correction-ledger row, config edits, transactions.csv rows affected, tag-namespace rejected entry) BEFORE any write; under --apply writes tag-renames.csv + tags.json (+ suppliers.json/categories.json if affected), backs up each file to a timestamped .bak, persists a rollback manifest, and emits one config_write audit event per destination. Dry-run writes NOTHING.
+canonical_reader_writer: appends .user/finance/bookkeeper/config/corrections/tag-renames.csv; rewrites .user/finance/bookkeeper/config/tags.json (+ suppliers.json/categories.json when default_tags/reimbursement tags reference the tag)
+dry_run: default
+last_validated: 2026-05-27
+```
+
+```yaml
+tool: rename_canonical (python migrations/rename_canonical.py [--from "Old"|--slug SLUG] --to "New" [--apply] [--rollback TOKEN])
+purpose: Retro-rewrite a vendor's canonical display name — rewrites the matched supplier's `canonical` field in suppliers.json (the classifier's live source for the supplier_canonical output column) and appends the durable record to the append-only corrections/vendor-canonicals.csv. NEVER edits historical ledger rows (transactions.csv supplier_canonical regenerates via categorize.py); flags the 2-areas/finance/pagamentos-recorrentes.md cross-tree mention for manual reconcile.
+owner_script: migrations/rename_canonical.py
+class: write
+use: retro-rewrite
+expected_inputs: --to "New" (required); one of --from "Old canonical" or --slug SLUG (required to target); --apply to execute (DRY-RUN is the DEFAULT); --rollback TOKEN to undo; env overrides BOOKKEEPER_CONFIG_DIR/BOOKKEEPER_LEDGER_DIR/BOOKKEEPER_RECURRING_PATH/BOOKKEEPER_ROOT; reads suppliers.json, all fechamento transactions.csv (enumeration only), pagamentos-recorrentes.md (mention check)
+outputs: Fix-impact preview enumerating every affected location (correction-ledger row, suppliers.json canonical edit, transactions.csv rows affected, pagamentos-recorrentes.md cross-tree dep) BEFORE any write; composes audit-aliases.py to surface current alias ambiguities; under --apply writes vendor-canonicals.csv + suppliers.json, backs up each to a timestamped .bak, persists a rollback manifest, and emits one config_write audit event per destination. Dry-run writes NOTHING.
+canonical_reader_writer: appends .user/finance/bookkeeper/config/corrections/vendor-canonicals.csv; rewrites .user/finance/bookkeeper/config/suppliers.json
+dry_run: default
+last_validated: 2026-05-27
+```
+
+```yaml
+tool: merge_categories (python migrations/merge_categories.py --from OLD --to KEEP [--apply] [--rollback TOKEN])
+purpose: Retro-rewrite that merges one category into another (highest blast radius) — drops the OLD key from categories.json and rewrites OLD->KEEP across value_based_mappings.category, reimbursement_mappings.*.category, recurrence_rules.default_by_category, plus suppliers.json default_category; appends the durable record to the append-only corrections/category-migrations.csv. NEVER edits historical ledger rows (transactions.csv category regenerates via categorize.py); enumerates the dashboard/expenses.js live-read join and the pagamentos-recorrentes.md cross-tree dep.
+owner_script: migrations/merge_categories.py
+class: write
+use: retro-rewrite
+expected_inputs: --from OLD --to KEEP (required; both must be existing categories, OLD != KEEP); --apply to execute (DRY-RUN is the DEFAULT); --rollback TOKEN to undo; env overrides BOOKKEEPER_CONFIG_DIR/BOOKKEEPER_LEDGER_DIR/BOOKKEEPER_RECURRING_PATH/BOOKKEEPER_ROOT; reads categories.json, suppliers.json, all fechamento transactions.csv (enumeration only), pagamentos-recorrentes.md (mention check)
+outputs: Fix-impact preview enumerating every affected location (correction-ledger row, categories.json 4 sub-surfaces, suppliers.json default_category, transactions.csv rows affected, dashboard-join, cross-tree dep) BEFORE any write; under --apply writes category-migrations.csv + categories.json + suppliers.json, backs up each to a timestamped .bak, persists a rollback manifest, and emits one config_write audit event per destination. Refuses (exit 1) if OLD or KEEP is not a valid category or OLD==KEEP. Dry-run writes NOTHING.
+canonical_reader_writer: appends .user/finance/bookkeeper/config/corrections/category-migrations.csv; rewrites .user/finance/bookkeeper/config/categories.json + suppliers.json
+dry_run: default
+last_validated: 2026-05-27
+```
