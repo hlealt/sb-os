@@ -17,8 +17,10 @@ from pathlib import Path
 import pytest
 
 _SCRIPTS_DIR = Path(__file__).resolve().parent.parent
-if str(_SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(_SCRIPTS_DIR))
+_TESTS_DIR = Path(__file__).resolve().parent
+for _p in (_SCRIPTS_DIR, _TESTS_DIR):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
 
 
 @pytest.fixture(autouse=True)
