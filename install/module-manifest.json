@@ -193,7 +193,15 @@
       "description": "Personal finance system: bookkeeper sibling agent (monthly close — gastos, investimentos), dashboard, and tool scripts. Investor sibling agent is design-scope only and not yet built — its command loader is reserved but unimplemented.",
       "always_installed": false,
       "atomic": false,
-      "skills": [],
+      "skills": [
+        {
+          "name": "create-thesis",
+          "module": "finance",
+          "source_template": "finance/skills/create-thesis/SKILL.md",
+          "target": ".claude/skills/create-thesis/SKILL.md",
+          "description": "Create a wiki thesis page from a candidate-thesis or freshly-proposed investment thesis."
+        }
+      ],
       "commands": [
         {
           "name": "bookkeeper",

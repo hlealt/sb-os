@@ -1,0 +1,40 @@
+# Wiki Frontmatter Schemas — Finance Extension
+
+Finance-module extension to the base wiki frontmatter schemas. Loaded only when `finance` is registered in `sb-os.json` → `wiki_extensions` (per the wiki Step 0 — Load extensions). The schemas here are **added to** the base set in `../../wiki/workflows/shared/frontmatter-schemas.md` — never a replacement. When this extension is absent, the base schemas behave identically.
+
+Mirrors the base `frontmatter-schemas.md` presentation. Every page of these types MUST include the base common block (`type`, `created`, `last-touched`, `related`, `tags`) plus the type-specific additions below. These two types back the `thesis` and `decision` page types defined in `./page-types.ext.md`.
+
+## Thesis
+
+```yaml
+type: thesis
+status: seed | developing | active | rejected | archived
+conviction: low | medium | high
+time_horizon: short | medium | long
+last_reviewed: YYYY-MM-DD
+related_companies: []
+related_assets: []
+related_sectors: []
+related_countries: []
+related_positions: []   # links to portfolio positions this thesis maps to (by ledger id/ticker)
+watchlist: false
+```
+
+The `related_*` lists are wikilinks to the matching entity kinds. `related_positions` links owned positions by ledger id/ticker. A thesis cites entity financials as evidence via footnotes.
+
+## Decision
+
+```yaml
+type: decision
+date: YYYY-MM-DD
+decision_type: buy | sell | trim | add | hold | pass | reject | pause | review | rebalance
+related_thesis:
+related_asset:
+related_company:
+```
+
+Filename convention: `YYYY-MM-DD-<action>-<asset-or-thesis>.md`, where `<action>` is one of the action enum: `buy | sell | trim | add | hold | pass | reject | pause | review | rebalance` (the same values as `decision_type`). The wiki holds the reasoning; the bookkeeper ledger holds the transaction (price/qty) — do NOT duplicate transaction data here.
+
+## Entity `## Financials` note
+
+Investment entity kinds (`company`, `asset`, `country`, `sector`) carry a `## Financials` section of structured fundamentals on the entity's own page. Its structure is defined in `./section-menus.ext.md`. The `person`, `tool`, and `model` kinds never carry one. This is a body section, not frontmatter — no `financials:` frontmatter field is added.

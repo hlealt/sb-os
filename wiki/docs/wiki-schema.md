@@ -62,6 +62,20 @@ A per-source synthesis. 1:1 with a raw file. Combines agent-written content with
 
 Naming: filename mirrors the raw counterpart exactly.
 
+## Module extensions
+
+The four page types above are the **base set**. Other sb-os modules MAY add their own page types, entity kinds, sections, and lint rules without editing the base wiki. The mechanism is registration + an additive merge at run start.
+
+**Registration.** A module is activated by listing its name in `sb-os.json` → `wiki_extensions` (a list). When the field is absent or empty, no extension loads.
+
+**Load — Step 0.** `/sb-wiki-ingest` and `/sb-wiki-lint` each run a **Step 0 — Load extensions** before their first native step. Step 0 reads `sb-os.json` → `wiki_extensions`; for each listed module it locates that module's `wiki-ext/` folder and MERGES its definition files — `page-types.ext.md`, `frontmatter-schemas.ext.md`, `section-menus.ext.md`, `lint-rules.ext.md` — into the active rule set for that run.
+
+**Additive-only.** Extension page types, entity kinds, sections, and lint rules are ADDED to the base set — they NEVER replace or override a base definition.
+
+**Base-unchanged.** When `wiki_extensions` is absent or empty, Step 0 is a no-op and the base four-type wiki behaves exactly as specified throughout this document.
+
+**Domain-clean guard.** The base shared definition files (`page-types.md`, `frontmatter-schemas.md`, `section-menus.md`) are NEVER edited to add a module's content. Each module ships its additions in its own `wiki-ext/` folder; the base files carry only base behavior.
+
 ## Folder structure
 
 ```
@@ -537,6 +551,7 @@ Single command: `/sb-wiki-ingest <slug>` where slug is a raw filename or unique 
 
 | Step | Operation | Owner |
 |------|-----------|-------|
+| 0 | **Load extensions** (runs before Step 1) — MERGE each registered module's `wiki-ext/` definitions into the active rule set per Module extensions §; no-op when `wiki_extensions` is absent/empty | Agent |
 | 1 | Read raw file | Agent |
 | 2 | Write `wiki/sources/{origin}/{date}-{slug}.md` (`Substance` and `Connections` always; `Notable quotes` / `Methodology` / `Counterpoints` per source kind; user-half sections present as empty shells with headings only). **Substance bullets MUST name entities/concepts at page-cluster granularity** per Page granularity § — sub-cluster names go in prose without wikilinks | Agent |
 | 3 | Identify entity/concept mentions; **cluster candidates by page-granularity** (variants, whole+part, siblings, producer+work — see Page granularity §); for each cluster representative, apply the stub-creation rule (Substance bullet = mechanical; title-only = discretion; Notable Quote = discretion). ALSO walk `wiki/topics/*.md` and identify existing topic pages relevant to this source per the relevance-detection rule (see "Existing topic updates" §) — build a `candidate-topic-updates` set | Agent |
@@ -651,6 +666,7 @@ The script performs deterministic maintenance and emits `judgment_needed`. The a
 
 | Step | Operation |
 |------|-----------|
+| 0 | **Load extensions** (runs before Step 1) — MERGE each registered module's `wiki-ext/` definitions (including its `lint-rules.ext.md`) into the active rule set per Module extensions §; no-op when `wiki_extensions` is absent/empty |
 | 1 | Walk all wiki pages — detect stubs (structural rule) and record age via `created` |
 | 2 | Walk all wiki pages — detect orphans (no inbound wikilinks). **Orphan-detection scope is STRICT** — see "Orphan-detection scope" below |
 | 3 | Walk wiki concept/entity pages — detect unresolved Disputed callouts (older than 30 days without resolution) |

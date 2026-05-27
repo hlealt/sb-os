@@ -37,6 +37,14 @@ Discriminator: Concept = the idea or entity itself; Topic = the conversation aro
 
 ---
 
+## Module Extensions
+
+The wiki supports **module extensions** — other sb-os modules MAY add their own page types, entity kinds, sections, and lint rules without editing the base wiki.
+
+When a module is listed in `sb-os.json` → `wiki_extensions`, `/sb-wiki-ingest` and `/sb-wiki-lint` run a **Step 0** that locates that module's `wiki-ext/` folder and MERGES its definition files into the active rule set for the run. Extension page types, entity kinds, sections, and lint rules are ADDED to the base set — never replace it. When `wiki_extensions` is absent or empty, Step 0 is a no-op and the base four-type wiki behaves unchanged.
+
+---
+
 ## Operations
 
 Four operations cover the wiki lifecycle.

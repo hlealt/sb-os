@@ -46,6 +46,10 @@ These files codify rules referenced across multiple `sb-wiki-*` workflows. Load 
 
 No mid-flow user input during steps 1–9. Stage 1 commits approved changes before Stage 2 begins. Stage 2 is optional and can be ignored without blocking the committed ingest.
 
+### Step 0 — Load extensions
+
+Read `sb-os.json` at vault root → `wiki_extensions` field (a list of registered module names; resolve via `install/manifest.py`, never hardcode). For each listed module, locate its `wiki-ext/` folder and MERGE its `page-types.ext.md`, `frontmatter-schemas.ext.md`, `section-menus.ext.md`, and `lint-rules.ext.md` into the active rule set for this run. Extension page types, entity kinds, sections, and lint rules are ADDED to — never replace — the base set referenced by the shared data files. If `wiki_extensions` is absent or empty, run with the base behavior unchanged. Process every later step against the merged rule set.
+
 ### Step 1 — Read raw file
 
 1. Resolve `<slug>` against `{wiki_root}/raw/`:
@@ -159,7 +163,7 @@ For each entry in `stub-candidates`:
 
 1. Resolve target path. Default: `{wiki_root}/wiki/concepts/{slug}.md` (concept) or `{wiki_root}/wiki/entities/{slug}.md` (entity). **If the parent type folder has been subdivided** per schema § "Folder subdivision" (per-kind subfolders proposed and executed by `/sb-wiki-lint`), check the parent `{wiki_root}/wiki/{type}/CLAUDE.md` marker-block routing table for the kind's subfolder and write to `{wiki_root}/wiki/{type}/{subfolder}/{slug}.md` instead. Kinds without a subfolder write to the type-folder root. Subdivision read is best-effort — if the parent CLAUDE.md is absent or the marker block is missing, default to type-folder root.
 2. Slug per `../shared/naming-convention.md` — `lowercase-kebab.md`. Forbidden: same slug already present in a sibling type folder (concepts vs topics is forbidden per schema; concepts vs entities is allowed).
-3. Write frontmatter per `../shared/frontmatter-schemas.md` (Concept adds `kind:` free-form string; Entity adds `kind:` from enum `tool | person | company | product | model`).
+3. Write frontmatter per `../shared/frontmatter-schemas.md` (Concept adds `kind:` free-form string; Entity adds `kind:` from the enum defined in `../shared/frontmatter-schemas.md` — single source of truth, never restated here).
 4. Write a 1–2 sentence preamble derived from the raw source.
 5. Write the required sections empty:
    - Concept: `Definition` (1 factual sentence) + `Sources` (with the current `[^N]: [[<raw-filename>]]` definition)

@@ -73,6 +73,12 @@ The helper MUST NOT fill judgment-bearing cells. `Description`, `Scope`, and `Wh
 
 Steps 1-8 run unattended. Step 8 PRUNES `log.md` (deletes spent candidates + retired history; writes NO `lint` entry). Step 9 is read-only for findings 1-7 and surfaces the `candidate-mention` review queue; when step 7.5 produced a non-empty `subdivision-proposals` set, the LINT REPORT at step 9 includes a SUBDIVISION PROPOSAL block that requires a user decision (accept all / accept N / reject / defer). On user accept, the agent executes the subdivision per step 7.5 § "Subdivision execution" (no log entry). The agent must perform the LLM judgment pass from the deterministic helper report before Step 8.
 
+### Step 0 — Load extensions
+
+Read `sb-os.json` at vault root → `wiki_extensions` field (a list of registered module names; resolve via `install/manifest.py`, never hardcode). For each listed module, locate its `wiki-ext/` folder and MERGE its `page-types.ext.md`, `frontmatter-schemas.ext.md`, `section-menus.ext.md`, and `lint-rules.ext.md` into the active rule set for this run. Extension page types, entity kinds, sections, and lint rules are ADDED to — never replace — the base set. If `wiki_extensions` is absent or empty, run with the base behavior unchanged. Process every later step against the merged rule set.
+
+Lint MERGES each registered module's `lint-rules.ext.md`. Extension lint rules are SCOPED to that module's folders and entity kinds — they fire ONLY on pages within those scopes and NEVER on a general-wiki run. A general-wiki run (no matching folders/kinds present, or no extension registered) applies the base lint rules only.
+
 ### Step 1 — Walk all wiki pages; detect stubs and record age
 
 1. Walk `{wiki_root}/wiki/concepts/`, `{wiki_root}/wiki/entities/`, `{wiki_root}/wiki/topics/`, and `{wiki_root}/wiki/sources/{*}/` per `../shared/folder-structure.md`. Skip leaf indexes (`concepts.md`, `entities.md`, `topics.md`, `{origin}.md`).
