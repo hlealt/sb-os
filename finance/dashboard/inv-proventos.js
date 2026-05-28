@@ -230,7 +230,8 @@ const INV_PROV_CLASS_LABELS = {
   crypto:          'Crypto',
 };
 
-const INV_PROV_BROKER_LABELS = { safra: 'Safra', clear: 'Clear', xp: 'XP', avenue: 'Avenue', bipa: 'Bipa', binance: 'Binance' };
+// Investment broker label lookup — canonical map lives in shared.js (BROKER_LABELS).
+// INV_PROV_BROKER_LABELS removed; all callers below use invBrokerLabelShared().
 
 function invProvByTickerTable(byTicker) {
   if (byTicker.length === 0) return '';
@@ -255,7 +256,7 @@ function invProvByTickerTable(byTicker) {
   html += `</tr></thead><tbody>`;
   rows.forEach(t => {
     const classLabel = INV_PROV_CLASS_LABELS[t.asset_class] || t.asset_class || '—';
-    const brokerLabel = INV_PROV_BROKER_LABELS[t.broker] || t.broker || '—';
+    const brokerLabel = invBrokerLabelShared(t.broker);
     const currencyHint = t.currency === 'USD' ? ` <span style="font-size:0.7rem;color:var(--text-muted);">(US$ ${Number(t.total).toLocaleString('pt-BR', { maximumFractionDigits: 2 })})</span>` : '';
     html += `<tr>
       <td style="padding:8px 10px;border-bottom:1px solid var(--border-faint, var(--border));">

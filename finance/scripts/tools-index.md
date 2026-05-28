@@ -446,3 +446,16 @@ canonical_reader_writer: appends .user/finance/bookkeeper/config/corrections/cat
 dry_run: default
 last_validated: 2026-05-27
 ```
+
+```yaml
+tool: audit_data_duplication (python shared/audit_data_duplication.py [--config-dir PATH])
+purpose: Scan bookkeeper config stores for cross-config data duplicates — vendor→category mappings present in both suppliers.json::default_category and categories.json::value_based_mappings (OC-1), and self-transfer patterns also present as supplier aliases (OC-3) — the class of duplication the ME gate's registry keyword check cannot see.
+owner_script: shared/audit_data_duplication.py
+class: read
+use: audit-diagnostic
+expected_inputs: optional --config-dir PATH (default: auto-resolved from vault root via sb-os.json/vault heuristic); env override BOOKKEEPER_CONFIG_DIR; reads .user/finance/bookkeeper/config/suppliers.json and .user/finance/bookkeeper/config/categories.json
+outputs: Human-readable report grouped by overlap class (OC-1, OC-3) with per-hit vendor/store details and resolution guidance. Exit 0 = no duplicates; exit 1 = duplicates found; exit 2 = config directory missing. Also exposes find_cross_config_duplicates(concept, target) -> list[str] for composition by me_gate.py as the tertiary safety net (plan p5-12).
+canonical_reader_writer: reads .user/finance/bookkeeper/config/suppliers.json + .user/finance/bookkeeper/config/categories.json (no write)
+dry_run: not-applicable
+last_validated: 2026-05-27
+```

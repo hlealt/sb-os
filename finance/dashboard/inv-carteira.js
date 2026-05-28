@@ -19,18 +19,8 @@ const INV_IRR_CLASS_LABELS = {
 };
 const _INV_IRR_CLASS_ORDER = ['rv_br', 'rv_eua', 'rf_balcao', 'fundos', 'crypto'];
 
-const INV_BROKER_LABELS = {
-  safra: 'Safra',
-  avenue: 'Avenue',
-  clear: 'Clear',
-  xp: 'XP',
-  bipa: 'Bipa',
-  binance: 'Binance',
-  mercado_bitcoin: 'Mercado Bitcoin',
-  mercado_pago: 'Mercado Pago'
-};
-
-function invBrokerLabel(id) { return INV_BROKER_LABELS[id] || id; }
+// Investment broker label lookup — canonical map lives in shared.js (BROKER_LABELS).
+function invBrokerLabel(id) { return invBrokerLabelShared(id); }
 function invClassLabel(id) { return INV_CLASS_LABELS[id] || id; }
 
 function invFormatPct(v) {

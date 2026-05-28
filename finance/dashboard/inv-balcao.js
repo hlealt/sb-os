@@ -38,7 +38,8 @@ const INV_BALCAO_TYPE_LABELS = {
 // open-ended cota even though it classifies as fixed_income for the donut.
 const _INV_BALCAO_FUND_TYPES = new Set(['fia_br', 'fia_usa', 'fim_br', 'firf_br', 'fidc', 'coe', 'di']);
 
-const INV_BALCAO_BROKER_LABELS = { safra: 'Safra', clear: 'Clear', xp: 'XP', avenue: 'Avenue', guide: 'Guide' };
+// Investment broker label lookup — canonical map lives in shared.js (BROKER_LABELS).
+// INV_BALCAO_BROKER_LABELS removed; all callers below use invBrokerLabelShared().
 
 let invBalcaoBrokerFilter = 'all';
 let invBalcaoSort = { col: 'current_value', dir: 'desc' };
@@ -96,7 +97,7 @@ function invBalcaoRender(container) {
     .map(p => ({
       ...p,
       type_label: INV_BALCAO_TYPE_LABELS[p.type] || p.type || '—',
-      broker_label: INV_BALCAO_BROKER_LABELS[p.broker] || p.broker || '—',
+      broker_label: invBrokerLabelShared(p.broker),
       indexer_label: invBalcaoFormatIndexer(p),
     }));
 
@@ -150,7 +151,7 @@ function invBalcaoApplyFilters(positions) {
 function invBalcaoFilterBar(allPositions) {
   const brokers = ['all', ...Array.from(new Set(allPositions.map(p => p.broker).filter(Boolean))).sort()];
   const brokerOpts = brokers.map(b => {
-    const label = b === 'all' ? 'Todas as instituições' : (INV_BALCAO_BROKER_LABELS[b] || b);
+    const label = b === 'all' ? 'Todas as instituições' : invBrokerLabelShared(b);
     return `<option value="${b}"${b === invBalcaoBrokerFilter ? ' selected' : ''}>${label}</option>`;
   }).join('');
 
@@ -407,7 +408,7 @@ function invBalcaoMissingBlock(missing) {
       <th style="text-align:right;padding:8px 10px;color:var(--text-muted);font-size:0.85rem;">Aplicado (último conhecido)</th>
     </tr></thead><tbody>`;
   Object.values(grouped).sort((a, b) => b.cost - a.cost).forEach(g => {
-    const label = INV_BALCAO_BROKER_LABELS[g.broker] || g.broker;
+    const label = invBrokerLabelShared(g.broker);
     html += `<tr>
       <td style="padding:8px 10px;border-bottom:1px solid var(--border-faint, var(--border));">${label}</td>
       <td style="text-align:right;padding:8px 10px;border-bottom:1px solid var(--border-faint, var(--border));">${g.count}</td>

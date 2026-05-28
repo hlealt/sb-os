@@ -3,7 +3,7 @@
 > [!warning] Deferred Wiring
 > This file defines candidate-thesis triggers for the **investor path only**. Wiring into general ingest is **DEFERRED** — it is an open question per spec §12 whether candidate-thesis detection lives in general ingest or exclusively in the investor path. This file is **NOT part of the Step 0 merge list** (general ingest/lint merge only `page-types.ext.md`, `frontmatter-schemas.ext.md`, `section-menus.ext.md`, and `lint-rules.ext.md`). Its consumer is the investor path (out of scope for this build) or a future wiring task. General ingest does NOT fire these triggers today.
 
-Three triggers the investor path evaluates when processing raw sources. Each trigger that fires produces a `candidate-thesis` log entry surfaced to the user. The investor path NEVER auto-creates thesis pages — all thesis creation flows through the `create-thesis` capability (see `./page-types.ext.md` for the `thesis` page type definition).
+Three triggers the investor path evaluates when processing raw sources. Each trigger that fires produces a `candidate-thesis` log entry surfaced to the user. The investor path NEVER auto-creates thesis pages — all thesis creation flows through the `sb-fin-create-thesis` capability (see `./page-types.ext.md` for the `thesis` page type definition).
 
 ## Trigger Table
 
@@ -24,7 +24,7 @@ Three triggers the investor path evaluates when processing raw sources. Each tri
 
 **Do NOT fire** on a single-source temporal phrase alone ("X is expected to grow"), on generic market commentary, or on claims about different entities that happen to share a topic.
 
-**On fire:** log the two (or more) source citations, the shared claim, and the investment entity in the candidate-thesis entry. Present as a PROPOSED THESIS candidate. The user decides whether to initiate thesis authoring via `create-thesis`.
+**On fire:** log the two (or more) source citations, the shared claim, and the investment entity in the candidate-thesis entry. Present as a PROPOSED THESIS candidate. The user decides whether to initiate thesis authoring via `sb-fin-create-thesis`.
 
 ### Mispricing Signal
 

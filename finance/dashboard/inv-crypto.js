@@ -3,7 +3,8 @@
 // Spec: position cards (qty, value BRL, cost, P&L) + BTC dominance.
 // Loaded after shared.js, inv-data.js, inv-carteira.js.
 
-const INV_CRYPTO_BROKER_LABELS = { bipa: 'Bipa', binance: 'Binance', mercado_bitcoin: 'Mercado Bitcoin' };
+// Investment broker label lookup — canonical map lives in shared.js (BROKER_LABELS).
+// INV_CRYPTO_BROKER_LABELS removed; all callers below use invBrokerLabelShared().
 
 let invCryptoSortState = { col: 'current_value', dir: 'desc' };
 
@@ -91,7 +92,7 @@ const INV_CRYPTO_COLUMNS = [
 function invCryptoPositionsBlock(positions) {
   const decorated = positions.map(p => ({
     ...p,
-    broker_label: INV_CRYPTO_BROKER_LABELS[p.broker] || p.broker || '—',
+    broker_label: invBrokerLabelShared(p.broker),
   }));
   const rows = invCryptoSortRows(decorated);
 

@@ -58,9 +58,9 @@ Examples: `local-llms-landscape`, `ai-memory-systems`, `mcp-evolution`, `mcp-deb
 
 ### Source
 
-A per-source synthesis. 1:1 with a raw file. Combines agent-written content with user-written reflections (My take / Open questions / Dive deeper). Sources are the **entry points** of the wiki — flexibility in their structure is required, not optional.
+A per-source synthesis. 1:1 with a raw file (Markdown or PDF). Combines agent-written content with user-written reflections (My take / Open questions / Dive deeper). Sources are the **entry points** of the wiki — flexibility in their structure is required, not optional.
 
-Naming: filename mirrors the raw counterpart exactly.
+Naming: filename mirrors the raw counterpart's stem exactly, always with a `.md` extension (a PDF raw `Foo.pdf` yields source page `Foo.md`; the `raw:` frontmatter wikilinks `[[Foo.pdf]]`).
 
 ## Module extensions
 
@@ -541,6 +541,7 @@ Four operations covering the wiki lifecycle:
 | Component | Type | Invoked by | Purpose |
 |-----------|------|------------|---------|
 | `/sb-wiki-ingest <slug>` | Slash command | The user | Distill a raw source into wiki pages |
+| `/sb-wiki-ingest-all [origin]` | Slash command | The user | Backfill: ingest every non-ingested raw source via batched Opus subagents, then lint |
 | `sb-wiki-create-topic` | Skill (auto-discovered) | Agent mid-ingest, OR auto-fired when the user expresses intent | Create a topic page from a candidate or freshly-proposed topic |
 | `/sb-wiki-lint` | Slash command | The user | Health check + index maintenance for `raw/` and `wiki/` |
 | `/sb-wiki-query <question>` | Slash command | The user | Synthesize an answer from wiki + optionally file the result back |
@@ -552,8 +553,8 @@ Single command: `/sb-wiki-ingest <slug>` where slug is a raw filename or unique 
 | Step | Operation | Owner |
 |------|-----------|-------|
 | 0 | **Load extensions** (runs before Step 1) — MERGE each registered module's `wiki-ext/` definitions into the active rule set per Module extensions §; no-op when `wiki_extensions` is absent/empty | Agent |
-| 1 | Read raw file | Agent |
-| 2 | Write `wiki/sources/{origin}/{date}-{slug}.md` (`Substance` and `Connections` always; `Notable quotes` / `Methodology` / `Counterpoints` per source kind; user-half sections present as empty shells with headings only). **Substance bullets MUST name entities/concepts at page-cluster granularity** per Page granularity § — sub-cluster names go in prose without wikilinks | Agent |
+| 1 | Read raw file — resolve `<slug>` against `raw/{origin}/*.md` and `raw/{origin}/*.pdf`; read PDFs natively (page-range requests for large files) | Agent |
+| 2 | Write `wiki/sources/{origin}/{date}-{slug}.md` (`.md` extension even for a PDF source) (`Substance` and `Connections` always; `Notable quotes` / `Methodology` / `Counterpoints` per source kind; user-half sections present as empty shells with headings only). **Substance bullets MUST name entities/concepts at page-cluster granularity** per Page granularity § — sub-cluster names go in prose without wikilinks | Agent |
 | 3 | Identify entity/concept mentions; **cluster candidates by page-granularity** (variants, whole+part, siblings, producer+work — see Page granularity §); for each cluster representative, apply the stub-creation rule (Substance bullet = mechanical; title-only = discretion; Notable Quote = discretion). ALSO walk `wiki/topics/*.md` and identify existing topic pages relevant to this source per the relevance-detection rule (see "Existing topic updates" §) — build a `candidate-topic-updates` set | Agent |
 | 4 | Update existing entity/concept pages with new perspective + citation; populate `Open variants / debates` section if Contradiction fires. **Agent NEVER overwrites a main section that already contains substantive content (>50 words) — only appends new sections, adds bullets to existing lists, or adds footnote definitions to Sources. User-fleshed content is treated as authoritative.** Existing topic pages are NOT updated at this step — they go through the Stage 1 user gate per "Existing topic updates" § | Agent |
 | 5 | Create stubs for new entities/concepts that meet the rule | Agent |
@@ -636,6 +637,21 @@ The user can answer with a bundled, out-of-order reflection. The agent routes by
 Explicit or semantically clear content MUST go to its matching section even if it arrives while another section is displayed. Example: "quero dive deeper em graph databases" goes under `Dive deeper`, never under `My take`. If a response contains multiple routed spans, write each span under its matching heading. If a response contains substantive text with no routing signal, write it under `My take`. If routing is ambiguous and misrouting would change meaning, ask one targeted clarification.
 
 The agent re-syncs the `My take` index cell per the three-state rule defined under "Wiki sources index format" — write the 1-sentence preview if `My take` was filled; write `—` if Stage 2 produced `Open questions` or `Dive deeper` while `My take` stayed empty; leave `pending` if Stage 2 was declined, ignored, or produced no routed content.
+
+### `/sb-wiki-ingest-all`
+
+`/sb-wiki-ingest-all [origin]`. Orchestration-only command: it ingests every raw source that has no source page yet (`wiki/sources/{origin}/{stem}.md` absent) by dispatching subagents that each run `/sb-wiki-ingest` unchanged. It adds NO ingestion logic — `/sb-wiki-ingest` remains the sole authority on how one source is distilled.
+
+| Step | Operation | Owner |
+|------|-----------|-------|
+| 1 | Run `sb-wiki-ingest-all-manifest.py` → JSON of non-ingested sources (`.md` + `.pdf`) with per-file approx `token_estimate` and per-origin token sums. "Ingested" = source page exists. Excludes asset folders; includes `studies` and any `_`-prefixed origin except assets | Script |
+| 2 | Per origin, greedily pack files into batches ≤50,000 source tokens; a lone file >50,000 (or null estimate) is its own batch — a source is never split | Agent |
+| 3 | Schedule waves: wave K = batch K of each origin (distinct origins → parallel-safe), cap 5 concurrent; same-origin batches always land in different waves (serialized) | Agent |
+| 4 | Dispatch one Opus subagent per batch per wave; subagents run `/sb-wiki-ingest` non-interactively (auto `accept-all`, defer all topics, reject all topic updates, skip Stage 2), one file at a time | Agent + Subagents |
+| 5 | After the last wave, run `/sb-wiki-lint` to dedupe cross-origin duplicate stubs, renumber footnotes, repair indexes, and prune the log | Agent |
+| 6 | Report committed/partial/failed counts, cross-origin duplicate slugs, and the lint outcome | Agent |
+
+**Why origin-serial.** Same-origin sources reuse the same entities/concepts, so concurrent ingestion races to create the same stub. Serializing per origin removes the dense-overlap collisions; the rarer cross-origin collisions (globally-common entities) are healed by the step-5 lint pass. There is no user checkpoint during the run — Stage 1/Stage 2 are auto-resolved per subagent; the only interactive surface is lint's step-9 report at the end.
 
 ### `sb-wiki-create-topic`
 
@@ -796,6 +812,7 @@ Source files live in the sb-os repo under `sb-os/workflows/sb-wiki-*/`. Skills a
 | Component | Type | Source (sb-os repo) | Installed loader (vault) | Purpose |
 |-----------|------|--------------------|--------------------------|---------|
 | `sb-wiki-ingest` | Slash command | `sb-os/workflows/sb-wiki-ingest/` | `.claude/commands/sb-wiki-ingest.md` | User-invocable end-to-end ingest |
+| `sb-wiki-ingest-all` | Slash command | `sb-os/workflows/sb-wiki-ingest-all/` | `.claude/commands/sb-wiki-ingest-all.md` | User-invocable batch backfill of all non-ingested sources (orchestration only) |
 | `sb-wiki-create-topic` | Skill (auto-discovered) | `sb-os/workflows/sb-wiki-create-topic/` | `.claude/skills/sb-wiki-create-topic/SKILL.md` | Agent-invokable mid-ingest; auto-fires when the user expresses topic-creation intent |
 | `sb-wiki-lint` | Slash command | `sb-os/workflows/sb-wiki-lint/` | `.claude/commands/sb-wiki-lint.md` | User-invocable health check + index maintenance |
 | `sb-wiki-query` | Slash command | `sb-os/workflows/sb-wiki-query/` | `.claude/commands/sb-wiki-query.md` | User-invocable synthesized query |

@@ -26,6 +26,25 @@ const BANK_NAMES = {
   'xp_fatura': 'XP'
 };
 
+// Canonical investment-broker / exchange label map.
+// Single source of truth for all inv-*.js views. Union of labels from
+// inv-carteira, inv-bolsa, inv-balcao, inv-crypto, inv-proventos, inv-historico.
+// Fallback: callers use `BROKER_LABELS[id] || id` — unknown keys pass through as-is.
+const BROKER_LABELS = {
+  safra:           'Safra',
+  avenue:          'Avenue',
+  clear:           'Clear',
+  xp:              'XP',
+  bipa:            'Bipa',
+  binance:         'Binance',
+  mercado_bitcoin: 'Mercado Bitcoin',
+  mercado_pago:    'Mercado Pago',
+  guide:           'Guide',
+  warren:          'Warren',
+};
+
+function invBrokerLabelShared(id) { return id ? (BROKER_LABELS[id] || id) : '—'; }
+
 // Global state shared across page-specific scripts
 let allData = {};
 let charts = {};

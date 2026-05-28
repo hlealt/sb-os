@@ -1,9 +1,9 @@
 ---
-name: create-thesis
+name: sb-fin-create-thesis
 description: Create a single investment thesis page in the finance-extended wiki layer. Two invocation modes — deliberate user-intent authoring (single confirmation checkpoint) and investor-orchestrated authoring (no separate checkpoint).
 ---
 
-# create-thesis
+# sb-fin-create-thesis
 
 Author a single `thesis` page — a falsifiable investment argument with explicit evidence and invalidation criteria. Thesis pages are authored DELIBERATELY (like topics via `sb-wiki-create-topic`), NEVER auto-created by ingest. Invocation is intent-driven — no slash command. Two invocation modes are supported:
 

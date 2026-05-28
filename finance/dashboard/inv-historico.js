@@ -14,11 +14,8 @@ const INV_HIST_LEDGERS = [
   { id: 'crypto',    file: './ledgers/investimentos/crypto.csv',    label: 'Crypto'     },
 ];
 
-const INV_HIST_BROKER_LABELS = {
-  safra: 'Safra', clear: 'Clear', xp: 'XP', avenue: 'Avenue',
-  bipa: 'Bipa', binance: 'Binance', mercado_bitcoin: 'Mercado Bitcoin',
-  warren: 'Warren', mercado_pago: 'Mercado Pago', guide: 'Guide',
-};
+// Investment broker label lookup — canonical map lives in shared.js (BROKER_LABELS).
+// INV_HIST_BROKER_LABELS removed; all callers below use invBrokerLabelShared().
 
 let invHistTxs = null;          // loaded transaction array (cached)
 let invHistFilters = { ledger: 'all', broker: 'all', search: '', dateFrom: '', dateTo: '' };
@@ -159,7 +156,7 @@ function invHistFilterBar(allTxs) {
     .map(([v, l]) => `<option value="${v}"${v === invHistFilters.ledger ? ' selected' : ''}>${l}</option>`).join('');
   const brokers = ['all', ...Array.from(new Set(allTxs.map(t => t.broker).filter(Boolean))).sort()];
   const brokerOpts = brokers.map(b => {
-    const label = b === 'all' ? 'Todas as instituições' : (INV_HIST_BROKER_LABELS[b] || b);
+    const label = b === 'all' ? 'Todas as instituições' : invBrokerLabelShared(b);
     return `<option value="${b}"${b === invHistFilters.broker ? ' selected' : ''}>${label}</option>`;
   }).join('');
 
@@ -227,7 +224,7 @@ function invHistFormatCell(t, col) {
   if (v == null || v === '') return '—';
   if (col.key === 'date')          return invFormatBrDate(v);
   if (col.key === 'ledger')        return INV_HIST_LEDGERS.find(l => l.id === v)?.label || v;
-  if (col.key === 'broker')        return INV_HIST_BROKER_LABELS[v] || v;
+  if (col.key === 'broker')        return invBrokerLabelShared(v);
   if (col.key === 'quantity')      return Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 8 });
   if (col.key === 'value_native') {
     const num = Number(v);

@@ -141,6 +141,13 @@
           "description": "Two-stage Karpathy-style ingest of a raw source into the wiki."
         },
         {
+          "name": "sb-wiki-ingest-all",
+          "module": "wiki",
+          "source_template": "wiki/commands/sb-wiki-ingest-all.md",
+          "target": ".claude/commands/sb-wiki-ingest-all.md",
+          "description": "Backfill the wiki: ingest every non-ingested raw source via batched Opus subagents, then lint."
+        },
+        {
           "name": "sb-wiki-lint",
           "module": "wiki",
           "source_template": "wiki/commands/sb-wiki-lint.md",
@@ -195,10 +202,10 @@
       "atomic": false,
       "skills": [
         {
-          "name": "create-thesis",
+          "name": "sb-fin-create-thesis",
           "module": "finance",
-          "source_template": "finance/skills/create-thesis/SKILL.md",
-          "target": ".claude/skills/create-thesis/SKILL.md",
+          "source_template": "finance/skills/sb-fin-create-thesis/SKILL.md",
+          "target": ".claude/skills/sb-fin-create-thesis/SKILL.md",
           "description": "Create a wiki thesis page from a candidate-thesis or freshly-proposed investment thesis."
         }
       ],

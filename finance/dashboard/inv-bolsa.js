@@ -18,6 +18,7 @@ let invBolsaSortState = { col: 'current_value', dir: 'desc' };
 let invBolsaBrokerFilter = 'all';
 let invBolsaCurrencyView = 'native'; // 'native' | 'brl' — affects table only
 let invBolsaSectionsOpen = { positions: true, sector: true };
+let invBolsaPriceVarExpanded = false; // historical price-variation columns collapsed by default
 
 // Fields that swap between native and BRL when the currency-view toggle changes.
 const INV_BOLSA_BRL_FIELDS = {
@@ -63,6 +64,7 @@ function invBolsaRender(container) {
   invBolsaAttachRefreshHandler(container);
   invBolsaAttachSortHandlers(container);
   invBolsaAttachCollapsibleHandlers(container);
+  invBolsaAttachPriceVarToggle(container);
 }
 
 // --- Filter bar: broker filter + currency view toggle ---
@@ -152,10 +154,8 @@ function invBolsaToast(message, kind) {
   setTimeout(() => { el.remove(); }, 4200);
 }
 
-function invBolsaBrokerLabel(b) {
-  if (!b) return '—';
-  return b.charAt(0).toUpperCase() + b.slice(1);
-}
+// Investment broker label lookup — canonical map lives in shared.js (BROKER_LABELS).
+function invBolsaBrokerLabel(b) { return invBrokerLabelShared(b); }
 
 function invBolsaAttachBrokerHandler(container) {
   const sel = container.querySelector('#inv-bolsa-broker-filter');
@@ -275,6 +275,16 @@ function invBolsaSectorSummary(positions) {
 
 // --- Positions table (with price variation) ---
 
+// IRR quality flag tooltips (mirrors inv-balcao.js pattern).
+// These flags are only produced by calculate.py for valuation_method='balcao'.
+// For bolsa (valuation_method='price'), irr_quality is never set today — the field
+// is read defensively so the view is future-proof if calculate.py ever adds it.
+const _INV_BOLSA_IRR_QUALITY_TOOLTIPS = {
+  seed_only:    'TIR baseada apenas no snapshot inicial (seed) — sem histórico de aplicações reais.',
+  short_window: 'Janela < 90 dias entre o primeiro fluxo e a data de corte — TIR pode oscilar fortemente.',
+  unverified:   'Aplicação única não auditada contra extratos históricos — possíveis lançamentos faltando.',
+};
+
 const INV_BOLSA_COLUMNS = [
   { key: 'id',               label: 'Ticker',       align: 'left' },
   { key: 'quantity',         label: 'Qtd',          align: 'right', privacy: true,  format: 'qty' },
@@ -283,6 +293,7 @@ const INV_BOLSA_COLUMNS = [
   { key: 'current_value',    label: 'Valor',        align: 'right', privacy: true,  format: 'money' },
   { key: 'pnl_absolute',     label: 'P&L',          align: 'right', privacy: true,  format: 'pnl' },
   { key: 'pnl_pct',          label: 'Retorno %',    align: 'right', privacy: true,  format: 'pct' },
+  { key: 'irr',              label: 'TIR',          align: 'right', privacy: true,  format: 'irr' },
   { key: 'return_usd',       label: 'Ret. USD',     align: 'right', privacy: true,  format: 'pnl_usd',  currency_filter: true },
   { key: 'return_fx_brl',    label: 'FX',           align: 'right', privacy: true,  format: 'pnl_brl',  currency_filter: true },
   { key: 'return_total_brl', label: 'BRL All-in',   align: 'right', privacy: true,  format: 'pnl_brl',  currency_filter: true },
@@ -293,18 +304,27 @@ const INV_BOLSA_COLUMNS = [
 ];
 
 function invBolsaPositionsTable(rows) {
-  let html = `<div style="overflow-x:auto"><table class="inv-bolsa-table"><thead><tr>`;
+  // Toggle button for price-variation columns (collapsed by default — p6-3).
+  const toggleLabel = invBolsaPriceVarExpanded ? '▲ Ocultar variação' : '▼ Mostrar variação';
+  const toggleStyle = 'padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-size:0.8rem;margin-bottom:8px;display:inline-block';
+  const toggleHtml = `<button id="inv-bolsa-pricevar-toggle" type="button" style="${toggleStyle}" title="Mostrar/ocultar colunas de variação histórica de preço">${toggleLabel}</button>`;
+
+  const colCount = INV_BOLSA_COLUMNS.length + (invBolsaPriceVarExpanded ? INV_BOLSA_PERIODS.length : 0) + 1;
+
+  let html = `${toggleHtml}<div style="overflow-x:auto"><table class="inv-bolsa-table"><thead><tr>`;
   INV_BOLSA_COLUMNS.forEach(col => {
     const arrow = invBolsaSortState.col === col.key ? (invBolsaSortState.dir === 'asc' ? ' ▲' : ' ▼') : '';
     html += `<th data-sort="${col.key}" style="cursor:pointer;text-align:${col.align}">${col.label}${arrow}</th>`;
   });
-  INV_BOLSA_PERIODS.forEach(p => {
-    html += `<th style="text-align:right">${p.label}</th>`;
-  });
+  if (invBolsaPriceVarExpanded) {
+    INV_BOLSA_PERIODS.forEach(p => {
+      html += `<th style="text-align:right">${p.label}</th>`;
+    });
+  }
   html += `<th>Fonte</th></tr></thead><tbody>`;
 
   if (rows.length === 0) {
-    html += `<tr><td colspan="${INV_BOLSA_COLUMNS.length + INV_BOLSA_PERIODS.length + 1}" style="text-align:center;color:var(--text-muted)">Nenhum dado</td></tr>`;
+    html += `<tr><td colspan="${colCount}" style="text-align:center;color:var(--text-muted)">Nenhum dado</td></tr>`;
   }
 
   rows.forEach(p => {
@@ -312,10 +332,12 @@ function invBolsaPositionsTable(rows) {
     INV_BOLSA_COLUMNS.forEach(col => {
       html += `<td style="text-align:${col.align}" class="${col.privacy ? 'privacy-hide' : ''}">${invBolsaFormatCell(p, col)}</td>`;
     });
-    INV_BOLSA_PERIODS.forEach(per => {
-      const v = p.price_changes ? p.price_changes[per.key] : null;
-      html += `<td style="text-align:right">${invBolsaFormatChange(v)}</td>`;
-    });
+    if (invBolsaPriceVarExpanded) {
+      INV_BOLSA_PERIODS.forEach(per => {
+        const v = p.price_changes ? p.price_changes[per.key] : null;
+        html += `<td style="text-align:right">${invBolsaFormatChange(v)}</td>`;
+      });
+    }
     const dot = invPriceSourceDot(p);
     html += `<td><span title="${dot.label}" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${dot.color};margin-right:6px;"></span>${dot.label}</td>`;
     html += `</tr>`;
@@ -329,6 +351,19 @@ function invBolsaFormatCell(p, col) {
   if (col.key === 'id') return `<strong>${p.id}</strong>${p.name ? `<div style="font-size:0.75rem;color:var(--text-muted)">${p.name}</div>` : ''}`;
   if (col.key === 'first_purchase') return p.first_purchase_date ? invFormatBrDate(p.first_purchase_date) : '—';
   if (p.price_source === 'missing' && (col.key === 'current_price' || col.key === 'current_value' || col.key === 'pnl_absolute' || col.key === 'pnl_pct')) return '—';
+  // IRR column: render annualised % with amber quality-flag dot when flagged.
+  if (col.format === 'irr') {
+    const irr = p.irr;
+    if (irr == null) return '<span style="color:var(--text-muted)">—</span>';
+    const txt = invFormatPctValue(irr);
+    const quality = p.irr_quality;
+    if (quality && quality !== 'complete') {
+      const tip = _INV_BOLSA_IRR_QUALITY_TOOLTIPS[quality] || quality;
+      const dot = `<span title="${tip}" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--amber, #F59E0B);margin-right:6px;vertical-align:middle;cursor:help;"></span>`;
+      return `${dot}${txt}`;
+    }
+    return txt;
+  }
   // Returns decomposition columns: BRL positions and price-missing → em-dash.
   if (col.currency_filter) {
     if (p.currency === 'BRL' || p.price_source === 'missing' || p[col.key] == null) return '—';
@@ -403,6 +438,15 @@ function invBolsaSort(rows, col, dir) {
     if (vb == null) return -1;
     if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * mult;
     return String(va).localeCompare(String(vb)) * mult;
+  });
+}
+
+function invBolsaAttachPriceVarToggle(container) {
+  const btn = container.querySelector('#inv-bolsa-pricevar-toggle');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    invBolsaPriceVarExpanded = !invBolsaPriceVarExpanded;
+    invBolsaRender(container);
   });
 }
 
