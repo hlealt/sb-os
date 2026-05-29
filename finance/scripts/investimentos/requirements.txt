@@ -3,4 +3,5 @@ openpyxl
 numpy-financial
 yfinance
 requests
+httpx
 scipy
