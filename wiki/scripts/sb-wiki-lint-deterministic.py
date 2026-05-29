@@ -147,7 +147,7 @@ def sync_wiki_leaf_headers_and_queue(wiki_root: Path, report: Report, apply_chan
             index_text = read_text(index_path)
         links = table_links(index_text)
         for page in sorted(leaf_dir.glob("*.md")):
-            if page.name == index_name or page.name in links:
+            if page.name == index_name or page.name in links or page.name in NON_SOURCE_FILES:
                 continue
             report.judgment_needed.append(
                 {
@@ -242,6 +242,39 @@ SUBDIVISION_NAMING_POLICY: dict[str, tuple[str, bool]] = {
 SUBDIVISION_PROPOSE_FLOOR = 5
 SUBDIVISION_TYPE_FOLDERS = ("concepts", "entities")
 
+# Irregular and uncountable kind -> subfolder mappings for kinds NOT in the
+# explicit naming policy. The blind-reader test still applies downstream (the
+# LLM lint pass may override a proposed name at step 9), but proposals should
+# carry correct English plurals rather than a naive "+s".
+SUBDIVISION_IRREGULAR = {
+    "phenomenon": "phenomena",
+    "analysis": "analyses",
+    "thesis": "theses",
+    "hypothesis": "hypotheses",
+    "taxonomy": "taxonomies",
+}
+# Uncountable / already-plural-shaped kinds: subfolder == kind, no suffix.
+SUBDIVISION_UNCOUNTABLE = {"ai-safety", "research"}
+
+
+def pluralize_kind(kind: str) -> str:
+    """English-plural a `kind:` value for a proposed subfolder name.
+
+    Order: irregular map, uncountable map, already-plural detection, then
+    standard rules (consonant+y -> ies; sibilant -> es; else +s).
+    """
+    if kind in SUBDIVISION_IRREGULAR:
+        return SUBDIVISION_IRREGULAR[kind]
+    if kind in SUBDIVISION_UNCOUNTABLE:
+        return kind
+    if kind.endswith("s") or kind.endswith("ics"):
+        return kind  # already plural-shaped (e.g. automation-economics)
+    if re.search(r"[^aeiou]y$", kind):
+        return kind[:-1] + "ies"
+    if kind.endswith(("x", "z", "ch", "sh")):
+        return kind + "es"
+    return kind + "s"
+
 
 def collect_kind_pages(type_dir: Path) -> tuple[dict[str, list[Path]], list[Path]]:
     """Walk a type folder (flat root + per-kind subfolders) and group by `kind:`.
@@ -282,6 +315,7 @@ def detect_subdivision(wiki_root: Path, report: Report) -> None:
     proposals at step 9 and executes on user accept.
     """
     proposals: list[dict] = []
+    stragglers: list[dict] = []
     kind_missing: list[str] = []
     for type_folder in SUBDIVISION_TYPE_FOLDERS:
         type_dir = wiki_root / "wiki" / type_folder
@@ -291,13 +325,32 @@ def detect_subdivision(wiki_root: Path, report: Report) -> None:
         for page in missing:
             kind_missing.append(str(page.relative_to(wiki_root)).replace("\\", "/"))
         for kind, pages in kinds.items():
-            count = len(pages)
+            subfolder, prefixed = SUBDIVISION_NAMING_POLICY.get(
+                kind, (pluralize_kind(kind), False)
+            )
+            flat = [p for p in pages if p.parent == type_dir]
+            # A kind whose subfolder already exists has graduated — never
+            # re-propose it. Instead, flag any flat pages of that kind as
+            # stragglers to relocate into the existing subfolder.
+            already_graduated = subfolder != type_folder and (type_dir / subfolder).is_dir()
+            if already_graduated:
+                if flat:
+                    stragglers.append(
+                        {
+                            "type": type_folder,
+                            "kind": kind,
+                            "subfolder": subfolder,
+                            "count": len(flat),
+                            "pages": sorted(p.name for p in flat),
+                        }
+                    )
+                continue
+            # Propose subdivision only on FLAT pages — pages already in a
+            # subfolder are not eligible to graduate again.
+            count = len(flat)
             if count < SUBDIVISION_PROPOSE_FLOOR:
                 continue
-            subfolder, prefixed = SUBDIVISION_NAMING_POLICY.get(
-                kind, (kind + "s" if not kind.endswith("s") else kind, False)
-            )
-            sample = sorted(p.stem for p in pages)[:5]
+            sample = sorted(p.stem for p in flat)[:5]
             proposals.append(
                 {
                     "type": type_folder,
@@ -307,9 +360,14 @@ def detect_subdivision(wiki_root: Path, report: Report) -> None:
                     "domain_prefix_applied": prefixed,
                     "sample_pages": sample,
                     "naming_heuristic_applied": kind not in SUBDIVISION_NAMING_POLICY,
+                    # A proposed subfolder equal to the parent type folder name
+                    # (e.g. kind `concept` -> `concepts/` under concepts/) is an
+                    # invalid collision; flag so the LLM/user skips or renames it.
+                    "name_collides_with_parent": subfolder == type_folder,
                 }
             )
     report.detected["subdivision_proposals"] = proposals
+    report.detected["subdivision_stragglers"] = stragglers
     report.detected["kind_missing"] = kind_missing
 
 

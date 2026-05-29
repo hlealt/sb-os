@@ -9,7 +9,7 @@ End-to-end ingest of a single raw source into the Karpathy-style wiki layer. Imp
 
 ## Schema Source
 
-Read `3-resources/tools/sb-os/docs/wiki-schema.md` — Operations § "/sb-wiki-ingest" — for canonical step definitions. This workflow body implements that spec verbatim. Schema deviations require updating the schema first.
+Read `3-resources/tools/sb-os/wiki/docs/wiki-schema.md` — Operations § "/sb-wiki-ingest" — for canonical step definitions. This workflow body implements that spec verbatim. Schema deviations require updating the schema first.
 
 ## Path Resolution
 
@@ -40,7 +40,26 @@ These files codify rules referenced across multiple `sb-wiki-*` workflows. Load 
 
 ## Invocation
 
-`/sb-wiki-ingest <slug>` where `<slug>` is a raw filename or unique substring.
+| Form | Behavior |
+|------|----------|
+| `/sb-wiki-ingest <slug>` | Default (interactive). Runs the full 11-step flow with both checkpoints presented to the user. |
+| `/sb-wiki-ingest silent <slug>` | Silent (non-interactive). Runs steps 0–9 UNCHANGED, auto-resolves step 10 to fixed defaults, SKIPS step 11, and RETURNS a structured summary instead of presenting checkpoints. See Silent Mode below. |
+
+`<slug>` is a raw filename or unique substring.
+
+## Silent Mode
+
+When the `silent` keyword is present, this run is non-interactive — it emits NO checkpoint prompts and NEVER awaits user input. A caller (an orchestrator subagent, the research-mode auto-ingest, or `/sb-wiki-ingest-all`) invokes it to ingest one source end-to-end and parse a machine-readable result. The schema doc § "/sb-wiki-ingest" subsection "Silent (non-interactive) mode" is the canonical spec — follow it.
+
+The mode changes ONLY three things; everything else (clustering, stub rules, append-only protection, citation discipline, candidate-trigger detection) runs EXACTLY as the default flow:
+
+| Branch point | Silent behavior |
+|--------------|-----------------|
+| Step 1 — slug resolution | A multi-match `<slug>` ERRORS — NEVER prompts. See step 1 silent clause. |
+| Step 10 — Stage 1 commit gate | Auto-resolve every decision to a fixed default; emit the structured summary; NO prompt, NO mid-flow HALT. See step 10 silent clause. |
+| Step 11 — Stage 2 reflection | SKIPPED entirely — never presented, never awaited. See step 11 silent clause. |
+
+When the `silent` keyword is ABSENT, NONE of the silent clauses below apply — the workflow behaves EXACTLY as the default-mode body specifies.
 
 ## Flow
 
@@ -53,9 +72,10 @@ Read `sb-os.json` at vault root → `wiki_extensions` field (a list of registere
 ### Step 1 — Read raw file
 
 1. Resolve `<slug>` against `{wiki_root}/raw/`:
-   - Exact filename match wins.
+   - Exact filename match wins (never ambiguous).
    - Otherwise match unique substring across `{wiki_root}/raw/{origin}/*.md`, `{wiki_root}/raw/{origin}/*.pdf`, and `{wiki_root}/raw/studies/*.md`.
    - Multiple matches → halt and ask the user to disambiguate before any other action.
+   - **Silent mode override:** Multiple matches → do NOT prompt. RETURN the structured summary with per-file status `failed (slug ambiguous: N matches)` and ingest nothing. Zero matches → RETURN `failed (slug not found)`. (Both per the schema's silent return contract.)
 2. Read the raw file in full. For a PDF source, read it natively (the Read tool renders PDF pages); read every page — issue successive page-range requests when the file exceeds the per-request page limit. Capture origin (`{origin}` = parent folder name; `studies` is a valid origin).
 3. Note the source kind from origin and content shape: `article` | `paper` | `podcast` | `study` | `repo` (a PDF source is typically `paper` or `article`).
 
@@ -265,7 +285,20 @@ User response handling:
 
 Default behavior when the user omits per-topic decisions: defer all topics, reject all topic updates (firm AND speculative).
 
+**Silent mode override (step 10).** Do NOT present the Stage 1 preview. Do NOT prompt. Do NOT HALT mid-flow. Auto-resolve EVERY decision point to its fixed default, then RETURN the structured summary:
+
+| Decision point | Silent resolution |
+|----------------|-------------------|
+| Stage 1 file changes | Commit per `accept-all` — commit every staged file change. NEVER `reject` any row. NEVER `abort`. |
+| Proposed topics (PROPOSED TOPICS) | `defer` ALL — every `candidate-topic` log entry persists. NEVER invoke `sb-wiki-create-topic` mid-run. |
+| Firm topic updates (PROPOSED TOPIC UPDATES) | `reject` ALL. |
+| Speculative topic updates (SPECULATIVE TOPIC UPDATES) | `reject` ALL. |
+
+These resolutions are IDENTICAL to the default-omission behavior above for topics, and to `accept-all` for file changes. After committing, RETURN the structured summary the caller parses, per the schema § "/sb-wiki-ingest" subsection "Silent (non-interactive) mode" → "Return — structured summary (silent)". The summary's per-file status MUST be `committed` when all staged changes commit; `partial (<reason>)` ONLY when the source page committed but ≥1 staged change failed mid-commit (`<reason>` names what failed); `failed (<reason>)` when nothing committed (slug-resolution outcome from step 1, or an abort cause). NEVER emit `partial`/`failed` for a skipped step — clustering, trigger detection, and append-only protection all run in full. The mode NEVER writes a topic page and NEVER runs `/sb-wiki-lint`.
+
 ### Step 11 — Stage 2 checkpoint
+
+**Silent mode override (step 11).** SKIP this step entirely — never present the prompt, never await a response. The source page user-half stays empty shells; the wiki sources index `My take` cell stays `pending` (set at step 8). The structured summary was already returned at step 10.
 
 Optional post-commit reflection pass. Skip entirely if Stage 1 was aborted OR the source page was rejected at Stage 1. The ingest is already complete when this prompt appears. If the user ignores the prompt and sends an unrelated next command, do not treat that next command as a reflection response. Format VERBATIM:
 
@@ -316,6 +349,8 @@ End of flow.
 | Failure | Behavior |
 |---------|----------|
 | `<slug>` resolves to multiple raw files | Halt at step 1; ask user to disambiguate. No writes. |
+| `<slug>` resolves to multiple raw files (silent mode) | No halt. RETURN summary `failed (slug ambiguous: N matches)`. No writes. |
+| `<slug>` resolves to zero raw files (silent mode) | RETURN summary `failed (slug not found)`. No writes. |
 | `{wiki_root}` cannot be resolved from `sb-os.json` | Halt before step 1; surface error. No writes. |
 | Stage 1 not yet reached when the user interrupts | Roll back any partial writes from steps 2–8. |
 | `sb-wiki-create-topic` skill fails mid-Stage-1 acceptance | Mark the topic row as failed; keep the `candidate-topic` log entry; proceed with the rest of the acceptance. |

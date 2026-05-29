@@ -30,7 +30,7 @@ Each subagent runs the unmodified `sb-wiki-ingest` workflow per source. This orc
 | Token budget | A subagent's batch MUST NOT exceed **50,000** estimated source tokens (sum of `token_estimate` across its files). A single source whose estimate alone exceeds 50,000 becomes its own batch — a source is NEVER split across subagents. |
 | Same-origin serialization | Batches of the SAME origin run STRICTLY sequentially — never two at once. Same-source files reuse the same entities/concepts; concurrent ingestion would create duplicate stubs. |
 | Cross-origin parallelism | Batches of DIFFERENT origins MAY run in parallel, capped at **5** concurrent subagents per wave. |
-| Non-interactive ingest | Subagents auto-resolve every `/sb-wiki-ingest` checkpoint (see dispatch prompt). NO subagent ever pauses for user input. |
+| Non-interactive ingest | Subagents invoke `/sb-wiki-ingest silent <slug>` per file; that mode owns every checkpoint auto-resolution. NO subagent ever pauses for user input. |
 | Model | Subagents run on **opus** (user-requested for ingest quality). |
 | No mid-run topic pages | Subagents DEFER all topics and REJECT all topic updates. Topic creation and cross-origin duplicate healing happen after, via the final lint pass. |
 
@@ -101,13 +101,12 @@ Ingest these raw wiki sources, one at a time, in this exact order:
 
 For EACH file, in order:
 1. If `{user_context_root}/sb-wiki-ingest/sb-wiki-ingest.yaml` exists, read it and apply its `context:` entries BEFORE ingesting (you do not inherit workspace rules — load it yourself).
-2. Invoke the `sb-wiki-ingest` workflow by reading and executing `{sb_os_path}/wiki/workflows/sb-wiki-ingest/sb-wiki-ingest.md` with this file as `<slug>`. Follow it EXACTLY — it is the sole authority on how a source is distilled. PDFs (`.pdf`) are valid slugs; the workflow resolves and reads them natively.
-3. You are NON-INTERACTIVE. At the Stage 1 checkpoint (step 10) respond `accept-all`, DEFER all proposed topics, and REJECT all topic updates (firm and speculative). SKIP the Stage 2 reflection checkpoint (step 11) entirely — never wait for input.
-4. Fully complete and commit one file before starting the next. Never run two ingests at once.
+2. Run `/sb-wiki-ingest silent <slug>` with this file as `<slug>` by reading and executing `{sb_os_path}/wiki/workflows/sb-wiki-ingest/sb-wiki-ingest.md` in its silent mode. Follow it EXACTLY — it is the sole authority on how a source is distilled and on every checkpoint auto-resolution. PDFs (`.pdf`) are valid slugs; the workflow resolves and reads them natively.
+3. Fully complete and commit one file before starting the next. Never run two ingests at once.
 
 Do NOT run /sb-wiki-lint. Do NOT create topic pages. Do NOT touch files outside this batch.
 
-Report back, per file: `committed` | `partial (reason)` | `failed (reason)`, and the list of NEW concept/entity page slugs you created (filename stems).
+Report back, per file, the structured summary silent mode returns: per-file status `committed` | `partial (reason)` | `failed (reason)`, and the list of NEW concept/entity page slugs created (filename stems).
 ```
 
 ## Failure Modes

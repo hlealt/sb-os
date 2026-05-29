@@ -85,4 +85,4 @@ Subdivision relies on Obsidian filename-based wikilink resolution. Required sett
 | Lint behavior | SKIP entirely — no index creation, no orphan-detection participation (in or out), no filename validation. |
 | Pre-existing exceptions | A vault may carry legacy asset folders nested inside specific origins (e.g., `raw/mails/assets/{message-folder}/` from `gmail-bridge`). User-owned; untouched by every sb-os component. New assets land in `{wiki_root}/raw/assets/`. |
 
-Pattern source: Karpathy-style workflow. Full schema: `3-resources/tools/sb-os/docs/wiki-schema.md` § "Asset folder".
+Pattern source: Karpathy-style workflow. Full schema: `3-resources/tools/sb-os/wiki/docs/wiki-schema.md` § "Asset folder".

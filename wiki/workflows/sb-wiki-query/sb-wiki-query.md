@@ -9,7 +9,7 @@ Synthesize an answer to a user question from the Karpathy-style wiki layer; opti
 
 ## Schema Source
 
-Read `3-resources/tools/sb-os/docs/wiki-schema.md` — Operations § "/sb-wiki-query" — for canonical step definitions. This workflow body implements that spec verbatim. Schema deviations require updating the schema first.
+Read `3-resources/tools/sb-os/wiki/docs/wiki-schema.md` — Operations § "/sb-wiki-query" — for canonical step definitions. This workflow body implements that spec verbatim. Schema deviations require updating the schema first.
 
 ## Karpathy Fallback Assertion
 

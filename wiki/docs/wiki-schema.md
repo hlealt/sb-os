@@ -548,7 +548,7 @@ Four operations covering the wiki lifecycle:
 
 ### `/sb-wiki-ingest`
 
-Single command: `/sb-wiki-ingest <slug>` where slug is a raw filename or unique substring.
+Two invocations: `/sb-wiki-ingest <slug>` (default, interactive) and `/sb-wiki-ingest silent <slug>` (non-interactive — see "Silent (non-interactive) mode" below). `<slug>` is a raw filename or unique substring.
 
 | Step | Operation | Owner |
 |------|-----------|-------|
@@ -638,6 +638,37 @@ Explicit or semantically clear content MUST go to its matching section even if i
 
 The agent re-syncs the `My take` index cell per the three-state rule defined under "Wiki sources index format" — write the 1-sentence preview if `My take` was filled; write `—` if Stage 2 produced `Open questions` or `Dive deeper` while `My take` stayed empty; leave `pending` if Stage 2 was declined, ignored, or produced no routed content.
 
+#### Silent (non-interactive) mode
+
+`/sb-wiki-ingest silent <slug>` runs the SAME 11-step flow with EVERY user-interaction point auto-resolved to a fixed default. It exists so a caller (an orchestrator subagent, a research-mode auto-ingest, `/sb-wiki-ingest-all`) ingests a source end-to-end with NO prompts and receives a machine-parseable result. Steps 0–9 are IDENTICAL to the default mode. The mode changes ONLY the two checkpoints and the slug-disambiguation behavior; everything else (clustering, stub rules, append-only protection, citation discipline, candidate-trigger detection) is unchanged.
+
+The default (interactive) mode is the behavior specified throughout this section. When the `silent` keyword is ABSENT, NONE of the silent overrides below apply — the command behaves EXACTLY as the default-mode spec above.
+
+**Auto-resolved defaults (silent):**
+
+| Decision point | Default mode | Silent override |
+|----------------|--------------|-----------------|
+| Stage 1 file changes (step 10) | User chooses `accept-all` / `reject N` / `abort` | Auto `accept-all` — commit every staged file change. NEVER `reject`, NEVER `abort`. |
+| Proposed topics (step 10 PROPOSED TOPICS) | User picks `accept N` / `defer N` (default defer all) | `defer` ALL — every `candidate-topic` log entry persists; NEVER invoke `sb-wiki-create-topic` mid-run. |
+| Firm topic updates (step 10 PROPOSED TOPIC UPDATES) | User picks `accept N` / `reject N` (default reject all) | `reject` ALL. |
+| Speculative topic updates (step 10 SPECULATIVE TOPIC UPDATES) | User picks `accept N` / `reject N` (default reject all) | `reject` ALL. |
+| Stage 2 reflection (step 11) | Optional post-commit prompt | SKIPPED entirely — never presented, never awaited. The source page user-half stays empty shells; the wiki sources index `My take` cell stays `pending` (set at step 8). |
+| Mid-flow HALT | A `<slug>` resolving to multiple raw files HALTS at step 1 for disambiguation | No HALT — see slug-resolution rule below. |
+
+This silent mode is the SINGLE source of the non-interactive ingest semantics. `/sb-wiki-ingest-all` no longer carries its own copy — its subagents invoke `/sb-wiki-ingest silent <slug>` and inherit these defaults. A change here changes every caller; never re-state these defaults in a caller.
+
+**Slug resolution (silent).** The caller MUST pass a precise slug. A `<slug>` that resolves to MULTIPLE raw files is an ERROR in silent mode (NOT a disambiguation prompt): return `failed (slug ambiguous: N matches)` and ingest nothing. An exact filename match always wins and is never ambiguous. A `<slug>` resolving to ZERO raw files is `failed (slug not found)`.
+
+**Return — structured summary (silent).** Instead of presenting checkpoints, silent mode RETURNS a structured summary the caller parses. The summary MUST contain, for the single source:
+
+| Field | Content |
+|-------|---------|
+| Per-file status | EXACTLY ONE of: `committed` (all staged changes committed) \| `partial (<reason>)` (source page committed, ≥1 staged change failed mid-commit — `<reason>` names what failed) \| `failed (<reason>)` (nothing committed — `<reason>` is `slug ambiguous: N matches`, `slug not found`, or the abort cause) |
+| New slugs | The list of NEW concept/entity page slugs created this run (filename stems, no `.md`); empty list if none |
+| Flags | Any scope-overlap detections and lint-relevant flags surfaced during the run (e.g. a `same-scope-opposing` Contradiction callout written, a deferred `candidate-topic`); empty if none |
+
+Silent mode runs the full append-only protection, clustering, and trigger detection of the default flow — `partial`/`failed` reflect ONLY commit-time or slug-resolution outcomes, never a skipped step. The mode NEVER writes a topic page and NEVER runs `/sb-wiki-lint` (cross-origin healing and topic promotion stay the caller's job).
+
 ### `/sb-wiki-ingest-all`
 
 `/sb-wiki-ingest-all [origin]`. Orchestration-only command: it ingests every raw source that has no source page yet (`wiki/sources/{origin}/{stem}.md` absent) by dispatching subagents that each run `/sb-wiki-ingest` unchanged. It adds NO ingestion logic — `/sb-wiki-ingest` remains the sole authority on how one source is distilled.
@@ -647,11 +678,11 @@ The agent re-syncs the `My take` index cell per the three-state rule defined und
 | 1 | Run `sb-wiki-ingest-all-manifest.py` → JSON of non-ingested sources (`.md` + `.pdf`) with per-file approx `token_estimate` and per-origin token sums. "Ingested" = source page exists. Excludes asset folders; includes `studies` and any `_`-prefixed origin except assets | Script |
 | 2 | Per origin, greedily pack files into batches ≤50,000 source tokens; a lone file >50,000 (or null estimate) is its own batch — a source is never split | Agent |
 | 3 | Schedule waves: wave K = batch K of each origin (distinct origins → parallel-safe), cap 5 concurrent; same-origin batches always land in different waves (serialized) | Agent |
-| 4 | Dispatch one Opus subagent per batch per wave; subagents run `/sb-wiki-ingest` non-interactively (auto `accept-all`, defer all topics, reject all topic updates, skip Stage 2), one file at a time | Agent + Subagents |
+| 4 | Dispatch one Opus subagent per batch per wave; subagents run `/sb-wiki-ingest silent <slug>` (silent mode owns every checkpoint auto-resolution — see "Silent (non-interactive) mode"), one file at a time | Agent + Subagents |
 | 5 | After the last wave, run `/sb-wiki-lint` to dedupe cross-origin duplicate stubs, renumber footnotes, repair indexes, and prune the log | Agent |
 | 6 | Report committed/partial/failed counts, cross-origin duplicate slugs, and the lint outcome | Agent |
 
-**Why origin-serial.** Same-origin sources reuse the same entities/concepts, so concurrent ingestion races to create the same stub. Serializing per origin removes the dense-overlap collisions; the rarer cross-origin collisions (globally-common entities) are healed by the step-5 lint pass. There is no user checkpoint during the run — Stage 1/Stage 2 are auto-resolved per subagent; the only interactive surface is lint's step-9 report at the end.
+**Why origin-serial.** Same-origin sources reuse the same entities/concepts, so concurrent ingestion races to create the same stub. Serializing per origin removes the dense-overlap collisions; the rarer cross-origin collisions (globally-common entities) are healed by the step-5 lint pass. There is no user checkpoint during the run — each subagent runs `/sb-wiki-ingest silent`, which auto-resolves both checkpoints; the only interactive surface is lint's step-9 report at the end.
 
 ### `sb-wiki-create-topic`
 
@@ -819,7 +850,7 @@ Source files live in the sb-os repo under `sb-os/workflows/sb-wiki-*/`. Skills a
 
 Workflows hold all logic. Slash commands and skills are thin loaders only.
 
-This schema doc lives at its canonical home: `3-resources/tools/sb-os/docs/wiki-schema.md` (inside the sb-os repo). Relocated from `1-projects/second-brain-evolution/sb-wiki-build/wiki-schema.md` at sb-os v2 build time (p2-1).
+This schema doc lives at its canonical home: `3-resources/tools/sb-os/wiki/docs/wiki-schema.md` (inside the sb-os repo). Relocated from `1-projects/second-brain-evolution/sb-wiki-build/wiki-schema.md` at sb-os v2 build time (p2-1).
 
 > **Configurability.** Wiki workflows resolve `{wiki_root}` from `sb-os.json` at runtime — never hardcoded. The `wiki/`, `raw/`, and `log.md` paths are derived as `{wiki_root}/wiki/`, `{wiki_root}/raw/`, and `{wiki_root}/log.md`. Per architecture doc §3, the user-context root for any YAML companions used by wiki workflows resolves through `sb-os.json` → `user_context_root` (default `.user/context/`).
 
@@ -846,7 +877,7 @@ These edits happen at sb-os v2 build time. Until v2 lands, the user's vault reta
 **sb-os repo (v2 build):**
 
 - **NEW `sb-os/workflows/sb-wiki-ingest/`, `sb-wiki-create-topic/`, `sb-wiki-lint/`, `sb-wiki-query/`**: workflow source files implementing the four operations defined above.
-- **`sb-os/docs/wiki-schema.md`**: this schema doc, relocated from `1-projects/second-brain-evolution/sb-wiki-build/wiki-schema.md` at v2 build time (p2-1). Now at canonical home.
+- **`sb-os/wiki/docs/wiki-schema.md`**: this schema doc, relocated from `1-projects/second-brain-evolution/sb-wiki-build/wiki-schema.md` at v2 build time (p2-1). Now at canonical home.
 - **`sb-os/install/module-manifest.json`**: add the four `sb-wiki-*` components so the installer generates loaders.
 - **`sb-os/wiki/claude-mds/wiki.md`** (managed CLAUDE.md source per architecture §4): replace the v1 placeholder with operational rules referencing this schema (page types — call out extensibility, ingest flow, stub policy, citation format, index rules, lint's raw-index responsibility). Installs to `{vault}/{wiki_root}/CLAUDE.md`.
 - **`sb-os/install.py`**: confirm `wiki_root` prompt persists into `sb-os.json` (already in v1 per architecture §6 manifest schema); v2 adds the `sb-wiki-*` loader generation.

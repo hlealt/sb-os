@@ -12,7 +12,7 @@ Create a single topic page in the Karpathy-style wiki layer. Implements the 5-st
 
 ## Schema Source
 
-Read `3-resources/tools/sb-os/docs/wiki-schema.md` — Operations § "sb-wiki-create-topic" — for canonical step definitions. This workflow body implements that spec verbatim. Schema deviations require updating the schema first.
+Read `3-resources/tools/sb-os/wiki/docs/wiki-schema.md` — Operations § "sb-wiki-create-topic" — for canonical step definitions. This workflow body implements that spec verbatim. Schema deviations require updating the schema first.
 
 ## Path Resolution
 

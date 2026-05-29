@@ -5,7 +5,7 @@ wiki feature is enabled. `wiki_root` is configured in `sb-os.json` (default:
 `python install.py`; content OUTSIDE is preserved.
 
 Operational rules summarize the locked schema at
-`3-resources/tools/sb-os/docs/wiki-schema.md`. Edit the schema first if
+`3-resources/tools/sb-os/wiki/docs/wiki-schema.md`. Edit the schema first if
 behavior changes; this file follows.
 -->
 
@@ -16,7 +16,7 @@ Karpathy-style wiki layer — synthesis space for consumed external content. Pat
 
 Raw consumption (articles, papers, transcripts, study sessions) lives under `{wiki_root}/raw/`; synthesized pages live under `{wiki_root}/wiki/`; a single actionable queue (open `candidate-topic` + `candidate-mention` items) lives at `{wiki_root}/log.md`.
 
-Locked schema: `3-resources/tools/sb-os/docs/wiki-schema.md`. Operational details below summarize the schema — read the schema for the canonical spec.
+Locked schema: `3-resources/tools/sb-os/wiki/docs/wiki-schema.md`. Operational details below summarize the schema — read the schema for the canonical spec.
 
 > **Installer scope guarantee.** The sb-os installer (`install.py`) NEVER reads or writes anything under `{wiki_root}/wiki/` or `{wiki_root}/raw/` — wiki content (pages, indexes, `log.md`) is created and maintained EXCLUSIVELY by `/sb-wiki-ingest` and `/sb-wiki-lint`. Re-running `install.py --upgrade` is safe at any time. Full guarantee: schema § "Installer scope guarantee".
 
