@@ -31,7 +31,7 @@ These files codify rules referenced across multiple `sb-wiki-*` workflows. Load 
 | `../shared/stub-policy.md` | 1 |
 | `../shared/section-menus.md` | 1, 3 |
 | `../shared/frontmatter-schemas.md` | 1, 4, 7.5 |
-| `../shared/naming-convention.md` | 5 |
+| `../shared/naming-convention.md` | 5, 7.6 |
 | `../shared/citation-format.md` | 6 |
 | `../shared/index-formats.md` | 6, 7, 7.5 |
 | `../shared/log-entry-shapes.md` | 4, 8 |
@@ -52,8 +52,9 @@ This workflow is read-mostly by contract. Auto-applied writes are SCOPED to inde
 | Create missing wiki leaf indexes (`concepts.md`, `entities.md`, `topics.md`) (step 7) | `{wiki_root}/wiki/concepts/concepts.md`, `entities/entities.md`, `topics/topics.md` | Auto-applied — no user diff |
 | Prune spent/retired entries from `log.md` (step 8) — delete `candidate-topic`/`candidate-mention` entries whose page now exists, and delete retired history entries | `{wiki_root}/log.md` | Auto-applied — no user diff |
 | Folder subdivision execution (step 7.5) — create `{type}/{subfolder}/`, leaf index, marker-block CLAUDE.md, rewrite parent index as router, MOVE pages | `{wiki_root}/wiki/{concepts,entities}/...` | USER-GATED — executed only on `accept` at step 9 |
+| PDF title-conformance rename execution (step 7.6) — rename raw PDF + source page, rewrite all referrers (frontmatter, footnotes, both indexes, `log.md`) | `{wiki_root}/raw/{origin}/`, `{wiki_root}/wiki/...`, `{wiki_root}/log.md` | USER-GATED — executed only on `accept` at step 9 |
 
-NEVER edit page bodies, frontmatter (other than `last-touched` on indexes and on pages moved by subdivision), or any user-authored content from this workflow. NEVER delete pages. NEVER write a `lint` entry — lint findings live in the report only. The log is an actionable queue (`candidate-topic` + `candidate-mention` only); lint MAY delete entries that are spent (page exists) or retired (history types), but NEVER edits the body of a `candidate-topic`/`candidate-mention` it keeps, and NEVER auto-deletes a `candidate-mention` whose page does not yet exist.
+NEVER edit page bodies, frontmatter (other than `last-touched` on indexes and on pages moved by subdivision, and wikilink-target rewrites performed by a user-accepted PDF title-conformance rename per step 7.6), or any user-authored content from this workflow. NEVER delete pages. NEVER write a `lint` entry — lint findings live in the report only. The log is an actionable queue (`candidate-topic` + `candidate-mention` only); lint MAY delete entries that are spent (page exists) or retired (history types), but NEVER edits the body of a `candidate-topic`/`candidate-mention` it keeps, and NEVER auto-deletes a `candidate-mention` whose page does not yet exist.
 
 **`raw/assets/` is OUT OF SCOPE for this workflow.** No reads, no writes, no walks, no index creation, no orphan-detection participation, no filename validation. The folder is user-maintained via Obsidian's "Download attachments for current file" command (per `../shared/folder-structure.md` "Asset Folder" and schema § "Asset folder"). Treat it as if it were not present in the tree. Same exclusion applies to any pre-existing legacy asset folder nested under a specific origin (e.g., `raw/mails/assets/`) — user-owned, untouched.
 
@@ -71,7 +72,7 @@ The helper MUST NOT fill judgment-bearing cells. `Description`, `Scope`, and `Wh
 
 ## Flow
 
-Steps 1-8 run unattended. Step 8 PRUNES `log.md` (deletes spent candidates + retired history; writes NO `lint` entry). Step 9 is read-only for findings 1-7 and surfaces the `candidate-mention` review queue; when step 7.5 produced a non-empty `subdivision-proposals` set, the LINT REPORT at step 9 includes a SUBDIVISION PROPOSAL block that requires a user decision (accept all / accept N / reject / defer). On user accept, the agent executes the subdivision per step 7.5 § "Subdivision execution" (no log entry). The agent must perform the LLM judgment pass from the deterministic helper report before Step 8.
+Steps 1-8 run unattended. Step 8 PRUNES `log.md` (deletes spent candidates + retired history; writes NO `lint` entry). Step 9 is read-only for findings 1-7 and surfaces the `candidate-mention` review queue; when step 7.5 produced a non-empty `subdivision-proposals` set, the LINT REPORT at step 9 includes a SUBDIVISION PROPOSAL block that requires a user decision (accept all / accept N / reject / defer). On user accept, the agent executes the subdivision per step 7.5 § "Subdivision execution" (no log entry). Likewise, when step 7.6 produced a non-empty `rename-proposals` set, the report includes a RENAME PROPOSAL block; on user accept the agent executes the rename + full referrer rewrite per step 7.6 § "PDF title-conformance execution". The agent must perform the LLM judgment pass from the deterministic helper report before Step 8.
 
 ### Step 0 — Load extensions
 
@@ -228,6 +229,28 @@ For each accepted subfolder:
 6. Verify Obsidian-config precondition. If the vault's `.obsidian/app.json` exists and explicitly sets `newLinkFormat` to a value other than `shortest` (or empty), surface a warning in the LINT REPORT and ABORT this subdivision (no file moves committed). Default Obsidian behavior is shortest-path when the field is absent — that case proceeds.
 7. Capture `subdivision-executed` count for the LINT REPORT: subfolder name + page count moved. No log entry is written for subdivision — the folder structure and indexes are the record.
 
+### Step 7.6 — PDF title-conformance detection
+
+For each PDF raw source in `{wiki_root}/raw/{origin}/` (EXCLUDING `raw/assets/`):
+
+1. Read the raw index `Title` for that file (raw indexes are verified/created at step 7, so titles are present). Compute `{title-slug}` per `../shared/naming-convention.md` § "Raw PDF Title-Conformance" → "Title-slug algorithm".
+2. Stem already equals `{title-slug}` → skip.
+3. Stem differs AND no `raw/{origin}/{title-slug}.pdf` exists → add a `rename-proposals` row: `{old-stem}`, `{title-slug}`, origin.
+4. Stem differs BUT `raw/{origin}/{title-slug}.pdf` already exists → add to `duplicate-raws` findings (NO rename proposed — the title slug is taken; this raw duplicates an already-ingested paper).
+
+Detection ONLY — NEVER rename at this step. Markdown raw sources are out of scope (clipper-named). Build `rename-proposals` and `duplicate-raws` for the LINT REPORT and the step 9 gate.
+
+#### PDF title-conformance execution (only on user accept at step 9)
+
+For each accepted rename, update the FULL referrer set atomically — a filesystem rename does NOT trigger Obsidian backlink updates:
+
+1. Replace EVERY occurrence of `{old-stem}` with `{title-slug}` across ALL `.md` files under `{wiki_root}`. One pass rewrites: the source page `raw:` frontmatter, every `[^N]: [[{old-stem}.pdf]]` footnote on any wiki page, the raw index `File` cell, the wiki sources index `File` cell, any `[[{old-stem}.md]]` wikilink, and `log.md` references.
+2. Move `raw/{origin}/{old-stem}.pdf` → `raw/{origin}/{title-slug}.pdf`.
+3. Move `wiki/sources/{origin}/{old-stem}.md` → `wiki/sources/{origin}/{title-slug}.md`.
+4. The raw PDF content is never edited — rename only. NO log entry — the renamed files and rewritten links are the record.
+
+`duplicate-raws` findings are REPORTED, never auto-renamed — the user merges (repoint references to the canonical copy, then delete the duplicate raw + source page) or deletes them manually.
+
 ### Step 8 — Prune the log
 
 The log is an actionable queue. Lint NEVER writes a `lint` entry — findings live in the LINT REPORT (step 9) only. Lint's only write to `log.md` is PRUNING:
@@ -258,6 +281,15 @@ Footnotes renumbered: <N> source pages
 Pages without `kind:` (N): [[<file>.md]]
 Log pruned: <N> spent (page now exists), <M> retired history entries removed
 Candidate-mentions to review (N): "<slug>", "<slug>", … (the actionable queue — promote to a stub or dismiss)
+Duplicate raws — title-slug already taken (N): <old>.pdf ≡ <existing>.pdf (merge or delete manually)
+
+RENAME PROPOSAL — PDF title-conformance (omit block entirely when empty):
+| # | origin | old filename | → new filename |
+|---|--------|--------------|----------------|
+| 1 | papers | 2602.21012v1.pdf | international-ai-safety-report-2026.pdf |
+
+Decisions: accept all | accept N (e.g. "accept 1") | reject | defer
+(Default if the user does not respond: defer all — proposals persist in the next lint run.)
 
 SUBDIVISION PROPOSAL (omit block entirely when empty):
 | # | type | kind | count | suggested subfolder | sample pages |
@@ -281,6 +313,15 @@ User response handling for SUBDIVISION PROPOSAL:
 | `accept N` (e.g. `accept 1,2`) | Execute the listed proposals only. Other proposals defer. |
 | `reject` | All proposals defer; surface as warnings in the next lint run. |
 | `defer` (default) | Same as `reject` for this run; proposals re-surface in subsequent runs as long as the kind remains ≥10 pages. |
+
+User response handling for RENAME PROPOSAL:
+
+| Response | Behavior |
+|----------|----------|
+| `accept all` | Execute every proposed rename per step 7.6 § "PDF title-conformance execution" — rename raw + source page and rewrite the full referrer set. No log entry. |
+| `accept N` (e.g. `accept 1,2`) | Execute the listed renames only. Others defer. |
+| `reject` | All renames defer; re-surface next run. |
+| `defer` (default) | Same as `reject` for this run; proposals re-detect next run while the mismatch persists. |
 
 End of flow.
 

@@ -18,6 +18,32 @@ Filename, slug, and wikilink rules for all wiki pages and source pages.
 
 The origin's date format is preserved verbatim in the source page filename.
 
+## Raw PDF Title-Conformance
+
+A raw **PDF** filename MUST equal the kebab-slug of the paper's actual title. Cryptic publisher/repository names (arXiv IDs, scan dumps) are renamed to the title. Scope: PDF raw sources ONLY — markdown raw sources arrive title-named and are exempt.
+
+| Element | Rule |
+|---------|------|
+| Canonical PDF name | `{title-slug}.pdf` — no date prefix |
+| Mirrored source page | `{title-slug}.md` (existing mirror rule) |
+| Title source | The title printed on the document; the raw index `Title` column is the maintained record lint compares against |
+| Collision | If `{title-slug}.pdf` already exists, NEVER overwrite — duplicate raw; ingest halts, lint flags for merge/delete |
+| Immutability | Rename changes the filename only; raw content is never edited |
+
+### Title-slug algorithm
+
+1. Lowercase the title.
+2. Replace each run of whitespace and `+ / : – —` with a single `-`.
+3. Remove `? ! , . " ' ( ) [ ]` (and other punctuation).
+4. Collapse consecutive `-`; trim leading/trailing `-`.
+
+| Title | Slug |
+|-------|------|
+| International AI Safety Report 2026 | `international-ai-safety-report-2026` |
+| You Only Look Once: Unified, Real-Time Object Detection | `you-only-look-once-unified-real-time-object-detection` |
+| Is there "Secret Sauce" in Large Language Model Development? | `is-there-secret-sauce-in-large-language-model-development` |
+| Machine Learning: The High-Interest Credit Card of Technical Debt | `machine-learning-the-high-interest-credit-card-of-technical-debt` |
+
 ## Wikilinks
 
 | Context | Format |

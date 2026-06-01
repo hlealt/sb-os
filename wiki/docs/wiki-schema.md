@@ -228,6 +228,21 @@ A vault MAY have legacy asset folders nested inside specific origin subdirectori
 | Wikilinks in frontmatter | `"[[slug.md]]"` (quoted) |
 | Type folder | disambiguates collisions; same slug may exist in `concepts/` and `entities/`. **Forbidden**: same slug in `concepts/` and `topics/` (if reclassified, the old slug retires) |
 
+### Raw PDF title-conformance
+
+A raw **PDF** filename MUST equal the kebab-slug of the paper's actual title (the title printed on the document; mirrored in the raw index `Title` column). Cryptic publisher/repository names (arXiv IDs like `2602.21012v1.pdf`, scan dumps like `kolmbook-eng-scan.pdf`) do NOT reflect the title and are renamed. Scope: PDF raw sources ONLY — markdown raw sources arrive title-named from the clipper and are exempt.
+
+| Element | Rule |
+|---------|------|
+| Canonical PDF name | `{title-slug}.pdf` — no date prefix (papers are identified by title) |
+| Mirrored source page | `{title-slug}.md` (existing mirror rule) |
+| Title source | The title on the document; the raw index `Title` column is the maintained record lint compares against |
+| Owner | `/sb-wiki-ingest` renames at ingest (step 1.5, before the source page exists); `/sb-wiki-lint` detects + proposes renames for already-ingested PDFs (step 7.6, user-gated) |
+| Collision | If `{title-slug}.pdf` already exists, NEVER overwrite — the raw is a duplicate; ingest halts, lint flags it for merge/delete |
+| Immutability | A rename changes the FILENAME only; raw content is never edited. This is the sole permitted mutation of a raw file |
+
+**Title-slug algorithm.** (1) Lowercase the title. (2) Replace each run of whitespace and `+ / : – —` with a single `-`. (3) Remove `? ! , . " ' ( ) [ ]`. (4) Collapse consecutive `-`; trim leading/trailing `-`. Acronyms lowercase (`AI` → `ai`). Example: `International AI Safety Report 2026` → `international-ai-safety-report-2026`.
+
 ## Frontmatter schemas
 
 ### Common (all types)
@@ -691,6 +706,7 @@ Two invocations: `/sb-wiki-ingest <slug>` (default, interactive) and `/sb-wiki-i
 |------|-----------|-------|
 | 0 | **Load extensions** (runs before Step 1) — MERGE each registered module's `wiki-ext/` definitions into the active rule set per Module extensions §; no-op when `wiki_extensions` is absent/empty | Agent |
 | 1 | Read raw file — resolve `<slug>` against `raw/{origin}/*.md` and `raw/{origin}/*.pdf`; read PDFs natively (page-range requests for large files) | Agent |
+| 1.5 | **PDF title-conformance rename** (PDF sources only; markdown skips) — compute `{title-slug}` from the paper's title (Naming convention § "Raw PDF title-conformance"); if the PDF stem differs, rename `raw/{origin}/{stem}.pdf` → `{title-slug}.pdf` BEFORE the source page is created, so the source page and every footnote are born title-named (no referrer propagation needed). Collision → error-halt and ask (silent: `failed (duplicate raw)`). Filename-only — content immutable | Agent |
 | 2 | Write `wiki/sources/{origin}/{date}-{slug}.md` (`.md` extension even for a PDF source) (`Substance` and `Connections` always; `Notable quotes` / `Methodology` / `Counterpoints` per source kind; user-half sections present as empty shells with headings only). **Substance bullets MUST name entities/concepts at page-cluster granularity** per Page granularity § — sub-cluster names go in prose without wikilinks | Agent |
 | 3 | Identify entity/concept mentions; **cluster candidates by page-granularity** (variants, whole+part, siblings, producer+work — see Page granularity §); for each cluster representative, apply the stub-creation rule (Substance bullet = mechanical; title-only = discretion; Notable Quote = discretion). ALSO walk `wiki/topics/*.md` and identify existing topic pages relevant to this source per the relevance-detection rule (see "Existing topic updates" §) — build a `candidate-topic-updates` set | Agent |
 | 4 | Update existing entity/concept pages with new perspective + citation; populate `Open variants / debates` section if Contradiction fires. **Agent NEVER overwrites a main section that already contains substantive content (>50 words) — only appends new sections, adds bullets to existing lists, or adds footnote definitions to Sources. User-fleshed content is treated as authoritative.** Existing topic pages are NOT updated at this step — they go through the Stage 1 user gate per "Existing topic updates" § | Agent |
@@ -800,7 +816,7 @@ This silent mode is the SINGLE source of the non-interactive ingest semantics. `
 
 | Field | Content |
 |-------|---------|
-| Per-file status | EXACTLY ONE of: `committed` (all staged changes committed) \| `partial (<reason>)` (source page committed, ≥1 staged change failed mid-commit — `<reason>` names what failed) \| `failed (<reason>)` (nothing committed — `<reason>` is `slug ambiguous: N matches`, `slug not found`, or the abort cause) |
+| Per-file status | EXACTLY ONE of: `committed` (all staged changes committed) \| `partial (<reason>)` (source page committed, ≥1 staged change failed mid-commit — `<reason>` names what failed) \| `failed (<reason>)` (nothing committed — `<reason>` is `slug ambiguous: N matches`, `slug not found`, `duplicate raw: {title-slug}.pdf exists`, or the abort cause) |
 | New slugs | The list of NEW concept/entity page slugs created this run (filename stems, no `.md`); empty list if none |
 | Flags | Any scope-overlap detections and lint-relevant flags surfaced during the run (e.g. a `same-scope-opposing` Contradiction callout written, a deferred `candidate-topic`); empty if none |
 
@@ -859,6 +875,7 @@ The script performs deterministic maintenance and emits `judgment_needed`. The a
 | 6 | For each `wiki/sources/{origin}/` — re-sync `My take` column from each source page's `My take` section per the three-state rule (`pending` / `—` / reflected preview — see "Wiki sources index format" §); renumber footnotes; remove stale footnote definitions |
 | 7 | For each `raw/{origin}/` — verify `{origin}.md` index exists; if missing, create it with the standard `\| File \| Title \| Date \| Wiki \|` columns. For each raw file in `{origin}/`, ensure a row exists with `Wiki = No` (default) or `Yes/Partial` (preserved). Same for `raw/studies/studies.md`. **Index creation and maintenance is the agent's job**, not the user's. |
 | 7.5 | Folder-subdivision detection. For `wiki/concepts/` and `wiki/entities/`, group pages by `kind:` frontmatter. Surface kinds at ≥5 pages as a SUBDIVISION PROPOSAL block. Skip `wiki/topics/` (count <20) and `wiki/sources/` (already subdivided by origin). On user accept at step 9, the agent creates `{type}/{subfolder}/`, leaf index, parent CLAUDE.md marker-block routing rules, moves pages, and rewrites parent index as router. The folder structure and indexes are the record — NO log entry. Naming and policy per schema § "Folder subdivision". |
+| 7.6 | **PDF title-conformance detection.** For each PDF in `raw/{origin}/`, compare the stem to the kebab-slug of the raw index `Title` (Naming convention § "Raw PDF title-conformance"). Mismatch + no name collision → `rename-proposals` row; mismatch + `{title-slug}.pdf` already exists → `duplicate-raws` finding (no rename). Detection only — execution is USER-GATED at step 9, updating the full referrer set per "PDF title-conformance (lint)" below. Markdown sources exempt. |
 | 8 | Prune `log.md`: DELETE every `candidate-topic` / `candidate-mention` entry whose matching page now exists (resolution = page exists), and DELETE any retired history entries (`ingest`, `concept-created`, `entity-created`, `topic-created`, `topic-updated`, `topic-coverage-candidate`, `lint`, `query`). NO `lint` entry is written — findings live in the report only. `candidate-mention` entries with no matching page are NEVER auto-aged; they persist until the page exists or the user dismisses them |
 | 9 | Present findings to the user (read-only summary for findings 1-7; the `candidate-mention` review queue is surfaced here; SUBDIVISION PROPOSAL is the only interactive block — user accepts per kind or defers all) |
 
@@ -877,9 +894,29 @@ Broken wikilinks (0)
 Index sync — wiki/sources My take refreshed: 4 source pages
 Index sync — raw indexes: 1 created (raw/studies/studies.md), 3 rows added across raw/{origins}
 Footnotes renumbered: 2 source pages
+PDF renames proposed (N): <old>.pdf → <title-slug>.pdf, …
+Duplicate raws — title-slug already taken (N): <old>.pdf ≡ <existing>.pdf
 
-No action required (lint is read-mostly; index sync writes auto-applied).
+RENAME PROPOSAL — accept all | accept N | reject | defer (default defer; renames + referrer rewrites apply only on accept)
+
+No action required for read-mostly findings (index sync auto-applied). RENAME PROPOSAL and SUBDIVISION PROPOSAL are the interactive blocks.
 ```
+
+#### PDF title-conformance (lint)
+
+Step 7.6 compares each raw PDF stem to the kebab-slug of its raw-index `Title`. Mismatches surface as a RENAME PROPOSAL block; execution is user-gated (same model as subdivision). On user `accept`, for each rename the agent updates the FULL referrer set atomically — a filesystem rename does NOT trigger Obsidian backlink updates:
+
+| Referrer | Update |
+|----------|--------|
+| Raw PDF | `raw/{origin}/{old}.pdf` → `{title-slug}.pdf` |
+| Source page | `wiki/sources/{origin}/{old}.md` → `{title-slug}.md` |
+| Source `raw:` frontmatter | `[[{old}.pdf]]` → `[[{title-slug}.pdf]]` |
+| Footnote definitions | every `[^N]: [[{old}.pdf]]` on any wiki page → `[[{title-slug}.pdf]]` |
+| Raw index `File` cell | `[[{old}.pdf]]` → `[[{title-slug}.pdf]]` |
+| Wiki sources index `File` cell | `[[{old}.md]]` → `[[{title-slug}.md]]` |
+| Other wikilinks + `log.md` | any `[[{old}.md]]` / `[[{old}.pdf]]` → new stem |
+
+Mechanically: replace every occurrence of the old stem with `{title-slug}` across all `.md` files under `{wiki_root}`, then move the two files. Content is never edited. `duplicate-raws` are reported, never auto-renamed — the user merges or deletes them.
 
 #### Orphan-detection scope (STRICT)
 

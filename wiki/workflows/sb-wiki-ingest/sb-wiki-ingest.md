@@ -34,8 +34,8 @@ These files codify rules referenced across multiple `sb-wiki-*` workflows. Load 
 | `../shared/citation-format.md` | 2, 4 |
 | `../shared/log-entry-shapes.md` | 9 |
 | `../shared/index-formats.md` | 7, 8 |
-| `../shared/naming-convention.md` | 2, 5 |
-| `../shared/folder-structure.md` | 2, 5 |
+| `../shared/naming-convention.md` | 1.5, 2, 5 |
+| `../shared/folder-structure.md` | 1.5, 2, 5 |
 | `./data/candidate-topic-triggers.md` | 6 |
 
 ## Invocation
@@ -51,11 +51,12 @@ These files codify rules referenced across multiple `sb-wiki-*` workflows. Load 
 
 When the `silent` keyword is present, this run is non-interactive — it emits NO checkpoint prompts and NEVER awaits user input. A caller (an orchestrator subagent, the research-mode auto-ingest, or `/sb-wiki-ingest-all`) invokes it to ingest one source end-to-end and parse a machine-readable result. The schema doc § "/sb-wiki-ingest" subsection "Silent (non-interactive) mode" is the canonical spec — follow it.
 
-The mode changes ONLY three things; everything else (clustering, stub rules, append-only protection, citation discipline, candidate-trigger detection) runs EXACTLY as the default flow:
+The mode changes ONLY four things; everything else (clustering, stub rules, append-only protection, citation discipline, candidate-trigger detection) runs EXACTLY as the default flow:
 
 | Branch point | Silent behavior |
 |--------------|-----------------|
 | Step 1 — slug resolution | A multi-match `<slug>` ERRORS — NEVER prompts. See step 1 silent clause. |
+| Step 1.5 — title-conformance collision | A `{title-slug}.pdf` collision ERRORS — `failed (duplicate raw)`. NEVER prompts. See step 1.5 silent clause. |
 | Step 10 — Stage 1 commit gate | Auto-resolve every decision to a fixed default; emit the structured summary; NO prompt, NO mid-flow HALT. See step 10 silent clause. |
 | Step 11 — Stage 2 reflection | SKIPPED entirely — never presented, never awaited. See step 11 silent clause. |
 
@@ -78,6 +79,18 @@ Read `sb-os.json` at vault root → `wiki_extensions` field (a list of registere
    - **Silent mode override:** Multiple matches → do NOT prompt. RETURN the structured summary with per-file status `failed (slug ambiguous: N matches)` and ingest nothing. Zero matches → RETURN `failed (slug not found)`. (Both per the schema's silent return contract.)
 2. Read the raw file in full. For a PDF source, read it natively (the Read tool renders PDF pages); read every page — issue successive page-range requests when the file exceeds the per-request page limit. Capture origin (`{origin}` = parent folder name; `studies` is a valid origin).
 3. Note the source kind from origin and content shape: `article` | `paper` | `podcast` | `study` | `repo` (a PDF source is typically `paper` or `article`).
+
+### Step 1.5 — PDF title-conformance rename (PDF sources only)
+
+Markdown raw sources SKIP this step. For a PDF raw source:
+
+1. Determine the paper's title from the document (page 1 / metadata, already read in step 1).
+2. Compute `{title-slug}` per `../shared/naming-convention.md` § "Raw PDF Title-Conformance" → "Title-slug algorithm".
+3. Stem already equals `{title-slug}` → do nothing; proceed to step 2.
+4. Stem differs AND `raw/{origin}/{title-slug}.pdf` does NOT exist → rename `raw/{origin}/{stem}.pdf` → `raw/{origin}/{title-slug}.pdf` NOW, before the source page is created. The source page (step 2), its `raw:` frontmatter, and every downstream footnote are then born title-named — NO referrer propagation is needed because no page cites this source yet. Use `{title-slug}` as the slug for the rest of the flow.
+5. Collision — `raw/{origin}/{title-slug}.pdf` already exists → this raw duplicates an already-ingested paper. ERROR-halt and ask the user: abort (skip the duplicate) or proceed without renaming. **Silent mode:** do NOT halt — RETURN `failed (duplicate raw: {title-slug}.pdf exists)` and ingest nothing.
+
+The rename changes the FILENAME only — raw content is never edited (immutability governs content, per `../shared/folder-structure.md`).
 
 ### Step 2 — Write source page
 
@@ -349,6 +362,7 @@ End of flow.
 | Failure | Behavior |
 |---------|----------|
 | `<slug>` resolves to multiple raw files | Halt at step 1; ask user to disambiguate. No writes. |
+| PDF `{title-slug}.pdf` already exists at step 1.5 (duplicate raw) | Error-halt; ask abort / proceed-without-rename. Silent: RETURN `failed (duplicate raw: {title-slug}.pdf exists)`. No writes. |
 | `<slug>` resolves to multiple raw files (silent mode) | No halt. RETURN summary `failed (slug ambiguous: N matches)`. No writes. |
 | `<slug>` resolves to zero raw files (silent mode) | RETURN summary `failed (slug not found)`. No writes. |
 | `{wiki_root}` cannot be resolved from `sb-os.json` | Halt before step 1; surface error. No writes. |

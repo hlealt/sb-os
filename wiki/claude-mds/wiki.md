@@ -125,7 +125,7 @@ If a leaf index exists with a user-customized column layout, lint preserves it �
 
 Type folders (`concepts/`, `entities/`, `topics/`, `sources/`) are STABLE — never reorganize or rename. Topic-folder sub-organization (e.g., `wiki/concepts/ai/`) is DEFERRED until ≥20 wiki pages. All folder and index creation is lazy.
 
-Filenames use `lowercase-kebab.md`. Source page filenames mirror the raw counterpart EXACTLY — preserve the date format the origin uses; do NOT normalize.
+Filenames use `lowercase-kebab.md`. Source page filenames mirror the raw counterpart EXACTLY — preserve the date format the origin uses; do NOT normalize. Raw **PDF** filenames must equal the kebab-slug of the paper's title — `/sb-wiki-ingest` renames non-conforming PDFs at ingest (step 1.5), `/sb-wiki-lint` proposes renames for existing ones (step 7.6, user-gated). Schema § "Raw PDF title-conformance".
 
 ---
 

@@ -65,7 +65,7 @@ All folder and index creation is lazy — folders and indexes are created only w
 - Type folders (`concepts/`, `entities/`, `topics/`, `sources/`) are STABLE — never reorganize or rename.
 - Per-kind subfolders WITHIN a type folder are an opt-in subdivision pattern proposed by lint (`/sb-wiki-lint`) when one kind crosses ≥5 pages. Pre-subdivision, every type folder is flat. Schema § "Folder subdivision" defines threshold, naming policy (e.g., `kind: model` → `ai-models/` because "models" is generic), parent-index router format, and the managed `{type}/CLAUDE.md` marker block. Subdivision is opt-in per-kind; mixed structure (some kinds in subfolders, others flat) is permitted.
 - Topics-folder subdivision is deferred until ≥20 topic pages. `sources/` is already subdivided by origin and not subject to the per-kind rule.
-- Raw files are IMMUTABLE — never edit a saved source file.
+- Raw files are IMMUTABLE in CONTENT — never edit a saved source file. The sole permitted exception is a title-conformance RENAME of a PDF (filename only, content untouched), owned by `/sb-wiki-ingest` and `/sb-wiki-lint` per `../shared/naming-convention.md` § "Raw PDF Title-Conformance".
 
 ## Wikilink Resolution
 
