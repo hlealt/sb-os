@@ -13,8 +13,9 @@ The `/investor` reasoning mode that re-evaluates an EXISTING thesis against new 
 
 | Layer | Owns |
 |-------|------|
-| This mode (the reviewer) | reasoning: load the thesis, gather and weigh new evidence, test each invalidation criterion, reach a verdict, the present-and-confirm checkpoint, the buy/sell/hold and invalidation handoffs |
-| `./research.md` (the evidence sourcer) | auto-pull of fresh OPEN sources when wiki evidence is thin — discovery, propose→approve, capture, auto-ingest. This mode dispatches it; it NEVER re-specifies discovery or ingest |
+| This mode (the reviewer) | reasoning: load the thesis, re-run the Assumption Audit on its standing assumptions, gather and weigh new evidence, test each invalidation criterion, reach a verdict, the present-and-confirm checkpoint, the buy/sell/hold and invalidation handoffs |
+| `./research.md` (the evidence sourcer) | the Step 7a Disconfirm wave this mode dispatches PER near/untested invalidation criterion — discovery, propose→approve, capture, auto-ingest. This mode dispatches it; it NEVER re-specifies discovery, the cost cap, or ingest |
+| `./thesis.md` Step 2a (the Assumption Audit lens) | the canonical first-principles method this mode REUSES to classify the thesis's standing assumptions and rewrite them as testable questions. This mode supplies the review-specific input (standing assumptions that may have decayed); it NEVER redefines the method |
 | `sb-fin-create-thesis` (the scribe), its named `extend` entry point | persistence: append evidence-against, sharpen invalidation, update `status` / `conviction` / `last_reviewed`. The only writer of thesis-page updates; the agent NEVER re-implements these writes |
 
 ---
@@ -40,27 +41,45 @@ Read the target thesis page in full at `{wiki_root}/wiki/theses/{slug}.md` (reso
 
 If the named thesis page does not exist, surface it per `./investor-loop.md` § Issue-surfacing (this is blocking — there is nothing to review) and STOP.
 
-## Step 3 — Gather recent evidence (auto-pull research when thin)
+## Step 3 — Gather recent evidence (Assumption Audit on standing assumptions → targeted Disconfirm)
 
 Find wiki sources touching the thesis's entities dated AFTER `last_reviewed` — read source/entity pages directly (markdown, not position data). Weigh each candidate against `source-policy` (loaded in Step 1); a source that fails the trust bar is surfaced per `./investor-loop.md` § Issue-surfacing, never silently kept or dropped.
 
-When the recent wiki evidence is **thin** (too few sources after `last_reviewed` to test the criteria), auto-pull fresh OPEN sources by dispatching the `research` mode — do NOT discover, capture, or ingest in this file. Dispatch one sub-agent whose prompt MUST direct it to:
+### Step 3a — Re-run the Assumption Audit on the thesis's STANDING assumptions
 
-1. **Read-and-follow `./research.md` and execute its protocol exactly**, anchored to THIS thesis (pass the claim, the entity(ies), and the `research-policy` scope/exclusions loaded in Step 1).
-2. **Retain `./research.md`'s propose→approve checkpoint** — the user still approves which sources enter the wiki. ONLY the search kickoff is automatic; there are NO silent web writes and NO bypassed approval.
-3. **Return only the structured post-ingest summary** `./research.md` produces (pages created/updated, scope-overlaps, lint flags) — full source text MUST NOT return to this mode.
+A thesis decays when an assumption that held at authoring no longer holds. Re-run the Assumption Audit — **REUSE the lens defined in `./thesis.md` § Step 2a (the canonical method: the same `true` / `partial` / `unproven` / `outdated` / `convenience` classification + the rewrite-as-testable-questions step)**; this mode does NOT redefine that method. The review-specific INPUT is what differs: not a fresh claim's hidden assumptions, but the thesis's ALREADY-STATED standing assumptions — the ones its `Claim`, `Hypotheses`, and `Causal mechanism` (read in Step 2) rest on — re-classified against the evidence dated after `last_reviewed`.
 
-`./research.md` owns every web-search, capture, and ingest mechanic (including the skill directives its own sub-agents require); this mode references it and consumes its summary. On return, fold the newly-ingested sources into the evidence set for Step 4. A `failed` / `partial` ingest in the summary is surfaced per `./investor-loop.md` § Issue-surfacing.
+The review question the audit answers: **which standing assumptions turned `unproven` or `outdated` since `last_reviewed`?** An assumption that was `true`/`partial` at authoring but is contradicted, eroded, or overtaken by the new evidence is now decayed. Run the lens as a SINGLE inline pass (it fetches nothing, writes nothing, dispatches no sub-agent — per `./thesis.md` § Step 2a). Its output — the testable questions on the now-decayed assumptions — identifies WHICH of the Step 2 invalidation criteria the new evidence has pushed to `near` or left untested, and therefore which criteria Step 3b must hunt against. Surface any decayed assumption the audit cannot resolve from reasoning alone per `./investor-loop.md` § Issue-surfacing.
+
+### Step 3b — Dispatch a Disconfirm wave PER near/untested invalidation criterion
+
+For EACH invalidation criterion the Step 3a audit flags as `near` or untested by the post-`last_reviewed` evidence, dispatch a TARGETED Disconfirm wave — hunt for the source that would push that specific criterion to `tripped`. This REPLACES the generic "auto-pull research when thin": the audit, not a thin-source heuristic, decides what to hunt, and the hunt is scoped per criterion rather than a blanket research pull. The discovery lives in `research`; this mode DISPATCHES it (it does NOT re-implement discovery, re-specify the search mechanics, or restate the cost cap — `./research.md` owns all of that). This rides the existing `review`→`research` sub-agent dispatch precedent.
+
+For each such criterion, dispatch one sub-agent whose prompt MUST direct it to:
+
+1. **Read-and-follow `./research.md` and execute its Step 7a Disconfirm wave exactly**, passing — per the Step 7a documented input contract — the anchor assumption (the decayed standing assumption / near criterion as the testable question from Step 3a), the entity(ies) the thesis touches, and the `research-policy` scope/exclusions loaded in Step 1. `./research.md` owns the wave's discovery mechanics, its plugin-agnostic web-search skill directive, and its cost cap — this mode names none of them.
+2. **Retain `./research.md`'s propose→approve checkpoint** — the user still approves which disconfirming sources enter the wiki. ONLY the hunt is automatic; there are NO silent web writes and NO bypassed approval.
+3. **Return only the structured result `./research.md` produces** — the ranked disconfirming candidates + metadata + each candidate's why-it-would-overturn note (Step 7a's documented output), including any source-tension flag the Propose step surfaced. Full source text MUST NOT return to this mode (anti-context-rot — the parent context stays clean).
+
+`./research.md` owns every web-search, capture, and ingest mechanic (including the skill directives its own sub-agents require); this mode references it and consumes its result. On return, fold the newly-surfaced disconfirming sources into the evidence set for Step 4 and tie each to the criterion it targets. A `failed` / `partial` ingest in the summary is surfaced per `./investor-loop.md` § Issue-surfacing. If a criterion's Disconfirm wave returns no candidate that clears the `source-policy` trust bar, that criterion is evaluated in Step 4 on the existing evidence alone, and the empty hunt is surfaced per `./investor-loop.md` § Issue-surfacing.
 
 ## Step 4 — Evaluate
 
-Test the thesis against the assembled evidence (prior + new). Three sub-evaluations, all required:
+Test the thesis against the assembled evidence (prior + new, including the Step 3b targeted Disconfirm candidates). Three sub-evaluations, all required:
 
 | Sub-evaluation | Method | Output |
 |----------------|--------|--------|
-| Invalidation criteria | Test EACH criterion from Step 2 against the new evidence | per-criterion status: **tripped** (the disconfirming condition occurred) / **near** (evidence is approaching the threshold) / **clear** (no movement toward invalidation) |
-| Evidence balance | Weigh new evidence-FOR against new evidence-AGAINST (each passed the `source-policy` bar) | the net direction the new evidence pushes conviction |
-| Staleness | The thesis is stale if it is contradicted by new evidence, OR unreviewed past its `time_horizon` cadence (the horizon defines the expected review interval) | stale / current |
+| Invalidation criteria | Test EACH criterion from Step 2 against the new evidence, informed by the Step 3a audit (which standing assumptions decayed) and the Step 3b Disconfirm result for each near/untested criterion | per-criterion status: **tripped** (the disconfirming condition occurred) / **near** (evidence is approaching the threshold) / **clear** (no movement toward invalidation) |
+| Evidence balance | Weigh new evidence-FOR against new evidence-AGAINST (each passed the `source-policy` bar) AND surface explicit source tensions — which sources contradict each other, on what | the net direction the new evidence pushes conviction, PLUS the source tensions feeding that direction (see below) |
+| Staleness | The thesis is stale if it is contradicted by new evidence, an assumption decayed (Step 3a), OR it is unreviewed past its `time_horizon` cadence (the horizon defines the expected review interval) | stale / current |
+
+**Source tensions in the evidence balance.** Do not report only a net direction — surface which sources DISAGREE and on what, so the verdict rests on the visible disagreement rather than a collapsed average. CONSUME the source-tension signal `./research.md` § Step 4 Propose produces: any Step 3b Disconfirm wave that returned a tension flag already carries it in the `relation to the thesis` / why-it-would-overturn metadata. Read those flags AND cross-read the assembled evidence (prior + new) for the same contradictions — from the metadata and the sources' stated conclusions already in hand, NEVER by pulling full source text (anti-context-rot holds). Surface each as a short note, in the same format `./research.md` emits:
+
+```
+Tensões entre fontes: #{a} ↔ #{b} — {one-line description of the disagreement}.
+```
+
+A source tension is a flag the user weighs, not a separate analysis pass: it reads only metadata and stated conclusions already assembled. If the evidence shows no contradiction, write none — do not fetch text to manufacture one. The verdict (Step 5) MUST reflect these tensions: a criterion whose evidence is internally contradicted is `near`, not `clear`, until the contradiction resolves.
 
 Read a related company's `## Financials` table off its wiki entity page directly when fundamentals inform the evaluation (no fundamentals tool in v1). Surface any reasoning problem — a contradicted premise, an unresolved source, a thesis already resting on tripped criteria — per `./investor-loop.md` § Issue-surfacing; a blocking issue halts the step until resolved.
 
@@ -70,8 +89,10 @@ Run `./investor-loop.md` § Present-and-confirm. State the review outcome and ST
 
 | Element | Content |
 |---------|---------|
-| Verdict | **holding** (evidence supports the claim; no criterion tripped) / **weakening** (evidence-against accumulating or a criterion near) / **invalidated** (a criterion tripped or the claim contradicted) |
-| New evidence-against | the disconfirming sources/arguments found in Steps 3–4, each tied to its source |
+| Verdict | **holding** (evidence supports the claim; no criterion tripped) / **weakening** (evidence-against accumulating or a criterion near) / **invalidated** (a criterion tripped or the claim contradicted) — the verdict MUST reflect the source tensions and decayed assumptions below, not a collapsed net average |
+| Decayed assumptions | the standing assumptions the Step 3a audit re-classified `unproven` / `outdated`, each as the testable question that exposed the decay |
+| New evidence-against | the disconfirming sources/arguments found in Steps 3–4 (including each criterion's targeted Step 3b Disconfirm result), each tied to its source |
+| Source tensions | the `Tensões entre fontes: #{a} ↔ #{b} — …` flags from Step 4 — which sources contradict each other and on what; empty only if the evidence shows no contradiction |
 | Per-criterion status | each invalidation criterion marked tripped / near / clear |
 | Recommended change | the proposed `status` and `conviction` change (and `last_reviewed` advance), with one-line rationale |
 

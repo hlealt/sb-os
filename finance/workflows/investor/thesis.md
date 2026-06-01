@@ -31,14 +31,50 @@ Develop the thesis content through reasoning. The thesis is a single falsifiable
 | Element | What to reason |
 |---------|----------------|
 | Claim | The single falsifiable statement the thesis defends — written first |
-| Hypotheses | The sub-claims that, if true, make the claim hold |
+| Hypotheses | The sub-claims that, if true, make the claim hold — populated from the Step 2a Assumption Audit's testable questions |
 | Causal mechanism | WHY the claim would play out — the chain from cause to outcome |
 | Evidence for | Concrete, sourced support; tie each item to a captured source filename where one exists |
-| Evidence against | MANDATORY and substantive — the strongest disconfirming evidence and counter-arguments; never an empty placeholder |
+| Evidence against | MANDATORY and substantive — the strongest disconfirming evidence and counter-arguments; never an empty placeholder. Populated by the Step 2b Disconfirm dispatch (not reasoned from context alone) |
 | Risks | What could break the thesis or the position independent of the core claim |
-| Invalidation criteria | MANDATORY and substantive — the specific, observable conditions under which the thesis is wrong and must be retired |
+| Invalidation criteria | MANDATORY and substantive — the specific, observable conditions under which the thesis is wrong and must be retired — seeded from the Step 2a Assumption Audit's testable questions on weak assumptions |
+
+The Assumption Audit (Step 2a) is the METHOD that fills `Hypotheses`, `Invalidation criteria`, and the Disconfirm targets; the Disconfirm dispatch (Step 2b) is the METHOD that fills `Evidence against`. They are not new output sections — they are how the elements above get reasoned. Run Step 2a, then Step 2b, then complete the remaining elements.
 
 Surface a problem with the reasoning or its inputs (a source failing the `source-policy` trust bar, a contradicted premise) per `./investor-loop.md` § Issue-surfacing — never pass it silently.
+
+### Step 2a — Assumption Audit (first-principles lens)
+
+The claim rests on hidden assumptions; left implicit, they become the thesis's blind spots. Run this lens as a SINGLE inline pass over the Claim (written first, above) — surface the assumptions, classify each, and rewrite each as a testable question. This is a reasoning lens, NOT a discovery wave: it fetches nothing, writes nothing, and dispatches no sub-agent. Depth is optional — a light pass on a simple claim, a deeper one when the user asks; never a multi-turn interrogation.
+
+1. **List** — surface the assumptions the Claim and its Causal mechanism take for granted (the conditions that must hold for the claim to be true but that the claim does not itself argue).
+2. **Classify** — tag each assumption with exactly one class:
+
+   | Class | Meaning |
+   |-------|---------|
+   | `true` | well-established; holds on current evidence |
+   | `partial` | holds only under conditions or in part |
+   | `unproven` | plausible but unverified — no evidence either way yet |
+   | `outdated` | was true; superseded by newer facts |
+   | `convenience` | assumed because it makes the thesis work, not because it is supported |
+
+3. **Rewrite as testable questions** — turn each assumption into a specific, checkable question (what evidence would confirm or break it). Route those questions into the Step 2 elements:
+   - Each testable question becomes (or sharpens) a `Hypotheses` sub-claim.
+   - The questions on weak assumptions (`unproven` / `convenience`, plus any `partial` / `outdated` worth testing) become candidate `Invalidation criteria` — the observable conditions that would falsify the claim.
+   - The SAME weak-assumption questions are the explicit input to the Step 2b Disconfirm dispatch (its anchor assumptions).
+
+Surface any assumption the audit cannot resolve from reasoning alone (e.g. a `convenience` assumption with no supporting basis) per `./investor-loop.md` § Issue-surfacing — do not bury it. The audit produces classified assumptions as testable questions; it does NOT produce a project plan — never append owners, timelines, metrics, or next-action lists (alien to this read-only reasoning mode, which never executes).
+
+### Step 2b — Populate `Evidence against` via a Disconfirm dispatch
+
+Populate `Evidence against` by HUNTING for the sources that would overturn the claim — not by reasoning counter-arguments from context alone. The discovery lives in `research`; this mode DISPATCHES it (it does NOT re-implement discovery, re-specify the search mechanics, or restate the cost cap — `./research.md` owns all of that). This mirrors the `review`→`research` sub-agent dispatch precedent (`./review.md` Step 3).
+
+For the audit's weak assumptions (the `unproven` / `convenience` testable questions from Step 2a), dispatch the Disconfirm wave. Dispatch one sub-agent whose prompt MUST direct it to:
+
+1. **Read-and-follow `./research.md` and execute its Step 7a Disconfirm wave exactly**, passing — per the Step 7a documented input contract — the anchor assumption(s) (the weak testable questions from Step 2a), the entity(ies) the thesis touches, and the `research-policy` scope/exclusions loaded in Step 1. `./research.md` owns the wave's discovery mechanics, its plugin-agnostic web-search skill directive, and its cost cap — this mode names none of them.
+2. **Retain `./research.md`'s propose→approve checkpoint** for any source that would enter the wiki — the user still approves which disconfirming sources are captured. ONLY the hunt is automatic; there are NO silent web writes and NO bypassed approval.
+3. **Return only the structured result `./research.md` produces** — the ranked disconfirming candidates + metadata + each candidate's why-it-would-overturn note (Step 7a's documented output). Full source text MUST NOT return to this mode (anti-context-rot — the parent context stays clean).
+
+Fold the returned disconfirming candidates into `Evidence against`, each tied to its source per the element table. If the dispatch returns no disconfirming candidate that clears the `source-policy` trust bar, `Evidence against` is still filled by reasoning (the element stays MANDATORY and substantive — never an empty placeholder), and the empty hunt is surfaced per `./investor-loop.md` § Issue-surfacing. The agent NEVER hand-writes a raw source or wiki page from this dispatch — `./research.md`'s own tool and ingest sub-agents persist anything captured (delegate-not-replace).
 
 ## Step 3 — Select related entities + position mapping
 

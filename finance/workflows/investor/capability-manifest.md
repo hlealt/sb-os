@@ -23,6 +23,17 @@ Every capability below is reached by one or more of these three mechanisms. They
 
 The `investment-source-capture` tool and the web-search sub-agent are additional `research`-only access mechanisms named in that capability's row.
 
+### `research` discovery-wave dispatch (width sweep + Disconfirm)
+
+`research`'s discovery is a **native sub-agent dispatch** mechanism (NOT the `deep-research` skill): the parent fans out web-search sub-agents — each directed to invoke `rbtv-web-searching` and follow it exactly, keeping discovery plugin-agnostic. Two waves use it: the **Step 3 width sweep** (one wave per Decompose sub-question) and the **Step 7a Disconfirm wave** (adversarial — "what source would OVERTURN the anchor?"). Both run **Haiku · ≤ 5 fetches · single-pass**; both return **ranked candidates + metadata ONLY** (full source text stays in the sub-agent — anti-context-rot) and surface at the Step 4 Propose present-and-confirm checkpoint. Mechanics: `./research.md` Steps 2.5 / 3 / 7a — never restated here.
+
+**Step 7a Disconfirm is the stable, dispatchable interface that `thesis` (B1) and `review` (B3) reach by DISPATCHING `research`** (the existing `review`→`research` sub-agent precedent) — they NEVER re-implement discovery (single evidence engine). Consumers dispatch against this contract (authoritative in `./research.md` Step 7a — keep stable):
+
+| Side | Contract |
+|------|----------|
+| **Input** | anchor claim / assumption (a consumer hands in the specific assumption or near/untested invalidation criterion) **+** the entity(ies) **+** the `research-policy` scope/exclusions |
+| **Output** | ranked disconfirming candidates **+** metadata **+** a **why-it-would-overturn** note per candidate (what about the source, if true, falsifies the anchor); full source text never returns |
+
 ---
 
 ## Capability map
@@ -44,9 +55,9 @@ One row group per mode. Route on the **Fires on** intent; reach the capability t
 | Field | Value |
 |-------|-------|
 | Fires on (intent) | "research `<X>`", "find sources on `<Y>`", "what's the latest on my `<entity>` thesis", "dig into `<topic>`" |
-| Access mechanism | Read-and-follow `./research.md` (the mode flow) **+** web-search sub-agent for discovery (plugin-agnostic) **+** `investment-source-capture` tool for capture **+** `sb-wiki-ingest` run via orchestrated sub-agents (one per source) for auto-ingest |
-| Inputs | the anchoring thesis (existing or nascent) or a bare research question; the entity(ies); `research-policy.md` (scope/exclusions) and `source-policy.md` (trust classes), loaded per `./investor-loop.md` § Policy read-rules |
-| When to use | New OPEN-web sources must be discovered, proposed, captured to `raw/`, and filed into the wiki so research stops dying in chat |
+| Access mechanism | Read-and-follow `./research.md` (the mode flow) **+** the `research` discovery-wave dispatch (above) — native web-search sub-agents for the Step 3 width sweep AND the Step 7a Disconfirm wave (plugin-agnostic) **+** `investment-source-capture` tool for capture **+** `sb-wiki-ingest` run via orchestrated sub-agents (one per source) for auto-ingest |
+| Inputs | the anchoring thesis (existing or nascent) or a bare research question; the entity(ies); `research-policy.md` (scope/exclusions) and `source-policy.md` (trust classes), loaded per `./investor-loop.md` § Policy read-rules. When dispatched by `thesis`/`review`, the handed-in anchor is a specific assumption or near/untested invalidation criterion per the Step 7a Disconfirm input contract (above) |
+| When to use | New OPEN-web sources must be discovered, proposed, captured to `raw/`, and filed into the wiki so research stops dying in chat. Internally the mode also: Decomposes the anchor into atomic sub-questions + a coverage matrix (Step 2.5) before discovery; runs a parallel width sweep (Step 3) and an adversarial Disconfirm wave (Step 7a); and flags coverage gaps + source tensions at Propose (Step 4) — mechanics in `./research.md`, never restated here. `thesis`/`review` reach Decompose/width-sweep/Disconfirm by DISPATCHING this mode, never by re-implementing them |
 | When NOT | Weighing ALREADY-captured sources against a thesis verdict → `review`. Authoring the thesis itself → `thesis`. Gated/paywalled sources are NEVER fetched — they register `gated_pending_access` (per `./investor-loop.md` permanent source boundary) |
 
 ### `review` (B3 — Maintenance)

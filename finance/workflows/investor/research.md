@@ -33,23 +33,68 @@ Tie the research to its subject before discovering anything:
 
 Identify the entity(ies) the research touches — they scope discovery and become the `--thesis` / origin context passed to capture.
 
-## Step 3 — Discover (web-search sub-agent)
+## Step 2.5 — Decompose (atomic sub-questions + coverage matrix)
 
-Dispatch a web-search sub-agent to find OPEN sources. The dispatch MUST keep the mode plugin-agnostic — it is NOT wired to any single search plugin, preserving sb-os finance-module portability.
+Before discovering anything, split the anchor (the thesis claim or research question fixed in Step 2) into **atomic sub-questions** — the smallest standalone questions whose answers, taken together, settle the anchor. Decomposition is ANCHORED: every sub-question must trace to the anchor's claim and the entity(ies) from Step 2; do not drift into adjacent topics the anchor does not raise, and respect the `research-policy` scope/exclusions loaded in Step 1 (a sub-question that probes an excluded topic is dropped here, not searched).
 
-The sub-agent prompt MUST direct it to **invoke the `rbtv-web-searching` skill before any web work and follow it exactly** (per the sub-agents rule — a sub-agent does not inherit this requirement; the parent states it explicitly and imperatively). The prompt passes the anchor (thesis claim / research question), the entity(ies), and the `research-policy` scope and exclusions so the sub-agent does not surface excluded topics.
+Build a **coverage matrix** mapping each sub-question to the angle and source-type that will address it. The matrix is the contract the Step 3 width sweep fans out against (one discovery wave per sub-question) and the yardstick the Step 4 Propose step measures coverage gaps against:
 
-Rank returned candidates by relevance to the anchor AND by `source-policy` trust class (load it in Step 1). A candidate that fails the `source-policy` trust bar is surfaced per `./investor-loop.md` § Issue-surfacing — never silently dropped or silently kept. Discovery writes NOTHING; it only returns ranked candidates with metadata (title, url, source, trust class).
+```
+| # | sub-question | angle / source-type that will address it |
+```
+
+Decompose reasons only; it writes nothing and fetches nothing. Keep it lightweight — atomic sub-questions and one matrix, not a research plan. This step adds no web access and no new write path.
+
+## Step 3 — Discover (parallel width sweep — one sub-agent wave per sub-question)
+
+Run a **parallel width sweep**: fan out web-search sub-agents — **one wave per Step 2.5 sub-question** — dispatched concurrently so breadth is covered in a single pass rather than one serial search. Each wave hunts OPEN sources for its own sub-question and the angle/source-type the coverage matrix assigned it. The fan-out MUST keep the mode plugin-agnostic — discovery is NOT wired to any single search plugin, preserving sb-os finance-module portability.
+
+**The Step 7a Disconfirm wave fires in THIS same discovery pass** (it is numbered 7a for dispatch-identity only — see Step 7a § Where it runs; it is NOT a post-ingest step). Dispatch it concurrently with the width-sweep waves here; its disconfirming candidates merge into the same Step 4 Propose table. The remaining acquisition steps (Capture → Gated → Auto-ingest, Steps 5–7) act ONLY on the subset the user approves at Step 4.
+
+**Cost cap (every discovery wave — width sweep AND the Step 7a Disconfirm wave).** This is the explicit cheap-model override the deepening mandates (it overrides the `sb-sub-agents` default of `sonnet`); name it in each wave's dispatch:
+
+| Knob | Value |
+|------|-------|
+| Model | **Haiku** (high-volume discovery does not need deep reasoning) |
+| Max fetches per wave | **≤ 5** |
+| Wave shape | **single-pass** — each wave fires once, returns, and NEVER loops |
+| Concurrency | parallel fan-out, bounded by the per-wave fetch cap |
+
+Each discovery sub-agent's prompt MUST:
+
+1. **Invoke the `rbtv-web-searching` skill before any web work and follow it exactly** (per the sub-agents rule — a sub-agent does not inherit this requirement; the parent states it explicitly and imperatively).
+2. Carry its assigned sub-question, the anchor (thesis claim / research question), the entity(ies), and the `research-policy` scope and exclusions so the sub-agent does not surface excluded topics.
+3. **Return ONLY ranked candidates + metadata** — `| title | url | source | trust class | why it matters | relation to the thesis |`. The **full source text MUST stay inside the sub-agent** and NEVER returns to this mode or `investor.md` (anti-context-rot — the parent context stays clean; only ranked candidates + metadata cross back).
+
+Merge the waves' returned candidates and rank them by relevance to the anchor AND by `source-policy` trust class (loaded in Step 1). A candidate that fails the `source-policy` trust bar is surfaced per `./investor-loop.md` § Issue-surfacing — never silently dropped or silently kept. Discovery writes NOTHING; it only returns ranked candidates with metadata. The merged candidate set (plus the Step 7a disconfirming candidates) is what Step 4 Propose presents.
 
 ## Step 4 — Propose (present-and-confirm; DEFAULT = propose before capture)
 
-Run `./investor-loop.md` § Present-and-confirm. Default behavior is propose-before-capture: present the ranked candidates and STOP for the user's selection — NEVER capture before approval. Present each candidate as a row:
+Run `./investor-loop.md` § Present-and-confirm. Default behavior is propose-before-capture: present the ranked candidates and STOP for the user's selection — NEVER capture before approval. Present each candidate as a row, including the Step 7a disconfirming candidates merged into the same table:
 
 ```
 | # | title | url | source | trust class | why it matters | relation to the thesis |
 ```
 
-The user approves a SUBSET. Approved OPEN candidates → state `approved_for_capture` (Step 5). Candidates the user rejects → state `rejected` (no capture, no record beyond the turn). Candidates the user (or discovery metadata) marks gated/paywalled → the gated branch (Step 6). This is a mode checkpoint per `./investor-loop.md` § Per-Step Checkpoint.
+Tag every Step 7a Disconfirm-wave candidate in its `relation to the thesis` cell as **disconfirming (evidence-against)** so the user sees, in one table, both the sources that support the anchor and the source(s) that would overturn it — never an undifferentiated list. (Step 7a defines the disconfirming wave; its candidates arrive here pre-tagged.)
+
+**Coverage gaps (from Step 2.5).** Cross-check the merged candidates against the Step 2.5 coverage matrix and surface, beneath the table, any **sub-question with no candidate** — an explicit "coverage gaps" note so the user sees what the sweep did not cover before approving:
+
+```
+Lacunas de cobertura: sub-questions {#…} têm zero candidatos.
+```
+
+A coverage gap is informational, not blocking — the user MAY approve the subset anyway, widen scope, or re-run discovery for the uncovered sub-questions.
+
+**Source tensions (lightweight flag).** From the candidates' titles and `why it matters` / `relation to the thesis` metadata ALREADY on the table — never by pulling full source text (anti-context-rot holds) — flag pairs or clusters of candidates that **contradict each other** (e.g. opposite conclusions on the same sub-question). Surface them as a short note beneath the table so the user weighs the disagreement instead of an undifferentiated list:
+
+```
+Tensões entre fontes: #{a} ↔ #{b} — {one-line description of the disagreement}.
+```
+
+This is a flag the user can act on, not a separate analysis pass: it reads only the metadata already returned. If no contradiction is evident from the metadata, write none — do not fetch text to manufacture one. The signal stays legible for `review` to consume downstream.
+
+The user approves a SUBSET (supporting and/or disconfirming candidates alike). Approved OPEN candidates → state `approved_for_capture` (Step 5). Candidates the user rejects → state `rejected` (no capture, no record beyond the turn). Candidates the user (or discovery metadata) marks gated/paywalled → the gated branch (Step 6). The coverage-gap and source-tension notes do not change this subset-approval flow — they inform it. This is a mode checkpoint per `./investor-loop.md` § Per-Step Checkpoint.
 
 ## Step 5 — Capture approved OPEN sources
 
@@ -82,6 +127,28 @@ After all sub-agents return, present a consolidated report so a misfire is catch
 ```
 
 Summarize, in `communication.language`, the pages created/updated and any scope-overlaps or lint flags the sub-agents surfaced. A flag is an issue → route it per `./investor-loop.md` § Issue-surfacing (blocking vs deferrable). The report is informational-by-default; it does NOT re-prompt for the already-committed ingests (the Step 4 approval authorized capture-and-file).
+
+## Step 7a — Disconfirm (adversarial discovery wave)
+
+The highest-value discovery primitive: instead of asking "what supports the anchor?", it asks **"what source would OVERTURN the anchor?"** and hunts for it — making the rigor spine (evidence → counter-evidence → invalidation) an ACTIVE search, not a reasoned-from-context afterthought. Step 7a is the **stable, dispatchable home** of this wave: `thesis` (B1) and `review` (B3) reach it by DISPATCHING `research` (the existing `review`→`research` sub-agent precedent), never by re-implementing discovery. Keep its interface below stable — consumers depend on it.
+
+**Where it runs (sequencing).** Although numbered 7a, the Disconfirm wave is a DISCOVERY operation: it fires in the discovery pass **alongside the Step 3 width sweep**, and its candidates merge into the **Step 4 Propose** table tagged `disconfirming (evidence-against)` — they are NOT a post-ingest step. Capture/ingest (Steps 5–7) act only on the subset the user approves at Step 4; a disconfirming candidate the user approves flows through capture-and-ingest exactly like any other approved source. The 7a label marks the wave's identity and dispatch interface, not a runtime position after ingest.
+
+**Interface (DOCUMENTED — keep stable; `thesis`/`review` dispatch against this):**
+
+| Side | Contract |
+|------|----------|
+| **Input** | The anchor claim / assumption (the Step 2 thesis claim, or — when dispatched by a consumer — the specific assumption or near/untested invalidation criterion the consumer hands in) + the entity(ies) + the `research-policy` scope/exclusions |
+| **Output** | **Ranked disconfirming candidates + metadata ONLY**, each carrying a **why-it-would-overturn** note (what about the source, if true, falsifies the anchor) in addition to the standard `| title | url | source | trust class | why it matters | relation to the thesis |` fields. Full source text NEVER returns to the parent. |
+
+**Dispatch.** Prompt ONE sub-agent (native dispatch — NOT the `deep-research` skill) to find the strongest source that would FALSIFY the anchor. The prompt MUST:
+
+1. **Invoke the `rbtv-web-searching` skill before any web work and follow it exactly** (the sub-agent does not inherit this requirement; state it explicitly and imperatively), keeping the wave plugin-agnostic (no hard-wired search plugin).
+2. Frame the hunt adversarially: search for the data, analysis, or primary source that, if it exists and holds, breaks the anchor — not for confirmation of it.
+3. Obey the **same cost cap as the width sweep** (Step 3 table): **Haiku model · ≤ 5 fetches · single-pass, never loops**.
+4. **Return ONLY ranked disconfirming candidates + metadata + the why-it-would-overturn note.** The **full source text MUST stay inside the sub-agent** (anti-context-rot — the parent context stays clean).
+
+Rank the returned disconfirming candidates by `source-policy` trust class (loaded in Step 1) exactly as Step 3 does; a candidate that fails the trust bar is surfaced per `./investor-loop.md` § Issue-surfacing — never silently dropped or kept. The wave writes NOTHING and fetches nothing into this mode; it adds no new data-access path. Its candidates feed the Step 4 Propose checkpoint, where the user approves or rejects them through the unchanged present-and-confirm subset flow — nothing disconfirming is captured before approval.
 
 ## Step 8 — Feed forward
 
