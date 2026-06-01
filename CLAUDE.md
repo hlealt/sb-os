@@ -48,3 +48,5 @@ All shippable components carry the `sb-` prefix. The prefix marks a component as
 | User content | A user's vault — never imported here |
 | Personal extensions | A user's `.user/` folder in their installed vault — never shipped from this repo |
 | Other agent harnesses | Components are written portable where possible; only Claude Code is currently a validated target |
+
+> Codex mirror note: do not read the sibling `AGENTS.md`. It is an auto-generated mirror for Codex agents. This `CLAUDE.md` file is the source of truth.
