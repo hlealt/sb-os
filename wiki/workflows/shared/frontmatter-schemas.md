@@ -47,6 +47,10 @@ author: "..."
 
 No additional frontmatter. The trigger that produced the topic is recorded in `log.md`.
 
+## `type: purpose` — non-page regulatory value
+
+`type: purpose` is a valid frontmatter value reserved for the single regulatory file `{wiki_root}/purpose.md` (the ingest focus lens). It is **NOT a page type** — do NOT add it to the page-type enum (`concept | entity | topic | source`). A file carrying `type: purpose` is excluded from page-type checks, leaf indexes, and orphan detection; it is regulatory configuration, not synthesis. Base behavior — not a `wiki-ext`. Full spec: `3-resources/tools/sb-os/wiki/docs/wiki-schema.md` § "Regulatory layer — purpose.md".
+
 ## Status field — DEFERRED
 
 Stub-state is detected structurally (see `stub-policy.md`). No `status:` frontmatter field at v1.

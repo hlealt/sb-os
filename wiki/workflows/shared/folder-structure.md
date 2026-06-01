@@ -6,6 +6,7 @@ Directory layout for `{wiki_root}/`. All paths are relative to `{wiki_root}`. Re
 
 ```
 {wiki_root}/
+├── purpose.md                          OPTIONAL regulatory file — ingest focus lens (not a page; lint skips it)
 ├── log.md                              actionable queue (candidate-topic + candidate-mention)
 ├── raw/
 │   ├── assets/                         local images / attachments (flat, shared) — user-maintained via Obsidian's "Download attachments for current file"
@@ -69,6 +70,20 @@ All folder and index creation is lazy — folders and indexes are created only w
 ## Wikilink Resolution
 
 Subdivision relies on Obsidian filename-based wikilink resolution. Required setting (per README "Obsidian setup"): Settings → Files & Links → "New link format" = `Shortest path when possible`. New wikilinks then carry no path segments and survive page moves between flat root and per-kind subfolders.
+
+## Regulatory File
+
+`{wiki_root}/purpose.md` is the **optional** ingest focus lens — a root-level sibling of `raw/`, `wiki/`, and `log.md`. It is **NOT a wiki page and NOT raw**; it carries `type: purpose` (non-page regulatory value, see `frontmatter-schemas.md`).
+
+| Aspect | Rule |
+|--------|------|
+| Path | `{wiki_root}/purpose.md` (root-level sibling; outside `wiki/` and `raw/`) |
+| Maintained by | The user (vault content). Only the ingest mechanism that READS it ships in sb-os. |
+| Agent writes | Lint NEVER writes or edits it. `/sb-wiki-ingest` reads it only (Step 0.5). |
+| Optionality | Absent → lens OFF → ingest identical to today. |
+| Lint behavior | SKIP entirely — NEVER flag as orphan/stray/stub, NEVER index, NEVER count in orphan detection (in or out). Holds structurally: lint walks only `wiki/` and `raw/` subtrees, so a root-level sibling is never walked. Mirrors the `raw/assets/` skip contract. |
+
+Full spec: `3-resources/tools/sb-os/wiki/docs/wiki-schema.md` § "Regulatory layer — purpose.md".
 
 ## Asset Folder
 

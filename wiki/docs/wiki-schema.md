@@ -1,4 +1,6 @@
-# Wiki Schema (v3 — post-reconciliation)
+# Wiki Schema (v4 — purpose-lens)
+
+> **Validation window (v4).** The `purpose.md` focus-lens depth/granularity wording (see "Regulatory layer — purpose.md" § "Per-step modulation") is tuned over the first ~10 real ingests before its semantics are frozen; window progress and the freeze decision are tracked in the feature plan's `shape.md`.
 
 > **Status:** Locked design. Operational spec for the Karpathy-style wiki layer shipped by **sb-os v2** (per `sb-os-build/second-brain-os-architecture.md` §12 and Decisions Log #12). sb-os v1 ships only the `wiki_root` config slot in `sb-os.json` (default `3-resources/knowledge-base/`), the empty default folder, and a placeholder managed `CLAUDE.md` at `{wiki_root}/CLAUDE.md`. The schema, the four `sb-wiki-*` components, and any populated wiki content described below are out of v1 scope — they ship in **sb-os v2**. Agents and CLAUDE.md files reference this document only after v2 lands.
 
@@ -80,6 +82,7 @@ The four page types above are the **base set**. Other sb-os modules MAY add thei
 
 ```
 3. Resources/knowledge-base/
+├── purpose.md                    OPTIONAL regulatory file — focus lens for ingest (not a page; lint skips it)
 ├── log.md                        actionable queue (candidate-topic + candidate-mention)
 ├── raw/
 │   ├── {origin}/                 articles, podcasts, papers — by source origin
@@ -108,6 +111,8 @@ The four page types above are the **base set**. Other sb-os modules MAY add thei
 ```
 
 Type folders are stable — `concepts/`, `entities/`, `topics/`, `sources/` never rename or reorganize. Per-kind subfolders WITHIN a type folder are an opt-in subdivision pattern proposed by lint when one kind grows large enough to warrant separation (see "Folder subdivision" below). Pre-subdivision, every type folder is flat.
+
+`{wiki_root}/purpose.md` is an **optional regulatory file**, not a wiki page and not raw — the regulatory-layer twin of this locked schema (full spec in "Regulatory layer — purpose.md" below). It is a root-level sibling of `raw/`, `wiki/`, and `log.md`; lint never walks it (it lives outside the `wiki/` and `raw/` subtrees) and MUST skip it entirely. Absent → ingest behaves exactly as today.
 
 ## Folder subdivision
 
@@ -259,6 +264,10 @@ Rationale: `read-date` is not used — `created` covers the same intent (ingest 
 
 ### Topic pages
 No additional frontmatter. While unpromoted, a topic candidate lives in `log.md` as a `candidate-topic` entry; once the page exists, that entry is removed (resolution = page exists).
+
+### `type: purpose` — non-page regulatory value
+
+`type: purpose` is a valid frontmatter value reserved for the single regulatory file `{wiki_root}/purpose.md` (see "Regulatory layer — purpose.md"). It is **NOT a page type** and MUST NOT be added to the page-type enum (`concept | entity | topic | source`). A file carrying `type: purpose` is excluded from page-type checks, leaf indexes, and orphan detection — it is regulatory configuration, not synthesis. This is base behavior, registered identically in the runtime shared file `wiki/workflows/shared/frontmatter-schemas.md` (not a `wiki-ext`).
 
 ### Status field — DEFERRED
 
@@ -534,6 +543,134 @@ By construction, stubs created via ingest match the stub-state definition. Lint 
 
 Note: empty user-half sections on Source pages do NOT count toward stub-state — Source pages are stubs only if their agent-half (`Substance` / `Notable quotes` / `Connections`) is empty.
 
+## Regulatory layer — purpose.md
+
+`{wiki_root}/purpose.md` is an **optional** regulatory file that gives `/sb-wiki-ingest` a **focus lens**: it biases how deeply a source is synthesized, which entities/concepts become pages, and how topics are suggested — toward the user's stated focus areas — and **flags** sources that match nothing. It is the regulatory-layer twin of this locked schema. It never drops content and never alters any deterministic rule.
+
+### Artifact, location, optionality
+
+| Property | Rule |
+|----------|------|
+| Location | `{wiki_root}/purpose.md` — root-level sibling of `raw/`, `wiki/`, `log.md`. NOT a wiki page (not under `wiki/`), NOT raw. |
+| Frontmatter | `type: purpose` — a non-page regulatory value (excluded from page-type checks, indexes, orphan detection; see "Frontmatter schemas" § `type: purpose`). |
+| Optionality | Absent → lens OFF → ingest behaves **exactly** as today. Mirrors the `wiki_extensions` Step 0 no-op contract. |
+| Malformed | Warn and proceed lens-OFF; NEVER abort the ingest. |
+| Ownership | Vault content (personal). Only the *mechanism* that reads it ships in sb-os. Lint never edits it and MUST skip it entirely. |
+
+### Format
+
+```markdown
+---
+type: purpose
+last-touched: YYYY-MM-DD
+---
+
+# Wiki Purpose
+
+## Mission
+1–3 sentences: why this wiki exists and the lens sources are read through.
+
+## Focus areas
+Subjects to treat with MORE depth and bias topic/stub suggestions toward.
+- **<area name>** — <one-line scope note>
+- ...
+(Optional tiering via `### Primary` / `### Secondary` subheadings.)
+
+## Down-weight signals
+Source shapes/subjects to treat with LESS discretionary depth — never dropped.
+- <signal> — <why>
+
+## Quality bar
+Editorial preferences applied during synthesis
+(e.g., favor primary sources; mechanism over hype; prefer dated/sourced claims).
+
+## Out of purpose
+Subjects that match nothing here → trigger the Stage-1 off-purpose flag.
+(May be left implicit: "anything not in Focus areas.")
+```
+
+### Parsing contract
+
+| Section | Lens use |
+|---------|----------|
+| `## Focus areas` | The match set for classification (in-focus detection). |
+| `## Down-weight signals` | Hints that push a source toward the peripheral band. |
+| `## Quality bar` | Synthesis preferences applied while writing the source page. Does NOT influence index `What it says` phrasing (see Index neutrality guard). |
+| `## Out of purpose` | Optional explicit off-purpose list; if absent, off-purpose = "matches no Focus area". |
+
+### Classification model
+
+At the open of ingest Step 2 (raw content from Step 1 + parsed purpose from Step 0.5 both available), classify the source into exactly **one** band, keying off the **primary** subject — not incidental mentions (same discipline as the existing Tecer-relevance axes):
+
+| Band | Definition | Effect |
+|------|------------|--------|
+| **in-focus** | Primary subject matches ≥1 `Focus area` | Dial discretionary treatment **UP** (richer) |
+| **peripheral** | Not a focus match, but not noise (or hits a `Down-weight signal`) | Baseline; lean terse on discretionary extras — "down-weight, never below baseline" |
+| **off-purpose** | Matches **no** `Focus area` (or appears in `Out of purpose`) | Baseline treatment **+ Stage-1 flag**; if the user proceeds, treat as peripheral |
+
+Registered `wiki_extensions` (e.g. `finance`) add page types (`thesis`, `decision`) and their own ingest triggers. Classification applies to extension page types too (key off primary subject); extension-registered triggers are **mechanical — untouched** by the lens, exactly like the base triggers. A `purpose.md` SHOULD cover active-extension domains so extension sources are not spuriously flagged off-purpose.
+
+### Core principle — discretionary-only modulation
+
+The lens touches **only the surfaces ingest already resolves by agent judgment**. Every mechanical/deterministic rule's **logic** is untouched — though its *output* may still shift when a modulated discretionary input feeds it ("untouched branch" ≠ "identical output"; bounded by determinism guarantees #2/#4 below). This is what makes the feature safe in the locked schema.
+
+| Mechanical — **UNTOUCHED** by the lens | Discretionary — **modulated** by the lens |
+|----------------------------------------|--------------------------------------------|
+| Substance-bullet stub branch (fires on cluster-representative match) | Depth/granularity of the `Substance` section |
+| Candidate-topic trigger **detection** (contradiction / evolution / cross-application; **+ extension triggers** e.g. candidate-thesis) | Which optional source sections to include (Notable quotes / Methodology / Counterpoints) |
+| Citation rules (`[^N]`, one footnote per source) | Title-only & Notable-Quote stub branches (already "agent discretion" today) |
+| Append-only protection | Cluster-granularity choices — **dial-UP only** (in-focus); peripheral floored at baseline per guarantee #4 |
+| Index updates (raw, sources, concepts, entities, topics) | Speculative topic-tier **ranking** (within the existing top-2 cap) |
+| Log entry shapes; Stage-2 reflection | Stage-1 **presentation** (classification line + off-purpose flag) |
+
+> **Index neutrality guard (the `What it says` edge case).** The wiki sources index `What it says` cell is LLM-derived from the (lens-modulated) `Substance` section, so a dialed-up in-focus Substance could bleed editorial framing into the index. Guard: write `What it says` **band-neutral** — the same factual core claim regardless of band. The index *update mechanism* stays mechanical/untouched; only the source-cell phrasing carries this neutrality rule. `Quality bar` does NOT influence index phrasing.
+
+### Per-step modulation
+
+Lens hooks live at ingest Steps **2, 5, 3·7b, 10**; Step 6 trigger-detection is **untouched**. (Step-number key below maps these to `/sb-wiki-ingest`.)
+
+| Ingest step | Lens effect | in-focus | peripheral | off-purpose |
+|-------------|-------------|----------|------------|-------------|
+| **0.5 — Load purpose** *(new)* | Read + parse `{wiki_root}/purpose.md`. Absent → lens OFF (flow identical to today). Malformed → warn, proceed lens-OFF. | — | — | — |
+| **2 open — Classify** | Compute band from raw vs `Focus areas`. | tag in-focus | tag peripheral | tag off-purpose |
+| **2 — `Substance` depth** *(discretionary)* | Depth dial. | finer granularity, fuller Substance; include warranted optional sections; apply `Quality bar` | baseline granularity; optional sections only if clearly warranted | baseline (becomes peripheral once user proceeds) |
+| **5 — Substance-bullet stub branch** *(mechanical)* | **Untouched** — fires exactly as today. | as today | as today | as today |
+| **5 — Title-only & Notable-Quote stub branches** *(discretionary)* | Bias the existing relevance heuristic. | lean **fire**; finer cluster granularity | lean **demote** to `candidate-mention` | as peripheral |
+| **6 — Trigger detection** *(mechanical)* | **Untouched** — all fires recorded as today. | as today | as today | as today |
+| **3·7b — Speculative topic ranking** *(discretionary)* | Re-rank within the existing top-2 cap by focus overlap. | focus overlap orders / breaks ties | — | — |
+| **10 — Trigger presentation** *(discretionary)* | Priority annotation only; **no fire suppressed**. | surfaced first, tagged `focus` | surfaced, untagged | surfaced, untagged |
+| **10 — Stage 1 checkpoint** *(discretionary)* | Add classification line; off-purpose flag. | `purpose: in-focus` | `purpose: peripheral` | `⚠ off-purpose` banner + proceed/abort |
+| **4, 4.5, 7, 8, 9, 11** | **Untouched.** | — | — | — |
+
+**Step-number key (maps to `/sb-wiki-ingest`).** Depth dial + classification = **Step 2** (Write source page). Stub branches (Substance-bullet mechanical; Title-only / Notable-Quote discretionary) fire at **Step 5** (Create stubs). "Step 3·7b" = **Step 3, clause 7b** (Speculative tier — speculative candidate-topic-updates, capped at 2). Trigger **detection** = **Step 6** (mechanical, untouched). Trigger **presentation** + classification line + off-purpose banner = **Step 10** (Stage 1 checkpoint).
+
+### Off-purpose flag (Step 10)
+
+Extend the existing `INGEST PREVIEW` header and reuse the existing `accept-all` / `abort` controls — no new control verb. The classification band is appended to the preview header:
+
+```
+INGEST PREVIEW — <slug>   [purpose: in-focus | peripheral | ⚠ off-purpose]
+```
+
+When `off-purpose`, prepend an **advisory** banner above the file-changes table:
+
+```
+⚠ Off-purpose — this source matches no focus area in purpose.md.
+   Ingest anyway?  (accept-all proceeds · abort discards)
+```
+
+All standard Stage-1 controls (`accept-all` / `reject N` / `abort`, plus the topic decisions) remain available — the banner only foregrounds the proceed/abort framing; it NEVER auto-aborts. Lens OFF (no `purpose.md`) → no classification line, no banner — preview identical to today.
+
+**Silent / bulk mode.** `silent` mode (used by `/sb-wiki-ingest-all`) shows no Stage-1 banner; instead it includes the source's purpose band in the structured summary it returns, and `/sb-wiki-ingest-all` lists every off-purpose ingest in its final report for human review. In silent mode the band is informational — it never auto-aborts.
+
+### Optionality & determinism guarantees
+
+1. `purpose.md` absent → ingest output **identical** to today.
+2. The lens **never alters mechanical branch _logic_**; it shapes only discretionary _inputs_ (synthesis depth, cluster granularity, optional-section inclusion). Those inputs may change a mechanical branch's _outputs_ (which stubs fire, index rows) — bounded by #3 and #4 — but no branch _rule_ changes.
+3. The lens **never** drops content and **never** suppresses a detected trigger → "down-weight, never drop" holds.
+4. Peripheral treatment is **floored at today's baseline, _including cluster granularity_** → the lens may lean terser on optional discretionary extras but **never coarsens clustering below baseline**, so no source becomes thinner (fewer stubs/links) than it would be today. Dial-UP for in-focus (finer granularity, more stubs) is the intended, allowed direction.
+5. Malformed `purpose.md` → warn and proceed lens-OFF (never abort the ingest).
+
 ## Operations
 
 Four operations covering the wiki lifecycle:
@@ -757,6 +894,10 @@ Orphan-detection is the lint signal for "the wiki is not actually building knowl
 
 **Practical implication.** A new stub created from a source page's `Notable Quotes` will, by design, be flagged as an orphan on the next lint run if no concept/entity/topic page links to it from its body or `Related` section. This is correct behavior, not a false positive — the orphan flag is the lint asking the user (or a future ingest) whether the stub deserves real synthesis.
 
+#### purpose.md — SKIP entirely (v1)
+
+`/sb-wiki-lint` MUST skip `{wiki_root}/purpose.md` entirely — NEVER flag it as orphan, stray, or stub; NEVER index it; NEVER count it in orphan detection (in or out). It is regulatory configuration (`type: purpose`), not a wiki page. This holds structurally: lint walks only the `wiki/` and `raw/` subtrees (steps 1–7), and `purpose.md` is a root-level sibling outside both — so it is never walked. Mirrors the existing `raw/assets/` skip contract. No semantic purpose-lint in v1 (off-purpose-drift / thin-focus / gap detection are parked backlog).
+
 ### `/sb-wiki-query`
 
 Single command: `/sb-wiki-query <question>`. Returns a synthesized answer; optionally files the answer back as a wiki page.
@@ -888,6 +1029,14 @@ These edits happen at sb-os v2 build time. Until v2 lands, the user's vault reta
 - **NEW `{wiki_root}/raw/studies/CLAUDE.md`**: operational rules for study captures (filename pattern `YYYY-MM-DD-{slug}.md`, immutability, relationship to ingest). User-owned per architecture §7 ("Subfolder CLAUDE.mds within PARA are user-owned, untouched by sb-os") — created on first `sb-wiki-ingest` of a study source if absent, or by the user manually.
 - **NEW (folder + leaf indexes, created lazily as origins surface; lint creates missing raw indexes automatically)**: `{wiki_root}/raw/studies/`, `raw/studies/studies.md`, `wiki/concepts/`, `wiki/concepts/concepts.md`, `wiki/entities/`, `wiki/entities/entities.md`, `wiki/topics/`, `wiki/topics/topics.md`, `wiki/sources/`, `wiki/sources/{origin}/{origin}.md`.
 - **User-area CLAUDE.mds that route study output**: any user-side CLAUDE.md that points `/sb-tutor` or multi-source notes at a learning area should route to `{wiki_root}/raw/studies/` (matches root CLAUDE.md hard-rule already in place pre-cutover).
+
+**v4 — purpose-lens propagation (queued by this schema change):**
+
+This schema section ("Regulatory layer — purpose.md", the folder-structure row, the `type: purpose` frontmatter note, and the lint skip-guarantee) is the spec; the following edits implement it. Until they land, the lens is undefined in the runtime workflows.
+
+- **`wiki/workflows/sb-wiki-ingest/sb-wiki-ingest.md`**: implement Step 0.5 (load/parse `purpose.md`; absent → lens OFF; malformed → warn, lens-OFF) and the lens modulation at Steps 2, 5, 3·7b, 10 (Step 6 trigger-detection untouched); carry the purpose band in the silent-mode structured summary; add a Path Resolution row for `{wiki_root}/purpose.md`; add a Failure Mode row (malformed → warn, lens-OFF).
+- **`wiki/claude-mds/wiki.md`** (managed CLAUDE.md source): document the regulatory file + optionality in the marker block; re-run `python install.py` to rewrite `{wiki_root}/CLAUDE.md`.
+- **Runtime shared files (base behavior, already applied with this schema change):** `wiki/workflows/shared/frontmatter-schemas.md` (non-page `type: purpose` note) and `wiki/workflows/shared/folder-structure.md` (`purpose.md` tree entry + lint-skip row).
 
 **Already applied (user's pre-cutover vault):**
 
