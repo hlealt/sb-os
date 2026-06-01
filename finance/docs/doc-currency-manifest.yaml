@@ -30,7 +30,7 @@
 #             hook gates at file granularity, the signal reports the sections).
 
 version: "1.0"
-last_updated: "2026-05-27"
+last_updated: "2026-05-30"
 
 couplings:
   # enforcement: hard-block (default) | signal-only
@@ -135,6 +135,7 @@ couplings:
       - "scripts/migrations/rename_tags.py"
       - "scripts/migrations/rename_canonical.py"
       - "scripts/migrations/merge_categories.py"
+      - "scripts/investimentos/investment_source_capture.py"
     docs:
       - path: "scripts/tools-index.md"
         sections:

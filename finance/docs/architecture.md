@@ -37,13 +37,16 @@ ledgers/fechamento/{MONTH}/transactions.csv ledgers/investimentos/{orders,proven
 | `sb-os/finance/scripts/` | Python pipeline (shared + investimentos + migrations) | Code |
 | `sb-os/finance/scripts/migrations/` | One-shot transformations (e.g., schema migrations) | Code; archive when no longer referenced |
 | `.user/finance/bookkeeper/config/categories.json` | Categorization rules + reimbursement_mappings | Maintained interactively by bookkeeper; read by dashboard |
+| `.user/finance/investor/` | Investor agent workspace: `research-policy.md`, `source-policy.md`, agent state | Written only by the `investor` agent or the user directly; never by bookkeeper or pipeline scripts |
 | `sb-os/finance/docs/` | This file + functional/technical docs | Docs |
 
 ## What lives where
 
 | Concern | Location | Reason |
 |---------|----------|--------|
-| Workflow definitions | `sb-os/finance/workflows/bookkeeper/*.md` | Workflow steps ship with sb-os; agent instructions, not code |
+| Bookkeeper workflow definitions | `sb-os/finance/workflows/bookkeeper/*.md` | Workflow steps ship with sb-os; agent instructions, not code |
+| Investor agent workflow definitions | `sb-os/finance/workflows/investor/*.md` | Read-only reasoning agent (six modes: thesis, research, review, portfolio, decision, policy); loop + capability manifest + per-mode files |
+| Finance wiki scribes (`sb-fin-create-thesis`, `sb-fin-create-decision`) | `sb-os/finance/workflows/sb-fin-*/` + `sb-os/finance/skills/sb-fin-*/` | Persistence helpers invoked by the investor; never invoked directly for thesis/decision creation |
 | Credentials, bank configs, asset registry | `.user/finance/bookkeeper/{config,data}/` | Operational personal data — never open-sourced |
 | Investment intermediate processed CSVs | `.user/finance/bookkeeper/investimentos/tmp-processed/` | Workflow scratch — overwritten per run |
 | Personal records (e.g., `pagamentos-recorrentes.md`) | `2-areas/finance/` | Vault content, not pipeline data |

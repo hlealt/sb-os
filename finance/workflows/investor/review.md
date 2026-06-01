@@ -5,7 +5,7 @@ runtime: agent-loop
 
 # Review Mode (B3 — Maintenance)
 
-The `/investor` reasoning mode that re-evaluates an EXISTING thesis against new information — surfacing staleness, new evidence-against, and tripped / near invalidation criteria — so the thesis base stays falsifiable over time. **This mode NEVER hand-writes a thesis page** — it reasons and proposes; `sb-fin-create-thesis` (resolving to its `extend` path against the existing thesis) persists every update (delegate-not-replace).
+The `/investor` reasoning mode that re-evaluates an EXISTING thesis against new information — surfacing staleness, new evidence-against, and tripped / near invalidation criteria — so the thesis base stays falsifiable over time. **This mode NEVER hand-writes a thesis page** — it reasons and proposes; `sb-fin-create-thesis` (its named `extend` entry point, targeting the existing thesis by slug) persists every update (delegate-not-replace).
 
 **Loaded by:** `./investor.md` reads-and-follows this file when `./capability-manifest.md` routes the `review` (B3) intent. The invariants, policy read-rules wiring, present-and-confirm pattern, issue-surfacing, Rule A, and the per-step Investor Checkpoint in `./investor-loop.md` are already in force when this file runs — this file does NOT restate them. Read `./investor-loop.md` before acting on any step below.
 
@@ -15,7 +15,7 @@ The `/investor` reasoning mode that re-evaluates an EXISTING thesis against new 
 |-------|------|
 | This mode (the reviewer) | reasoning: load the thesis, gather and weigh new evidence, test each invalidation criterion, reach a verdict, the present-and-confirm checkpoint, the buy/sell/hold and invalidation handoffs |
 | `./research.md` (the evidence sourcer) | auto-pull of fresh OPEN sources when wiki evidence is thin — discovery, propose→approve, capture, auto-ingest. This mode dispatches it; it NEVER re-specifies discovery or ingest |
-| `sb-fin-create-thesis` (the scribe), resolving to its `extend` path | persistence: append evidence-against, sharpen invalidation, update `status` / `conviction` / `last_reviewed`. The only writer of thesis-page updates; the agent NEVER re-implements these writes |
+| `sb-fin-create-thesis` (the scribe), its named `extend` entry point | persistence: append evidence-against, sharpen invalidation, update `status` / `conviction` / `last_reviewed`. The only writer of thesis-page updates; the agent NEVER re-implements these writes |
 
 ---
 
@@ -85,16 +85,16 @@ A `status` downgrade (e.g. `active` → `developing`, or → `rejected` / `archi
 
 ## Step 6 — Persist via the scribe (`extend` path)
 
-On `[S]`, invoke `sb-fin-create-thesis` in its **investor-orchestrated mode** (Skill tool) to update the EXISTING thesis page reviewed in Step 2 — append evidence-against, sharpen the invalidation criteria, and update `status` / `conviction` / `last_reviewed` per the confirmed findings. Pass the existing thesis slug as the subject: the scribe's scope-overlap check (its Step 1) resolves a same-subject existing thesis to its **`extend`** path and appends to that page in place rather than creating a new one. Pass these inputs; the scribe runs without re-prompting (the Step 5 confirm covers the invocation), except the one allowed interrupt below:
+On `[S]`, invoke `sb-fin-create-thesis` in its **investor-orchestrated `extend` entry point** (Skill tool) to update the EXISTING thesis page reviewed in Step 2 — append evidence-against, sharpen the invalidation criteria, and update `status` / `conviction` / `last_reviewed` per the confirmed findings. Pass the existing thesis slug as the named target: this entry point appends to that page in place and SKIPS the scribe's scope-overlap discovery prompt (the page is already identified — no disambiguation runs). Pass these inputs; the scribe runs without re-prompting (the Step 5 confirm covers the invocation):
 
 | Input | Source |
 |-------|--------|
-| Target thesis slug | the page reviewed in Step 2 — the subject the scribe matches its scope-overlap check against, resolving to `extend` of that page |
+| Target thesis slug | the page reviewed in Step 2 — the named target the `extend` entry point updates in place |
 | New evidence-against | the disconfirming items confirmed in Step 5, with their source filenames for citation |
 | Sharpened invalidation | the criteria revisions confirmed in Step 5 |
 | `status` / `conviction` / `last_reviewed` | the confirmed values from Step 5 |
 
-The agent does NOT hand-write the page and does NOT re-implement the scribe's frontmatter / section / citation / index checks — those are the scribe's sole authority (`./investor-loop.md` § Own-workspace-writes boundary). The scribe's scope-overlap prompt is the one allowed interrupt during an otherwise no-second-checkpoint invocation: if the scribe surfaces it (or any structural prompt) during the extend, act on it; do not pre-empt or suppress it.
+The agent does NOT hand-write the page and does NOT re-implement the scribe's frontmatter / section / citation / index checks — those are the scribe's sole authority (`./investor-loop.md` § Own-workspace-writes boundary). The `extend` entry point skips the scope-overlap discovery prompt, so it does not interrupt; if the scribe surfaces any other structural prompt during the extend, act on it — do not pre-empt or suppress it.
 
 ## Step 7 — Handoff
 
@@ -110,7 +110,7 @@ After persistence, route any implied next step — surface it, never auto-chain 
 ## Boundaries (this mode)
 
 - Read-only on portfolio/ledger data; position data ONLY through registered read tools (`./investor-loop.md` § Tools-only data access). Thesis / source / entity pages are markdown the agent reads directly — they are not position data.
-- Writes ONLY by invoking `sb-fin-create-thesis` in its investor-orchestrated mode resolving to the `extend` path (thesis-page updates) and by dispatching `./research.md` (which persists `raw/` + wiki only through its own tool and ingest sub-agents). The agent NEVER hand-writes a thesis page or a raw/wiki file (`./investor-loop.md` § Own-workspace-writes boundary).
+- Writes ONLY by invoking `sb-fin-create-thesis` in its named investor-orchestrated `extend` entry point (thesis-page updates) and by dispatching `./research.md` (which persists `raw/` + wiki only through its own tool and ingest sub-agents). The agent NEVER hand-writes a thesis page or a raw/wiki file (`./investor-loop.md` § Own-workspace-writes boundary).
 - `status` downgrades are ALWAYS surfaced for approval, NEVER applied silently.
 - Never mutates ledgers, `portfolio.json`, or the dashboard. A request to do so, or to hand-write the thesis page instead of delegating to the scribe, is out-of-structure → Rule A in `./investor-loop.md`.
 - Every user-facing turn ends at an Investor Checkpoint (`./investor-loop.md` § Per-Step Checkpoint). User-facing strings are in `communication.language` per `./investor.md` § Rules and `./investor-loop.md` § Language.

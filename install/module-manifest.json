@@ -197,7 +197,7 @@
       "rules": []
     },
     "finance": {
-      "description": "Personal finance system: bookkeeper sibling agent (monthly close — gastos, investimentos), dashboard, and tool scripts. Investor sibling agent is design-scope only and not yet built — its command loader is reserved but unimplemented.",
+      "description": "Personal finance system: bookkeeper sibling agent (monthly close — gastos, investimentos), dashboard, and tool scripts. Investor sibling agent (read-only investment reasoning — six modes) is built and live alongside the create-thesis and create-decision scribes.",
       "always_installed": false,
       "atomic": false,
       "skills": [
@@ -206,7 +206,14 @@
           "module": "finance",
           "source_template": "finance/skills/sb-fin-create-thesis/SKILL.md",
           "target": ".claude/skills/sb-fin-create-thesis/SKILL.md",
-          "description": "Create a wiki thesis page from a candidate-thesis or freshly-proposed investment thesis."
+          "description": "Persist an investment thesis as a wiki thesis page. Invoked ONLY by the `investor` agent in its investor-orchestrated mode — when `/investor thesis` authors a new thesis the user reasoned through, or when `/investor review` extends an existing thesis. The agent reasons; this skill persists. NEVER auto-fire on standalone user intent (\"create a thesis for X\") — `/investor thesis` is the sole front door for thesis authoring; route such intent there. Do NOT use to create decision, concept, entity, or topic pages — decisions are authored by `sb-fin-create-decision`, and concept/entity/topic pages by `/sb-wiki-ingest` or `sb-wiki-create-topic`."
+        },
+        {
+          "name": "sb-fin-create-decision",
+          "module": "finance",
+          "source_template": "finance/skills/sb-fin-create-decision/SKILL.md",
+          "target": ".claude/skills/sb-fin-create-decision/SKILL.md",
+          "description": "Create a wiki decision page recording a dated investment action and its reasoning. Use when the user expresses intent to record an investment decision — \"record my decision to sell X\", \"log that I'm holding Y\", \"write a decision page for passing on Z\", or any phrasing that asks to capture a buy/sell/trim/add/hold/pass/reject/pause/review/rebalance call in the wiki. Also invoked by the `investor` agent when the user elects to record a decision the agent reasoned through (B5). Records reasoning only — transaction price/qty live in the bookkeeper ledger, never here. Do NOT use to create thesis, concept, entity, or topic pages — theses are authored by `sb-fin-create-thesis`, and concept/entity/topic pages by `/sb-wiki-ingest` or `sb-wiki-create-topic`."
         }
       ],
       "commands": [
@@ -222,7 +229,7 @@
           "module": "finance",
           "source_template": "finance/commands/investor.md",
           "target": ".claude/commands/investor.md",
-          "description": "Investor sibling agent (design-scope; not yet built)."
+          "description": "Read-only investment-reasoning agent — thesis, research, review, portfolio, decision, policy modes."
         }
       ],
       "rules": []

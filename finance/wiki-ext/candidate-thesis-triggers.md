@@ -1,7 +1,7 @@
 # Candidate-Thesis Triggers
 
-> [!warning] Deferred Wiring
-> This file defines candidate-thesis triggers for the **investor path only**. Wiring into general ingest is **DEFERRED** — it is an open question per spec §12 whether candidate-thesis detection lives in general ingest or exclusively in the investor path. This file is **NOT part of the Step 0 merge list** (general ingest/lint merge only `page-types.ext.md`, `frontmatter-schemas.ext.md`, `section-menus.ext.md`, and `lint-rules.ext.md`). Its consumer is the investor path (out of scope for this build) or a future wiring task. General ingest does NOT fire these triggers today.
+> [!info] Investor-Path Triggers — General Ingest Wiring Deferred
+> This file defines candidate-thesis triggers for the **investor path only**. The investor path (`/investor research` B2 + `/investor review` B3) is the intended consumer — these triggers are evaluated when the investor processes raw sources. The investor path is BUILT and wired to evaluate them; end-to-end liveness is pending live verification of the research/review pipelines. Wiring into **general ingest** is **DEFERRED** — it is an open question per spec §12 whether candidate-thesis detection belongs in general ingest or exclusively in the investor path. This file is **NOT part of the Step 0 merge list** (general ingest/lint merge only `page-types.ext.md`, `frontmatter-schemas.ext.md`, `section-menus.ext.md`, and `lint-rules.ext.md`). General ingest does NOT fire these triggers; the investor path does.
 
 Three triggers the investor path evaluates when processing raw sources. Each trigger that fires produces a `candidate-thesis` log entry surfaced to the user. The investor path NEVER auto-creates thesis pages — all thesis creation flows through the `sb-fin-create-thesis` capability (see `./page-types.ext.md` for the `thesis` page type definition).
 
@@ -9,9 +9,9 @@ Three triggers the investor path evaluates when processing raw sources. Each tri
 
 | Trigger | Fire condition | Status |
 |---------|---------------|--------|
-| **Recurring Claim** | ≥2 dated sources (different read/publish dates) assert a directional claim about the SAME investment entity (asset/company/sector/country) AND the claim is falsifiable and specific (not a general observation) | Defined; inactive until wired |
-| **Mispricing Signal** | A source explicitly frames a price divergence as a mispricing AND at least one prior source or wiki page establishes a reference valuation for the same entity — both dated | Defined; inactive until wired |
-| **Thesis Invalidation** | A source contradicts or materially weakens a claim in an EXISTING `thesis` page (i.e., a document in `theses/`) with direct, dated evidence — not a routine price move or news item without causal framing | Defined; inactive until wired |
+| **Recurring Claim** | ≥2 dated sources (different read/publish dates) assert a directional claim about the SAME investment entity (asset/company/sector/country) AND the claim is falsifiable and specific (not a general observation) | Wired (investor path) — pending live verification |
+| **Mispricing Signal** | A source explicitly frames a price divergence as a mispricing AND at least one prior source or wiki page establishes a reference valuation for the same entity — both dated | Wired (investor path) — pending live verification |
+| **Thesis Invalidation** | A source contradicts or materially weakens a claim in an EXISTING `thesis` page (i.e., a document in `theses/`) with direct, dated evidence — not a routine price move or news item without causal framing | Wired (investor path) — pending live verification |
 
 ## Trigger Details
 

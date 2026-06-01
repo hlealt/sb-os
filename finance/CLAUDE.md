@@ -1,6 +1,6 @@
 # finance/
 
-Finance module source — the investment-research layer that extends the open-source `sb-os` wiki without putting investment content into the base wiki. This file documents how that layer plugs in: the wiki extension, lint scoping, the policy read-rules, and the watchlist invariant. It is the canonical statement of the read-rules; their runtime wiring belongs to the `investor` agent build (deferred — see Deferred Wiring below).
+Finance module source — the investment-research layer that extends the open-source `sb-os` wiki without putting investment content into the base wiki. This file documents how that layer plugs in: the wiki extension, lint scoping, the policy read-rules, and the watchlist invariant. It is the canonical statement of the read-rules; their runtime wiring is carried by the live `investor` agent (see Read-Rules Runtime Wiring below).
 
 Investment terminology (`thesis`, `decision`, `asset`, `country`, `sector`, fundamentals/metrics) is native to this module and appears throughout this file by design. The domain-clean guard keeps that terminology OUT of the base wiki only — never out of this module's own docs.
 
@@ -73,9 +73,9 @@ Any page MAY carry `watchlist: true` in frontmatter, but an agent MAY set it ONL
 
 ---
 
-## Deferred Wiring
+## Read-Rules Runtime Wiring
 
-The `investor` agent (the runtime consumer of the read-rules above) is DEFERRED and built last. `./commands/investor.md` is a reserved stub until then. This file is the canonical statement of the read-rules NOW; the `investor` build wires them into runtime behavior LATER. No agent currently enforces them — they bind when the `investor` agent ships.
+The `investor` agent — the runtime consumer of the read-rules above — is BUILT and live. `./commands/investor.md` is a live loader (no longer a reserved stub): it loads the orchestrator `./workflows/investor/investor.md`, which loads `./workflows/investor/investor-loop.md`. The loop enforces the read-rules table above by loading each policy file at the moment its row requires. This file remains the canonical statement of the read-rules; the live loop references that table and NEVER duplicates it. The read-rules now bind at runtime — every `investor` mode that reasons about investments loads the relevant policy first, per the table above.
 
 ---
 
@@ -116,5 +116,3 @@ The coupling above is also encoded, machine-readable, in `docs/doc-currency-mani
 | **4 — Reconciliation (`doc-maintainer`)** | The companion sub-agent that brings the docs current after an approved change and thereby CLEARS the layer-2 signal and lets the layer-3 block pass. It is the legitimate way through the hard block. | `workflows/doc-maintainer/doc-maintainer.md` |
 
 Layers 2 and 3 both read the manifest; layer 4 clears what layers 2 and 3 detect. A commit blocked by layer 3 is resolved by running `doc-maintainer` (layer 4) to reconcile the doc, then re-committing — NOT by bypassing the hook.
-
-> Codex mirror note: do not read the sibling `AGENTS.md`. It is an auto-generated mirror for Codex agents. This `CLAUDE.md` file is the source of truth.
