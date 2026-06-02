@@ -45,6 +45,18 @@ When a module is listed in `sb-os.json` → `wiki_extensions`, `/sb-wiki-ingest`
 
 ---
 
+## Regulatory Layer — purpose.md
+
+`{wiki_root}/purpose.md` is an **OPTIONAL** regulatory file that gives `/sb-wiki-ingest` a **focus lens** — it biases how deeply a source is synthesized, which entities/concepts become pages, and how topics are suggested toward the user's stated focus areas, and flags sources that match nothing. It is the regulatory-layer twin of the locked schema. It never drops content and never alters a deterministic rule.
+
+It is a root-level sibling of `raw/`, `wiki/`, and `log.md` — NOT a wiki page, NOT raw. It carries `type: purpose` (a non-page value excluded from page-type checks, indexes, and orphan detection). The user owns it; lint never edits it and skips it entirely.
+
+**Optionality (no-op contract).** Absent → lens OFF → ingest behaves exactly as today; malformed → ingest warns and proceeds lens-OFF. Mirrors the `wiki_extensions` Step 0 no-op contract.
+
+Canonical spec (artifact, format, parsing contract, classification bands, discretionary-only modulation, per-step effects, off-purpose flag): schema § "Regulatory layer — purpose.md".
+
+---
+
 ## Operations
 
 Four operations cover the wiki lifecycle.
@@ -131,7 +143,7 @@ Filenames use `lowercase-kebab.md`. Source page filenames mirror the raw counter
 
 ## Asset Folder
 
-Standard local-asset path: `{wiki_root}/raw/_assets/` — flat, single shared folder. Maintained by the user via Obsidian's core "Download attachments for current file" command (Karpathy-style workflow: clip a source, then hotkey-download all referenced images locally). Configure once in Obsidian Settings → Files and links → "Default location for new attachments" → `raw/_assets`. Reference from any page via `![[filename.png]]`. **Agents NEVER write to `raw/_assets/`. Lint SKIPS it entirely** — not a raw origin, no leaf index, excluded from orphan detection. Full rules: schema § "Asset folder".
+Standard local-asset path: `{wiki_root}/raw/assets/` — flat, single shared folder. Maintained by the user via Obsidian's core "Download attachments for current file" command (Karpathy-style workflow: clip a source, then hotkey-download all referenced images locally). Configure once in Obsidian Settings → Files and links → "Default location for new attachments" → `raw/assets`. Reference from any page via `![[filename.png]]`. **Agents NEVER write to `raw/assets/`. Lint SKIPS it entirely** — not a raw origin, no leaf index, excluded from orphan detection. Full rules: schema § "Asset folder".
 
 <!-- sb:end -->
 

@@ -322,6 +322,14 @@ No Obsidian plugins are required by sb-os. Users who build their own `Home.md` p
 
 ---
 
-## 11. License
+## 11. Behavior Changes
+
+| Version | Module | Change |
+|---------|--------|--------|
+| wiki v4 | `wiki` | `/sb-wiki-ingest` gains an optional `{wiki_root}/purpose.md` regulatory-layer focus lens (Step 0.5). When present, the lens modulates discretionary synthesis surfaces (depth, optional sections, stub bias, topic ranking, Stage-1 classification). When absent, ingest is identical to today. Schema canonical reference: `wiki/docs/wiki-schema.md`. |
+
+---
+
+## 12. License
 
 MIT. See `LICENSE` at the repo root.

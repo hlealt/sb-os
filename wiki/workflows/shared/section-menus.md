@@ -64,6 +64,8 @@ Required and optional sections per wiki page type. Agents select optional sectio
 | `Methodology` | For studies, papers — method, dataset, sample, limitations |
 | `Counterpoints` | Where the source disagrees with itself or with prior wiki claims |
 
+When `{wiki_root}/purpose.md` is present, the focus lens modulates which optional sections to include and at what depth. Full spec: `3-resources/tools/sb-os/wiki/docs/wiki-schema.md` § "Regulatory layer — purpose.md".
+
 **User half** (separated by `---`):
 
 | Section | Owner |

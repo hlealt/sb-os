@@ -20,6 +20,7 @@ Read `3-resources/tools/sb-os/wiki/docs/wiki-schema.md` — Operations § "/sb-w
 | `{wiki_root}/wiki/` | Wiki page tree (concepts, entities, topics, sources). |
 | `{wiki_root}/raw/` | Raw source tree — Markdown (`.md`) and PDF (`.pdf`) sources. **EXCLUDES `raw/assets/`** (user-maintained binary attachments — per `../shared/folder-structure.md` "Asset Folder"). This workflow NEVER reads or writes `raw/assets/`. |
 | `{wiki_root}/log.md` | Actionable queue — `candidate-topic` + `candidate-mention` entries only. |
+| `{wiki_root}/purpose.md` | OPTIONAL regulatory file — the focus-lens source loaded at Step 0.5. Root-level sibling of `raw/`, `wiki/`, `log.md`; NOT a wiki page, NOT raw. Absent → lens OFF (ingest identical to today). Per `../../docs/wiki-schema.md` § "Regulatory layer — purpose.md". |
 
 ## Shared Data Files
 
@@ -70,6 +71,24 @@ No mid-flow user input during steps 1–9. Stage 1 commits approved changes befo
 
 Read `sb-os.json` at vault root → `wiki_extensions` field (a list of registered module names; resolve via `install/manifest.py`, never hardcode). For each listed module, locate its `wiki-ext/` folder and MERGE its `page-types.ext.md`, `frontmatter-schemas.ext.md`, `section-menus.ext.md`, and `lint-rules.ext.md` into the active rule set for this run. Extension page types, entity kinds, sections, and lint rules are ADDED to — never replace — the base set referenced by the shared data files. If `wiki_extensions` is absent or empty, run with the base behavior unchanged. Process every later step against the merged rule set.
 
+### Step 0.5 — Load purpose (focus lens)
+
+Read + parse the OPTIONAL regulatory file `{wiki_root}/purpose.md`. This loads the focus lens that modulates the discretionary surfaces at Steps 2, 5, 3·7b, and 10. The canonical spec is `../../docs/wiki-schema.md` § "Regulatory layer — purpose.md" — follow it; the parsing contract and per-step modulation table there are authoritative.
+
+1. Resolve `{wiki_root}/purpose.md`.
+2. **Absent** → **lens OFF**: skip classification and all lens modulation for this run; every later step behaves EXACTLY as it does today (optionality guarantee #1). Proceed to Step 1.
+3. **Malformed** (unreadable, invalid frontmatter, or no parseable `## Focus areas`) → WARN and proceed **lens-OFF** (guarantee #5). NEVER abort the ingest. Proceed to Step 1.
+4. **Present and parseable** → **lens ON**: parse the four sections per the schema's parsing contract and hold them for the run:
+
+| Section | Lens use |
+|---------|----------|
+| `## Focus areas` | The match set for band classification (in-focus detection) at Step 2 open. |
+| `## Down-weight signals` | Hints that push a source toward the **peripheral** band. |
+| `## Quality bar` | Synthesis preferences applied while writing the source page (Step 2). Does NOT influence the wiki sources index `What it says` phrasing (index neutrality guard). |
+| `## Out of purpose` | Optional explicit off-purpose list; if absent, off-purpose = "matches no Focus area". |
+
+Lens ON modulates ONLY discretionary surfaces (Steps 2, 5 Title-only/Notable-Quote branches, 3·7b, 10). It NEVER alters a mechanical branch's logic, NEVER drops content, and NEVER suppresses a detected trigger (guarantees #2/#3). Peripheral treatment is floored at today's baseline including cluster granularity (guarantee #4).
+
 ### Step 1 — Read raw file
 
 1. Resolve `<slug>` against `{wiki_root}/raw/`:
@@ -93,6 +112,26 @@ Markdown raw sources SKIP this step. For a PDF raw source:
 The rename changes the FILENAME only — raw content is never edited (immutability governs content, per `../shared/folder-structure.md`).
 
 ### Step 2 — Write source page
+
+**Lens — classify the source (Step 2 open; lens ON only).** With the raw content (Step 1) and parsed purpose (Step 0.5) both available, classify the source into EXACTLY ONE band, keying off the **primary** subject — not incidental mentions (same discipline as the Tecer-relevance axes). Per the schema § "Regulatory layer — purpose.md" → "Classification model":
+
+| Band | Definition | Effect |
+|------|------------|--------|
+| **in-focus** | Primary subject matches ≥1 `Focus area` | Dial discretionary treatment **UP** (richer) |
+| **peripheral** | Not a focus match, but not noise (or hits a `Down-weight signal`) | Baseline; lean terse on discretionary extras — "down-weight, never below baseline" |
+| **off-purpose** | Matches **no** `Focus area` (or appears in `Out of purpose`) | Baseline treatment **+ Stage-1 flag** (Step 10); if the user proceeds, treat as peripheral |
+
+Registered `wiki_extensions` page types (e.g. `thesis`, `decision`) are classified too (key off primary subject); `purpose.md` SHOULD cover active-extension domains so extension sources are not spuriously flagged off-purpose. Hold the band for Steps 5, 3·7b, and 10. Lens OFF → no classification; skip this block entirely.
+
+**Lens — `Substance` depth dial (discretionary; lens ON only).** Modulate the discretionary depth/granularity of the `Substance` section and optional-section inclusion by band — the mechanical branches downstream are untouched:
+
+| Band | Discretionary treatment |
+|------|-------------------------|
+| **in-focus** | Finer granularity, fuller `Substance`; include warranted optional sections (`Notable quotes` / `Methodology` / `Counterpoints`); apply `Quality bar` editorial preferences |
+| **peripheral** | Baseline granularity; optional sections only if clearly warranted — never coarsen clustering below baseline (guarantee #4) |
+| **off-purpose** | Baseline (becomes peripheral once the user proceeds at Step 10) |
+
+This shapes only the discretionary inputs; the Substance-bullet stub branch (Step 5), trigger detection (Step 6), citations, and indexes are mechanical and untouched (their outputs may shift only as a bounded consequence of these inputs). Lens OFF → write `Substance` and select optional sections exactly as today.
 
 Write `{wiki_root}/wiki/sources/{origin}/{date}-{slug}.md`. Filename mirrors the raw counterpart's stem EXACTLY with a `.md` extension — preserve the date format the origin uses (`YYYY-MM-DD-slug.md`, `YYYY_MM_DD-slug.md`, etc.). Do NOT normalize date formats. A PDF raw source keeps the same stem with `.md` (e.g., `Starting-Up-AI.pdf` → `Starting-Up-AI.md`); the `raw:` frontmatter wikilinks the actual raw filename including its real extension (`[[Starting-Up-AI.pdf]]`).
 
@@ -135,6 +174,15 @@ Citations: emit inline `[^N]` markers at every claim derived from the raw, then 
    - The `Substance`-bullet branch is MECHANICAL — fire on match against the cluster representative.
    - The Source-title branch is MECHANICAL ONLY when the title name also appears in a Substance bullet. Title-only names fall under DISCRETION per `../shared/stub-policy.md` § "Title-Branch Rule" — apply the relevance heuristic before firing.
    - The Notable-Quote branch is AGENT DISCRETION per `../shared/stub-policy.md` § "Notable Quote Stub Creation" — apply the relevance heuristic before firing.
+5b. **Lens — discretionary stub branches (lens ON only; these are the "Step 5 — Create stubs" discretionary branches per the schema's per-step table).** Bias ONLY the relevance heuristic of the two DISCRETIONARY branches above (Title-only, Notable-Quote) by the source's band from Step 2 — the MECHANICAL `Substance`-bullet branch is UNTOUCHED and fires exactly as today:
+
+   | Band | Title-only / Notable-Quote heuristic bias |
+   |------|-------------------------------------------|
+   | **in-focus** | Lean **fire** (create the stub); apply finer cluster granularity |
+   | **peripheral** | Lean **demote** to `candidate-mention` |
+   | **off-purpose** | As peripheral |
+
+   The bias only tilts the existing yes/no heuristic — it NEVER fires the mechanical branch differently, NEVER drops a Substance-bullet stub, and NEVER coarsens peripheral clustering below baseline (guarantee #4). A demoted name still lands in `mention-only` (logged `candidate-mention`), so nothing is dropped. Lens OFF → apply the heuristic exactly as clause 5 specifies, no bias.
 6. Build five working sets for downstream steps:
    - `existing-pages` — concept/entity pages that already exist (handled in step 4)
    - `stub-candidates` — new concept/entity pages whose stub-creation rule fires (handled in step 5)
@@ -159,6 +207,8 @@ Citations: emit inline `[^N]` markers at every claim derived from the raw, then 
 | Dedupe with firm | The (topic, source) pair must NOT already appear in firm `candidate-topic-updates` — firm wins; suppress speculative for the same topic. |
 
    Rank candidates by token-overlap count (descending). Cap to TOP 2. The remaining candidates are dropped silently (NOT logged — they re-detect on future ingests of related sources). For each kept entry, capture: topic page path, the stub's slug, the matched tokens, and the topic-shape-appropriate proposed body bullet (per the same routing as firm-tier in step 4.5).
+
+   **Lens — speculative ranking (discretionary; lens ON only).** When the lens is ON, re-rank the qualifying candidates by **focus overlap** (overlap with the source's classified `Focus area`) WITHIN the existing TOP-2 cap: focus overlap orders the list and breaks ties when token-overlap counts are equal. The firing rule (token overlap ≥2, firm-dedupe), the cap of 2, and the silent-drop of overflow are UNCHANGED — the lens only reorders the kept set, never widens it. Lens OFF → rank by token-overlap count only, exactly as above.
 
 ### Step 4 — Update existing entity/concept pages
 
@@ -244,10 +294,23 @@ Emit NOTHING for the ingest itself, for stubs created in step 5, or for topic up
 
 ### Step 10 — Stage 1 checkpoint
 
-Present the user with a structured preview of all proposed file changes AND the PROPOSED TOPICS block. No file writes commit until the user responds. Format VERBATIM:
+Present the user with a structured preview of all proposed file changes AND the PROPOSED TOPICS block. No file writes commit until the user responds.
+
+**Lens — Stage 1 presentation (discretionary; lens ON only).** When the lens is ON, the presentation carries the source's band from Step 2 — the controls, the file-changes table, and trigger DETECTION (Step 6) are all UNCHANGED:
+
+1. **Classification line** — append the band to the preview header: `INGEST PREVIEW — <slug>   [purpose: in-focus | peripheral | ⚠ off-purpose]`.
+2. **Off-purpose banner** — when the band is `off-purpose`, prepend the advisory banner below ABOVE the file-changes table. It is ADVISORY only: all standard controls (`accept-all` / `reject N` / `abort`, plus topic decisions) remain available; it NEVER auto-aborts and NEVER suppresses any change.
+3. **Trigger presentation priority** — in the PROPOSED TOPICS block, surface in-focus-overlapping triggers FIRST and tag them `focus`; peripheral/off-purpose triggers are surfaced untagged. NO fire is suppressed or reordered out of the list — priority annotation only (the Step 6 detection set is unchanged).
+
+Lens OFF (no `purpose.md`) → NO classification line, NO banner, NO `focus` tags — the preview is IDENTICAL to today.
+
+Format VERBATIM (lens ON appends ` [purpose: …]` to the header line; lens OFF omits it):
 
 ```
-INGEST PREVIEW — <source slug>
+INGEST PREVIEW — <source slug>   [purpose: in-focus | peripheral | ⚠ off-purpose]
+
+⚠ Off-purpose — this source matches no focus area in purpose.md.   (only when band = off-purpose)
+   Ingest anyway?  (accept-all proceeds · abort discards)
 
 | # | file | action | preview |
 |---|------|--------|---------|
@@ -308,6 +371,12 @@ Default behavior when the user omits per-topic decisions: defer all topics, reje
 | Speculative topic updates (SPECULATIVE TOPIC UPDATES) | `reject` ALL. |
 
 These resolutions are IDENTICAL to the default-omission behavior above for topics, and to `accept-all` for file changes. After committing, RETURN the structured summary the caller parses, per the schema § "/sb-wiki-ingest" subsection "Silent (non-interactive) mode" → "Return — structured summary (silent)". The summary's per-file status MUST be `committed` when all staged changes commit; `partial (<reason>)` ONLY when the source page committed but ≥1 staged change failed mid-commit (`<reason>` names what failed); `failed (<reason>)` when nothing committed (slug-resolution outcome from step 1, or an abort cause). NEVER emit `partial`/`failed` for a skipped step — clustering, trigger detection, and append-only protection all run in full. The mode NEVER writes a topic page and NEVER runs `/sb-wiki-lint`.
+
+**Lens — purpose band in the silent summary (lens ON only).** Silent mode shows NO Stage-1 banner. Instead, when the lens is ON, the structured summary INCLUDES the source's purpose band (`in-focus` | `peripheral` | `off-purpose`) from Step 2 — so `/sb-wiki-ingest-all` can list every off-purpose ingest in its final report for human review. The band is INFORMATIONAL: silent mode NEVER auto-aborts on `off-purpose` (per schema § "Off-purpose flag (Step 10)" → "Silent / bulk mode"). Lens OFF → omit the band field (summary identical to today).
+
+| Field | Content (added when lens ON) |
+|-------|------------------------------|
+| Purpose band | EXACTLY ONE of: `in-focus` \| `peripheral` \| `off-purpose`. Informational only — never changes the commit outcome. |
 
 ### Step 11 — Stage 2 checkpoint
 
@@ -370,3 +439,4 @@ End of flow.
 | `sb-wiki-create-topic` skill fails mid-Stage-1 acceptance | Mark the topic row as failed; keep the `candidate-topic` log entry; proceed with the rest of the acceptance. |
 | Raw index file missing at step 7 | Log a warning for lint; do not block the ingest. |
 | Wiki sources index file missing at step 8 | Create it with header row; proceed. |
+| `{wiki_root}/purpose.md` malformed at step 0.5 (unreadable, invalid frontmatter, or no parseable `## Focus areas`) | WARN and proceed **lens-OFF** — every later step behaves as it does today. NEVER abort the ingest (guarantee #5). (Absent `purpose.md` is NOT a failure — it is the clean no-op lens-OFF path handled at Step 0.5.) |

@@ -33,6 +33,8 @@ Cluster candidate names into page-level units before deciding how many stubs to 
 
 The clustering decision is the AGENT'S RESPONSIBILITY upstream of mechanical fire. Step 2 substance-bullet writers must respect the cluster set: name only page-level entities/concepts; sub-cluster names go in prose without wikilinks.
 
+When `{wiki_root}/purpose.md` is present, the focus lens modulates cluster-granularity choices. Full spec: `3-resources/tools/sb-os/wiki/docs/wiki-schema.md` § "Regulatory layer — purpose.md".
+
 ## Stub Creation (ingest)
 
 The agent auto-creates a stub Concept or Entity page when the cluster representative appears in EITHER of the two mechanical branches OR fires the Notable-Quote discretion branch:
@@ -68,6 +70,8 @@ For each entity/concept name surfaced ONLY by a Notable Quote (not by source tit
 Discretion wins because lint can later catch missing entity references via broken-wikilink detection (an under-stubbed name surfaces the moment another page tries to link to it), but lint cannot easily prune mass-produced shallow stubs without false positives.
 
 The `Substance`-bullet branch remains mechanical — those artifacts are short, agent-curated, and high-signal by construction (and now subject to the page-granularity heuristic upstream). The Title and Notable Quote branches carry discretion.
+
+When `{wiki_root}/purpose.md` is present, the focus lens biases both discretionary stub branches (Title-only, Notable-Quote). Full spec: `3-resources/tools/sb-os/wiki/docs/wiki-schema.md` § "Regulatory layer — purpose.md".
 
 ## Stub State (lint detection)
 
