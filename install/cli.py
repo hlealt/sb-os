@@ -304,18 +304,26 @@ def prompt_modules(
         name = names[index]
         mod = modules[name]
         lines = [f"  {name} - {mod.get('description', '')}", ""]
+        stale_names: list[str] = []
         for group_name, key in (
             ("Skills", "skills"),
             ("Commands", "commands"),
             ("Rules", "rules"),
         ):
-            entries = mod.get(key, [])
+            all_of_kind = mod.get(key, [])
+            entries = [e for e in all_of_kind if not e.get("stale")]
+            stale_names += [
+                e.get("name", e.get("target", "")) for e in all_of_kind if e.get("stale")
+            ]
             lines.append(f"  {group_name} ({len(entries)}):")
             if entries:
                 for entry in entries:
                     lines.append(f"    - {entry.get('name', entry.get('target', ''))}")
             else:
                 lines.append("    - (none)")
+            lines.append("")
+        if stale_names:
+            lines.append(f"  Stale (retired — not installed): {', '.join(stale_names)}")
             lines.append("")
         return "\n".join(lines)
 
@@ -353,10 +361,16 @@ def prompt_module_components(
             continue
         all_entries: list[tuple[str, str, str]] = []  # (kind, name, target)
         for entry in mod.get("skills", []):
+            if entry.get("stale"):
+                continue
             all_entries.append(("skill", entry["name"], entry["target"].replace("\\", "/")))
         for entry in mod.get("commands", []):
+            if entry.get("stale"):
+                continue
             all_entries.append(("cmd", entry["name"], entry["target"].replace("\\", "/")))
         for entry in mod.get("rules", []):
+            if entry.get("stale"):
+                continue
             all_entries.append(("rule", entry["name"], entry["target"].replace("\\", "/")))
         if not all_entries:
             continue

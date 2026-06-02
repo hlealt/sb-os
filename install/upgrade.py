@@ -184,17 +184,17 @@ def _clear_orphans(
     keep_skill_targets = {
         e["target"].replace("\\", "/")
         for m in keep_modules.values() for e in m.get("skills", [])
-        if e["target"].replace("\\", "/") not in excluded_components
+        if e["target"].replace("\\", "/") not in excluded_components and not e.get("stale")
     }
     keep_command_targets = {
         e["target"].replace("\\", "/")
         for m in keep_modules.values() for e in m.get("commands", [])
-        if e["target"].replace("\\", "/") not in excluded_components
+        if e["target"].replace("\\", "/") not in excluded_components and not e.get("stale")
     }
     keep_rule_targets = {
         e["target"].replace("\\", "/")
         for m in keep_modules.values() for e in m.get("rules", [])
-        if e["target"].replace("\\", "/") not in excluded_components
+        if e["target"].replace("\\", "/") not in excluded_components and not e.get("stale")
     }
 
     all_skill_targets = {

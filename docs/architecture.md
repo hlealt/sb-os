@@ -176,9 +176,11 @@ Editing the installed file directly is forbidden — the source is the repo. Re-
 | Rule | Purpose |
 |------|---------|
 | `sb-obsidian-markdown.md` | Obsidian-flavored markdown reference |
-| `sb-user-preferences.md` | Loads `.user/preferences.md` if present |
+| ~~`sb-user-preferences.md`~~ | **Retired (stale).** Loaded `.user/profile/preferences.md` — superseded by host CLAUDE.md prefs + per-workflow context-injection |
 | `sb-workflow-context.md` | YAML context injection on workflow steps |
 | `sb-sub-agents.md` | Mandatory skill directives in Agent dispatches |
+
+`sb-source-of-truth.md` (the edit-source-not-installed-copies reminder) is also **retired (stale)** — its principle is documented in the managed CLAUDE.md and the README. Retired rules carry `"stale": true` in `module-manifest.json`; see §6 "Stale components".
 
 ---
 
@@ -198,6 +200,10 @@ The installer walks upward from cwd looking for `sb-os.json`. If found, it offer
 ### Installer interactivity
 
 The installer prompts before any vault-modifying action and shows a planned-action list. On a fresh install it offers a dry-run preview before any writes. v1 ships without a separate module system — the component count is small enough to ship one bundle by default; defaults are baked, advanced overrides live in `sb-os.json` and can be edited after install.
+
+### Stale components
+
+A component entry in `module-manifest.json` may carry `"stale": true` (with an optional `"stale_reason"`). Stale components are retired: the installer never installs them, never surfaces them in the interactive picker, and an upgrade run removes any previously-installed copy. Their source files remain in the repo for reference and history. Reviving one is a manifest edit (remove the flag) plus a re-install. Staleness is enforced at a single chokepoint (`loaders._flatten`), so every reader — fresh install, upgrade, orphan-cleanup, and tests — treats stale entries identically.
 
 ### Out of v1 scope
 
@@ -327,6 +333,7 @@ No Obsidian plugins are required by sb-os. Users who build their own `Home.md` p
 | Version | Module | Change |
 |---------|--------|--------|
 | wiki v4 | `wiki` | `/sb-wiki-ingest` gains an optional `{wiki_root}/purpose.md` regulatory-layer focus lens (Step 0.5). When present, the lens modulates discretionary synthesis surfaces (depth, optional sections, stub bias, topic ranking, Stage-1 classification). When absent, ingest is identical to today. Schema canonical reference: `wiki/docs/wiki-schema.md`. |
+| v0.2.0 | `core` | `module-manifest.json` gains a `"stale"` component flag (+ optional `"stale_reason"`), enforced at `loaders._flatten`. Stale components are never installed or surfaced and are removed on upgrade; sources are preserved. Rules `sb-source-of-truth` and `sb-user-preferences` retired as stale — source-of-truth's principle lives in the managed CLAUDE.md + README; preference loading moves to host CLAUDE.md (cross-cutting) and per-workflow context-injection (workflow-scoped). |
 
 ---
 

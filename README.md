@@ -22,7 +22,7 @@ Each module is a bundle of skills, commands, and rules. Core is always installed
 
 | Module | What it gives you |
 |---|---|
-| **core** *(always installed)* | The PARA gatekeepers. Every vault edit routes through `sb-vault-ops` (validates destination, format, naming, structural invariants) and triggers `sb-vault-integrity` (sweeps broken references on rename/move/delete, updates CLAUDE.mds, scaffolds task files for new project/area directories). Always-on rules cover Obsidian-flavored markdown, sub-agent dispatch hygiene, user-preference loading, workflow-context injection, and source-of-truth warnings. `/sb-onboarder` walks a fresh vault to populated PARA in one session, with state that persists across sessions. Periodic-note templates for daily/weekly/monthly/quarterly. |
+| **core** *(always installed)* | The PARA gatekeepers. Every vault edit routes through `sb-vault-ops` (validates destination, format, naming, structural invariants) and triggers `sb-vault-integrity` (sweeps broken references on rename/move/delete, updates CLAUDE.mds, scaffolds task files for new project/area directories). Always-on rules cover Obsidian-flavored markdown, sub-agent dispatch hygiene, and workflow-context injection. `/sb-onboarder` walks a fresh vault to populated PARA in one session, with state that persists across sessions. Periodic-note templates for daily/weekly/monthly/quarterly. |
 | **wiki** *(optional, atomic)* | A Karpathy-style knowledge base — raw sources kept verbatim, synthesis layered on top. `/sb-wiki-ingest` distills a saved article into concept/entity/topic/source pages and stubs out forward references. `/sb-wiki-query` answers questions via grep across your wiki and raw sources — no embeddings, no RAG, your notes are the index. `/sb-wiki-lint` checks structural and citation hygiene. `/sb-archivist` writes a rolling per-day session work-log capturing decisions, rejected alternatives, collaborative refinements, discoveries, and files touched. |
 | **life-planner** *(optional)* | `/sb-life-planner` runs structured weekly, monthly, and quarterly reviews. Closes the prior period, sets intentions for the next, routes scheduled tasks to your daily notes, and keeps projects and areas in sync. |
 | **learning** *(optional)* | `/sb-tutor` is a private tutor that delivers material in small pills along a personalized learning path. Works on any subject; reads study material you drop into the project context (gitingest exports, technical docs, transcripts). |
@@ -150,7 +150,16 @@ For workflow-content changes, that's enough — agents read directly from the so
 
 ## Source of truth
 
-Files in `.claude/skills/sb-*`, `.claude/commands/sb-*.md`, and `.claude/rules/sb-*.md` are regenerated on every install. **Do not edit them in your vault** — edit the source in this repo and re-install. The installed `.claude/rules/sb-source-of-truth.md` is a permanent reminder.
+Files in `.claude/skills/sb-*`, `.claude/commands/sb-*.md`, and `.claude/rules/sb-*.md` are regenerated on every install. **Do not edit them in your vault** — edit the source in this repo and re-install. This README section is the canonical statement of that principle — the always-on `sb-source-of-truth` rule is retired (see [Retired components](#retired-components)).
+
+## Retired components
+
+Some components ship in this repo but carry `"stale": true` in `install/module-manifest.json`. The installer never installs or offers them, and an upgrade removes any previously-installed copy; the source files remain for reference and history. Revive one by removing its `stale` flag and re-running `python install.py`.
+
+| Component | Module | Why retired |
+|---|---|---|
+| `sb-source-of-truth` (rule) | core | The edit-source-not-installed-copies principle is already in the managed CLAUDE.md and the **Source of truth** section above — the always-on rule duplicated it every turn. |
+| `sb-user-preferences` (rule) | core | Superseded by host CLAUDE.md prefs (cross-cutting) + per-workflow context-injection via `sb-workflow-context` (workflow-scoped). The always-on monolithic loader cost context on every turn for content most turns don't need. |
 
 ## Architecture notes
 

@@ -61,7 +61,9 @@
           "source": "para/rules/sb-user-preferences.md",
           "target": ".claude/rules/sb-user-preferences.md",
           "mode": "copy",
-          "description": "Loads .user/profile/preferences.md if present."
+          "description": "Loads .user/profile/preferences.md if present.",
+          "stale": true,
+          "stale_reason": "Superseded by host CLAUDE.md preferences + per-workflow context-injection (sb-workflow-context). The always-on monolithic loader cost context on every turn for content most turns don't need; cross-cutting prefs belong in CLAUDE.md, workflow-scoped prefs in per-workflow context YAMLs."
         },
         {
           "name": "sb-workflow-context",
@@ -77,7 +79,9 @@
           "source": "para/rules/sb-source-of-truth.md",
           "target": ".claude/rules/sb-source-of-truth.md",
           "mode": "copy",
-          "description": "Warns that sb-os components in .claude/ are overwritten on re-install."
+          "description": "Warns that sb-os components in .claude/ are overwritten on re-install.",
+          "stale": true,
+          "stale_reason": "Redundant — the edit-source-not-installed-copies principle is already documented in the shipped managed CLAUDE.md and the README 'Source of truth' section; the always-on rule duplicated it on every turn."
         }
       ],
       "templates": [

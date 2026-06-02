@@ -103,6 +103,11 @@ def _flatten(
     out: list[dict[str, Any]] = []
     for mod in modules.values():
         for entry in mod.get(kind, []):
+            if entry.get("stale"):
+                # Retired component: never shipped. Skipped at the single
+                # chokepoint so every manifest_* reader (fresh/upgrade install,
+                # orphan-cleanup, tests) ignores it uniformly.
+                continue
             target = entry.get("target", "").replace("\\", "/")
             if target in excluded:
                 continue
