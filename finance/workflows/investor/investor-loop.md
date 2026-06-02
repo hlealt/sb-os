@@ -32,7 +32,7 @@ The investor writes ONLY to:
 | `.user/finance/investor/` (its own workspace, incl. `research-policy.md`, `source-policy.md`, `log.md`) | Directly, present-and-confirm for policy content (see § B6 Policy thin mode) |
 | Wiki thesis pages | ONLY by invoking `sb-fin-create-thesis` (the sole authority on thesis-page structure) — the agent NEVER hand-writes a thesis page |
 | Wiki decision pages | ONLY by invoking `sb-fin-create-decision` — the agent NEVER hand-writes a decision page |
-| Wiki `raw/` captures | ONLY through the `investment-source-capture` tool — the agent NEVER hand-writes a raw source file |
+| Wiki `raw/` captures | ONLY through the `investment_source_capture` tool — the agent NEVER hand-writes a raw source file |
 
 Any write outside this table is out-of-structure → run Rule A. The agent reasons; scribes and tools persist (delegate-not-replace).
 
@@ -78,6 +78,25 @@ The investor proposes; the user decides. Before persisting anything (a thesis vi
 3. **STOP. Wait for the user's choice.** `[S]` → persist/act via the owning scribe or tool (own-workspace boundary applies). `[E]` → apply edits, re-present. `[N]` → persist nothing; take the user's alternative or halt.
 
 One carve-out: when persistence delegates to `sb-fin-create-thesis`, that scribe's own scope-overlap `extend`/`new`/`abort` prompt MAY fire as the single allowed interrupt inside the handoff — the agent does not pre-empt it.
+
+### Optional adversarial refuter (`[R]`) — refuter-enabled modes only
+
+`thesis` / `review` / `decision` (the refuter-enabled modes) offer ONE additional option at their checkpoint, ADDED to the `[S]/[E]/[N]` set above — never replacing it: `[R] Refutar — rodar uma refutação por um segundo modelo antes de decidir`. `research` / `portfolio` / `policy` NEVER offer it. On `[R]`, the mode reads-and-follows `./adversarial-refuter.md` (the shared refuter-dispatch workflow; the manifest registers it as a cross-mode mechanism), then RE-PRESENTS the SAME checkpoint with the critique added:
+
+- The refutation is shown **RAW + flagged** as a distinct "Adversarial critique" block beside the draft; the agent may add a one-line agree/disagree per item but NEVER edits or suppresses it.
+- The existing `[S]/[E]/[N]` choices then follow unchanged — the user still decides. Accepted points fold into the draft via the existing `[E]` edit path.
+- The refuter is single-pass and read-only: it NEVER persists, calls a tool, fetches the web, loops, or auto-acts on its verdict. It feeds this checkpoint; it never replaces, collapses, or gates it. If the refuter is unavailable or fails, the mode re-presents the draft UNCHANGED — `[R]` never blocks the checkpoint.
+
+**Optional always-on key (`research-policy.md`).** `.user/finance/investor/research-policy.md` MAY carry an `adversarial_refuter` key (user content, inside the own-workspace boundary — see § B6 Policy thin mode) that flips specific modes to always-on: a mode flipped on SKIPS the `[R]` offer and runs the refuter automatically before presenting, surfacing the critique the same RAW + flagged way. Schema (resolved in `p4-2`):
+
+```yaml
+adversarial_refuter:
+  thesis:   { enabled: false, backend: auto }   # auto | claude | codex
+  review:   { enabled: false, backend: auto }
+  decision: { enabled: false, backend: auto }
+```
+
+`enabled` (bool, default `false`) — when `true`, that mode runs the refuter automatically and omits the `[R]` offer; `false` keeps `[R]` as the opt-in trigger. `backend` (`auto` default | `claude` | `codex`) — selects the refuter backend per `./adversarial-refuter.md` § Step 2 (`auto` = Claude sub-agent default, Codex fallback). **No mode auto-enables it**: every key defaults to `false` and only the user, via the `policy` thin mode, sets it (own-workspace boundary; setting it is the user owning their policy, never the agent's initiative). The key is OPTIONAL — absent or empty, every refuter-enabled mode falls back to the `[R]` opt-in and no mode auto-runs the refuter.
 
 ---
 

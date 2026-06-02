@@ -59,9 +59,34 @@ This is the mode's single user-facing checkpoint. Per the scribe's investor-orch
 
 | User choice | Action |
 |-------------|--------|
+| `[R]` Refutar | Run a second-model refutation of this decision reasoning before deciding (§ Adversarial refuter below); re-present THIS checkpoint with the critique added — `[R]` never persists, never auto-acts, never replaces `[S]/[E]/[N]` |
 | `[S]` Aprovar | Proceed to Step 5 — invoke the scribe |
 | `[E]` Editar | Apply the user's edits to the reasoning; re-present; loop until `[S]` or `[N]` |
 | `[N]` Rejeitar | Persist nothing; take the user's alternative path or halt |
+
+### Adversarial refuter (`[R]`) — dispatch with the decision rubric
+
+On `[R]`, read-and-follow `./adversarial-refuter.md` (the shared refuter-dispatch workflow; registered as a cross-mode mechanism). This mode DISPATCHES it — it adds NO discovery engine and NEVER re-implements the refutation logic; `./adversarial-refuter.md` owns the backend, single-pass, read-only, and no-generation mechanics. The refuter attacks ARGUMENT STRUCTURE only (the falsifier, the risks, rationale drift, source contradiction) — it NEVER reasons or critiques price / quantity / fees / position size (the `bookkeeper` ledger owns those; this mode records reasoning only). Hand it the CLOSED input set its § Step 1 requires:
+
+| Input | What this mode passes |
+|-------|------------------------|
+| Drafted artifact | the Step 4 decision record above — the Context, Action, Related thesis, Rationale, What I believed at the time, What would prove me wrong, Acknowledged risks, and Review trigger exactly as drafted (reasoning only — no price/qty/fees) |
+| Cited sources | the full text of every source the decision cites (the source pages and entity `## Financials` rows reasoned in Step 2) — passed inline so the refuter reads it in its OWN context; full text never re-enters this mode (anti-context-rot) |
+| The decision rubric | the ordered attack questions below — this mode OWNS its rubric; `./adversarial-refuter.md` never hard-codes it |
+| `research-policy` scope | the scope / exclusions loaded at Step 1 |
+
+**Decision rubric (the attack questions the refuter tests this decision reasoning against):**
+
+1. Is "What would prove me wrong" a genuinely observable falsifier — a specific, checkable condition — rather than a hedged or unfalsifiable restatement of the Rationale?
+2. Are the `Acknowledged risks` complete, or does a material risk in the cited sources go unlisted?
+3. Does the Rationale still follow from the `Related thesis`, or has it drifted from what that thesis actually claims?
+4. Is the decision contradicted by its own cited sources — does any source the Rationale rests on actually point the other way?
+
+The refuter returns its § Output schema verbatim — one `overturned | weakened | survives` verdict per rubric item. Render that returned block RAW + flagged as a distinct **"Adversarial critique"** block beside the decision record, then RE-PRESENT this SAME checkpoint with the critique added:
+
+- The critique is shown intact; this mode may add a one-line agree/disagree per item but NEVER edits or suppresses it.
+- It is single-pass — the refuter runs ONCE and never loops. Points the user accepts fold into the decision via the existing `[E]` path, NOT by re-running the refuter.
+- The `[S]/[E]/[N]` choice then follows unchanged — the critique informs the decision; the user still decides. A failed or unavailable refuter NEVER blocks this checkpoint: present the decision record unchanged and proceed (`./adversarial-refuter.md` § Step 2).
 
 ## Step 5 — Delegate persistence to `sb-fin-create-decision`
 

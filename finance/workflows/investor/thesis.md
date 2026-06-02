@@ -90,9 +90,34 @@ This is the mode's single user-facing checkpoint. Per the handoff contract there
 
 | User choice | Action |
 |-------------|--------|
+| `[R]` Refutar | Run a second-model refutation of this proposed thesis before deciding (§ Adversarial refuter below); re-present THIS checkpoint with the critique added — `[R]` never persists, never auto-acts, never replaces `[S]/[E]/[N]` |
 | `[S]` Aprovar | Proceed to Step 5 — invoke the scribe |
 | `[E]` Editar | Apply the user's edits to the reasoning; re-present; loop until `[S]` or `[N]` |
 | `[N]` Rejeitar | Persist nothing; take the user's alternative path or halt |
+
+### Adversarial refuter (`[R]`) — dispatch with the thesis rubric
+
+On `[R]`, read-and-follow `./adversarial-refuter.md` (the shared refuter-dispatch workflow; registered as a cross-mode mechanism). This mode DISPATCHES it — it adds NO discovery engine, NEVER re-runs the Step 2b Disconfirm, and NEVER re-implements the refutation logic; `./adversarial-refuter.md` owns the backend, single-pass, read-only, and no-generation mechanics. Hand it the CLOSED input set its § Step 1 requires:
+
+| Input | What this mode passes |
+|-------|------------------------|
+| Drafted artifact | the Step 4 proposed-thesis block above — the Claim, Hypotheses, Causal mechanism, Evidence for, Evidence against, Risks, and Invalidation criteria exactly as drafted, plus the proposed `status`/`conviction`/`time_horizon` |
+| Cited sources | the full text of every source the thesis cites (the Step 2–2b evidence already in hand) — passed inline so the refuter reads it in its OWN context; full text never re-enters this mode (anti-context-rot) |
+| The thesis rubric | the ordered attack questions below — this mode OWNS its rubric; `./adversarial-refuter.md` never hard-codes it |
+| `research-policy` scope | the scope / exclusions loaded at Step 1 |
+
+**Thesis rubric (the attack questions the refuter tests this proposed thesis against):**
+
+1. Is the strongest counter-case to the Claim actually engaged in `Evidence against`, or does a stronger disconfirmer in the cited sources go unaddressed?
+2. Are the `Invalidation criteria` observable conditions — specific and checkable — rather than hedged or unfalsifiable restatements of the Claim?
+3. Did the Step 2a Assumption Audit miss an assumption the Claim or Causal mechanism silently rests on?
+4. Is EACH `Evidence for` item actually supported by its cited source, or does a citation overstate or misread what the source shows?
+
+The refuter returns its § Output schema verbatim — one `overturned | weakened | survives` verdict per rubric item. Render that returned block RAW + flagged as a distinct **"Adversarial critique"** block beside the proposed thesis, then RE-PRESENT this SAME checkpoint with the critique added:
+
+- The critique is shown intact; this mode may add a one-line agree/disagree per item but NEVER edits or suppresses it.
+- It is single-pass — the refuter runs ONCE and never loops. Points the user accepts fold into the thesis via the existing `[E]` path, NOT by re-running the refuter.
+- The `[S]/[E]/[N]` choice then follows unchanged — the critique informs the decision; the user still decides. A failed or unavailable refuter NEVER blocks this checkpoint: present the proposed thesis unchanged and proceed (`./adversarial-refuter.md` § Step 2).
 
 ## Step 5 — Delegate persistence to `sb-fin-create-thesis`
 

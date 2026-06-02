@@ -63,6 +63,8 @@ For each such criterion, dispatch one sub-agent whose prompt MUST direct it to:
 
 `./research.md` owns every web-search, capture, and ingest mechanic (including the skill directives its own sub-agents require); this mode references it and consumes its result. On return, fold the newly-surfaced disconfirming sources into the evidence set for Step 4 and tie each to the criterion it targets. A `failed` / `partial` ingest in the summary is surfaced per `./investor-loop.md` § Issue-surfacing. If a criterion's Disconfirm wave returns no candidate that clears the `source-policy` trust bar, that criterion is evaluated in Step 4 on the existing evidence alone, and the empty hunt is surfaced per `./investor-loop.md` § Issue-surfacing.
 
+**When the audit flags nothing, no wave fires (by design).** The trigger is audit-driven, not source-count-driven: if the Step 3a audit finds NO standing assumption decayed and pushes NO invalidation criterion to `near`/untested, then ZERO Disconfirm waves dispatch and the review proceeds on the existing evidence alone. This is the deliberate precision upgrade over the old thin-source auto-pull (which fired a blanket pull on a source-count heuristic regardless of whether any assumption had actually decayed) — a review that finds the thesis still holding spends no discovery budget.
+
 ## Step 4 — Evaluate
 
 Test the thesis against the assembled evidence (prior + new, including the Step 3b targeted Disconfirm candidates). Three sub-evaluations, all required:
@@ -100,9 +102,33 @@ A `status` downgrade (e.g. `active` → `developing`, or → `rejected` / `archi
 
 | User choice | Action |
 |-------------|--------|
+| `[R]` Refutar | Run a second-model refutation of this verdict before deciding (§ Adversarial refuter below); re-present THIS checkpoint with the critique added — `[R]` never persists, never auto-acts, never replaces `[S]/[E]/[N]` |
 | `[S]` Aprovar | Proceed to Step 6 — delegate the update to the scribe |
 | `[E]` Editar | Apply the user's edits to the verdict / recommended change; re-present; loop until `[S]` or `[N]` |
 | `[N]` Rejeitar | Persist nothing; take the user's alternative path or halt |
+
+### Adversarial refuter (`[R]`) — dispatch with the review rubric
+
+On `[R]`, read-and-follow `./adversarial-refuter.md` (the shared refuter-dispatch workflow; registered as a cross-mode mechanism). This mode DISPATCHES it — it adds NO discovery engine, NEVER re-runs the Step 3b Disconfirm, and NEVER re-implements the refutation logic; `./adversarial-refuter.md` owns the backend, single-pass, read-only, and no-generation mechanics. Hand it the CLOSED input set its § Step 1 requires:
+
+| Input | What this mode passes |
+|-------|------------------------|
+| Drafted artifact | the Step 5 verdict block above — the verdict, decayed assumptions, new evidence-against, source tensions, per-criterion status, and recommended change exactly as drafted |
+| Cited sources | the full text of every source the verdict cites (the Step 3–4 evidence already in hand) — passed inline so the refuter reads it in its OWN context; full text never re-enters this mode (anti-context-rot) |
+| The review rubric | the ordered attack questions below — this mode OWNS its rubric; `./adversarial-refuter.md` never hard-codes it |
+| `research-policy` scope | the scope / exclusions loaded at Step 1 |
+
+**Review rubric (the attack questions the refuter tests this verdict against):**
+
+1. Is EACH invalidation criterion tested against the BEST available disconfirming evidence — including the criterion's targeted Step 3b Disconfirm result — or does a stronger disconfirmer in the cited sources go unaddressed?
+2. Is the verdict (**holding** / **weakening** / **invalidated**) consistent with the per-criterion statuses — does any tripped/near criterion contradict the stated verdict?
+3. Does any criterion marked **clear** sit on sources that actually show it as **near** or **tripped** (incl. internally-contradicted evidence the Step 4 tension flags expose)?
+
+The refuter returns its § Output schema verbatim — one `overturned | weakened | survives` verdict per rubric item. Render that returned block RAW + flagged as a distinct **"Adversarial critique"** block beside the verdict, then RE-PRESENT this SAME checkpoint with the critique added:
+
+- The critique is shown intact; this mode may add a one-line agree/disagree per item but NEVER edits or suppresses it.
+- It is single-pass — the refuter runs ONCE and never loops. Points the user accepts fold into the verdict via the existing `[E]` path, NOT by re-running the refuter.
+- The `[S]/[E]/[N]` choice then follows unchanged — the critique informs the decision; the user still decides. A failed or unavailable refuter NEVER blocks this checkpoint: present the verdict unchanged and proceed (`./adversarial-refuter.md` § Step 2).
 
 ## Step 6 — Persist via the scribe (`extend` path)
 

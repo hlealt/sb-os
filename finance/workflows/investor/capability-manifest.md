@@ -21,7 +21,7 @@ Every capability below is reached by one or more of these three mechanisms. They
 | **Read-and-follow sb-os workflow file** | Read the named `.md` and execute its protocol turn by turn | Agent-internal reasoning modes, not user-invocable (`./thesis.md`, `./research.md`, `./review.md`, `./portfolio.md`, `./decision.md`) |
 | **Call registered tool** | Run the tool named in `../../scripts/tools-index.md` (the tools-only data-access invariant) | All position/ledger data access (`position_table`, `position_summary`, `fx_impact_report`, `validate_calculate`) |
 
-The `investment-source-capture` tool and the web-search sub-agent are additional `research`-only access mechanisms named in that capability's row.
+The `investment_source_capture` tool and the web-search sub-agent are additional `research`-only access mechanisms named in that capability's row. The **adversarial refuter** (below) is a further shared CROSS-mode mechanism — distinct from the three above and reachable ONLY from inside a refuter-enabled mode's checkpoint, never as a standalone intent.
 
 ### `research` discovery-wave dispatch (width sweep + Disconfirm)
 
@@ -33,6 +33,19 @@ The `investment-source-capture` tool and the web-search sub-agent are additional
 |------|----------|
 | **Input** | anchor claim / assumption (a consumer hands in the specific assumption or near/untested invalidation criterion) **+** the entity(ies) **+** the `research-policy` scope/exclusions |
 | **Output** | ranked disconfirming candidates **+** metadata **+** a **why-it-would-overturn** note per candidate (what about the source, if true, falsifies the anchor); full source text never returns |
+
+### Adversarial refuter (shared, optional, cross-mode)
+
+The optional **adversarial refuter** is a shared CROSS-mode access mechanism, distinct from the three per-mode mechanisms above: a calling mode reaches it by **reading-and-following `./adversarial-refuter.md`** ONLY after the user elects `[R]` at that mode's present-and-confirm checkpoint. It is NOT a capability with its own intent row — it has NO "Fires on" trigger and is NEVER routed from a user's natural-language ask; the agent never selects it from this map. It is reachable ONLY from the present-and-confirm checkpoint of a **refuter-enabled mode** (`thesis` / `review` / `decision`), and `research` / `portfolio` / `policy` never reach it.
+
+| Side | Contract |
+|------|----------|
+| **Reached by** | The calling mode reads-and-follows `./adversarial-refuter.md` after an `[R]` election (or an always-on `research-policy.md` key per `./investor-loop.md` § Present-and-confirm); never a standalone route |
+| **Backend** | `auto` — Claude sub-agent default; Codex CLI opt-in via Bash; Codex absent/slow/error → sub-agent fallback (portable; a non-Codex installer is never broken) |
+| **Input** | the drafted artifact **+** its cited sources (full text, read in the refuter's own context) **+** the calling mode's rubric **+** the `research-policy` scope |
+| **Output** | a structured per-rubric-item verdict (`overturned` / `weakened` / `survives` + the disconfirming reason); persists NOTHING; the critique only feeds the calling mode's EXISTING checkpoint — the user still decides `[S]/[E]/[N]` |
+
+Read-only / refute-only / no-generation / single-pass; it never fetches the web, calls a tool, persists, loops, or auto-acts. Mechanics, backends, and the invariant-preservation map are authoritative in `./adversarial-refuter.md` — never restated here.
 
 ---
 
@@ -55,7 +68,7 @@ One row group per mode. Route on the **Fires on** intent; reach the capability t
 | Field | Value |
 |-------|-------|
 | Fires on (intent) | "research `<X>`", "find sources on `<Y>`", "what's the latest on my `<entity>` thesis", "dig into `<topic>`" |
-| Access mechanism | Read-and-follow `./research.md` (the mode flow) **+** the `research` discovery-wave dispatch (above) — native web-search sub-agents for the Step 3 width sweep AND the Step 7a Disconfirm wave (plugin-agnostic) **+** `investment-source-capture` tool for capture **+** `sb-wiki-ingest` run via orchestrated sub-agents (one per source) for auto-ingest |
+| Access mechanism | Read-and-follow `./research.md` (the mode flow) **+** the `research` discovery-wave dispatch (above) — native web-search sub-agents for the Step 3 width sweep AND the Step 7a Disconfirm wave (plugin-agnostic) **+** `investment_source_capture` tool for capture **+** `sb-wiki-ingest` run via orchestrated sub-agents (one per source) for auto-ingest |
 | Inputs | the anchoring thesis (existing or nascent) or a bare research question; the entity(ies); `research-policy.md` (scope/exclusions) and `source-policy.md` (trust classes), loaded per `./investor-loop.md` § Policy read-rules. When dispatched by `thesis`/`review`, the handed-in anchor is a specific assumption or near/untested invalidation criterion per the Step 7a Disconfirm input contract (above) |
 | When to use | New OPEN-web sources must be discovered, proposed, captured to `raw/`, and filed into the wiki so research stops dying in chat. Internally the mode also: Decomposes the anchor into atomic sub-questions + a coverage matrix (Step 2.5) before discovery; runs a parallel width sweep (Step 3) and an adversarial Disconfirm wave (Step 7a); and flags coverage gaps + source tensions at Propose (Step 4) — mechanics in `./research.md`, never restated here. `thesis`/`review` reach Decompose/width-sweep/Disconfirm by DISPATCHING this mode, never by re-implementing them |
 | When NOT | Weighing ALREADY-captured sources against a thesis verdict → `review`. Authoring the thesis itself → `thesis`. Gated/paywalled sources are NEVER fetched — they register `gated_pending_access` (per `./investor-loop.md` permanent source boundary) |
@@ -65,7 +78,7 @@ One row group per mode. Route on the **Fires on** intent; reach the capability t
 | Field | Value |
 |-------|-------|
 | Fires on (intent) | "review my `<entity>` thesis", "is `<thesis>` still valid?", "check `<thesis>` against the latest", a periodic-review prompt, a `Thesis Invalidation` candidate-trigger |
-| Access mechanism | Read-and-follow `./review.md` (the reasoning) **+** `research` mode (auto-pulled via sub-agents when sources are thin; its propose→approve checkpoint is retained) **+** invoke `sb-fin-create-thesis` in extend mode (the only writer of thesis-page updates) |
+| Access mechanism | Read-and-follow `./review.md` (the reasoning) **+** the `research` Step 7a Disconfirm wave (above), DISPATCHED per near/untested invalidation criterion the Step 3a Assumption Audit flags as decayed — audit-driven, replacing the old thin-source auto-pull; its propose→approve checkpoint is retained **+** invoke `sb-fin-create-thesis` in extend mode (the only writer of thesis-page updates) |
 | Inputs | the target thesis page (claim, evidence, invalidation criteria, `status`, `last_reviewed`); its related entities; sources newer than `last_reviewed`; `research-policy.md` + `source-policy.md`, loaded per `./investor-loop.md` § Policy read-rules |
 | When to use | An EXISTING thesis must be tested against new evidence — staleness, new evidence-against, tripped/near invalidation criteria, a `status`/`conviction` change |
 | When NOT | Creating a thesis that does not yet exist → `thesis`. Acquiring brand-new sources with no thesis to test → `research`. Acting on the buy/sell/hold a review implies → `decision`. Updates persist only via the scribe — never hand-written |
