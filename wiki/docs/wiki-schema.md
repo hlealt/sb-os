@@ -500,7 +500,7 @@ Decision tests (apply in order, per pair of candidates):
 |---|------|--------|-------|
 | 1 | Are they instances of the same family/series differing only in a parameter (version, size, generation, edition, phase, period, era)? | ONE parent page covering variants. A variant gets its own stub ONLY when the source treats it as a standalone subject (≥1 dedicated paragraph or named section). | Continue to test 2. |
 | 2 | Is one a whole/system and the other a property/parameter/part that cannot stand independently of the whole? | ONE page (property becomes a section of the whole). | Continue to test 3. |
-| 3 | Are they co-members of a group (siblings) co-mentioned but not co-substantive in this source? | ONE group page. Per-member only when standalone treatment exists. | Continue to test 4. |
+| 3 | Are they co-members of a group (siblings) co-mentioned but not co-substantive in this source? | Split by collective identity: a named collective → ONE Concept/Topic (or Entity if a named org); an ad-hoc co-mention set → individual candidates, NEVER a synthetic group slug. Per-member stub only with standalone treatment. | Continue to test 4. |
 | 4 | Is one a producer/maintainer/author and the other its product/work? | TWO pages — distinct identities. | TWO pages — independent. |
 
 The clustering decision is the AGENT'S RESPONSIBILITY upstream of mechanical fire. Step 2 substance-bullet writers must respect the cluster set: name only page-level entities/concepts; sub-cluster names go in prose without wikilinks.

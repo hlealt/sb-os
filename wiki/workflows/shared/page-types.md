@@ -42,6 +42,18 @@ Definitions, tests, and discriminator rules for the 4 active wiki page types. Us
 - `compound-engineering-adoption` → Topic (discussion of who is adopting it)
 - `anthropic-vs-openai` → Topic (comparison)
 
+## Aggregation Rule
+
+An entity is ONE named thing referenced as a single actor. Aggregation of distinct entities is the role of **Topic** (the conversation around them — plural framing) and **Concept** (the category they instantiate) — NEVER an entity.
+
+| Case | Entity? | Page outcome |
+|------|---------|--------------|
+| A named collective with its own identity — an organization, lab, fund, committee, named consortium | YES | ONE entity page; it MAY link members. Having members ≠ being an aggregate. |
+| A school of thought, movement, or named class of things | NO | ONE Concept or Topic page; instances link in. |
+| A bare set of entities co-mentioned with NO collective identity — people quoted together, institutions named only as affiliations, items used as a test-bed | NO | NOT one page. Create the individual entities, or a Topic/Concept that links them. |
+
+The discriminator is "named and referenced as one actor," NEVER the grammatical plurality of the label. NEVER create an entity whose only content is a list of other entities (a synthetic aggregator).
+
 ## Tie-Breaker
 
 When in doubt, start as Concept or Entity. Promote to Topic only when finding "there are N variants of this, evolving over time."

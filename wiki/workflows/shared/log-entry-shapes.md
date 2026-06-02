@@ -39,6 +39,12 @@ The log is an ACTIONABLE QUEUE — it holds ONLY items awaiting a user action. E
 - reason: stub rule did not fire (name not in source title, Notable Quote, or Substance bullet)
 ```
 
+## Candidate-mention Is Single-Subject
+
+A `candidate-mention` names ONE subject: the heading `<brief>`, the `name:` field, and the resulting page filename on promotion are the SAME single name. This preserves the "Resolution = page exists" contract — lint prunes the entry the moment that one page exists.
+
+NEVER use a synthetic collective slug (e.g., `seal-researchers`, `ai-ethics-institutes`) as the heading with multiple members in `name:`. An ad-hoc sibling set is logged as ONE entry PER member (per `stub-policy.md` § "Sibling clusters (test 3) — named collective vs. ad-hoc set"). A collective slug can never resolve — its page must never exist (`page-types.md` § "Aggregation Rule") — so it would orphan the entry in the queue.
+
 ## Retired Types (NO LONGER written)
 
 `ingest`, `concept-created`, `entity-created`, `topic-created`, `topic-updated`, `topic-coverage-candidate`, `lint`, and `query` were logged pre-v1. They are no longer emitted — the source pages, raw indexes, and wiki pages are the record. Lint deletes any surviving instances on its next pass.

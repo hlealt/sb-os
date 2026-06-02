@@ -12,7 +12,7 @@ Cluster candidate names into page-level units before deciding how many stubs to 
 |---|------|--------|-------|
 | 1 | Are they instances of the same family/series differing only in a parameter (version, size, generation, edition, phase, period, era)? | ONE parent page covering variants. A variant gets its own stub ONLY when the source treats it as a standalone subject (≥1 dedicated paragraph or named section). | Continue to test 2. |
 | 2 | Is one a whole/system and the other a property/parameter/part that cannot stand independently of the whole? | ONE page (property becomes a section of the whole). | Continue to test 3. |
-| 3 | Are they co-members of a group (siblings) co-mentioned but not co-substantive in this source? | ONE group page. Per-member only when standalone treatment exists. | Continue to test 4. |
+| 3 | Are they co-members of a group (siblings) co-mentioned but not co-substantive in this source? | Split by collective identity — see "Sibling clusters (test 3)" below. | Continue to test 4. |
 | 4 | Is one a producer/maintainer/author and the other its product/work? | TWO pages — distinct identities. | TWO pages — independent. |
 
 ### Domain-neutral examples
@@ -27,11 +27,23 @@ Cluster candidate names into page-level units before deciding how many stubs to 
 | 2 (whole+part) | A musical form + its required cadence | One form page |
 | 2 (whole+part) | An economic indicator + its composition rule | One indicator page |
 | 2 (whole+part) | A neural architecture + a structural ratio defining it | One architecture page |
-| 3 (siblings) | Three members of one school co-mentioned in passing | One school page (per-member only with standalone treatment) |
+| 3 (named collective) | Members of a named school of thought / movement | One Concept or Topic page for the collective (per-member only with standalone treatment) |
+| 3 (ad-hoc set) | Several people quoted together with no shared identity | Individual entity candidates — NEVER a synthetic group page or slug |
 | 4 (producer+work) | Author + their novel | Two pages |
 | 4 (producer+work) | Company + their product | Two pages |
 
 The clustering decision is the AGENT'S RESPONSIBILITY upstream of mechanical fire. Step 2 substance-bullet writers must respect the cluster set: name only page-level entities/concepts; sub-cluster names go in prose without wikilinks.
+
+### Sibling clusters (test 3) — named collective vs. ad-hoc set
+
+Test 3 splits on whether the siblings have their OWN collective identity:
+
+| Sibling kind | Decision |
+|--------------|----------|
+| **Named collective** — members belong to a group with its own name and identity (a school of thought, a movement, a named lab/consortium/fund), referenced as one actor | ONE page for the collective, classified by what it IS per `page-types.md` § "Aggregation Rule": a Concept or Topic (or an Entity ONLY if it is itself a named organization). Members are linked, never a bare list. |
+| **Ad-hoc co-mention set** — members are N distinct entities co-mentioned with no collective identity (people quoted in passing, institutions named only as affiliations, items used as a test-bed) | NO group page and NO group slug. Each member is an INDIVIDUAL candidate: a per-member stub only with standalone treatment, otherwise an individual `candidate-mention` per `log-entry-shapes.md`. NEVER invent a synthetic collective name (e.g., `*-researchers`, `*-institutes`, `*-incumbents`) to represent the set. |
+
+A synthetic collective slug for an ad-hoc set creates the aggregator entity `page-types.md` forbids and a queue entry that can never resolve.
 
 When `{wiki_root}/purpose.md` is present, the focus lens modulates cluster-granularity choices. Full spec: `3-resources/tools/sb-os/wiki/docs/wiki-schema.md` § "Regulatory layer — purpose.md".
 

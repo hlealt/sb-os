@@ -167,7 +167,7 @@ Citations: emit inline `[^N]` markers at every claim derived from the raw, then 
 ### Step 3 — Identify entities and concepts
 
 1. Extract candidate entity and concept mentions from the raw source AND from the agent-written `Substance` and `Notable quotes` sections of the source page produced in step 2.
-2. **Cluster candidates by page-granularity** per `../shared/stub-policy.md` § "Page Granularity". Apply the four decision tests (variants, whole+part, siblings, producer+work) to every pair of related candidates. Replace each cluster with a SINGLE representative name. Sub-cluster names dropped from the working set are NOT logged as `candidate-mention` — they are part of the cluster representative's page.
+2. **Cluster candidates by page-granularity** per `../shared/stub-policy.md` § "Page Granularity". Apply the four decision tests (variants, whole+part, siblings, producer+work) to every pair of related candidates. Replace each TRUE cluster with a SINGLE representative name; sub-cluster names dropped from the working set are NOT logged as `candidate-mention` — they are part of the cluster representative's page. EXCEPTION — a test-3 ad-hoc co-mention set has NO representative: each member stays an independent candidate and NEVER collapses into a synthetic group slug, per `../shared/stub-policy.md` § "Sibling clusters (test 3) — named collective vs. ad-hoc set".
 3. For each cluster representative, classify as `entity` or `concept` per `../shared/page-types.md` discriminator rule.
 4. For each cluster representative, check existence under `{wiki_root}/wiki/concepts/{slug}.md` and `{wiki_root}/wiki/entities/{slug}.md`.
 5. Apply the stub-creation rule per `../shared/stub-policy.md`:
