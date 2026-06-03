@@ -5,7 +5,7 @@ last_updated: "2026-05-27"
 
 # Sources Manifest
 
-Public registry of finance sources supported by this module. Every source listed here has a working parser under `../../scripts/`. When a user adds a source not listed here, `bookkeeper` dispatches `tool-builder` to build it and then `doc-maintainer` to add it here — compounding the registry for all users.
+Public registry of finance sources supported by this module. Every source listed here has a working parser under `../../scripts/`. When a user adds a source not listed here, `sb-bookkeeper` dispatches `tool-builder` to build it and then `doc-maintainer` to add it here — compounding the registry for all users.
 
 **Path constants:**
 ```

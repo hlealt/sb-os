@@ -37,15 +37,15 @@ ledgers/fechamento/{MONTH}/transactions.csv ledgers/investimentos/{orders,proven
 | `sb-os/finance/scripts/` | Python pipeline (shared + investimentos + migrations) | Code |
 | `sb-os/finance/scripts/migrations/` | One-shot transformations (e.g., schema migrations) | Code; archive when no longer referenced |
 | `.user/finance/bookkeeper/config/categories.json` | Categorization rules + reimbursement_mappings | Maintained interactively by bookkeeper; read by dashboard |
-| `.user/finance/investor/` | Investor agent workspace: `research-policy.md`, `source-policy.md`, agent state | Written only by the `investor` agent or the user directly; never by bookkeeper or pipeline scripts |
+| `.user/finance/investor/` | Investor agent workspace: `research-policy.md`, `source-policy.md`, agent state | Written only by the `sb-investor` agent or the user directly; never by bookkeeper or pipeline scripts |
 | `sb-os/finance/docs/` | This file + functional/technical docs | Docs |
 
 ## What lives where
 
 | Concern | Location | Reason |
 |---------|----------|--------|
-| Bookkeeper workflow definitions | `sb-os/finance/workflows/bookkeeper/*.md` | Workflow steps ship with sb-os; agent instructions, not code |
-| Investor agent workflow definitions | `sb-os/finance/workflows/investor/*.md` | Read-only reasoning agent (six modes: thesis, research, review, portfolio, decision, policy); loop + capability manifest + per-mode files. Research-rigor primitives (Decompose, Disconfirm, Assumption Audit) and the optional adversarial refuter, with their placement: see Investor reasoning layer below |
+| Bookkeeper workflow definitions | `sb-os/finance/workflows/sb-bookkeeper/*.md` | Workflow steps ship with sb-os; agent instructions, not code |
+| Investor agent workflow definitions | `sb-os/finance/workflows/sb-investor/*.md` | Read-only reasoning agent (six modes: thesis, research, review, portfolio, decision, policy); loop + capability manifest + per-mode files. Research-rigor primitives (Decompose, Disconfirm, Assumption Audit) and the optional adversarial refuter, with their placement: see Investor reasoning layer below |
 | Finance wiki scribes (`sb-fin-create-thesis`, `sb-fin-create-decision`) | `sb-os/finance/workflows/sb-fin-*/` + `sb-os/finance/skills/sb-fin-*/` | Persistence helpers invoked by the investor; never invoked directly for thesis/decision creation |
 | Credentials, bank configs, asset registry | `.user/finance/bookkeeper/{config,data}/` | Operational personal data — never open-sourced |
 | Investment intermediate processed CSVs | `.user/finance/bookkeeper/investimentos/tmp-processed/` | Workflow scratch — overwritten per run |
@@ -54,7 +54,7 @@ ledgers/fechamento/{MONTH}/transactions.csv ledgers/investimentos/{orders,proven
 
 ## Investor reasoning layer
 
-The `investor` agent (read-only; six modes — thesis, research, review, portfolio, decision, policy) carries three deep-research reasoning primitives. This section specs WHERE each primitive lives and HOW consumers reach it; the step-by-step mechanics live in the workflow files (`workflows/investor/*.md`) and are not duplicated here.
+The `sb-investor` agent (read-only; six modes — thesis, research, review, portfolio, decision, policy) carries three deep-research reasoning primitives. This section specs WHERE each primitive lives and HOW consumers reach it; the step-by-step mechanics live in the workflow files (`workflows/sb-investor/*.md`) and are not duplicated here.
 
 **Primitives:**
 
@@ -75,10 +75,10 @@ The `investor` agent (read-only; six modes — thesis, research, review, portfol
 
 ### Adversarial refuter (optional, pluggable, cross-mode)
 
-A fourth reasoning capability — distinct from the three discovery/reasoning primitives above — is an **optional, opt-in adversarial refuter**: an independent second model that can ONLY refute the drafted argument a reasoning mode is about to present, never generate its own findings. This section specs WHAT it is and WHERE it lives; the step-by-step contract, backend invocation, and invariant map live in the workflow file (`workflows/investor/adversarial-refuter.md`) and are not duplicated here.
+A fourth reasoning capability — distinct from the three discovery/reasoning primitives above — is an **optional, opt-in adversarial refuter**: an independent second model that can ONLY refute the drafted argument a reasoning mode is about to present, never generate its own findings. This section specs WHAT it is and WHERE it lives; the step-by-step contract, backend invocation, and invariant map live in the workflow file (`workflows/sb-investor/adversarial-refuter.md`) and are not duplicated here.
 
 - **What it is:** read-only / refute-only / no-generation / single-pass. It reads the drafted artifact plus its already-cited sources in its own context and returns a structured per-rubric-item verdict (`overturned` / `weakened` / `survives` + the disconfirming reason). It NEVER fetches the web, calls a tool, persists anything, loops, or edits the draft — its input set is closed (artifact + its citations), so reading existing evidence is not generating findings.
-- **Where it lives:** `workflows/investor/adversarial-refuter.md` — a shared cross-mode workflow that `review`, `thesis`, and `decision` read-and-follow at their present-and-confirm checkpoint. The refuter file owns the contract, dispatch mechanism, backends, and invariants; each calling mode owns its own rubric and passes it in (it is never hard-coded in the refuter). `portfolio` and `research` have no refuter (a derived-join completeness check and a per-candidate human vet, respectively, are different contracts).
+- **Where it lives:** `workflows/sb-investor/adversarial-refuter.md` — a shared cross-mode workflow that `review`, `thesis`, and `decision` read-and-follow at their present-and-confirm checkpoint. The refuter file owns the contract, dispatch mechanism, backends, and invariants; each calling mode owns its own rubric and passes it in (it is never hard-coded in the refuter). `portfolio` and `research` have no refuter (a derived-join completeness check and a per-candidate human vet, respectively, are different contracts).
 - **How it is reached (opt-in surface):** offered as `[R]` at each enabled mode's present-and-confirm checkpoint, ADDED to — never replacing — `[S]/[E]/[N]`. The critique is surfaced RAW + flagged as a distinct "Adversarial critique" block beside the draft; the user still decides `[S]/[E]/[N]`, and accepted points fold in via the existing `[E]` edit path. An optional always-on `adversarial_refuter` key in `.user/finance/investor/research-policy.md` (per-mode `{enabled, backend}`, all default off — user content, out of this module's scope) flips specific modes to run the refuter automatically before presenting; absent/empty key ⇒ `[R]` stays the sole trigger.
 - **Backends (pluggable, portable):** the default backend is a fresh-context **Claude sub-agent** (no plugin dependency); a **Codex CLI** backend is opt-in via Bash (`codex exec --sandbox read-only`, a different model for genuine independence). Selection is `auto`: Codex absent / not opted into / slow / erroring → **auto-fallback to the sub-agent** plus a one-line note, so a non-Codex installer is never broken. A failed or unavailable refuter NEVER blocks the checkpoint — the mode presents its draft unchanged.
 
@@ -88,7 +88,7 @@ This adds no new data-access path, no ledger mutation, and no change to the read
 
 - Python scripts use `_find_vault_root()` (looks for `sb-os.json` or `.obsidian/`) and build absolute paths from `VAULT_ROOT`.
 - Dashboard paths are vault-root-absolute (the server serves the vault root as docroot; there is no `/sb-os/` route alias), never relative to the entry HTML — its location (`finance_dashboard_html_path`, default `.user/finance/dashboard.html`) is configurable. Asset (CSS/JS) URLs are rendered into the entry HTML at install time from `sb_os_path` (`/{sb_os_path}/finance/dashboard/...`); data fetches are fixed at `/.user/finance/bookkeeper/...` via `FIN_DATA_BASE` in `shared.js`. Render mechanism: sb-os `install/finance.py` + repo `docs/architecture.md` §6.
-- Workflow `.md` files use `{VARIABLE}` substitution defined in `bookkeeper.md` (e.g., `{RAW_DIR}`, `{PROCESSED_DIR}`, `{INV_LEDGER_DIR}`).
+- Workflow `.md` files use `{VARIABLE}` substitution defined in `sb-bookkeeper.md` (e.g., `{RAW_DIR}`, `{PROCESSED_DIR}`, `{INV_LEDGER_DIR}`).
 
 ## Closing reports
 

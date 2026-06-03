@@ -8,7 +8,7 @@ description: Create a single investment decision page in the finance-extended wi
 Author a single `decision` page — a dated record of ONE investment action (buy / sell / trim / add / hold / pass / reject / pause / review / rebalance) and the reasoning held at the time. Decision pages are authored DELIBERATELY, NEVER auto-created by ingest. Invocation is intent-driven — no slash command. Two invocation modes are supported:
 
 1. **User-intent-driven** — Claude Code auto-fires this workflow when the user expresses decision-recording intent (e.g., "record my decision to sell X", "log that I'm holding Y", "write a decision page for passing on Z"). SINGLE confirmation checkpoint on the proposed `Decision` + filled sections before writing.
-2. **Investor-orchestrated** — The `investor` agent invokes this workflow when the user elects to record a decision the agent reasoned through (B5 decision mode). NO separate checkpoint — the investor's own present-and-confirm step covers this invocation; proceed through steps 1-5 without re-prompting. The named entry point for this mode is **investor-orchestrated invocation** (Invocation Inputs below).
+2. **Investor-orchestrated** — The `sb-investor` agent invokes this workflow when the user elects to record a decision the agent reasoned through (B5 decision mode). NO separate checkpoint — the investor's own present-and-confirm step covers this invocation; proceed through steps 1-5 without re-prompting. The named entry point for this mode is **investor-orchestrated invocation** (Invocation Inputs below).
 
 A decision page differs from a thesis page in two ways that this workflow MUST honor:
 
@@ -45,7 +45,7 @@ The base wiki conventions still apply: read `{sb_os_path}/wiki/workflows/shared/
 | Mode | Caller | Inputs passed in |
 |------|--------|------------------|
 | User-intent | Claude Code auto-fire | The action (`buy \| sell \| trim \| add \| hold \| pass \| reject \| pause \| review \| rebalance`), the asset-or-thesis the decision concerns, and the user's stated reasoning. Workflow derives the slug, filename, and `decision_type`. |
-| Investor-orchestrated | `investor` agent | The action, the decision date, the asset-or-thesis subject, the resolved reasoning for each required section, the related thesis/asset/company wikilinks, and the source filenames cited. The investor passes these from its B5 present-and-confirm step. |
+| Investor-orchestrated | `sb-investor` agent | The action, the decision date, the asset-or-thesis subject, the resolved reasoning for each required section, the related thesis/asset/company wikilinks, and the source filenames cited. The investor passes these from its B5 present-and-confirm step. |
 
 ## Flow
 

@@ -5,11 +5,11 @@ runtime: agent-loop
 
 # Investor Loop
 
-The always-on runtime rulebook that makes `/investor` a read-only reasoning agent instead of a passive mode runner. This file is the single home for the agent's invariants, boundaries, the policy read-rules wiring, the present-and-confirm pattern, issue-surfacing, the per-step checkpoint, and the thin `policy` (B6) mode. `investor.md` § activation loads it before routing to any capability; it stays in force across every capability file the agent reads.
+The always-on runtime rulebook that makes `/sb-investor` a read-only reasoning agent instead of a passive mode runner. This file is the single home for the agent's invariants, boundaries, the policy read-rules wiring, the present-and-confirm pattern, issue-surfacing, the per-step checkpoint, and the thin `policy` (B6) mode. `sb-investor.md` § activation loads it before routing to any capability; it stays in force across every capability file the agent reads.
 
 **Runtime model.** This is a markdown-step agent-loop, NOT a headless driver script. The agent (you) reads this file and executes the protocol turn by turn, surfacing decisions to the user and waiting for input at each STOP. The loop IS the agent following these rules; there is no driver.
 
-**Load at activation.** `investor.md` loads this file before routing to any capability (`thesis`, `research`, `review`, `portfolio`, `decision`) or running the inline `policy` mode. Every capability's user-facing decision point is an Investor Checkpoint (see § Per-Step Checkpoint).
+**Load at activation.** `sb-investor.md` loads this file before routing to any capability (`thesis`, `research`, `review`, `portfolio`, `decision`) or running the inline `policy` mode. Every capability's user-facing decision point is an Investor Checkpoint (see § Per-Step Checkpoint).
 
 **Language (binding).** Load `communication` from `.user/finance/bookkeeper/config/standing-rules.yaml` via `lib.standing_rules.load_communication()`. Every user-facing string the loop emits is in `communication.language` (currently: Brazilian Portuguese). Technical terms — function names, paths, column identifiers, tool names — stay in English per `communication.technical_terms`.
 
@@ -17,7 +17,7 @@ The always-on runtime rulebook that makes `/investor` a read-only reasoning agen
 
 ## Read-only invariant (architectural)
 
-The investor NEVER mutates financial data stores. It NEVER writes a ledger CSV, `portfolio.json`, the financial dashboard, or any file under the bookkeeper's data stores — directly or through any path. Any request, intent, or capability step that would alter ledger/position/dashboard data is out-of-structure → run Rule A. A suspected data problem is NEVER fixed in place: record it and route the user to `bookkeeper` (the investor and bookkeeper do not share an inter-agent protocol — the user mediates the handoff).
+The investor NEVER mutates financial data stores. It NEVER writes a ledger CSV, `portfolio.json`, the financial dashboard, or any file under the bookkeeper's data stores — directly or through any path. Any request, intent, or capability step that would alter ledger/position/dashboard data is out-of-structure → run Rule A. A suspected data problem is NEVER fixed in place: record it and route the user to `sb-bookkeeper` (the investor and bookkeeper do not share an inter-agent protocol — the user mediates the handoff).
 
 ## Tools-only data access (architectural invariant)
 
@@ -118,7 +118,7 @@ When in doubt, classify as **blocking** — surfacing too much beats shipping a 
 ### Blocking → inline
 
 1. **State the issue** in plain language (pt-BR): what is wrong and why it blocks.
-2. **Propose a concrete next action** (pt-BR): re-pull fresh sources via research mode, drop the failing source, route a suspected data problem to `bookkeeper`, or narrow the claim.
+2. **Propose a concrete next action** (pt-BR): re-pull fresh sources via research mode, drop the failing source, route a suspected data problem to `sb-bookkeeper`, or narrow the claim.
 3. **Offer approve/reject:**
 
    ```
@@ -185,7 +185,7 @@ The user-facing `policy` capability is thin — it lives here, not in a separate
 
 3. **STOP. Wait for the user's choice.** Do not proceed on any branch without it.
 4. **Route:**
-   - `[A]` → record the pending item in `.user/finance/investor/log.md` and tell the user the correct owner (e.g. route a ledger fix to `bookkeeper`; flag a missing read tool for the build). The investor NEVER mutates a data store and NEVER builds a tool at runtime to route around the gap.
+   - `[A]` → record the pending item in `.user/finance/investor/log.md` and tell the user the correct owner (e.g. route a ledger fix to `sb-bookkeeper`; flag a missing read tool for the build). The investor NEVER mutates a data store and NEVER builds a tool at runtime to route around the gap.
    - `[B]` → record the dropped item (one line in `log.md`) and resume the current step. Nothing is changed.
    - `[C]` → run the `policy` thin mode (present-and-confirm) to update scope, then resume.
 

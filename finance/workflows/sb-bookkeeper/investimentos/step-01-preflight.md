@@ -36,7 +36,7 @@ Nota sobre Safra: o site Safra tem problemas conhecidos de download. Se o usuár
    - PDFs em `avenue-notas/` ou nomes com padrão de nota Avenue → roteia para `avenue-notas/`. PDFs com `cambio` ou `fx` no nome → `avenue-cambio/`.
    - Nomes ambíguos → perguntar ao usuário antes de renomear. NÃO abrir o arquivo para tentar identificar.
 4. Verifique completude: para cada fonte da tabela, se o usuário indicou que houve movimentação no mês, o arquivo correspondente deve existir.
-5. Verifique MP: se houver expectativa de movimentação no Mercado Pago, confirmar que `.user/finance/bookkeeper/ledgers/expenses/{MONTH}/mp_extrato.csv` existe. Se não, instruir: "O fechamento de gastos do mês `{MONTH}` precisa rodar antes para gerar `mp_extrato.csv`. Rode `/bookkeeper` com path=Gastos primeiro."
+5. Verifique MP: se houver expectativa de movimentação no Mercado Pago, confirmar que `.user/finance/bookkeeper/ledgers/expenses/{MONTH}/mp_extrato.csv` existe. Se não, instruir: "O fechamento de gastos do mês `{MONTH}` precisa rodar antes para gerar `mp_extrato.csv`. Rode `/sb-bookkeeper` com path=Gastos primeiro."
 6. Apresente ao usuário:
 
 ```

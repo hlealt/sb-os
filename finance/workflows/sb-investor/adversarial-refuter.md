@@ -5,7 +5,7 @@ runtime: agent-loop
 
 # Adversarial Refuter (shared, optional, cross-mode)
 
-The `/investor` shared refuter-dispatch workflow. An **independent second model** that can ONLY refute the drafted argument the calling mode is about to present — it never generates its own findings. `review` / `thesis` / `decision` read-and-follow this file at their present-and-confirm checkpoint when the user elects `[R]`; the refutation is surfaced beside the draft as a distinct critique block, and the user still decides `[S] / [E] / [N]`. This file owns the CONTRACT, the DISPATCH MECHANISM, the BACKENDS, and the INVARIANTS. Each calling mode owns its own rubric and passes it in.
+The `/sb-investor` shared refuter-dispatch workflow. An **independent second model** that can ONLY refute the drafted argument the calling mode is about to present — it never generates its own findings. `review` / `thesis` / `decision` read-and-follow this file at their present-and-confirm checkpoint when the user elects `[R]`; the refutation is surfaced beside the draft as a distinct critique block, and the user still decides `[S] / [E] / [N]`. This file owns the CONTRACT, the DISPATCH MECHANISM, the BACKENDS, and the INVARIANTS. Each calling mode owns its own rubric and passes it in.
 
 **Loaded by:** a calling mode reads-and-follows this file ONLY after the user elects `[R]` at that mode's checkpoint. The invariants, policy read-rules wiring, present-and-confirm pattern, issue-surfacing, Rule A, and the per-step Investor Checkpoint in `./investor-loop.md` are already in force — this file does NOT restate them. Read `./investor-loop.md` before acting.
 

@@ -5,7 +5,7 @@ runtime: agent-loop
 
 # Research Mode (B2 — Evidence)
 
-The `/investor` reasoning mode that discovers, proposes, captures, and auto-files OPEN-web sources in service of a thesis or research question, so research stops dying in chat. **This mode NEVER hand-writes a raw source file or a wiki page** — it reasons and proposes; the `investment_source_capture` tool persists to `raw/`, and `sb-wiki-ingest` (run via sub-agents) files into the wiki (delegate-not-replace).
+The `/sb-investor` reasoning mode that discovers, proposes, captures, and auto-files OPEN-web sources in service of a thesis or research question, so research stops dying in chat. **This mode NEVER hand-writes a raw source file or a wiki page** — it reasons and proposes; the `investment_source_capture` tool persists to `raw/`, and `sb-wiki-ingest` (run via sub-agents) files into the wiki (delegate-not-replace).
 
 **Loaded by:** `./investor.md` reads-and-follows this file when `./capability-manifest.md` routes the `research` (B2) intent. The invariants, policy read-rules wiring, present-and-confirm pattern, issue-surfacing, Rule A, and the per-step Investor Checkpoint in `./investor-loop.md` are already in force when this file runs — this file does NOT restate them. Read `./investor-loop.md` before acting on any step below.
 
@@ -64,7 +64,7 @@ Each discovery sub-agent's prompt MUST:
 
 1. **Invoke the `rbtv-web-searching` skill before any web work and follow it exactly** (per the sub-agents rule — a sub-agent does not inherit this requirement; the parent states it explicitly and imperatively).
 2. Carry its assigned sub-question, the anchor (thesis claim / research question), the entity(ies), and the `research-policy` scope and exclusions so the sub-agent does not surface excluded topics.
-3. **Return ONLY ranked candidates + metadata** — `| title | url | source | trust class | why it matters | relation to the thesis |`. The **full source text MUST stay inside the sub-agent** and NEVER returns to this mode or `investor.md` (anti-context-rot — the parent context stays clean; only ranked candidates + metadata cross back).
+3. **Return ONLY ranked candidates + metadata** — `| title | url | source | trust class | why it matters | relation to the thesis |`. The **full source text MUST stay inside the sub-agent** and NEVER returns to this mode or `sb-investor.md` (anti-context-rot — the parent context stays clean; only ranked candidates + metadata cross back).
 
 Merge the waves' returned candidates and rank them by relevance to the anchor AND by `source-policy` trust class (loaded in Step 1). A candidate that fails the `source-policy` trust bar is surfaced per `./investor-loop.md` § Issue-surfacing — never silently dropped or silently kept. Discovery writes NOTHING; it only returns ranked candidates with metadata. The merged candidate set (plus the Step 7a disconfirming candidates) is what Step 4 Propose presents.
 
@@ -108,7 +108,7 @@ A gated source (paywall / login / IR / broker portal) is NEVER fetched — the p
 
 ## Step 7 — Auto-ingest (one sub-agent per captured source)
 
-After capture, file each `captured_to_raw` source into the wiki by dispatching **one sub-agent per source** (fanned out — full text stays in each sub-agent's context, so this mode and `investor.md` stay clean). The agent invokes the real ingest command via the sub-agent; it NEVER reimplements ingest.
+After capture, file each `captured_to_raw` source into the wiki by dispatching **one sub-agent per source** (fanned out — full text stays in each sub-agent's context, so this mode and `sb-investor.md` stay clean). The agent invokes the real ingest command via the sub-agent; it NEVER reimplements ingest.
 
 Each sub-agent prompt MUST direct it to:
 

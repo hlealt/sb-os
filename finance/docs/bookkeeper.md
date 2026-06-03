@@ -1,6 +1,6 @@
 # Fechamento Financeiro Mensal
 
-> **RETIRED — não é mais a descrição canônica.** Este documento descreve um layout pré-restruturação (paths `scripts/` co-localizados que não existem mais) e está desatualizado. A descrição canônica de "o que o workflow `bookkeeper` faz" é a seção `## What This Workflow Does` em [`../workflows/bookkeeper/bookkeeper.md`](../workflows/bookkeeper/bookkeeper.md). Para schemas de ledger e referência de design do subsistema de investimentos, ver [`./investimentos.md`](./investimentos.md). O conteúdo abaixo é mantido apenas como registro histórico.
+> **RETIRED — não é mais a descrição canônica.** Este documento descreve um layout pré-restruturação (paths `scripts/` co-localizados que não existem mais) e está desatualizado. A descrição canônica de "o que o workflow `sb-bookkeeper` faz" é a seção `## What This Workflow Does` em [`../workflows/sb-bookkeeper/sb-bookkeeper.md`](../workflows/sb-bookkeeper/sb-bookkeeper.md). Para schemas de ledger e referência de design do subsistema de investimentos, ver [`./investimentos.md`](./investimentos.md). O conteúdo abaixo é mantido apenas como registro histórico.
 
 Workflow automatizado de fechamento financeiro mensal para um Second Brain baseado em Obsidian. Processa extratos bancários e faturas de cartão de crédito (PDF/CSV), categoriza transações, e gera um relatório markdown — com revisão humana para itens não categorizados.
 
@@ -53,7 +53,7 @@ A categorização depende de revisão humana para itens desconhecidos. O agente 
 O workflow segue o PARA method do Obsidian e distribui arquivos em três locais:
 
 ```
-3-resources/tools/sb-os/finance/workflows/bookkeeper/   # WORKFLOW (permanent infrastructure)
+3-resources/tools/sb-os/finance/workflows/sb-bookkeeper/   # WORKFLOW (permanent infrastructure)
 ├── bookkeeper.md               # Workflow entry point (path vars, activation, rules)
 ├── gastos/
 │   ├── step-01-preflight.md               # Pre-flight check and filename normalization
@@ -84,7 +84,7 @@ O workflow segue o PARA method do Obsidian e distribui arquivos em três locais:
     ├── banks-template.json                # Template open source (sem dados pessoais)
     └── categories-template.json           # Template open source (categorias vazias)
 
-3-resources/tools/sb-os/finance/workflows/bookkeeper/                 # WORKFLOW DEFINITION + OPERATIONAL CONFIG
+3-resources/tools/sb-os/finance/workflows/sb-bookkeeper/                 # WORKFLOW DEFINITION + OPERATIONAL CONFIG
 ├── bookkeeper.md                            # Top-level workflow
 ├── gastos/                                  # Gastos step files (.md)
 ├── investimentos/                           # Investimentos step files (.md) + tmp-processed/ scratch
@@ -128,7 +128,7 @@ O workflow segue o PARA method do Obsidian e distribui arquivos em três locais:
 
 | Local | Razão |
 |---|---|
-| `3-resources/tools/sb-os/finance/workflows/bookkeeper/` | Workflow definition + operational config (credentials, asset registry) — never open-sourced |
+| `3-resources/tools/sb-os/finance/workflows/sb-bookkeeper/` | Workflow definition + operational config (credentials, asset registry) — never open-sourced |
 | `3-resources/tools/sb-os/finance/` | Self-contained pipeline (scripts + data + docs co-located) |
 | `2-areas/finance/` | Personal finance records consumed by the `home` dashboard (`3-resources/tools/obsidian-dashboards/home.md`) |
 | `4-archives/finance/monthly-closings/` | Legacy fechamento reports (dashboard supersedes) |
@@ -428,7 +428,7 @@ Path variables adicionais introduzidas: `GASTOS_WORKFLOW_DIR` (`{WORKFLOW_DIR}/g
 
 ## Fluxo do agente — Gastos (8 passos)
 
-O workflow usa arquitetura micro-file BMAD. Entry point em `3-resources/tools/sb-os/finance/workflows/bookkeeper/bookkeeper.md`, passos individuais em `3-resources/tools/sb-os/finance/workflows/bookkeeper/step-{NN}-{id}.md`.
+O workflow usa arquitetura micro-file BMAD. Entry point em `3-resources/tools/sb-os/finance/workflows/sb-bookkeeper/sb-bookkeeper.md`, passos individuais em `3-resources/tools/sb-os/finance/workflows/sb-bookkeeper/step-{NN}-{id}.md`.
 
 | Passo | Arquivo | Objetivo | STOP? |
 |---|---|---|---|

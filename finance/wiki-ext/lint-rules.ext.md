@@ -51,5 +51,5 @@ Scope: the `## Financials` table on investment entity kinds (`company`, `asset`,
 
 ## Governance
 
-- **Lint shows state; it never decides.** It surfaces findings only — the `investor` proposes next actions from the lint output. Lint NEVER auto-resolves a conflict, NEVER edits a thesis or `## Financials` row, NEVER promotes or archives a page.
+- **Lint shows state; it never decides.** It surfaces findings only — the `sb-investor` proposes next actions from the lint output. Lint NEVER auto-resolves a conflict, NEVER edits a thesis or `## Financials` row, NEVER promotes or archives a page.
 - **Implement incrementally — not all rules are required at MVP.** Add rules as the investment wiki grows; an unimplemented rule simply does not fire.

@@ -5,7 +5,7 @@ runtime: agent-loop
 
 # Thesis Mode (B1 — Capture)
 
-The `/investor` reasoning mode that turns an informal investment idea into a structured, falsifiable thesis, then delegates persistence to `sb-fin-create-thesis`. **This mode NEVER writes a thesis page** — it reasons; the scribe persists (delegate-not-replace).
+The `/sb-investor` reasoning mode that turns an informal investment idea into a structured, falsifiable thesis, then delegates persistence to `sb-fin-create-thesis`. **This mode NEVER writes a thesis page** — it reasons; the scribe persists (delegate-not-replace).
 
 **Loaded by:** `./investor.md` reads-and-follows this file when `./capability-manifest.md` routes the `thesis` (B1) intent. The invariants, policy read-rules wiring, present-and-confirm pattern, issue-surfacing, Rule A, and the per-step Investor Checkpoint in `./investor-loop.md` are already in force when this file runs — this file does NOT restate them. Read `./investor-loop.md` before acting on any step below.
 

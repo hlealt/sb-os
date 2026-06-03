@@ -1,6 +1,6 @@
 # finance/
 
-Finance module source — the investment-research layer that extends the open-source `sb-os` wiki without putting investment content into the base wiki. This file documents how that layer plugs in: the wiki extension, lint scoping, the policy read-rules, and the watchlist invariant. It is the canonical statement of the read-rules; their runtime wiring is carried by the live `investor` agent (see Read-Rules Runtime Wiring below).
+Finance module source — the investment-research layer that extends the open-source `sb-os` wiki without putting investment content into the base wiki. This file documents how that layer plugs in: the wiki extension, lint scoping, the policy read-rules, and the watchlist invariant. It is the canonical statement of the read-rules; their runtime wiring is carried by the live `sb-investor` agent (see Read-Rules Runtime Wiring below).
 
 Investment terminology (`thesis`, `decision`, `asset`, `country`, `sector`, fundamentals/metrics) is native to this module and appears throughout this file by design. The domain-clean guard keeps that terminology OUT of the base wiki only — never out of this module's own docs.
 
@@ -31,7 +31,7 @@ For each file's definitions, read that file directly. This module doc never rest
 
 ### Financial extraction boundary
 
-`sb-wiki-ingest` produces source pages, entities, concepts, and candidate-topics — and, with the extension loaded, recognizes the investment entity kinds. It does NOT write the `## Financials` table. The `## Financials` write path is run by the `investor` agent's ingest/research path (deferred), keeping numeric extraction out of general ingest. Until the extraction parser exists, `## Financials` rows are entered manually (`method: manual`).
+`sb-wiki-ingest` produces source pages, entities, concepts, and candidate-topics — and, with the extension loaded, recognizes the investment entity kinds. It does NOT write the `## Financials` table. The `## Financials` write path is run by the `sb-investor` agent's ingest/research path (deferred), keeping numeric extraction out of general ingest. Until the extraction parser exists, `## Financials` rows are entered manually (`method: manual`).
 
 ---
 
@@ -41,7 +41,7 @@ The investment lint rules in `./wiki-ext/lint-rules.ext.md` are loaded by `sb-wi
 
 The base structural lint (broken wikilinks, stub aging, orphans, raw-without-ingest, source-without-raw, slug convention, frontmatter validity) applies to all pages and is reused, not redefined, by the extension.
 
-Lint shows state; it never decides. The `investor` agent proposes next actions from lint output.
+Lint shows state; it never decides. The `sb-investor` agent proposes next actions from lint output.
 
 ---
 
@@ -75,7 +75,7 @@ Any page MAY carry `watchlist: true` in frontmatter, but an agent MAY set it ONL
 
 ## Read-Rules Runtime Wiring
 
-The `investor` agent — the runtime consumer of the read-rules above — is BUILT and live. `./commands/investor.md` is a live loader (no longer a reserved stub): it loads the orchestrator `./workflows/investor/investor.md`, which loads `./workflows/investor/investor-loop.md`. The loop enforces the read-rules table above by loading each policy file at the moment its row requires. This file remains the canonical statement of the read-rules; the live loop references that table and NEVER duplicates it. The read-rules now bind at runtime — every `investor` mode that reasons about investments loads the relevant policy first, per the table above.
+The `sb-investor` agent — the runtime consumer of the read-rules above — is BUILT and live. `./commands/sb-investor.md` is a live loader (no longer a reserved stub): it loads the orchestrator `./workflows/sb-investor/sb-investor.md`, which loads `./workflows/sb-investor/sb-investor-loop.md`. The loop enforces the read-rules table above by loading each policy file at the moment its row requires. This file remains the canonical statement of the read-rules; the live loop references that table and NEVER duplicates it. The read-rules now bind at runtime — every `sb-investor` mode that reasons about investments loads the relevant policy first, per the table above.
 
 ---
 

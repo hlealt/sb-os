@@ -1,6 +1,6 @@
 # Metric Vocabulary — Finance Extension
 
-Controlled vocabulary the `investor` extracts against. Segmented by entity kind. The `investor` extracts against THIS list — the user NEVER enumerates metrics per file. A new recurring metric is **proposed** by the agent for addition (governed growth, like new page types); start small, grow on evidence.
+Controlled vocabulary the `sb-investor` extracts against. Segmented by entity kind. The `sb-investor` extracts against THIS list — the user NEVER enumerates metrics per file. A new recurring metric is **proposed** by the agent for addition (governed growth, like new page types); start small, grow on evidence.
 
 Feeds the `metric` and `unit` columns of the uniform long-format `## Financials` table (schema in `./section-menus.ext.md`). Names here are controlled identifiers — the investment lint rules (`./lint-rules.ext.md`) check against them exactly.
 

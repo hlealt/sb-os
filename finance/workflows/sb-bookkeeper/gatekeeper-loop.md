@@ -5,11 +5,11 @@ runtime: agent-loop
 
 # Gatekeeper Loop
 
-The runtime protocol that makes `bookkeeper` an active-agency gatekeeper instead of a passive script runner. This file is the single home for the three gatekeeper rules; `bookkeeper.md` § What This Workflow Does describes WHAT they are, this file defines HOW they run.
+The runtime protocol that makes `sb-bookkeeper` an active-agency gatekeeper instead of a passive script runner. This file is the single home for the three gatekeeper rules; `sb-bookkeeper.md` § What This Workflow Does describes WHAT they are, this file defines HOW they run.
 
 **Runtime model.** This is a markdown-step agent-loop, NOT a headless driver script. The agent (you) reads this file and executes the protocol turn by turn, surfacing decisions to the user and waiting for input at each STOP. There is no `_driver.py`; the loop IS the agent following these steps.
 
-**Load at activation.** `bookkeeper.md` (Activation) loads this file before routing to any step. It stays in force across every gastos and investimentos step. Every step's STOP is a Gatekeeper Checkpoint (see § Per-Step Checkpoint).
+**Load at activation.** `sb-bookkeeper.md` (Activation) loads this file before routing to any step. It stays in force across every gastos and investimentos step. Every step's STOP is a Gatekeeper Checkpoint (see § Per-Step Checkpoint).
 
 **Language (binding).** Load `communication` from `{CONFIG_DIR}/standing-rules.yaml` via `lib.standing_rules.load_communication()`. Every user-facing string the loop emits is in `communication.language` (Brazilian Portuguese). Technical terms — function names, paths, column identifiers, tool names — stay in English per `communication.technical_terms`.
 
@@ -90,7 +90,7 @@ The reference list is `../../scripts/lib/source_of_truth_registry.py` (the 23 p2
    | Unresolvable rate shape | a `portfolio.json` rate-metadata structure / classifier rule | **dispatch `tool-builder`** if a code path is needed; otherwise record the rule and update the doc |
 
 2. **Prioritize building structure over a one-off fix.** If the deviation needs a new or changed tool, dispatch `tool-builder` (Seam 1) — do not hand-edit a ledger or `portfolio.json` to work around the gap.
-3. **Update documentation in the same resolution.** When the durable structure changes (a new tool, a renamed tag, a new config contract, a new parser), dispatch `doc-maintainer` (Seam 2) so `bookkeeper.md`, the step files, and `tools-index.md` do not drift. The deviation is not resolved until docs are current.
+3. **Update documentation in the same resolution.** When the durable structure changes (a new tool, a renamed tag, a new config contract, a new parser), dispatch `doc-maintainer` (Seam 2) so `sb-bookkeeper.md`, the step files, and `tools-index.md` do not drift. The deviation is not resolved until docs are current.
 4. **Confirm to the user (pt-BR)** what durable structure was built/changed and that the same input now resolves on the next run. Then resume the current step.
 
 ### Seam 1 — `tool-builder` dispatch
@@ -103,7 +103,7 @@ When a deviation needs a new or changed tool, dispatch the `tool-builder` sub-ag
 
 > Wired here as a SEAM. The `doc-maintainer` companion is built at `p5-5` (`../doc-maintainer/`). This dispatch point exists now; until `p5-5` lands, taking this branch surfaces to the user that the companion is not yet available (pt-BR: "a estrutura mudou e a documentação precisa ser atualizada, mas o `doc-maintainer` ainda não está disponível — registro a pendência").
 
-When durable structure changes, dispatch the `doc-maintainer` sub-agent (`../doc-maintainer/`) to bring `bookkeeper.md`, the affected step files, and `tools-index.md` current with the change. This is the doc-currency arm of the quality bar in step 3 above.
+When durable structure changes, dispatch the `doc-maintainer` sub-agent (`../doc-maintainer/`) to bring `sb-bookkeeper.md`, the affected step files, and `tools-index.md` current with the change. This is the doc-currency arm of the quality bar in step 3 above.
 
 ---
 

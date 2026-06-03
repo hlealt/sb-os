@@ -1,6 +1,6 @@
 # Investimentos
 
-Design documentation for the investment tracking system. Workflow infrastructure lives in `3-resources/tools/sb-os/finance/workflows/bookkeeper/investimentos/`, ledgers in `.user/finance/bookkeeper/ledgers/investimentos/`, config in `.user/finance/bookkeeper/config/`.
+Design documentation for the investment tracking system. Workflow infrastructure lives in `3-resources/tools/sb-os/finance/workflows/sb-bookkeeper/investimentos/`, ledgers in `.user/finance/bookkeeper/ledgers/investimentos/`, config in `.user/finance/bookkeeper/config/`.
 
 > **This doc is partially outdated and scheduled for rewrite.** When this doc disagrees with the implementation, the implementation wins — ledger CSVs in `.user/finance/bookkeeper/ledgers/investimentos/`, parsers in `3-resources/tools/sb-os/finance/scripts/investimentos/parsers/`, and the dashboard documentation in `3-resources/tools/sb-os/finance/docs/financial-dashboard.md` are authoritative.
 

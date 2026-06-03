@@ -1,5 +1,5 @@
 ---
-name: bookkeeper
+name: sb-bookkeeper
 description: Monthly financial closing — gastos, investimentos, or both.
 model: opus
 ---
@@ -10,11 +10,11 @@ Conduct the complete monthly financial closing. Three flows are supported: bank 
 
 ## What This Workflow Does
 
-This section is the single canonical description of what `bookkeeper` currently does. Any other document that purports to describe the workflow is RETIRED and points here. Per-step detail lives in the step files named below — this section never restates it.
+This section is the single canonical description of what `sb-bookkeeper` currently does. Any other document that purports to describe the workflow is RETIRED and points here. Per-step detail lives in the step files named below — this section never restates it.
 
 ### Modes
 
-`bookkeeper` runs in one of two modes (or both in sequence), chosen at activation:
+`sb-bookkeeper` runs in one of two modes (or both in sequence), chosen at activation:
 
 - **gastos** — the monthly expense close. It ingests the month's bank statements and credit-card invoices, normalizes them through per-bank parsers, categorizes every transaction, runs a two-pass human review to clear unknowns and month-boundary attributions, then produces a markdown report and updates the dashboard manifest. The eight steps live under `{GASTOS_WORKFLOW_DIR}/step-01-preflight.md` … `step-08-manifest.md`; each step file owns its own procedure.
 - **investimentos** — the monthly investment close. It ingests the month's broker and exchange source files, appends them to the append-only investment ledgers, recomputes positions and the portfolio snapshot, validates the result against brokerage statements, and reports. The eight steps live under `{INV_WORKFLOW_DIR}/step-01-preflight.md` … `step-08-report.md`; each step file owns its own procedure.
@@ -23,7 +23,7 @@ When activated as **ambos** (both), gastos runs to completion first and then cha
 
 ### Gatekeeper role
 
-`bookkeeper` is an active-agency gatekeeper, not a passive script runner. It refuses to operate on inputs that do not fit the expected structure rather than silently producing wrong output — silent-wrong is treated as the worst possible outcome. Concretely, the agent reads transaction and ledger data ONLY through registered tools (the tool layer described in `../../scripts/tools-index.md`); it never reads ledger CSVs or `portfolio.json` directly. Each step ends with a STOP that hands control back to the user for confirmation before the next step runs.
+`sb-bookkeeper` is an active-agency gatekeeper, not a passive script runner. It refuses to operate on inputs that do not fit the expected structure rather than silently producing wrong output — silent-wrong is treated as the worst possible outcome. Concretely, the agent reads transaction and ledger data ONLY through registered tools (the tool layer described in `../../scripts/tools-index.md`); it never reads ledger CSVs or `portfolio.json` directly. Each step ends with a STOP that hands control back to the user for confirmation before the next step runs.
 
 The runtime that enforces this — the three gatekeeper rules (refusal-on-out-of-structure, deviation-to-structure, hybrid issue-surfacing) and the per-step checkpoint — is defined in `gatekeeper-loop.md`. It is a markdown-step agent-loop the agent executes turn by turn, NOT a headless driver script. Run it.
 
@@ -33,7 +33,7 @@ When the agent encounters an input or situation that does not match the existing
 
 ### Companion delegation
 
-`bookkeeper` does not build its own tools or maintain its own documentation inline. Two companion sub-agents own that work and are delegated to when needed — the runtime dispatch points are Seam 1 and Seam 2 in `gatekeeper-loop.md` (Rule B):
+`sb-bookkeeper` does not build its own tools or maintain its own documentation inline. Two companion sub-agents own that work and are delegated to when needed — the runtime dispatch points are Seam 1 and Seam 2 in `gatekeeper-loop.md` (Rule B):
 
 - **tool-builder** (`../tool-builder/`) — builds and registers new tools when the gatekeeper needs a capability the tool layer does not yet provide. Its output is tools only; it never writes ledgers, `portfolio.json`, or the dashboard directly, and a schema gap is dual-surfaced (user prompt plus an audit event) rather than silently worked around.
 - **doc-maintainer** (`../doc-maintainer/`) — keeps the workflow's documentation current as the workflow changes, so that this canonical description and the per-step files do not drift from the code.
@@ -45,7 +45,7 @@ Every ledger or output write the workflow performs emits one audit event per `(s
 ## Path Variables
 
 ```
-WORKFLOW_DIR     = 3-resources/tools/sb-os/finance/workflows/bookkeeper
+WORKFLOW_DIR     = 3-resources/tools/sb-os/finance/workflows/sb-bookkeeper
 SCRIPTS_DIR      = 3-resources/tools/sb-os/finance/scripts/shared
 GASTOS_WORKFLOW_DIR = {WORKFLOW_DIR}/gastos
 INV_WORKFLOW_DIR = {WORKFLOW_DIR}/investimentos

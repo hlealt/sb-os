@@ -5,11 +5,11 @@ description: Companion sub-agent that builds and registers finance tools (parser
 
 # tool-builder
 
-Build a finance **tool** — a Python parser, importer, reader, or validator — when a sibling agent's gatekeeper loop hits a missing capability (no tool can read/produce the needed data, or an unrecognized bank/broker/exchange source has no parser). This workflow is the runtime "how" for the `tool-builder` companion; the calling contract is Seam 1 of `../bookkeeper/gatekeeper-loop.md`.
+Build a finance **tool** — a Python parser, importer, reader, or validator — when a sibling agent's gatekeeper loop hits a missing capability (no tool can read/produce the needed data, or an unrecognized bank/broker/exchange source has no parser). This workflow is the runtime "how" for the `tool-builder` companion; the calling contract is Seam 1 of `../sb-bookkeeper/gatekeeper-loop.md`.
 
-**Runtime model (binding).** This companion runs as a **sub-agent dispatched via the Agent tool**, NOT a sibling-session handoff and NOT a one-shot generator. The calling sibling (`bookkeeper`) dispatches this workflow, brokers every iteration cycle, surfaces results to the user, and re-dispatches with accumulated context until the tool is correct. The companion never holds its own multi-turn user session — each dispatch is one bounded build/revise cycle that returns its output to the caller. Decision source: `1-projects/finance-system/finance-system-v2-foundation/phase-2/decision-prep/p2-17-tool-builder-runtime.md` (Option A — Sub-Agent Model).
+**Runtime model (binding).** This companion runs as a **sub-agent dispatched via the Agent tool**, NOT a sibling-session handoff and NOT a one-shot generator. The calling sibling (`sb-bookkeeper`) dispatches this workflow, brokers every iteration cycle, surfaces results to the user, and re-dispatches with accumulated context until the tool is correct. The companion never holds its own multi-turn user session — each dispatch is one bounded build/revise cycle that returns its output to the caller. Decision source: `1-projects/finance-system/finance-system-v2-foundation/phase-2/decision-prep/p2-17-tool-builder-runtime.md` (Option A — Sub-Agent Model).
 
-**Callable from any sibling (binding).** The dispatch contract below is plain Agent-tool dispatch with no handoff protocol, so any sibling agent calls this companion the same way: `bookkeeper` is the current caller; `investor` is design-callable with no change to this file. Placement source: `1-projects/finance-system/finance-system-v2-foundation/phase-2/decision-prep/p2-16-companion-agent-placement.md` (Option A — sb-os shippable).
+**Callable from any sibling (binding).** The dispatch contract below is plain Agent-tool dispatch with no handoff protocol, so any sibling agent calls this companion the same way: `sb-bookkeeper` is the current caller; `sb-investor` is design-callable with no change to this file. Placement source: `1-projects/finance-system/finance-system-v2-foundation/phase-2/decision-prep/p2-16-companion-agent-placement.md` (Option A — sb-os shippable).
 
 ---
 
@@ -106,7 +106,7 @@ A tool that reads/writes an EXISTING store (the common case — a parser feeding
    - **Correct** → caller proceeds to Step 5 (accept) on the next dispatch with `accept: true`.
    - **Needs revision** → caller re-dispatches this companion with `prior_output` + the user's `correction`. Return to Step 3. This is the **batched iteration loop** — one build/dry-run/return cycle per dispatch, repeated until the user confirms the output is correct.
 
-The companion never loops internally against the user; each iteration is a discrete dispatch the caller brokers. This keeps `bookkeeper`-as-gatekeeper continuity and lets any sibling drive the loop identically.
+The companion never loops internally against the user; each iteration is a discrete dispatch the caller brokers. This keeps `sb-bookkeeper`-as-gatekeeper continuity and lets any sibling drive the loop identically.
 
 ### Step 5 — Ship the test, register the tool, signal doc-maintainer
 
@@ -114,7 +114,7 @@ Only on the caller's `accept: true`:
 
 1. **Schema-validation test (mandatory).** Write a pytest test at `{TESTS_DIR}/test_{tool_name}.py` that, for a `write` tool, asserts the tool's output conforms to the destination artifact's current schema (calls `tool_schema_check.assert_conforms(...)` — see § Schema Conformance), AND asserts `--dry-run` writes nothing (byte-for-byte unchanged destination, pattern: `test_p4_26_retro_rewrite.py`). For a `read` tool, assert the output contract (human-readable shape for `audit-diagnostic`; exit-code semantics for `validation-gate`). A generated tool is NOT done until this test exists and passes.
 2. **Register in `tools-index.md` (mandatory).** Append one fenced ```yaml block to `{TOOLS_INDEX}` § Registered Tools with all ten fields populated in order (`tool, purpose, owner_script, class, use, expected_inputs, outputs, canonical_reader_writer, dry_run, last_validated`) per that file's § Per-Entry Schema. `last_validated` = today's date (the tool was just dry-run-validated against the real sample). Append a new block; never rewrite a seeded one.
-3. **Signal the caller to dispatch `doc-maintainer`.** The durable structure changed (a new tool, possibly a new store/schema). Return a flag to the caller that `doc-maintainer` (Seam 2 of the gatekeeper loop) must run so `bookkeeper.md`, the affected step files, and `tools-index.md` narrative do not drift. The deviation is not resolved until docs are current (the caller owns this dispatch; this companion only signals it).
+3. **Signal the caller to dispatch `doc-maintainer`.** The durable structure changed (a new tool, possibly a new store/schema). Return a flag to the caller that `doc-maintainer` (Seam 2 of the gatekeeper loop) must run so `sb-bookkeeper.md`, the affected step files, and `tools-index.md` narrative do not drift. The deviation is not resolved until docs are current (the caller owns this dispatch; this companion only signals it).
 4. Return the final tool path, test path, and registry-entry confirmation to the caller. End the dispatch.
 
 ---

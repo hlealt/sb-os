@@ -5,7 +5,7 @@ runtime: agent-loop
 
 # Decision Mode (B5 — Decision record)
 
-The `/investor` reasoning mode that reasons about ONE investment decision and the rationale held at the time, then delegates persistence to `sb-fin-create-decision`. **This mode NEVER writes a decision page** — it reasons; the scribe persists (delegate-not-replace).
+The `/sb-investor` reasoning mode that reasons about ONE investment decision and the rationale held at the time, then delegates persistence to `sb-fin-create-decision`. **This mode NEVER writes a decision page** — it reasons; the scribe persists (delegate-not-replace).
 
 **Loaded by:** `./investor.md` reads-and-follows this file when `./capability-manifest.md` routes the `decision` (B5) intent. The invariants, policy read-rules wiring, present-and-confirm pattern, issue-surfacing, Rule A, and the per-step Investor Checkpoint in `./investor-loop.md` are already in force when this file runs — this file does NOT restate them. Read `./investor-loop.md` before acting on any step below.
 
@@ -16,7 +16,7 @@ The `/investor` reasoning mode that reasons about ONE investment decision and th
 | This mode (the thinker) | reasoning: the action taken, rationale, what was believed at the time, what would prove it wrong, acknowledged risks, review trigger, the related thesis; the present-and-confirm checkpoint |
 | `sb-fin-create-decision` (the scribe) | persistence: filename (`YYYY-MM-DD-<action>-<asset-or-thesis>.md`) + collision check, frontmatter, the nine required sections, citation discipline, entity/thesis cross-linking, decisions index update. The agent NEVER re-implements these checks |
 
-**Never transaction data.** This mode records reasoning ONLY. Transaction price, quantity, fees, and position size live in the `bookkeeper` ledger and are NEVER reasoned into a decision page (`./investor-loop.md` § Read-only invariant). A request to record them is out-of-structure → Rule A.
+**Never transaction data.** This mode records reasoning ONLY. Transaction price, quantity, fees, and position size live in the `sb-bookkeeper` ledger and are NEVER reasoned into a decision page (`./investor-loop.md` § Read-only invariant). A request to record them is out-of-structure → Rule A.
 
 ---
 
@@ -43,7 +43,7 @@ Develop the decision's reasoning. The decision is a dated record of ONE action a
 
 Cite the source pages and entity `## Financials` rows the reasoning rests on — these become the scribe's `Data and sources used` section. Read a single company's `## Financials` table off its wiki entity page directly when fundamentals inform the reasoning (no fundamentals tool in v1); inspect position data ONLY through a registered `class: read` tool in `../../scripts/tools-index.md` (tools-only invariant), NEVER `portfolio.json`/ledgers directly.
 
-Record reasoning ONLY — NEVER reason price, quantity, fees, or position size into the decision (the `bookkeeper` ledger owns those). Surface a problem with the reasoning or its inputs (a source failing the `source-policy` trust bar, a contradicted premise) per `./investor-loop.md` § Issue-surfacing — never pass it silently.
+Record reasoning ONLY — NEVER reason price, quantity, fees, or position size into the decision (the `sb-bookkeeper` ledger owns those). Surface a problem with the reasoning or its inputs (a source failing the `source-policy` trust bar, a contradicted premise) per `./investor-loop.md` § Issue-surfacing — never pass it silently.
 
 ## Step 3 — Select related thesis + entities
 
@@ -53,7 +53,7 @@ Record reasoning ONLY — NEVER reason price, quantity, fees, or position size i
 
 ## Step 4 — Present-and-confirm checkpoint
 
-Run `./investor-loop.md` § Present-and-confirm before the handoff. State the proposed decision (the action + decision date + the eight reasoned sections + the related thesis/entities to cross-link + the sources to cite) and STOP for the user's choice. State that price/qty are NOT recorded — they live in the `bookkeeper` ledger.
+Run `./investor-loop.md` § Present-and-confirm before the handoff. State the proposed decision (the action + decision date + the eight reasoned sections + the related thesis/entities to cross-link + the sources to cite) and STOP for the user's choice. State that price/qty are NOT recorded — they live in the `sb-bookkeeper` ledger.
 
 This is the mode's single user-facing checkpoint. Per the scribe's investor-orchestrated mode there is NO second checkpoint at the scribe — the agent's confirm here covers the invocation.
 
@@ -66,7 +66,7 @@ This is the mode's single user-facing checkpoint. Per the scribe's investor-orch
 
 ### Adversarial refuter (`[R]`) — dispatch with the decision rubric
 
-On `[R]`, read-and-follow `./adversarial-refuter.md` (the shared refuter-dispatch workflow; registered as a cross-mode mechanism). This mode DISPATCHES it — it adds NO discovery engine and NEVER re-implements the refutation logic; `./adversarial-refuter.md` owns the backend, single-pass, read-only, and no-generation mechanics. The refuter attacks ARGUMENT STRUCTURE only (the falsifier, the risks, rationale drift, source contradiction) — it NEVER reasons or critiques price / quantity / fees / position size (the `bookkeeper` ledger owns those; this mode records reasoning only). Hand it the CLOSED input set its § Step 1 requires:
+On `[R]`, read-and-follow `./adversarial-refuter.md` (the shared refuter-dispatch workflow; registered as a cross-mode mechanism). This mode DISPATCHES it — it adds NO discovery engine and NEVER re-implements the refutation logic; `./adversarial-refuter.md` owns the backend, single-pass, read-only, and no-generation mechanics. The refuter attacks ARGUMENT STRUCTURE only (the falsifier, the risks, rationale drift, source contradiction) — it NEVER reasons or critiques price / quantity / fees / position size (the `sb-bookkeeper` ledger owns those; this mode records reasoning only). Hand it the CLOSED input set its § Step 1 requires:
 
 | Input | What this mode passes |
 |-------|------------------------|
@@ -107,7 +107,7 @@ The scribe halts if the decision filename already exists for that date+action+su
 
 ## Step 6 — Handoff
 
-A decision that revises the conviction or status of its related thesis → suggest `/investor review` (B3) to update the thesis page via its scribe; this mode NEVER edits the thesis. A suspected data problem encountered while reasoning → record it and route the user to `bookkeeper` (`./investor-loop.md` § Read-only invariant) — never fix data in place.
+A decision that revises the conviction or status of its related thesis → suggest `/sb-investor review` (B3) to update the thesis page via its scribe; this mode NEVER edits the thesis. A suspected data problem encountered while reasoning → record it and route the user to `sb-bookkeeper` (`./investor-loop.md` § Read-only invariant) — never fix data in place.
 
 ---
 
@@ -115,6 +115,6 @@ A decision that revises the conviction or status of its related thesis → sugge
 
 - Read-only on portfolio/ledger data; position data ONLY through registered read tools (`./investor-loop.md` § Tools-only data access).
 - Writes ONLY by invoking `sb-fin-create-decision` — the agent NEVER hand-writes a decision page (`./investor-loop.md` § Own-workspace-writes boundary).
-- Never reasons or records transaction price / quantity / fees / position size — the `bookkeeper` ledger owns those. A request to do so is out-of-structure → Rule A in `./investor-loop.md`.
+- Never reasons or records transaction price / quantity / fees / position size — the `sb-bookkeeper` ledger owns those. A request to do so is out-of-structure → Rule A in `./investor-loop.md`.
 - Never mutates ledgers, `portfolio.json`, or the dashboard. A request to do so, or to author the page by hand, is out-of-structure → Rule A.
 - Every user-facing turn ends at an Investor Checkpoint (`./investor-loop.md` § Per-Step Checkpoint). User-facing strings are in `communication.language` per `./investor.md` § Rules and `./investor-loop.md` § Language.

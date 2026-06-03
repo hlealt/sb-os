@@ -121,7 +121,7 @@ Se o usuário mencionar uma fonte que NÃO consta no manifesto:
    Para iniciar o fechamento, execute bookkeeper novamente.
    ```
 
-4. STOP. O workflow encerra aqui. O usuário executa `bookkeeper` de novo para iniciar o fechamento com as fontes configuradas.
+4. STOP. O workflow encerra aqui. O usuário executa `sb-bookkeeper` de novo para iniciar o fechamento com as fontes configuradas.
 
 ---
 

@@ -5,7 +5,7 @@ runtime: agent-loop
 
 # Portfolio Mode (B4 — Coherence)
 
-The `/investor` reasoning mode that maps the user's real exposure against his theses — surfacing positions held without a thesis, theses with no matching exposure, and concentration — so belief and portfolio stay coherent. **This mode is read-only and builds NO coherence tool.** It composes the existing registered position read tools, reads theses' `related_positions` frontmatter, and performs the position↔thesis join itself in reasoning (D3 Option A). No `portfolio-view` tool exists, and no thin `thesis-map` / `unmapped` tool is built in v1 (build-on-demand only — see § Build-on-demand trigger).
+The `/sb-investor` reasoning mode that maps the user's real exposure against his theses — surfacing positions held without a thesis, theses with no matching exposure, and concentration — so belief and portfolio stay coherent. **This mode is read-only and builds NO coherence tool.** It composes the existing registered position read tools, reads theses' `related_positions` frontmatter, and performs the position↔thesis join itself in reasoning (D3 Option A). No `portfolio-view` tool exists, and no thin `thesis-map` / `unmapped` tool is built in v1 (build-on-demand only — see § Build-on-demand trigger).
 
 **Loaded by:** `./investor.md` reads-and-follows this file when `./capability-manifest.md` routes the `portfolio` (B4) intent. The invariants (read-only, tools-only, own-workspace-writes, watchlist), policy read-rules wiring, present-and-confirm pattern, issue-surfacing, Rule A, and the per-step Investor Checkpoint in `./investor-loop.md` are already in force when this file runs — this file does NOT restate them. Read `./investor-loop.md` before acting on any step below.
 
@@ -37,7 +37,7 @@ Read position data ONLY through the registered `class: read` tools in `../../scr
 | An all-in-one diagnostic for a single position the join flags (metadata, balcão, snapshots, anomalies) | `position_summary PRODUCT_ID` |
 | For USD (`rv_eua`) positions, how much BRL P&L is native gain vs FX — informs concentration reasoning | `fx_impact_report` |
 
-Treat each tool's stdout as the authoritative position record for this turn. If the position data the join needs has no read tool, that is out-of-structure → Rule A `[A]` (`./investor-loop.md`): record the missing-read-tool gap and route it to the build; NEVER hand-read the store to compensate and NEVER build a tool at runtime. A tool reporting an anomaly (e.g. `position_summary` exit 1) or data the join cannot reconcile is surfaced per `./investor-loop.md` § Issue-surfacing; a suspected data problem routes to `bookkeeper` (never fixed here).
+Treat each tool's stdout as the authoritative position record for this turn. If the position data the join needs has no read tool, that is out-of-structure → Rule A `[A]` (`./investor-loop.md`): record the missing-read-tool gap and route it to the build; NEVER hand-read the store to compensate and NEVER build a tool at runtime. A tool reporting an anomaly (e.g. `position_summary` exit 1) or data the join cannot reconcile is surfaced per `./investor-loop.md` § Issue-surfacing; a suspected data problem routes to `sb-bookkeeper` (never fixed here).
 
 ## Step 3 — Read theses' position mappings
 
@@ -107,5 +107,5 @@ The agent-performed join is v1's coherence engine; no `thesis-map` / `unmapped` 
 - Theses / entity / source pages are markdown the agent reads directly — they are not position data.
 - Persists NOTHING: the coherence map is read-only output. No wiki page, no policy file, no ledger, no `portfolio.json` is written by this mode.
 - `watchlist: true` is set ONLY after explicit user approval, routed through the `policy` thin mode — NEVER auto-set to clear a coherence gap (`./investor-loop.md` § Watchlist invariant).
-- Never mutates ledgers, `portfolio.json`, or the dashboard. A request to do so, to read position data off a non-tool path, or to set `watchlist` without approval is out-of-structure → Rule A in `./investor-loop.md`. A suspected data problem is recorded and routed to `bookkeeper`, never fixed here.
+- Never mutates ledgers, `portfolio.json`, or the dashboard. A request to do so, to read position data off a non-tool path, or to set `watchlist` without approval is out-of-structure → Rule A in `./investor-loop.md`. A suspected data problem is recorded and routed to `sb-bookkeeper`, never fixed here.
 - Every user-facing turn ends at an Investor Checkpoint (`./investor-loop.md` § Per-Step Checkpoint). User-facing strings are in `communication.language` per `./investor.md` § Rules and `./investor-loop.md` § Language.

@@ -5,7 +5,7 @@ runtime: agent-loop
 
 # Review Mode (B3 — Maintenance)
 
-The `/investor` reasoning mode that re-evaluates an EXISTING thesis against new information — surfacing staleness, new evidence-against, and tripped / near invalidation criteria — so the thesis base stays falsifiable over time. **This mode NEVER hand-writes a thesis page** — it reasons and proposes; `sb-fin-create-thesis` (its named `extend` entry point, targeting the existing thesis by slug) persists every update (delegate-not-replace).
+The `/sb-investor` reasoning mode that re-evaluates an EXISTING thesis against new information — surfacing staleness, new evidence-against, and tripped / near invalidation criteria — so the thesis base stays falsifiable over time. **This mode NEVER hand-writes a thesis page** — it reasons and proposes; `sb-fin-create-thesis` (its named `extend` entry point, targeting the existing thesis by slug) persists every update (delegate-not-replace).
 
 **Loaded by:** `./investor.md` reads-and-follows this file when `./capability-manifest.md` routes the `review` (B3) intent. The invariants, policy read-rules wiring, present-and-confirm pattern, issue-surfacing, Rule A, and the per-step Investor Checkpoint in `./investor-loop.md` are already in force when this file runs — this file does NOT restate them. Read `./investor-loop.md` before acting on any step below.
 

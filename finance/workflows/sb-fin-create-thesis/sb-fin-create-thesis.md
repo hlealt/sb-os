@@ -1,14 +1,14 @@
 ---
 name: sb-fin-create-thesis
-description: Create or extend a single investment thesis page in the finance-extended wiki layer. Invoked ONLY by the `investor` agent (investor-orchestrated, no separate checkpoint) via two named entry points — authoring a new thesis (`/investor thesis`) and a named `extend` entry point that updates an existing thesis by slug (`/investor review`).
+description: Create or extend a single investment thesis page in the finance-extended wiki layer. Invoked ONLY by the `sb-investor` agent (investor-orchestrated, no separate checkpoint) via two named entry points — authoring a new thesis (`/sb-investor thesis`) and a named `extend` entry point that updates an existing thesis by slug (`/sb-investor review`).
 ---
 
 # sb-fin-create-thesis
 
-Author a single `thesis` page — a falsifiable investment argument with explicit evidence and invalidation criteria. Thesis pages are authored DELIBERATELY (like topics via `sb-wiki-create-topic`), NEVER auto-created by ingest. This workflow is the `investor` agent's persistence helper — the agent reasons, this workflow persists. It is invoked ONLY in its investor-orchestrated mode; it does NOT auto-fire on standalone user intent ("create a thesis for X"). `/investor thesis` is the sole front door for thesis authoring — that intent routes there, where the agent reasons the thesis and then invokes this workflow. Two named entry points are supported, both investor-orchestrated (Invocation Inputs below):
+Author a single `thesis` page — a falsifiable investment argument with explicit evidence and invalidation criteria. Thesis pages are authored DELIBERATELY (like topics via `sb-wiki-create-topic`), NEVER auto-created by ingest. This workflow is the `sb-investor` agent's persistence helper — the agent reasons, this workflow persists. It is invoked ONLY in its investor-orchestrated mode; it does NOT auto-fire on standalone user intent ("create a thesis for X"). `/sb-investor thesis` is the sole front door for thesis authoring — that intent routes there, where the agent reasons the thesis and then invokes this workflow. Two named entry points are supported, both investor-orchestrated (Invocation Inputs below):
 
-1. **Authoring (new)** — `/investor thesis` invokes this workflow to persist a NEW thesis the user reasoned through with the agent (optionally promoting a `candidate-thesis` trigger the agent surfaced). Runs the full create flow (steps 1-5). NO separate checkpoint — the investor's own present-and-confirm step covers the invocation; proceed through the steps without re-prompting. The one carve-out is the Step 1 scope-overlap prompt (the single allowed interrupt — see Step 1).
-2. **`extend` (update existing)** — `/investor review` (or any caller that already KNOWS the target page) invokes this workflow to UPDATE an EXISTING thesis by slug: append evidence-against, sharpen invalidation criteria, and bump `status` / `conviction` / `last_reviewed`. The caller passes the existing thesis slug, so this entry point targets that page directly and MUST SKIP the Step 1 scope-overlap discovery prompt (the page is already identified — there is nothing to disambiguate). It appends in place and NEVER creates a new page. NO separate checkpoint. Follow the Step-by-step deltas marked **(extend)** below.
+1. **Authoring (new)** — `/sb-investor thesis` invokes this workflow to persist a NEW thesis the user reasoned through with the agent (optionally promoting a `candidate-thesis` trigger the agent surfaced). Runs the full create flow (steps 1-5). NO separate checkpoint — the investor's own present-and-confirm step covers the invocation; proceed through the steps without re-prompting. The one carve-out is the Step 1 scope-overlap prompt (the single allowed interrupt — see Step 1).
+2. **`extend` (update existing)** — `/sb-investor review` (or any caller that already KNOWS the target page) invokes this workflow to UPDATE an EXISTING thesis by slug: append evidence-against, sharpen invalidation criteria, and bump `status` / `conviction` / `last_reviewed`. The caller passes the existing thesis slug, so this entry point targets that page directly and MUST SKIP the Step 1 scope-overlap discovery prompt (the page is already identified — there is nothing to disambiguate). It appends in place and NEVER creates a new page. NO separate checkpoint. Follow the Step-by-step deltas marked **(extend)** below.
 
 This workflow loads only when `finance` is registered in `sb-os.json` → `wiki_extensions`. It mirrors the `sb-wiki-create-topic` 5-step flow, adapted to the `thesis` page type defined in the finance wiki extension.
 
@@ -39,8 +39,8 @@ The base wiki conventions still apply: read `{sb_os_path}/wiki/workflows/shared/
 
 | Entry point | Caller | Inputs passed in |
 |-------------|--------|------------------|
-| Authoring (new) | `investor` agent (`/investor thesis`) | Proposed thesis slug, candidate-thesis timestamp (if promoting one), the shared claim, source filenames, and the investment entity(ies). Workflow resolves the candidate from `log.md` when a timestamp is passed. |
-| `extend` (update existing) | `investor` agent (`/investor review`) | The EXISTING thesis slug (the page to update — this is the named target, NOT a candidate to disambiguate); the new evidence-against items with their source filenames; the sharpened invalidation criteria; the confirmed `status` / `conviction` / `last_reviewed` values. The caller already identified the page, so the scope-overlap discovery prompt is SKIPPED for this entry point. |
+| Authoring (new) | `sb-investor` agent (`/sb-investor thesis`) | Proposed thesis slug, candidate-thesis timestamp (if promoting one), the shared claim, source filenames, and the investment entity(ies). Workflow resolves the candidate from `log.md` when a timestamp is passed. |
+| `extend` (update existing) | `sb-investor` agent (`/sb-investor review`) | The EXISTING thesis slug (the page to update — this is the named target, NOT a candidate to disambiguate); the new evidence-against items with their source filenames; the sharpened invalidation criteria; the confirmed `status` / `conviction` / `last_reviewed` values. The caller already identified the page, so the scope-overlap discovery prompt is SKIPPED for this entry point. |
 
 ## Flow
 
@@ -142,7 +142,7 @@ If the index exists with a user-customized column layout, preserve the user's co
 
 ## User Checkpoint
 
-Both entry points are investor-orchestrated: NO separate checkpoint at the scribe. The investor's own present-and-confirm step (in `/investor thesis` for authoring, `/investor review` for extend) covers the invocation. Proceed through steps 1-5 without prompting. The single allowed interrupt is the Step 1 scope-overlap prompt on the authoring (new) path (the `extend` entry point skips it). The investor surfaces that prompt's `extend N` / `new` / `abort` outcome to the user and acts on the choice — it is the scribe's structural authority, never a second checkpoint.
+Both entry points are investor-orchestrated: NO separate checkpoint at the scribe. The investor's own present-and-confirm step (in `/sb-investor thesis` for authoring, `/sb-investor review` for extend) covers the invocation. Proceed through steps 1-5 without prompting. The single allowed interrupt is the Step 1 scope-overlap prompt on the authoring (new) path (the `extend` entry point skips it). The investor surfaces that prompt's `extend N` / `new` / `abort` outcome to the user and acts on the choice — it is the scribe's structural authority, never a second checkpoint.
 
 ## Failure Modes
 

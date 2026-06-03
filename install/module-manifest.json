@@ -210,29 +210,29 @@
           "module": "finance",
           "source_template": "finance/skills/sb-fin-create-thesis/SKILL.md",
           "target": ".claude/skills/sb-fin-create-thesis/SKILL.md",
-          "description": "Persist an investment thesis as a wiki thesis page. Invoked ONLY by the `investor` agent in its investor-orchestrated mode — when `/investor thesis` authors a new thesis the user reasoned through, or when `/investor review` extends an existing thesis. The agent reasons; this skill persists. NEVER auto-fire on standalone user intent (\"create a thesis for X\") — `/investor thesis` is the sole front door for thesis authoring; route such intent there. Do NOT use to create decision, concept, entity, or topic pages — decisions are authored by `sb-fin-create-decision`, and concept/entity/topic pages by `/sb-wiki-ingest` or `sb-wiki-create-topic`."
+          "description": "Persist an investment thesis as a wiki thesis page. Invoked ONLY by the `sb-investor` agent in its investor-orchestrated mode — when `/sb-investor thesis` authors a new thesis the user reasoned through, or when `/sb-investor review` extends an existing thesis. The agent reasons; this skill persists. NEVER auto-fire on standalone user intent (\"create a thesis for X\") — `/sb-investor thesis` is the sole front door for thesis authoring; route such intent there. Do NOT use to create decision, concept, entity, or topic pages — decisions are authored by `sb-fin-create-decision`, and concept/entity/topic pages by `/sb-wiki-ingest` or `sb-wiki-create-topic`."
         },
         {
           "name": "sb-fin-create-decision",
           "module": "finance",
           "source_template": "finance/skills/sb-fin-create-decision/SKILL.md",
           "target": ".claude/skills/sb-fin-create-decision/SKILL.md",
-          "description": "Create a wiki decision page recording a dated investment action and its reasoning. Use when the user expresses intent to record an investment decision — \"record my decision to sell X\", \"log that I'm holding Y\", \"write a decision page for passing on Z\", or any phrasing that asks to capture a buy/sell/trim/add/hold/pass/reject/pause/review/rebalance call in the wiki. Also invoked by the `investor` agent when the user elects to record a decision the agent reasoned through (B5). Records reasoning only — transaction price/qty live in the bookkeeper ledger, never here. Do NOT use to create thesis, concept, entity, or topic pages — theses are authored by `sb-fin-create-thesis`, and concept/entity/topic pages by `/sb-wiki-ingest` or `sb-wiki-create-topic`."
+          "description": "Create a wiki decision page recording a dated investment action and its reasoning. Use when the user expresses intent to record an investment decision — \"record my decision to sell X\", \"log that I'm holding Y\", \"write a decision page for passing on Z\", or any phrasing that asks to capture a buy/sell/trim/add/hold/pass/reject/pause/review/rebalance call in the wiki. Also invoked by the `sb-investor` agent when the user elects to record a decision the agent reasoned through (B5). Records reasoning only — transaction price/qty live in the bookkeeper ledger, never here. Do NOT use to create thesis, concept, entity, or topic pages — theses are authored by `sb-fin-create-thesis`, and concept/entity/topic pages by `/sb-wiki-ingest` or `sb-wiki-create-topic`."
         }
       ],
       "commands": [
         {
-          "name": "bookkeeper",
+          "name": "sb-bookkeeper",
           "module": "finance",
-          "source_template": "finance/commands/bookkeeper.md",
-          "target": ".claude/commands/bookkeeper.md",
+          "source_template": "finance/commands/sb-bookkeeper.md",
+          "target": ".claude/commands/sb-bookkeeper.md",
           "description": "Monthly financial closing — gastos, investimentos, or both."
         },
         {
-          "name": "investor",
+          "name": "sb-investor",
           "module": "finance",
-          "source_template": "finance/commands/investor.md",
-          "target": ".claude/commands/investor.md",
+          "source_template": "finance/commands/sb-investor.md",
+          "target": ".claude/commands/sb-investor.md",
           "description": "Read-only investment-reasoning agent — thesis, research, review, portfolio, decision, policy modes."
         }
       ],

@@ -9,7 +9,7 @@ Scoped revision pass — user picks a specific month AND a specific revision typ
 
 **Two entry points:**
 1. **Gatekeeper deferral.** At the end of a gastos or investimentos close, the gatekeeper loop (`gatekeeper-loop.md` Rule C) may have accumulated deferrable issues. After presenting the deferrable list, the loop asks: "Rodar o modo de revisão agora ou depois?" — [S] now or [D] defer. Choosing [S] calls this file with the deferrable list pre-loaded as the initial queue.
-2. **Direct activation.** User runs `bookkeeper` and selects `[4] Revisão` at the flow prompt. No pre-loaded queue; user picks month and revision type interactively.
+2. **Direct activation.** User runs `sb-bookkeeper` and selects `[4] Revisão` at the flow prompt. No pre-loaded queue; user picks month and revision type interactively.
 
 **Language and UI (binding).** User-facing strings in PT-BR. Load `communication` and `batch_ui` from `{CONFIG_DIR}/standing-rules.yaml` via `lib.standing_rules.load_communication()` and `load_batch_ui()`. Decision surface shapes follow `batch_ui` — one row = one decision (`batch_ui.tags.one_row_one_decision`); do not aggregate suppliers (`batch_ui.sub_items.aggregate_suppliers: false`).
 
@@ -18,7 +18,7 @@ Scoped revision pass — user picks a specific month AND a specific revision typ
 ## Path Variables
 
 ```
-WORKFLOW_DIR = 3-resources/tools/sb-os/finance/workflows/bookkeeper
+WORKFLOW_DIR = 3-resources/tools/sb-os/finance/workflows/sb-bookkeeper
 CONFIG_DIR   = .user/finance/bookkeeper/config
 DASHBOARD_DATA = .user/finance/bookkeeper/ledgers/fechamento
 ```

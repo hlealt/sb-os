@@ -5,7 +5,7 @@ runtime: agent-loop
 
 # Investor Capability Manifest
 
-The intent → capability → access-mechanism routing map for `/investor`. `investor.md` reads this file after loading `investor-loop.md` to pick the capability that matches the user's natural-language ask, then reads-and-follows that capability (or chains several). The agent infers the capability from intent; it NEVER asks the user "which mode?".
+The intent → capability → access-mechanism routing map for `/sb-investor`. `sb-investor.md` reads this file after loading `sb-investor-loop.md` to pick the capability that matches the user's natural-language ask, then reads-and-follows that capability (or chains several). The agent infers the capability from intent; it NEVER asks the user "which mode?".
 
 This file routes. It does NOT restate the invariants, boundaries, policy read-rules, present-and-confirm pattern, or checkpoint — those live in `./investor-loop.md` and bind every capability listed here. Read `./investor-loop.md` before acting on any routed capability.
 
@@ -91,7 +91,7 @@ One row group per mode. Route on the **Fires on** intent; reach the capability t
 | Access mechanism | Read-and-follow `./portfolio.md` (the reasoning) **+** call the registered read tools `position_table`, `position_summary`, `fx_impact_report`, `validate_calculate` (per `../../scripts/tools-index.md`) **+** agent-performed join (read theses' `related_positions` frontmatter against the position list). No `portfolio-view` tool exists; the agent performs the coherence join itself |
 | Inputs | position data via the read tools above (NEVER read `portfolio.json`/ledgers directly — tools-only invariant in `./investor-loop.md`); the thesis pages' `related_positions` frontmatter; `research-policy.md` (loaded per `./investor-loop.md` § Policy read-rules); single-company fundamentals read off the entity page's `## Financials` when reasoning |
 | When to use | Belief must be mapped to REAL exposure — positions without theses, theses without exposure, concentration |
-| When NOT | Reasoning about a belief with no portfolio link → `thesis`/`review`. Cross-entity fundamentals comparison (deferred; no tool in v1). Any ledger/`portfolio.json` mutation → out-of-structure, route to `bookkeeper` per `./investor-loop.md` Rule A |
+| When NOT | Reasoning about a belief with no portfolio link → `thesis`/`review`. Cross-entity fundamentals comparison (deferred; no tool in v1). Any ledger/`portfolio.json` mutation → out-of-structure, route to `sb-bookkeeper` per `./investor-loop.md` Rule A |
 
 ### `decision` (B5 — Decision record)
 

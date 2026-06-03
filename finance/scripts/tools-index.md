@@ -1,6 +1,6 @@
 # Finance Tool Registry (`tools-index.md`)
 
-> Canonical registry of the finance module's **tool layer** under `sb-os/finance/scripts/`. Sibling agents (`bookkeeper`, `investor`) read this index to discover available tools by class and use; companion agents (`tool-builder`, `doc-maintainer`) maintain it. This file is the single source of truth for "what tools exist, what class they are, and how to invoke them."
+> Canonical registry of the finance module's **tool layer** under `sb-os/finance/scripts/`. Sibling agents (`sb-bookkeeper`, `sb-investor`) read this index to discover available tools by class and use; companion agents (`tool-builder`, `doc-maintainer`) maintain it. This file is the single source of truth for "what tools exist, what class they are, and how to invoke them."
 
 > **Scope — what belongs here.** A registry entry is a **registered tool**: a parser, retro-rewrite, upsert, audit-diagnostic, or validation-gate that an agent reaches for to read or mutate data on the user's behalf. The deterministic pipeline scripts (`calculate.py`, `categorize.py`, `fx_engine.py`, `normalize.py`, the per-source parser modules, and the `shared/lib/` helpers) are NOT registry tools — they are the pipeline whose ledger data is read THROUGH tools, and they already emit audit events on every ledger write. Do NOT register a pipeline script as a tool. Register the diagnostic/validation/dry-run/retro-rewrite tools that observe or correct that pipeline.
 

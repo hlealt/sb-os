@@ -1,7 +1,7 @@
 """sample-from-ledger: spot-checkable row slices from ledger CSVs (p4-2).
 
 Returns a small, bounded slice of rows from a normalized per-bank extrato CSV
-or a fechamento transactions.csv so `bookkeeper` can validate by judgment
+or a fechamento transactions.csv so `sb-bookkeeper` can validate by judgment
 WITHOUT reading raw CSVs/JSONs directly — closing the P0 gap for tools-only
 access during Pass 1.
 

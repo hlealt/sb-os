@@ -8,7 +8,7 @@ Mirrors the base `page-types.md` classification-test + discriminator style. Read
 
 | Type | Definition |
 |------|-----------|
-| **Thesis** | An investment argument: a falsifiable claim about an asset/company/sector/country, with evidence and explicit invalidation criteria. Authored deliberately by the `investor` agent — never auto-created by ingest. |
+| **Thesis** | An investment argument: a falsifiable claim about an asset/company/sector/country, with evidence and explicit invalidation criteria. Authored deliberately by the `sb-investor` agent — never auto-created by ingest. |
 | **Decision** | A dated record of one investment decision and its reasoning (buy/sell/hold/pass/…). The reasoning lives here; the transaction (price/qty) lives in the bookkeeper ledger — never duplicated here. |
 
 ## Classification Tests

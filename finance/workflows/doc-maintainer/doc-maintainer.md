@@ -5,11 +5,11 @@ description: Companion sub-agent that keeps the finance module's living document
 
 # doc-maintainer
 
-Reconcile the finance module's living documentation with an approved durable-structure change — a new/changed tool, a renamed tag, a new config contract, a new parser, a new data store, a schema bump — so the data-flow map, component docs, and `tools-index.md` narrative do not drift from what the code and config actually do. This workflow is the runtime "how" for the `doc-maintainer` companion; the calling contract is Seam 2 of `../bookkeeper/gatekeeper-loop.md`. It is the **active-reconciliation layer (layer 4)** of the documentation-currency mechanism (Option D Hybrid). Mechanism source: `1-projects/finance-system/finance-system-v2-foundation/phase-2/decision-prep/p2-19-documentation-currency.md`.
+Reconcile the finance module's living documentation with an approved durable-structure change — a new/changed tool, a renamed tag, a new config contract, a new parser, a new data store, a schema bump — so the data-flow map, component docs, and `tools-index.md` narrative do not drift from what the code and config actually do. This workflow is the runtime "how" for the `doc-maintainer` companion; the calling contract is Seam 2 of `../sb-bookkeeper/gatekeeper-loop.md`. It is the **active-reconciliation layer (layer 4)** of the documentation-currency mechanism (Option D Hybrid). Mechanism source: `1-projects/finance-system/finance-system-v2-foundation/phase-2/decision-prep/p2-19-documentation-currency.md`.
 
-**Runtime model (binding).** This companion runs as a **sub-agent dispatched via the Agent tool**, NOT a sibling-session handoff and NOT a one-shot generator. The calling sibling (`bookkeeper`) dispatches this workflow with a change spec, the companion reconciles the affected docs, returns the doc diffs to the caller, and the caller surfaces them to the user. The companion never holds its own multi-turn user session — each dispatch is one bounded reconcile cycle that returns its output to the caller. This mirrors the dispatch model of the sibling `tool-builder` companion (`../tool-builder/`); placement source: `1-projects/finance-system/finance-system-v2-foundation/phase-2/decision-prep/p2-16-companion-agent-placement.md` (Option A — sb-os shippable).
+**Runtime model (binding).** This companion runs as a **sub-agent dispatched via the Agent tool**, NOT a sibling-session handoff and NOT a one-shot generator. The calling sibling (`sb-bookkeeper`) dispatches this workflow with a change spec, the companion reconciles the affected docs, returns the doc diffs to the caller, and the caller surfaces them to the user. The companion never holds its own multi-turn user session — each dispatch is one bounded reconcile cycle that returns its output to the caller. This mirrors the dispatch model of the sibling `tool-builder` companion (`../tool-builder/`); placement source: `1-projects/finance-system/finance-system-v2-foundation/phase-2/decision-prep/p2-16-companion-agent-placement.md` (Option A — sb-os shippable).
 
-**Callable from any sibling (binding).** The dispatch contract below is plain Agent-tool dispatch with no handoff protocol, so any sibling agent calls this companion the same way: `bookkeeper` is the current caller (its deviation-to-structure protocol, Rule B step 3 of `../bookkeeper/gatekeeper-loop.md`, dispatches this companion at Seam 2); `investor` is design-callable with no change to this file.
+**Callable from any sibling (binding).** The dispatch contract below is plain Agent-tool dispatch with no handoff protocol, so any sibling agent calls this companion the same way: `sb-bookkeeper` is the current caller (its deviation-to-structure protocol, Rule B step 3 of `../sb-bookkeeper/gatekeeper-loop.md`, dispatches this companion at Seam 2); `sb-investor` is design-callable with no change to this file.
 
 ---
 
@@ -20,7 +20,7 @@ Reconcile the finance module's living documentation with an approved durable-str
 | The companion MAY write | The companion NEVER writes |
 |-------------------------|----------------------------|
 | The target-state data-flow map (`{DATA_FLOW_MAP}`) | Any ledger (`*.csv` under `.user/finance/bookkeeper/ledgers/`) |
-| Component docs — the finance-module `CLAUDE.md` (`{FINANCE_CLAUDE_MD}`), `bookkeeper.md`, and the affected step files | `portfolio.json` or any `portfolio-{date}.json` snapshot |
+| Component docs — the finance-module `CLAUDE.md` (`{FINANCE_CLAUDE_MD}`), `sb-bookkeeper.md`, and the affected step files | `portfolio.json` or any `portfolio-{date}.json` snapshot |
 | The narrative and per-entry blocks of `{TOOLS_INDEX}` (e.g. re-stamping `last_validated`, adding a tool's narrative line) | Config DATA (`suppliers.json` / `categories.json` / `tags.json` / `standing-rules.yaml` values) |
 | `{SOURCES_MANIFEST}` (active / historical-only sources + parser paths) | Tool code (any script under `../../scripts/`) or a tool's pytest test |
 | The doc-currency node-doc lookup manifest (`{DOC_CURRENCY_MANIFEST}`) | The `docs_potentially_stale` audit event (it CONFIRMS the signal is cleared — it does not emit it) |
@@ -35,7 +35,7 @@ Reconcile the finance module's living documentation with an approved durable-str
 
 ```
 WORKFLOWS_DIR        = 3-resources/tools/sb-os/finance/workflows
-BOOKKEEPER_DIR       = {WORKFLOWS_DIR}/bookkeeper
+BOOKKEEPER_DIR       = {WORKFLOWS_DIR}/sb-bookkeeper
 SCRIPTS_DIR          = 3-resources/tools/sb-os/finance/scripts
 TOOLS_INDEX          = {SCRIPTS_DIR}/tools-index.md
 FINANCE_CLAUDE_MD    = 3-resources/tools/sb-os/finance/CLAUDE.md
@@ -57,7 +57,7 @@ The set of living documents this companion keeps current. These are the doc surf
 |-------------|------|-------------------|---------------------------------|
 | Data-flow map (target state) | `{DATA_FLOW_MAP}` | End-to-end pipeline: data stores, producers, consumers, transformations, per-source parser map, lineage table | A data store changed, a producer/consumer changed, a transformation changed, a source was added/deprecated, a schema bumped |
 | Finance-module `CLAUDE.md` | `{FINANCE_CLAUDE_MD}` | The finance layer's behavioral contracts (wiki extension, policy read-rules, doc-currency layer 1 narrative) | A behavioral contract or read-rule changed |
-| `bookkeeper.md` + step files | `{BOOKKEEPER_DIR}/bookkeeper.md` + `{BOOKKEEPER_DIR}/{gastos,investimentos}/step-*.md` | Per-component behavioral contract: what each flow/step does, the gatekeeper rules | A step's behavior changed, a new tool changed how a step runs, a config contract a step reads changed |
+| `sb-bookkeeper.md` + step files | `{BOOKKEEPER_DIR}/sb-bookkeeper.md` + `{BOOKKEEPER_DIR}/{gastos,investimentos}/step-*.md` | Per-component behavioral contract: what each flow/step does, the gatekeeper rules | A step's behavior changed, a new tool changed how a step runs, a config contract a step reads changed |
 | `tools-index.md` | `{TOOLS_INDEX}` | The tool registry — narrative (taxonomy, conventions) + one YAML block per registered tool | A tool was added/changed/retired, or a tool's `last_validated` / fields need re-stamping |
 | `sources-manifest.md` | `{SOURCES_MANIFEST}` | Active / historical-only sources and their parser paths | A source/parser was added, deprecated, or its path changed |
 | Standing-rules prose | the prose docs accompanying `standing-rules.yaml` (per the change spec's `doc_sections`) | Per-section rule documentation | A standing-rules section's behavior or consumer changed |
@@ -71,7 +71,7 @@ The companion touches ONLY the surfaces the change spec implicates — never a b
 
 ## Dispatch Contract (what the caller passes in)
 
-When a sibling's gatekeeper loop takes the Seam 2 branch (Rule B step 3 of `../bookkeeper/gatekeeper-loop.md` — durable structure changed, docs must be brought current), it dispatches this companion via the Agent tool with a prompt carrying the **change spec**:
+When a sibling's gatekeeper loop takes the Seam 2 branch (Rule B step 3 of `../sb-bookkeeper/gatekeeper-loop.md` — durable structure changed, docs must be brought current), it dispatches this companion via the Agent tool with a prompt carrying the **change spec**:
 
 | Field | Meaning |
 |-------|---------|
@@ -102,7 +102,7 @@ For each surface resolved in Step 1, update ONLY the sections that describe the 
 1. **Read the current section, then the change.** Compare what the doc says against what the structure now does. Edit the prose/table/entry so it matches reality. Surgical — touch only the lines the change implicates; do not reflow, re-style, or "improve" adjacent sections.
 2. **`{TOOLS_INDEX}` re-stamp (the common case for a tool change).** `tool-builder` appends a tool's YAML block as part of ITS definition-of-done (`../tool-builder/` Step 5.2); this companion does NOT duplicate that append. It re-stamps `last_validated` to today's date when the tool was just re-validated, updates a changed field (e.g. `outputs` after a behavior change), and adds the tool to any narrative list in the index that enumerates tools by class. If the change RETIRED a tool, the companion marks the entry retired per the index's convention (it does not silently delete a seeded block).
 3. **`{DATA_FLOW_MAP}` edit.** When a store/producer/consumer/transformation/source changed, edit the matching § (e.g. § 4.4 per-source parser map for a new parser; § 6 lineage table for a new derived field; the Delta Summary row if the change is a new end-state delta). Keep the document's existing reading-rule convention (sections that differ from current state are written in full; unchanged sections point back to `data-flow-map.md §X`).
-4. **Consistency check (FM-3 — cross-section).** After editing a section, scan the OTHER doc surfaces for a statement about the same structure that now contradicts the edit (e.g. `bookkeeper.md` says "5 banks" while the data-flow map now says 6). If a contradiction exists, reconcile it in the same dispatch and note it in the returned diff. This is the only mechanism that catches contradicting docs — it is a judgment pass, not an automated diff. Source: `p2-19-documentation-currency.md` § FM-3 + Option D layer roles.
+4. **Consistency check (FM-3 — cross-section).** After editing a section, scan the OTHER doc surfaces for a statement about the same structure that now contradicts the edit (e.g. `sb-bookkeeper.md` says "5 banks" while the data-flow map now says 6). If a contradiction exists, reconcile it in the same dispatch and note it in the returned diff. This is the only mechanism that catches contradicting docs — it is a judgment pass, not an automated diff. Source: `p2-19-documentation-currency.md` § FM-3 + Option D layer roles.
 
 ### Step 3 — Confirm the staleness signal is cleared for the touched surfaces
 
@@ -120,13 +120,13 @@ The reconcile is not "done" until the doc-currency signal for every touched surf
    - **Correct** → the caller stages the doc edits with the structural change and proceeds to commit (the hard block passes).
    - **Needs revision** → the caller re-dispatches this companion with `prior_output` + the user's `correction`. Return to Step 2. This is the batched-iteration loop — one reconcile/return cycle per dispatch, repeated until the user confirms the docs are current.
 
-The companion never loops internally against the user; each iteration is a discrete dispatch the caller brokers — the same model as the sibling `tool-builder` companion. This keeps `bookkeeper`-as-gatekeeper continuity and lets any sibling drive the loop identically.
+The companion never loops internally against the user; each iteration is a discrete dispatch the caller brokers — the same model as the sibling `tool-builder` companion. This keeps `sb-bookkeeper`-as-gatekeeper continuity and lets any sibling drive the loop identically.
 
 ---
 
 ## Audit-event behavior
 
-This companion writes docs, not ledgers — but the doc reconcile is part of resolving a deviation, and the deviation's structural change already rode the workflow's audit-event protocol (one event per `(source_file, destination_file_path)` per run, fail-soft, appended to `.user/finance/bookkeeper/audit/events-{YYYY}.jsonl` — see `../bookkeeper/gatekeeper-loop.md` § Audit-event behavior). The companion does NOT invent a second audit mechanism and does NOT emit the `docs_potentially_stale` event (the instrumented scripts emit it on write — `p5-10`). Its role in the audit chain is to CLEAR the pending staleness signal by making the docs current (Step 3), not to emit signals.
+This companion writes docs, not ledgers — but the doc reconcile is part of resolving a deviation, and the deviation's structural change already rode the workflow's audit-event protocol (one event per `(source_file, destination_file_path)` per run, fail-soft, appended to `.user/finance/bookkeeper/audit/events-{YYYY}.jsonl` — see `../sb-bookkeeper/gatekeeper-loop.md` § Audit-event behavior). The companion does NOT invent a second audit mechanism and does NOT emit the `docs_potentially_stale` event (the instrumented scripts emit it on write — `p5-10`). Its role in the audit chain is to CLEAR the pending staleness signal by making the docs current (Step 3), not to emit signals.
 
 ---
 
