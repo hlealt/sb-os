@@ -1,6 +1,4 @@
-# Wiki Schema (v4 — purpose-lens)
-
-> **Validation window (v4).** The `purpose.md` focus-lens depth/granularity wording (see "Regulatory layer — purpose.md" § "Per-step modulation") is tuned over the first ~10 real ingests before its semantics are frozen; window progress and the freeze decision are tracked in the feature plan's `shape.md`.
+# Wiki Schema (v5 — questions-layer)
 
 > **Status:** Locked design. Operational spec for the Karpathy-style wiki layer shipped by **sb-os v2** (per `sb-os-build/second-brain-os-architecture.md` §12 and Decisions Log #12). sb-os v1 ships only the `wiki_root` config slot in `sb-os.json` (default `3-resources/knowledge-base/`), the empty default folder, and a placeholder managed `CLAUDE.md` at `{wiki_root}/CLAUDE.md`. The schema, the four `sb-wiki-*` components, and any populated wiki content described below are out of v1 scope — they ship in **sb-os v2**. Agents and CLAUDE.md files reference this document only after v2 lands.
 
@@ -60,7 +58,7 @@ Examples: `local-llms-landscape`, `ai-memory-systems`, `mcp-evolution`, `mcp-deb
 
 ### Source
 
-A per-source synthesis. 1:1 with a raw file (Markdown or PDF). Combines agent-written content with user-written reflections (My take / Open questions / Dive deeper). Sources are the **entry points** of the wiki — flexibility in their structure is required, not optional.
+A per-source synthesis. 1:1 with a raw file (Markdown or PDF). Combines agent-written content with the user's `My take` reflection (v5 — question and dive-deeper reflections route to `{wiki_root}/questions.md`, not to the source page). Sources are the **entry points** of the wiki — flexibility in their structure is required, not optional.
 
 Naming: filename mirrors the raw counterpart's stem exactly, always with a `.md` extension (a PDF raw `Foo.pdf` yields source page `Foo.md`; the `raw:` frontmatter wikilinks `[[Foo.pdf]]`).
 
@@ -83,6 +81,8 @@ The four page types above are the **base set**. Other sb-os modules MAY add thei
 ```
 3. Resources/knowledge-base/
 ├── purpose.md                    OPTIONAL regulatory file — focus lens for ingest (not a page; lint skips it)
+├── questions.md                  OPTIONAL user open-questions queue (not a page; lint OWNS sweep/graduate/prune)
+├── open-gaps.md                  lint-generated read-only aggregate of all open questions, both homes (not a page)
 ├── log.md                        actionable queue (candidate-topic + candidate-mention)
 ├── raw/
 │   ├── {origin}/                 articles, podcasts, papers — by source origin
@@ -113,6 +113,8 @@ The four page types above are the **base set**. Other sb-os modules MAY add thei
 Type folders are stable — `concepts/`, `entities/`, `topics/`, `sources/` never rename or reorganize. Per-kind subfolders WITHIN a type folder are an opt-in subdivision pattern proposed by lint when one kind grows large enough to warrant separation (see "Folder subdivision" below). Pre-subdivision, every type folder is flat.
 
 `{wiki_root}/purpose.md` is an **optional regulatory file**, not a wiki page and not raw — the regulatory-layer twin of this locked schema (full spec in "Regulatory layer — purpose.md" below). It is a root-level sibling of `raw/`, `wiki/`, and `log.md`; lint never walks it (it lives outside the `wiki/` and `raw/` subtrees) and MUST skip it entirely. Absent → ingest behaves exactly as today.
+
+`{wiki_root}/questions.md` is an **optional** user open-questions queue and `{wiki_root}/open-gaps.md` is its **lint-generated, read-only** cross-wiki aggregate — neither is a wiki page or raw (full spec in "Questions layer — questions.md" below). Both are root-level siblings of `raw/`, `wiki/`, `log.md`, and `purpose.md`; lint skips them from page/orphan/stub checks. Absent `questions.md` → ingest/lint behave exactly as today.
 
 ## Folder subdivision
 
@@ -284,6 +286,10 @@ No additional frontmatter. While unpromoted, a topic candidate lives in `log.md`
 
 `type: purpose` is a valid frontmatter value reserved for the single regulatory file `{wiki_root}/purpose.md` (see "Regulatory layer — purpose.md"). It is **NOT a page type** and MUST NOT be added to the page-type enum (`concept | entity | topic | source`). A file carrying `type: purpose` is excluded from page-type checks, leaf indexes, and orphan detection — it is regulatory configuration, not synthesis. This is base behavior, registered identically in the runtime shared file `wiki/workflows/shared/frontmatter-schemas.md` (not a `wiki-ext`).
 
+### `type: questions` / `type: questions-index` — non-page values
+
+`type: questions` is reserved for the single file `{wiki_root}/questions.md`, and `type: questions-index` for the single lint-generated file `{wiki_root}/open-gaps.md` (see "Questions layer — questions.md"). Neither is a page type — do NOT add either to the page-type enum (`concept | entity | topic | source`). A file carrying either value is excluded from page-type checks, leaf indexes, and orphan detection — it is queue/aggregate data, not synthesis. This is base behavior, registered identically in the runtime shared file `wiki/workflows/shared/frontmatter-schemas.md` (not a `wiki-ext`).
+
 ### Status field — DEFERRED
 
 Stub-state is detected structurally (see Stub policy). No `status:` frontmatter field at v1. Revisit only if lint surfaces a real need after the first 5–10 ingests.
@@ -365,12 +371,12 @@ Required: `Sources`.
 | Section | Owner |
 |---------|-------|
 | `My take` | The user — why it mattered, what surprised, agreements/disagreements |
-| `Open questions` | The user — what's unclear, what to dive into |
-| `Dive deeper` | The user — checklist of follow-ups |
+
+`Open questions` and `Dive deeper` are NOT source-page sections (v5 — questions-layer). Question content from Stage-2 reflection routes to `{wiki_root}/questions.md` instead (see "Questions layer — questions.md"). The **topic** `Open questions` menu is unchanged.
 
 The `---` separators visually mark agent-half / user-half / sources.
 
-User-half sections are created as **empty shells** (heading only, no content) by ingest step 2 — not stub-flagged when empty (this is the page's natural post-ingest state). The user fills them via Stage 2 of the ingest checkpoint OR later in Obsidian editor.
+The `My take` user-half section is created as an **empty shell** (heading only, no content) by ingest step 2 — not stub-flagged when empty (this is the page's natural post-ingest state). The user fills it via Stage 2 of the ingest checkpoint OR later in Obsidian editor.
 
 ## Citation format
 
@@ -409,7 +415,7 @@ The `My take` cell distinguishes **pre-reflect** (the user has not yet been prom
 | State | Token in cell | Meaning | Source page state |
 |-------|---------------|---------|-------------------|
 | Pre-reflect | `pending` | Stage 2 was skipped, ignored, or never reached — the source page's `My take` section is an empty shell awaiting user action. | `My take` heading present, body empty |
-| Post-reflect-empty | `—` (em-dash, U+2014) | Stage 2 ran and the user explicitly recorded reflection content without a take. Finalized. | `My take` heading present, body empty while `Open questions` or `Dive deeper` has substantive content |
+| Post-reflect-empty | `—` (em-dash, U+2014) | Stage 2 ran and the user explicitly routed reflection content to `questions.md` without recording a take. Finalized. | `My take` heading present, body empty while Stage 2 captured one or more `questions.md` entries (`seeded-by:` this source) |
 | Reflected | 1-sentence opinion derived from the source page's `My take` section (≤280 chars; truncate with ellipsis if longer) | The user filled `My take` on the source page. Index cell mirrors the take. | `My take` heading present, body has substantive content |
 
 **Rationale.** The two empty states have different downstream behaviors (see below) and different remediations from the user's standpoint. Blank conflates them. Two human-readable, typographically distinct tokens preserve the distinction at a glance and let lint detect each state programmatically. `pending` was chosen for its action-pending semantics (a verb-shaped keyword the user reads as "needs me to act"); `—` (em-dash) was chosen for its long-standing convention as a typographic null marker (the user reads it as "nothing here, intentionally").
@@ -419,10 +425,10 @@ The `My take` cell distinguishes **pre-reflect** (the user has not yet been prom
 | State | Written by | When | Lint behavior |
 |-------|-----------|------|---------------|
 | `pending` | `sb-wiki-ingest` step 8 (initial) AND step 11 if Stage 2 is skipped, ignored, or receives no routed content | At end of ingest when no take was captured | The 7-day staleness rule applies — lint may re-sync (no-op if source page's `My take` body is still empty) |
-| `—` | `sb-wiki-ingest` step 11 if Stage 2 receives `Open questions` or `Dive deeper` content while `My take` remains empty — see Stage 2 finalization rule below | At end of Stage 2 | Final. The 7-day staleness rule does NOT apply — `—` rows do NOT age out. Lint preserves `—` on every pass (no-op). |
+| `—` | `sb-wiki-ingest` step 11 if Stage 2 routes reflection content to `questions.md` while `My take` remains empty — see Stage 2 finalization rule below | At end of Stage 2 | Final. The 7-day staleness rule does NOT apply — `—` rows do NOT age out. Lint preserves `—` on every pass (no-op). |
 | Reflected (1-sentence preview) | `sb-wiki-ingest` step 11 if the user filled `My take`; refreshed by `sb-wiki-lint` step 6 on every run | At end of Stage 2 / on every lint pass | Re-sync from the source page's `My take` section on every run, preserving the three-state distinction (if the source page's `My take` body is now empty after previously having content, the lint downgrades the cell to `—` only if a `pending` state cannot be inferred — see "Re-sync algorithm" below) |
 
-**Stage 2 finalization rule.** The `—` token is written ONLY when the user explicitly engaged Stage 2 and routed reflection content to `Open questions` or `Dive deeper` while leaving `My take` empty. If the user answered `n`, ignored the prompt, or sent an unrelated next command, the cell stays `pending` — the user did not produce a finalization signal.
+**Stage 2 finalization rule.** The `—` token is written ONLY when the user explicitly engaged Stage 2 and routed reflection content to `questions.md` (a question / dive-deeper captured as a `questions.md` entry) while leaving `My take` empty. If the user answered `n`, ignored the prompt, or sent an unrelated next command, the cell stays `pending` — the user did not produce a finalization signal.
 
 **Re-sync algorithm (lint step 6).** For each row:
 - If the source page's `My take` section has substantive content → write the 1-sentence preview (overwriting the prior cell value).
@@ -686,6 +692,95 @@ All standard Stage-1 controls (`accept-all` / `reject N` / `abort`, plus the top
 4. Peripheral treatment is **floored at today's baseline, _including cluster granularity_** → the lens may lean terser on optional discretionary extras but **never coarsens clustering below baseline**, so no source becomes thinner (fewer stubs/links) than it would be today. Dial-UP for in-focus (finer granularity, more stubs) is the intended, allowed direction.
 5. Malformed `purpose.md` → warn and proceed lens-OFF (never abort the ingest).
 
+## Questions layer — questions.md
+
+`{wiki_root}/questions.md` is an **optional** registry of the **user's open questions** — a queue-style inbox (framed as actionable, **not a log**) that the wiki gradually answers as sources land and topics form. Questions are captured during ingest (Stage-2 reflection), on a `/sb-wiki-query` miss, in chat, or by direct Obsidian edit. The **answer-scan** revisits open questions at ingest (active) and lint (periodic) and accretes cited answers inline until each question **graduates** to a page or is **retired**. It never drops content and never alters any deterministic rule.
+
+### Artifact, location, optionality
+
+| Property | Rule |
+|----------|------|
+| Location | `{wiki_root}/questions.md` — root-level sibling of `raw/`, `wiki/`, `log.md`, `purpose.md`. NOT a wiki page (not under `wiki/`), NOT raw. |
+| Frontmatter | `type: questions` — a non-page value (excluded from page-type checks, indexes, orphan detection; see "Frontmatter schemas" § `type: questions`). |
+| Optionality | Absent → questions layer OFF → ingest/lint behave **exactly** as today. Mirrors the `purpose.md` no-op contract. |
+| Malformed | Warn and proceed as if absent; NEVER abort the ingest or lint. |
+| Ownership | Vault content (personal). Only the *mechanism* that reads/writes it ships in sb-os. |
+| Maintenance owner | **Lint OWNS** `questions.md` maintenance — sweep, graduation proposals, prune, and the `open-gaps.md` regeneration (see "The answer-scan" below). When the file is absent, lint skips it entirely. |
+
+### Entry schema
+
+Each entry is an H2 heading (same shape family as `log.md` entries). The runtime mirror of this shape is `wiki/workflows/shared/question-entry-shapes.md`.
+
+```markdown
+## [YYYY-MM-DD] <question text>
+relates:
+- "[[<page>.md]]"          # 0..n wikilinks to the pages the question concerns
+seeded-by: "[[<source>.md]]"  # OPTIONAL — present when captured during ingest; absent when hand-added
+answer:
+- <claim that partially or fully answers it> [^1]   # accretes inline over scans; each bullet cited
+
+[^1]: [[<source>.md]]
+```
+
+| Field | Rule |
+|-------|------|
+| H2 heading | `## [YYYY-MM-DD] <question>` — the capture date in brackets, then the question text. |
+| `relates:` | 0..n quoted wikilinks to the concept/entity/topic/source pages the question concerns. May be empty for a cross-cutting question tied to no existing page. |
+| `seeded-by:` | Optional single quoted wikilink to the source that surfaced the question at ingest. Absent when the question was hand-added (chat, `/sb-wiki-query` miss, or Obsidian). |
+| `answer:` | Accretes inline as a bulleted list; each bullet carries an `[^N]` citation, with `[^N]: [[<source>.md]]` footnote defs (reuse the wiki citation convention — see "Citation format"; do NOT reinvent). |
+
+**NO `status` field.** State is **inferred**: a question is `answered` iff an `answer:` block with at least one bullet exists, else `open`. `kind` and `origin` are **deliberately absent** — everything is a question (no question/thread distinction), and the two-homes model removes the need to record where a question came from.
+
+### Two homes
+
+| Home | Holds | How it resolves |
+|------|-------|-----------------|
+| **Topic `Open questions`** (stays on the topic page — menu UNCHANGED) | agent-authored gaps for *that* topic | the scan answers it → **strike the line, fold the answer into the topic body** via the existing `PROPOSED TOPIC UPDATES` append-only machinery. No entry ever moves into `questions.md`. |
+| **`questions.md`** | the **user's** registered questions, including cross-cutting ones tied to no existing topic | inline `answer:` accretes → **graduate** to a page (via `sb-wiki-create-topic`) **or** **retire** → entry **REMOVED** from the file. |
+
+Consequence: there is no single pane showing every open question across the wiki — `open-gaps.md` (below) recovers that view as a lint-generated aggregate over **both** homes.
+
+### Lifecycle
+
+```
+open ──(scan / query / manual answer accretes inline)──▶ answered
+   answered ──(lint GRADUATION PROPOSAL accepted)──▶ promoted ⇒ REMOVED (the page is the record)
+   answered/open ──(user retires)─────────────────▶ retired   ⇒ REMOVED
+```
+
+- `open` and `answered` are the only transient states, inferred from `answer:` presence; neither is stored as a field.
+- **Graduation** invokes the existing `sb-wiki-create-topic` skill (which carries its own `extend N` / `new` overlap check) — the agent **NEVER auto-authors** a topic page.
+- Resolution signal is the wiki's existing model: **the page exists ⇒ the queue entry is gone** (same principle as `candidate-topic` in `log.md`). Retirement removes the entry on user judgment with no page.
+
+### The answer-scan (the engine, not a store)
+
+The scan matches open questions in **both** homes against new and existing wiki content. It runs in two places:
+
+| Where | Behavior |
+|-------|----------|
+| **Ingest** (`/sb-wiki-ingest`, active) | Load `questions.md` (skip if absent). Match the new source against open questions in both homes, then surface a **`PROPOSED ANSWERS`** block at the Stage-1 checkpoint alongside the existing proposal blocks. **Default reject.** On accept: topic-home → strike the line + fold the answer into the topic body (append-only + cite); `questions.md` → append an inline `answer:` bullet (cited). Silent mode auto-**rejects** all proposed answers (same posture as topic updates). |
+| **Lint** (`/sb-wiki-lint`, periodic) | A `questions.md` step (skip if absent): **sweep** every open question (both homes) against the existing wiki for now-available answers (off the ingest hot-path → may be more thorough than ingest's mechanical match); **GRADUATION PROPOSAL** — surface mature `answered` entries → on accept invoke `sb-wiki-create-topic` (user-gated, same model as `SUBDIVISION` / `RENAME`); **prune** — remove `questions.md` entries that are promoted (page exists) or retired; verify `relates:` / `seeded-by:` wikilinks resolve via the existing wikilink check; **regenerate `open-gaps.md`**. |
+
+> **Validation window — ON.** Three heuristics are run ON for an initial validation window (≈ first 10 graduations / scans) before their wording is frozen here, exactly as the `purpose.md` design did: (1) the **graduation maturity** heuristic (when an accreted answer is "ripe" for a page); (2) the **scan match thresholds** (how much wikilink/token overlap fires a `PROPOSED ANSWER` — starting point: mirror the speculative-topic tier, ≥2 shared substantive tokens); (3) the **lint sweep thoroughness** (how much more than ingest's mechanical match the sweep does). Tune in the window, then freeze.
+
+### `open-gaps.md` — lint-generated aggregate
+
+| Property | Rule |
+|----------|------|
+| Location | `{wiki_root}/open-gaps.md` — root-level sibling of `questions.md`. NOT a wiki page, NOT raw. |
+| Frontmatter | `type: questions-index` — a non-page value (excluded from page-type checks, indexes, orphan detection; see "Frontmatter schemas" § `type: questions`). |
+| Generation | **Lint-generated, READ-ONLY** — regenerated in full on every lint run. The user never hand-edits it; edits are overwritten. |
+| Content | Aggregates every open question across **both** homes — `questions.md` entries AND topic-page `Open questions` lines — with backlinks to the home (the topic page, or the `questions.md` entry). Recovers the single-pane visibility the two-homes model gives up. |
+| Optionality | Absent `questions.md` AND no topic `Open questions` → lint produces an empty or skipped `open-gaps.md`; presence of the file is never required for ingest/lint to run. |
+
+### Optionality & determinism guarantees
+
+1. `questions.md` absent → ingest/lint output **identical** to today (no-op contract).
+2. The scan **proposes**, never silently rewrites — every answer and graduation is user-gated (default reject), like the existing topic-update and subdivision/rename proposals.
+3. The scan **never drops** wiki content; topic-question resolution is an **append-only** topic update plus a strike of the answered line.
+4. Graduation **never auto-authors** a topic page — it routes through `sb-wiki-create-topic`.
+5. Malformed `questions.md` → warn and proceed as if absent (never abort the ingest or lint).
+
 ## Operations
 
 Four operations covering the wiki lifecycle:
@@ -716,7 +811,7 @@ Two invocations: `/sb-wiki-ingest <slug>` (default, interactive) and `/sb-wiki-i
 | 8 | Update wiki sources index (`What it says` filled; `My take` set to `pending` — populated post Stage 2 per the three-state rule) | Agent |
 | 9 | Append `candidate-topic` and `candidate-mention` entries to `log.md` when triggered (the actionable queue). NO `ingest` / `concept-created` / `entity-created` / `topic-updated` entries — created pages and updates are recorded by the pages themselves | Agent |
 | 10 | **Stage 1 checkpoint**: present structured table + PROPOSED TOPICS block; the user accepts-all / rejects N / aborts file changes; per topic: accept (agent invokes `sb-wiki-create-topic` skill now) / defer (keeps as candidate in log). Approved changes commit before Stage 2 begins. | Agent + User |
-| 11 | **Stage 2 checkpoint** (optional, post-commit): present reflection prompt after approved changes are committed. The user can ignore it, decline it, or answer with freeform reflection content in any order. The agent routes content to `My take` / `Open questions` / `Dive deeper` by intent, writes routed sections, and syncs the `My take` column to the wiki sources index. | Agent + User |
+| 11 | **Stage 2 checkpoint** (optional, post-commit): present reflection prompt after approved changes are committed. The user can ignore it, decline it, or answer with freeform reflection content in any order. The agent routes content by intent — `My take` → the source page `My take` section; questions / dive-deepers → `{wiki_root}/questions.md` entries (`seeded-by:` this source) — writes the routed content, and syncs the `My take` column to the wiki sources index. | Agent + User |
 
 **No mid-flow user input during steps 1–9.** All user interaction happens at steps 10–11.
 
@@ -787,13 +882,13 @@ The user can answer with a bundled, out-of-order reflection. The agent routes by
 - `Open questions`: "open questions", "question", "dúvida", "pergunta", "unclear", "não entendi".
 - `Dive deeper`: "dive deeper", "deep dive", "deep diver", "dive deepr", "follow up", "aprofundar", "quero dive deeper em", "quero me aprofundar em".
 
-Explicit or semantically clear content MUST go to its matching section even if it arrives while another section is displayed. Example: "quero dive deeper em graph databases" goes under `Dive deeper`, never under `My take`. If a response contains multiple routed spans, write each span under its matching heading. If a response contains substantive text with no routing signal, write it under `My take`. If routing is ambiguous and misrouting would change meaning, ask one targeted clarification.
+Explicit or semantically clear content MUST go to its matching destination even if it arrives while another category is displayed. `My take` content → the source page `My take` section. `Open questions` and `Dive deeper` content → `{wiki_root}/questions.md` entries (`seeded-by:` this source; one entry per question/dive-deeper) per "Questions layer — questions.md" and `question-entry-shapes.md`; they are NOT written back to the source page (v5 — the source page carries `My take` only). Example: "quero dive deeper em graph databases" becomes a `questions.md` entry, never a source-page section. If a response contains multiple routed spans, route each span to its matching destination. If a response contains substantive text with no routing signal, write it under `My take`. If routing is ambiguous and misrouting would change meaning, ask one targeted clarification.
 
-The agent re-syncs the `My take` index cell per the three-state rule defined under "Wiki sources index format" — write the 1-sentence preview if `My take` was filled; write `—` if Stage 2 produced `Open questions` or `Dive deeper` while `My take` stayed empty; leave `pending` if Stage 2 was declined, ignored, or produced no routed content.
+The agent re-syncs the `My take` index cell per the three-state rule defined under "Wiki sources index format" — write the 1-sentence preview if `My take` was filled; write `—` if Stage 2 routed `Open questions` or `Dive deeper` content to `questions.md` while `My take` stayed empty; leave `pending` if Stage 2 was declined, ignored, or produced no routed content.
 
 #### Silent (non-interactive) mode
 
-`/sb-wiki-ingest silent <slug>` runs the SAME 11-step flow with EVERY user-interaction point auto-resolved to a fixed default. It exists so a caller (an orchestrator subagent, a research-mode auto-ingest, `/sb-wiki-ingest-all`) ingests a source end-to-end with NO prompts and receives a machine-parseable result. Steps 0–9 are IDENTICAL to the default mode. The mode changes ONLY the two checkpoints and the slug-disambiguation behavior; everything else (clustering, stub rules, append-only protection, citation discipline, candidate-trigger detection) is unchanged.
+`/sb-wiki-ingest silent <slug>` runs the SAME 11-step flow with EVERY user-interaction point auto-resolved to a fixed default. It exists so a caller (an orchestrator subagent, a research-mode auto-ingest, `/sb-wiki-ingest-all`) ingests a source end-to-end with NO prompts and receives a machine-parseable result. Steps 0–9 are IDENTICAL to the default mode. The mode changes the two checkpoints (Stage 1 auto-resolution — including the v5 firm-topic-update auto-apply below — and Stage 2 skip) and the slug-disambiguation behavior; everything else (clustering, stub rules, append-only protection, citation discipline, candidate-trigger detection) is unchanged.
 
 The default (interactive) mode is the behavior specified throughout this section. When the `silent` keyword is ABSENT, NONE of the silent overrides below apply — the command behaves EXACTLY as the default-mode spec above.
 
@@ -803,10 +898,13 @@ The default (interactive) mode is the behavior specified throughout this section
 |----------------|--------------|-----------------|
 | Stage 1 file changes (step 10) | User chooses `accept-all` / `reject N` / `abort` | Auto `accept-all` — commit every staged file change. NEVER `reject`, NEVER `abort`. |
 | Proposed topics (step 10 PROPOSED TOPICS) | User picks `accept N` / `defer N` (default defer all) | `defer` ALL — every `candidate-topic` log entry persists; NEVER invoke `sb-wiki-create-topic` mid-run. |
-| Firm topic updates (step 10 PROPOSED TOPIC UPDATES) | User picks `accept N` / `reject N` (default reject all) | `reject` ALL. |
-| Speculative topic updates (step 10 SPECULATIVE TOPIC UPDATES) | User picks `accept N` / `reject N` (default reject all) | `reject` ALL. |
+| Firm topic updates (step 10 PROPOSED TOPIC UPDATES — genuine firm-tier entries ONLY; answer-origin entries excluded, see PROPOSED ANSWERS row) | User picks `accept N` / `reject N` (default reject all) | **`accept` ALL — APPLY each via the step-4.5 append-only machinery** (append the `[^N]: [[<raw-filename>]]` footnote + the staged body bullet under the topic-shape-appropriate section; bump `last-touched`; append-only protection NEVER overwrites existing prose). Write ONE audit record per applied update into the summary `Flags` field. This INVERTS the prior silent posture (was reject-all) — interactive mode still defaults to reject. The firm tier is mechanical (wikilink/slug match, no semantic "feels relevant"), so unattended apply stays safe. |
+| Speculative topic updates (step 10 SPECULATIVE TOPIC UPDATES) | User picks `accept N` / `reject N` (default reject all) | `reject` ALL. Write ONE audit record per rejected speculative update into `Flags`. NEVER apply unattended. |
+| Proposed answers (step 10 PROPOSED ANSWERS — both homes; INCLUDES answer-origin firm entries staged by Step 3·7c) | User picks `accept N` / `reject N` (default reject all) | `reject` ALL. Write ONE audit record per rejected proposed answer into `Flags`. NEVER apply unattended (no `questions.md` `answer:` accretion; no topic-home strike-and-fold). |
 | Stage 2 reflection (step 11) | Optional post-commit prompt | SKIPPED entirely — never presented, never awaited. The source page user-half stays empty shells; the wiki sources index `My take` cell stays `pending` (set at step 8). |
 | Mid-flow HALT | A `<slug>` resolving to multiple raw files HALTS at step 1 for disambiguation | No HALT — see slug-resolution rule below. |
+
+Only the FIRM tier of genuine topic updates auto-applies; speculative updates and proposed answers (including answer-origin firm entries) NEVER auto-apply. The audit records above are emitted to the structured-summary `Flags` channel (the existing caller-facing field — NO new `log.md` entry type, NO parallel log; `log.md`'s `topic-updated` type is retired per "Resolution signal" below and the queue holds no accretion/history entries). The applied topic page is its own durable record; `Flags` is the per-run audit trail `/sb-wiki-ingest-all` aggregates into its final-report counts (firm applied / speculative rejected / answers rejected). This is the v5 silent-mode behavior change.
 
 This silent mode is the SINGLE source of the non-interactive ingest semantics. `/sb-wiki-ingest-all` no longer carries its own copy — its subagents invoke `/sb-wiki-ingest silent <slug>` and inherit these defaults. A change here changes every caller; never re-state these defaults in a caller.
 
@@ -818,7 +916,7 @@ This silent mode is the SINGLE source of the non-interactive ingest semantics. `
 |-------|---------|
 | Per-file status | EXACTLY ONE of: `committed` (all staged changes committed) \| `partial (<reason>)` (source page committed, ≥1 staged change failed mid-commit — `<reason>` names what failed) \| `failed (<reason>)` (nothing committed — `<reason>` is `slug ambiguous: N matches`, `slug not found`, `duplicate raw: {title-slug}.pdf exists`, or the abort cause) |
 | New slugs | The list of NEW concept/entity page slugs created this run (filename stems, no `.md`); empty list if none |
-| Flags | Any scope-overlap detections and lint-relevant flags surfaced during the run (e.g. a `same-scope-opposing` Contradiction callout written, a deferred `candidate-topic`); empty if none |
+| Flags | Any scope-overlap detections, lint-relevant flags, and silent-mode audit records surfaced during the run (e.g. a `same-scope-opposing` Contradiction callout written, a deferred `candidate-topic`, a firm topic-update applied, a rejected speculative update, a rejected proposed answer); empty if none. The firm-apply / speculative-reject / answer-reject audit records are the v5 silent-mode audit trail — one line per record naming the topic page (or question), the action, and the citing source; `/sb-wiki-ingest-all` aggregates them into its final-report counts |
 
 Silent mode runs the full append-only protection, clustering, and trigger detection of the default flow — `partial`/`failed` reflect ONLY commit-time or slug-resolution outcomes, never a skipped step. The mode NEVER writes a topic page and NEVER runs `/sb-wiki-lint` (cross-origin healing and topic promotion stay the caller's job).
 

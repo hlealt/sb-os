@@ -71,12 +71,12 @@ When `{wiki_root}/purpose.md` is present, the focus lens modulates which optiona
 | Section | Owner |
 |---------|-------|
 | `My take` | User — why it mattered, what surprised, agreements/disagreements |
-| `Open questions` | User — what is unclear, what to dive into |
-| `Dive deeper` | User — checklist of follow-ups |
+
+`Open questions` and `Dive deeper` are NOT source-page sections (v5 — questions-layer). Question content from Stage-2 reflection routes to `{wiki_root}/questions.md` instead. The **topic** `Open questions` menu is unchanged.
 
 The `---` separator marks agent-half / user-half / sources boundaries.
 
-**Empty-shell rule:** User-half sections on Source pages MUST be created as empty shells (heading only, no content) by ingest step 2. Empty user-half sections do NOT count toward stub-state — this is the page's natural post-ingest state. The user fills them at Stage 2 or later in Obsidian.
+**Empty-shell rule:** The `My take` section on Source pages MUST be created as an empty shell (heading only, no content) by ingest step 2. An empty `My take` does NOT count toward stub-state — this is the page's natural post-ingest state. The user fills it at Stage 2 or later in Obsidian.
 
 ## Contradiction — Disputed Callout
 

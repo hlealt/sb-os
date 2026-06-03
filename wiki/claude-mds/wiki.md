@@ -57,6 +57,20 @@ Canonical spec (artifact, format, parsing contract, classification bands, discre
 
 ---
 
+## Questions Layer — questions.md
+
+`{wiki_root}/questions.md` is an **OPTIONAL** registry of the **user's open questions** — a queue-style inbox (actionable, NOT a log) that the wiki gradually answers as sources land and topics form. Questions are captured at ingest (Stage-2 reflection), on a `/sb-wiki-query` miss, in chat, or by direct Obsidian edit. The **answer-scan** revisits open questions at ingest (active) and lint (periodic) and accretes cited answers inline until each question **graduates** to a page (via `sb-wiki-create-topic` — never auto-authored) or is **retired**. It never drops content and never alters a deterministic rule.
+
+It is a root-level sibling of `raw/`, `wiki/`, `log.md`, and `purpose.md` — NOT a wiki page, NOT raw. It carries `type: questions` (a non-page value excluded from page-type checks, indexes, and orphan detection). **Lint OWNS** its maintenance — sweep, graduation proposals, prune, and regenerating the read-only cross-wiki aggregate `{wiki_root}/open-gaps.md` (`type: questions-index`).
+
+**Two homes.** Topic `Open questions` stay on the topic page (menu UNCHANGED) and resolve in place — strike the line + fold the answer into the topic body via the existing `PROPOSED TOPIC UPDATES` append-only machinery. `questions.md` holds the user's registered questions (including cross-cutting ones tied to no page) and accretes an inline `answer:` until it graduates or is retired (entry then REMOVED). `open-gaps.md` recovers the single-pane view across both homes.
+
+**Optionality (no-op contract).** Absent → questions layer OFF → ingest/lint behave exactly as today; malformed → warn and proceed as if absent, NEVER aborting ingest or lint. Mirrors the `purpose.md` no-op contract.
+
+Canonical spec (artifact, entry schema, two-homes resolution, lifecycle, the answer-scan at ingest + lint, `open-gaps.md`, determinism guarantees): schema § "Questions layer — questions.md".
+
+---
+
 ## Operations
 
 Four operations cover the wiki lifecycle.

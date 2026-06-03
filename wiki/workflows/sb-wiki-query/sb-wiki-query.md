@@ -24,6 +24,7 @@ This workflow uses `grep` / `ripgrep` for substring search across `{wiki_root}/w
 | `{wiki_root}/wiki/` | Wiki page tree (concepts, entities, topics, sources). |
 | `{wiki_root}/raw/` | Raw source tree. |
 | `{wiki_root}/log.md` | Actionable queue — `candidate-topic` + `candidate-mention` entries only. |
+| `{wiki_root}/questions.md` | OPTIONAL questions-layer registry — the user's open questions, loaded at Step 0 ONLY to decide whether the register-as-open-question offer fires at a query miss. Root-level sibling of `raw/`, `wiki/`, `log.md`; NOT a wiki page, NOT raw. Absent → loaded as empty; the register offer still fires and CREATES the file on first capture. Per `../../docs/wiki-schema.md` § "Questions layer — questions.md". |
 
 ## Shared Data Files
 
@@ -39,6 +40,7 @@ These files codify rules referenced across multiple `sb-wiki-*` workflows. Load 
 | `../shared/frontmatter-schemas.md` | 7 |
 | `../shared/section-menus.md` | 7 |
 | `../shared/log-entry-shapes.md` | 7 |
+| `../shared/question-entry-shapes.md` | 6 (register-as-open-question write) |
 
 ## Invocation
 
@@ -46,7 +48,16 @@ These files codify rules referenced across multiple `sb-wiki-*` workflows. Load 
 
 ## Flow
 
-Steps 1–5 run without user input. Step 6 is the single user interaction (file-back decision). Step 7 fires only if the user files the answer back.
+Step 0 (load `questions.md`) and Steps 1–5 run without user input. Step 6 is the single user interaction (file-back decision; on a genuine miss it ALSO offers to register the question). Step 7 fires only if the user files the answer back.
+
+### Step 0 — Load questions (register-offer gate)
+
+Mirrors the `/sb-wiki-ingest` Step 0.6 load contract — load only, NEVER write here. This step decides only whether the Step 6 register-as-open-question offer fires; it does NOT gate any Step 1–5 logic.
+
+1. Resolve `{wiki_root}/questions.md`.
+2. **Absent** → hold an EMPTY question set. The register offer at Step 6 STILL fires on a genuine miss and CREATES `questions.md` on first capture (create-on-first-capture — an explicit user write intent materializes the registry; matches `/sb-wiki-ingest` Stage-2 create-on-first-capture). Proceed to Step 1.
+3. **Malformed** (unreadable, invalid frontmatter, or no parseable H2 entries) → WARN and proceed as if absent (empty question set). NEVER abort the query. Proceed to Step 1.
+4. **Present and parseable** → no parsing of individual entries is required; the file's existence means the register write at Step 6 APPENDS rather than creates. Proceed to Step 1.
 
 ### Step 1 — Parse question; identify candidate page types and keywords
 
@@ -109,9 +120,9 @@ For each page in `picks` from steps 2–3:
 4. Use wikilink format per `../shared/naming-convention.md` Wikilinks rules — `[[<filename>.md]]` matching the target file's actual filename.
 5. If the answer surfaces a contradiction between two wiki pages or two sources, flag it explicitly in the prose (e.g., "On X, [[page-a.md]] argues Y while [[page-b.md]] argues Z"). Do NOT add a `> [!warning] Disputed` callout in this step — that is the ingest workflow's responsibility (per `sb-wiki-ingest.md` step 6).
 
-### Step 6 — Present answer + offer file-back
+### Step 6 — Present answer + offer file-back (+ register on a genuine miss)
 
-Present the answer to the user in the format below. The output VERBATIM matches the schema's `/sb-wiki-query` "QUERY" example layout.
+Present the answer to the user in the format below. The output VERBATIM matches the schema's `/sb-wiki-query` "QUERY" example layout. The file-back menu is presented on EVERY answer, unchanged.
 
 ```
 QUERY — "<question>"
@@ -137,6 +148,39 @@ User response handling for the file-back menu:
 | `[t]opic` | Proceed to step 7 with target type `topic`. |
 
 If the user response is ambiguous (no clear `c`/`e`/`t`/`s` letter), re-prompt with the same menu. Do NOT default to skip silently.
+
+#### 6m — Register-as-open-question offer (genuine miss ONLY)
+
+Fires ONLY when the answer presented is the **empty-evidence answer** — i.e., Step 3's grep/ripgrep returned zero hits across `wiki/` AND `raw/` and Step 5 emitted the empty-evidence template ("No wiki pages match this question — answer cannot be synthesized from the current wiki content."). NEVER fires on a successful (evidence-backed) answer; filing such an answer back is the file-back menu's job, not this offer's.
+
+On a genuine miss, present this offer ALONGSIDE the file-back menu (append it below the menu line):
+
+```
+This question can't be answered from the current wiki. Register it as an open question? (y/n)
+```
+
+User response handling for the register offer:
+
+| Response | Behavior |
+|----------|----------|
+| `n`, `[s]kip`, or no register response | Do NOT write a `questions.md` entry. The file-back menu still governs whether step 7 runs. |
+| `y` or equivalent register-yes | Write ONE `{wiki_root}/questions.md` entry per the shape below, then continue handling the file-back menu response (the two offers are independent). |
+
+Register write — append one H2 entry to `{wiki_root}/questions.md` per `../shared/question-entry-shapes.md`:
+
+- **H2 heading** `## [<today>] <question>` — `<today>` is the current date `YYYY-MM-DD`; `<question>` is the user's `<question>` verbatim.
+- **`relates:`** 0..n quoted wikilinks to any wiki page the question concerns (the `picks` set from steps 2–3, if any survived; on a true empty-evidence miss `picks` is empty, so OMIT the `relates:` field entirely — it is a cross-cutting question).
+- **OMIT `seeded-by:`** — this capture is USER-originated (a `/sb-wiki-query` miss), not ingest. Per `../shared/question-entry-shapes.md`, `seeded-by:` is absent when hand-added.
+- **OMIT `answer:`** — a freshly registered question is born `open` (no `answer:` block).
+- Write NO `status`, `kind`, or `origin` field.
+
+**Create-on-first-capture:** if `{wiki_root}/questions.md` is absent (Step 0 held an empty set), CREATE it with frontmatter `type: questions`, then append the entry. This matches `/sb-wiki-ingest` Stage-2 create-on-first-capture — an explicit user write intent materializes the registry. If the file already exists, append only (never rewrite existing entries).
+
+Worked entry (empty-evidence miss, no related page):
+
+```markdown
+## [2026-06-02] <the user's question verbatim>
+```
 
 ### Step 7 — File the answer back; append `query` log entry
 
@@ -192,8 +236,9 @@ End of flow.
 |---------|----------|
 | `{wiki_root}` cannot be resolved from `sb-os.json` | Halt before step 1; surface error. No writes. |
 | `<question>` empty | Halt at step 1; ask the user to provide a question. No writes. |
+| `{wiki_root}/questions.md` malformed at Step 0 (unreadable, invalid frontmatter, or no parseable H2 entries) | WARN and proceed with an EMPTY question set. NEVER abort the query. The Step 6m register offer still fires on a genuine miss; an accepted register CREATES a fresh `questions.md` (overwriting an unreadable file is NOT done — surface the conflict instead and skip the write). (Absent `questions.md` is NOT a failure — Step 0 loads it empty and Step 6m creates it on first capture.) |
 | Step 2 leaf index file missing for a `candidate-type` | Skip that leaf for indexed scoring; rely on the Karpathy fallback in step 3. Capture in answer if no other leaves contribute matches. |
-| Step 3 grep / ripgrep returns zero hits across `wiki/` AND `raw/` | Proceed to step 5 with the empty-evidence answer template ("No wiki pages match this question — answer cannot be synthesized from the current wiki content."). Step 6 still presents the file-back menu; if the user files-back, step 7 writes a stub-shaped page (no inline citations). |
+| Step 3 grep / ripgrep returns zero hits across `wiki/` AND `raw/` | Proceed to step 5 with the empty-evidence answer template ("No wiki pages match this question — answer cannot be synthesized from the current wiki content."). Step 6 still presents the file-back menu; if the user files-back, step 7 writes a stub-shaped page (no inline citations). Step 6m ALSO fires here (genuine miss) — offer to register the question as an open `questions.md` entry. |
 | `ripgrep` (`rg`) not installed | Fall back to `grep -r` for step 3 substring search. Both must be exhausted before declaring zero hits. |
 | Wikilink target in step 4 missing (broken link) | Skip the expansion silently; do NOT halt. The page is consulted only if it exists. |
 | User response at step 6 file-back menu ambiguous | Re-prompt with the same menu. Do NOT default to skip. |

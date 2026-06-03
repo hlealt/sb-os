@@ -310,13 +310,16 @@ def collect_kind_pages(type_dir: Path) -> tuple[dict[str, list[Path]], list[Path
 def detect_subdivision(wiki_root: Path, report: Report) -> None:
     """Detect kinds in concepts/ and entities/ that warrant subdivision.
 
-    Emits subdivision_proposals (count >=5) and kind_missing (pages without
-    a kind: value). Never moves files; the LLM lint workflow surfaces
+    Emits subdivision_proposals (count >=5), kind_missing (pages without
+    a kind: value), and generic_kind_flags (a flat kind whose suggested
+    subfolder collides with the parent type folder — a re-kind signal, never
+    a subdivision proposal). Never moves files; the LLM lint workflow surfaces
     proposals at step 9 and executes on user accept.
     """
     proposals: list[dict] = []
     stragglers: list[dict] = []
     kind_missing: list[str] = []
+    generic_kind_flags: list[dict] = []
     for type_folder in SUBDIVISION_TYPE_FOLDERS:
         type_dir = wiki_root / "wiki" / type_folder
         if not type_dir.exists():
@@ -351,6 +354,22 @@ def detect_subdivision(wiki_root: Path, report: Report) -> None:
             if count < SUBDIVISION_PROPOSE_FLOOR:
                 continue
             sample = sorted(p.stem for p in flat)[:5]
+            # A proposed subfolder equal to the parent type folder name
+            # (e.g. kind `concept` -> `concepts/` under concepts/) is a
+            # degenerate collision: the generic kind fails the blind-reader
+            # test and cannot graduate into a same-named subfolder. Emitting a
+            # subdivision proposal here would re-fire an unexecutable suggestion
+            # on every lint, so record a re-kind flag instead and skip it.
+            if subfolder == type_folder:
+                generic_kind_flags.append(
+                    {
+                        "type": type_folder,
+                        "kind": kind,
+                        "count": count,
+                        "sample_pages": sample,
+                    }
+                )
+                continue
             proposals.append(
                 {
                     "type": type_folder,
@@ -360,15 +379,12 @@ def detect_subdivision(wiki_root: Path, report: Report) -> None:
                     "domain_prefix_applied": prefixed,
                     "sample_pages": sample,
                     "naming_heuristic_applied": kind not in SUBDIVISION_NAMING_POLICY,
-                    # A proposed subfolder equal to the parent type folder name
-                    # (e.g. kind `concept` -> `concepts/` under concepts/) is an
-                    # invalid collision; flag so the LLM/user skips or renames it.
-                    "name_collides_with_parent": subfolder == type_folder,
                 }
             )
     report.detected["subdivision_proposals"] = proposals
     report.detected["subdivision_stragglers"] = stragglers
     report.detected["kind_missing"] = kind_missing
+    report.detected["generic_kind_flags"] = generic_kind_flags
 
 
 def detect_broken_wikilinks(wiki_root: Path, report: Report) -> None:

@@ -21,6 +21,7 @@ Read `3-resources/tools/sb-os/wiki/docs/wiki-schema.md` — Operations § "/sb-w
 | `{wiki_root}/raw/` | Raw source tree — Markdown (`.md`) and PDF (`.pdf`) sources. **EXCLUDES `raw/assets/`** (user-maintained binary attachments — per `../shared/folder-structure.md` "Asset Folder"). This workflow NEVER reads or writes `raw/assets/`. |
 | `{wiki_root}/log.md` | Actionable queue — `candidate-topic` + `candidate-mention` entries only. |
 | `{wiki_root}/purpose.md` | OPTIONAL regulatory file — the focus-lens source loaded at Step 0.5. Root-level sibling of `raw/`, `wiki/`, `log.md`; NOT a wiki page, NOT raw. Absent → lens OFF (ingest identical to today). Per `../../docs/wiki-schema.md` § "Regulatory layer — purpose.md". |
+| `{wiki_root}/questions.md` | OPTIONAL questions-layer registry — the user's open questions loaded at Step 0.6 for the answer-scan. Root-level sibling of `raw/`, `wiki/`, `log.md`, `purpose.md`; NOT a wiki page, NOT raw. Absent → questions layer OFF (ingest identical to today). Per `../../docs/wiki-schema.md` § "Questions layer — questions.md". |
 
 ## Shared Data Files
 
@@ -88,6 +89,15 @@ Read + parse the OPTIONAL regulatory file `{wiki_root}/purpose.md`. This loads t
 | `## Out of purpose` | Optional explicit off-purpose list; if absent, off-purpose = "matches no Focus area". |
 
 Lens ON modulates ONLY discretionary surfaces (Steps 2, 5 Title-only/Notable-Quote branches, 3·7b, 10). It NEVER alters a mechanical branch's logic, NEVER drops content, and NEVER suppresses a detected trigger (guarantees #2/#3). Peripheral treatment is floored at today's baseline including cluster granularity (guarantee #4).
+
+### Step 0.6 — Load questions (answer-scan)
+
+Read + parse the OPTIONAL questions-layer registry `{wiki_root}/questions.md`. This loads the open questions that the answer-scan matches the new source against at the Stage-1 `PROPOSED ANSWERS` block (Step 10). The canonical spec is `../../docs/wiki-schema.md` § "Questions layer — questions.md" — follow it; the entry schema and two-homes contract there are authoritative. The runtime entry shape is `../shared/question-entry-shapes.md`. This step ONLY loads — it NEVER writes (writes happen at Step 10 commit on user accept).
+
+1. Resolve `{wiki_root}/questions.md`.
+2. **Absent** → **questions layer OFF**: hold an EMPTY question set; skip ALL questions behavior for this run; the Step 10 `PROPOSED ANSWERS` block is omitted and every other step behaves EXACTLY as it does today (optionality guarantee #1). Proceed to Step 1.
+3. **Malformed** (unreadable, invalid frontmatter, or no parseable H2 entries) → WARN and proceed as if absent (empty question set, layer OFF). NEVER abort the ingest (guarantee #5). Proceed to Step 1.
+4. **Present and parseable** → parse every H2 entry per the entry schema and hold the **open** ones for the Step 10 scan. State is INFERRED — an entry is `open` iff it has no `answer:` block or zero `answer:` bullets; `answered` entries (≥1 `answer:` bullet) are skipped by the scan. For each open entry hold: the question text, its `relates:` wikilinks, and its `seeded-by:` wikilink (if any). Holding open questions does not gate any Step 1–9 logic — it feeds ONLY the Step 10 block.
 
 ### Step 1 — Read raw file
 
@@ -158,7 +168,7 @@ Section structure per `../shared/section-menus.md` Source page entry:
 |------|-------------------|
 | Agent half | `Substance` (always); `Connections` (always); `Notable quotes` / `Methodology` / `Counterpoints` per source kind selection rules |
 | Separator | `---` |
-| User half | `My take`, `Open questions`, `Dive deeper` — empty shells (heading only, no body) |
+| User half | `My take` ONLY — empty shell (heading only, no body) (v5 — questions-layer; `Open questions` / `Dive deeper` are NOT source-page sections, per `../shared/section-menus.md`. Stage-2 question/dive-deeper content routes to `{wiki_root}/questions.md` instead) |
 | Separator | `---` |
 | Sources | `Sources` section — required |
 
@@ -210,6 +220,31 @@ Citations: emit inline `[^N]` markers at every claim derived from the raw, then 
 
    **Lens — speculative ranking (discretionary; lens ON only).** When the lens is ON, re-rank the qualifying candidates by **focus overlap** (overlap with the source's classified `Focus area`) WITHIN the existing TOP-2 cap: focus overlap orders the list and breaks ties when token-overlap counts are equal. The firing rule (token overlap ≥2, firm-dedupe), the cap of 2, and the silent-drop of overflow are UNCHANGED — the lens only reorders the kept set, never widens it. Lens OFF → rank by token-overlap count only, exactly as above.
 
+### Step 3·7c — Answer-scan (match new source against open questions, BOTH homes)
+
+SKIP this step entirely if the questions layer is OFF (Step 0.6: `questions.md` absent or malformed). When OFF, hold an EMPTY `candidate-answers` set — the Step 10 `PROPOSED ANSWERS` block is omitted and the run is identical to today.
+
+Match THIS source against every **open** question in **BOTH** homes, using the SAME mechanical signal as the speculative-topic-update tier (Step 3·7b) — do NOT invent a new one:
+
+| Home | Open-question source |
+|------|----------------------|
+| **Topic-home** | Each `Open questions` line on each `{wiki_root}/wiki/topics/*.md` page (walked at Step 3). |
+| **`questions.md`** | Each open entry held from Step 0.6 (no `answer:` block or zero `answer:` bullets). |
+
+For EACH open question (either home) fire a candidate answer when the **token overlap** condition holds:
+
+| Condition | Detection |
+|-----------|-----------|
+| Token overlap | The question text shares ≥2 substantive tokens with this source's `Substance` section text (use the topic-home question's `Open questions` line text, or the `questions.md` entry's H2 question text). **Tokenize both with the EXACT rule defined at Step 3·7b** (lowercase; strip the stopword list; preserve kebab-case as a single token AND its hyphen-split parts). Threshold: ≥2 distinct substantive tokens shared. |
+
+For each fire, capture into `candidate-answers`: the home (`topic` or `questions.md`); the question identity (topic page path + the verbatim `Open questions` line for a topic-home fire; the `questions.md` entry's H2 heading for a `questions.md` fire); the matched tokens; and the proposed `answer:` claim — a 1-sentence claim derived from this source's `Substance` that addresses the question, carrying the source citation `[^N]: [[<raw-filename>]]`.
+
+**Topic-home routing — reuse the existing append-only path (NO parallel path).** For each topic-home fire, stage the corresponding topic update through `candidate-topic-updates` (the firm tier consumed at Step 4.5): the proposed change is the answer claim folded into the topic body under the topic-shape-appropriate section per the Step 4.5 Update-behavior routing, PLUS a strike of the matched `Open questions` line. The topic-home fire is surfaced to the user ONLY in the `PROPOSED ANSWERS` block (Step 10) — SUPPRESS its row from the `PROPOSED TOPIC UPDATES` block so the same resolution is never presented twice. Accepting the `PROPOSED ANSWERS` row applies the staged topic-update through the Step 4.5 machinery (append-only protection applies); rejecting it discards the staged update. Do NOT create a second write path for topic pages.
+
+This step prepares but does NOT write. Apply happens at Step 10 commit, only for accepted rows.
+
+> **Validation window — ON (§13 fuzzy thresholds).** The token-overlap threshold for firing a `PROPOSED ANSWER` (mirrored from the Step 3·7b speculative tier, ≥2 shared substantive tokens) is run ON for an initial validation window before its wording is frozen, exactly as the `purpose.md` design did. Tune in the window, then freeze. Per `../../docs/wiki-schema.md` § "Questions layer — questions.md" → "The answer-scan" validation-window note.
+
 ### Step 4 — Update existing entity/concept pages
 
 For each page in `existing-pages`:
@@ -236,7 +271,7 @@ For each entry in EITHER tier:
      - cross-application-shaped → `Key concepts` or `Key entities` (whichever holds the source's substance overlap)
      - other shapes → `Key concepts` / `Key entities` if the source introduces a new wikilinkable page; otherwise no body bullet (citation-only update)
    - Frontmatter: `last-touched: <today>`.
-4. Surface the staged proposal at Stage 1 (step 10) as a row in PROPOSED TOPIC UPDATES. Default user behavior is reject — the user must explicitly `accept N` to apply.
+4. Surface the staged proposal at Stage 1 (step 10) as a row in PROPOSED TOPIC UPDATES. Default user behavior is reject — the user must explicitly `accept N` to apply. **EXCEPTION — answer-origin firm entries:** a firm `candidate-topic-updates` entry staged by Step 3·7c (an answer to a topic's `Open questions` line) is surfaced in the `PROPOSED ANSWERS` block at Step 10 instead — SUPPRESS it from `PROPOSED TOPIC UPDATES` so the same resolution is never presented twice. Its staged change additionally includes the strike of the matched `Open questions` line, and accepting its `PROPOSED ANSWERS` row applies this same staged update.
 
 This step prepares but does NOT write. Apply happens at step 10 commit, only for accepted rows.
 
@@ -337,13 +372,20 @@ SPECULATIVE TOPIC UPDATES (low-confidence, default reject):
 |---|-------|---------|-----------------|
 | 1 | [[<topic-slug>.md]] | tokens: <token1>, <token2> ([[<new-stub-slug>.md]]) | + bullet under "<section-name>" + citation |
 
+PROPOSED ANSWERS (default reject):
+| # | question | home | overlap | proposed resolution |
+|---|----------|------|---------|---------------------|
+| 1 | <question text> | [[<topic-slug>.md]] | tokens: <token1>, <token2> | strike "Open questions" line + fold answer into "<section-name>" + citation |
+| 2 | <question text> | questions.md | tokens: <token1>, <token2> | + answer: bullet on the entry + citation |
+
 File changes: accept-all | reject N (e.g. "reject 3,4") | abort
 Topic decisions: accept N (creates now) | defer N (logs as candidate) | (default: defer all)
 Topic updates: accept N (applies append-only update) | reject N (skip) | (default: reject all)
 Speculative updates: accept N (applies append-only update) | reject N (skip) | (default: reject all)
+Proposed answers: accept N (applies answer) | reject N (skip) | (default: reject all)
 ```
 
-Omit the PROPOSED TOPICS block entirely if no triggers fired in step 6. Omit the PROPOSED TOPIC UPDATES block entirely if `candidate-topic-updates` is empty after step 3. Omit the SPECULATIVE TOPIC UPDATES block entirely if `candidate-topic-updates-speculative` is empty after step 3.
+Omit the PROPOSED TOPICS block entirely if no triggers fired in step 6. Omit the PROPOSED TOPIC UPDATES block entirely if `candidate-topic-updates` has no non-answer-origin entries after step 3 (answer-origin entries surface in PROPOSED ANSWERS, not here). Omit the SPECULATIVE TOPIC UPDATES block entirely if `candidate-topic-updates-speculative` is empty after step 3. Omit the PROPOSED ANSWERS block entirely if `candidate-answers` is empty after step 3·7c (questions layer OFF, or no question matched).
 
 User response handling:
 
@@ -358,19 +400,35 @@ User response handling:
 | Topic update `reject N` (per firm topic-update row, default if user omits) | No change to the topic page. No log entry. The detection is not preserved as a candidate — re-detected on future ingests if relevance recurs. |
 | Speculative update `accept N` (per speculative topic-update row) | Same write semantics as firm `accept N` above (no log entry). ALSO append the new stub's wikilink to the topic's `related:` frontmatter (so future firm-tier detection picks up the connection mechanically). |
 | Speculative update `reject N` (per speculative topic-update row, default if user omits) | No change to the topic page. No log entry. The detection is not preserved — re-detected on future ingests of related sources if token overlap recurs. |
+| Proposed answer `accept N` — **topic-home** row (home = `[[<topic>.md]]`) | Apply the staged firm topic-update from step 3·7c via step 4.5: append `[^N]: [[<raw-filename>]]` to the topic's `Sources`; append the answer bullet (with inline `[^N]`) under the topic-shape-appropriate section; STRIKE the matched `Open questions` line in place (`~~…~~`) — never delete it; bump `last-touched: <today>`. Append-only protection per `../shared/stub-policy.md` "Append-Only Protection" applies. NEVER auto-authors a page. No log entry — the topic page records its own content. |
+| Proposed answer `accept N` — **questions.md** row (home = `questions.md`) | Append an inline `answer:` bullet to that `questions.md` entry per `../shared/question-entry-shapes.md`: add the 1-sentence claim as a new `- <claim> [^N]` bullet under the entry's `answer:` field (create the `answer:` field if absent), with a matching `[^N]: [[<raw-filename>]]` footnote def. State flips `open → answered` by inference (≥1 bullet) — write NO `status` field. NEVER overwrite an existing bullet; accrete only. |
+| Proposed answer `reject N` (per row, default if user omits) | No change to the topic page or `questions.md` entry; for a topic-home row, discard the staged step-4.5 topic-update too. No log entry. The detection is not preserved — re-detected on future ingests (or by the lint sweep) if overlap recurs. |
 
-Default behavior when the user omits per-topic decisions: defer all topics, reject all topic updates (firm AND speculative).
+Default behavior when the user omits per-topic decisions: defer all topics, reject all topic updates (firm AND speculative), reject all proposed answers.
 
-**Silent mode override (step 10).** Do NOT present the Stage 1 preview. Do NOT prompt. Do NOT HALT mid-flow. Auto-resolve EVERY decision point to its fixed default, then RETURN the structured summary:
+**Silent mode override (step 10).** Do NOT present the Stage 1 preview. Do NOT prompt. Do NOT HALT mid-flow. Auto-resolve EVERY decision point to its fixed default, then RETURN the structured summary.
+
+**Bucket by ORIGIN, not by internal set (read before applying).** A firm `candidate-topic-updates` entry staged by Step 3·7c (an answer to a topic's `Open questions` line) lives in the SAME firm set as a genuine firm topic update, but it is an ANSWER. Bucket every firm-set entry by how it was staged: a genuine firm topic update (Step 3 firm-tier detection) auto-APPLIES below; an answer-origin entry (Step 3·7c — surfaced in `PROPOSED ANSWERS`, suppressed from `PROPOSED TOPIC UPDATES` per Step 4.5 EXCEPTION) is a PROPOSED ANSWER and auto-REJECTS below. NEVER auto-apply an answer-origin entry — doing so violates the `PROPOSED ANSWERS → reject` rule and mis-buckets the counts.
 
 | Decision point | Silent resolution |
 |----------------|-------------------|
 | Stage 1 file changes | Commit per `accept-all` — commit every staged file change. NEVER `reject` any row. NEVER `abort`. |
 | Proposed topics (PROPOSED TOPICS) | `defer` ALL — every `candidate-topic` log entry persists. NEVER invoke `sb-wiki-create-topic` mid-run. |
-| Firm topic updates (PROPOSED TOPIC UPDATES) | `reject` ALL. |
-| Speculative topic updates (SPECULATIVE TOPIC UPDATES) | `reject` ALL. |
+| Firm topic updates (PROPOSED TOPIC UPDATES — genuine firm-tier entries ONLY, answer-origin entries excluded) | **`accept` ALL — APPLY each via the step-4.5 append-only machinery** (append `[^N]: [[<raw-filename>]]` to the topic's `Sources`; append the staged body bullet under the topic-shape-appropriate section with inline `[^N]`; bump `last-touched: <today>`; append-only protection per `../shared/stub-policy.md` "Append-Only Protection" — NEVER overwrite existing prose). Write ONE audit record per applied update into the summary `Flags` field (see Audit records below). This is the v5 silent-mode change — interactive mode still defaults to reject. |
+| Speculative topic updates (SPECULATIVE TOPIC UPDATES) | `reject` ALL. Write ONE audit record per rejected speculative update into `Flags`. NEVER apply unattended. |
+| Proposed answers (PROPOSED ANSWERS — both homes; INCLUDES answer-origin firm entries) | `reject` ALL. Write ONE audit record per rejected proposed answer into `Flags`. NEVER apply unattended (no `questions.md` `answer:` accretion; no topic-home strike-and-fold). |
 
-These resolutions are IDENTICAL to the default-omission behavior above for topics, and to `accept-all` for file changes. After committing, RETURN the structured summary the caller parses, per the schema § "/sb-wiki-ingest" subsection "Silent (non-interactive) mode" → "Return — structured summary (silent)". The summary's per-file status MUST be `committed` when all staged changes commit; `partial (<reason>)` ONLY when the source page committed but ≥1 staged change failed mid-commit (`<reason>` names what failed); `failed (<reason>)` when nothing committed (slug-resolution outcome from step 1, or an abort cause). NEVER emit `partial`/`failed` for a skipped step — clustering, trigger detection, and append-only protection all run in full. The mode NEVER writes a topic page and NEVER runs `/sb-wiki-lint`.
+Only the FIRM tier of genuine topic updates auto-applies. Speculative updates and proposed answers (including answer-origin firm entries) NEVER auto-apply. For proposed topics and file changes these resolutions are IDENTICAL to the default-omission / `accept-all` behavior above. After committing, RETURN the structured summary the caller parses, per the schema § "/sb-wiki-ingest" subsection "Silent (non-interactive) mode" → "Return — structured summary (silent)". The summary's per-file status MUST be `committed` when all staged changes commit; `partial (<reason>)` ONLY when the source page committed but ≥1 staged change failed mid-commit (`<reason>` names what failed); `failed (<reason>)` when nothing committed (slug-resolution outcome from step 1, or an abort cause). NEVER emit `partial`/`failed` for a skipped step — clustering, trigger detection, and append-only protection all run in full. The mode NEVER writes a topic page and NEVER runs `/sb-wiki-lint`.
+
+**Audit records (silent firm-apply + rejections).** Each applied firm update and each rejected speculative-update / proposed-answer is recorded in the structured summary's `Flags` field (the existing caller-facing channel that already carries `deferred candidate-topic` flags — NO new `log.md` entry type, NO parallel log; `log.md`'s `topic-updated` type is retired and the queue holds no accretion/history entries per `../shared/log-entry-shapes.md`). One `Flags` line per record, each naming the topic page (or question), the action, and the citing source:
+
+| Record | `Flags` line shape |
+|--------|--------------------|
+| Firm update applied | `topic-update applied: [[<topic-slug>.md]] ← [[<raw-filename>]] (section "<section-name>")` |
+| Speculative update rejected | `speculative-update rejected: [[<topic-slug>.md]] (tokens: <t1>, <t2>)` |
+| Proposed answer rejected | `proposed-answer rejected: <home> — <question brief> ← [[<raw-filename>]]` |
+
+These `Flags` lines are what `/sb-wiki-ingest-all` aggregates into its final-report counts. The applied topic page itself is the durable record of its own updated content (per `../shared/log-entry-shapes.md` — pages record their own updates); `Flags` is the per-run audit trail the caller surfaces.
 
 **Lens — purpose band in the silent summary (lens ON only).** Silent mode shows NO Stage-1 banner. Instead, when the lens is ON, the structured summary INCLUDES the source's purpose band (`in-focus` | `peripheral` | `off-purpose`) from Step 2 — so `/sb-wiki-ingest-all` can list every off-purpose ingest in its final report for human review. The band is INFORMATIONAL: silent mode NEVER auto-aborts on `off-purpose` (per schema § "Off-purpose flag (Step 10)" → "Silent / bulk mode"). Lens OFF → omit the band field (summary identical to today).
 
@@ -382,46 +440,52 @@ These resolutions are IDENTICAL to the default-omission behavior above for topic
 
 **Silent mode override (step 11).** SKIP this step entirely — never present the prompt, never await a response. The source page user-half stays empty shells; the wiki sources index `My take` cell stays `pending` (set at step 8). The structured summary was already returned at step 10.
 
-Optional post-commit reflection pass. Skip entirely if Stage 1 was aborted OR the source page was rejected at Stage 1. The ingest is already complete when this prompt appears. If the user ignores the prompt and sends an unrelated next command, do not treat that next command as a reflection response. Format VERBATIM:
+Optional post-commit reflection pass. Skip entirely if Stage 1 was aborted OR the source page was rejected at Stage 1. The ingest is already complete when this prompt appears. If the user ignores the prompt and sends an unrelated next command, do not treat that next command as a reflection response.
+
+The prompt is a SINGLE combined ask (v5). `My take` stays its own routed answer destined for the source page; questions and dive-deepers are BOTH captured as `{wiki_root}/questions.md` entries. Format VERBATIM:
 
 ```
 Committed approved ingest changes.
 
 Reflect on this source? (y/n, or write any reflection now)
-
-You can answer in any order:
-- My take — why this mattered
-- Open questions — what's unclear
-- Dive deeper — follow-ups to pursue
+My take? Any questions or anything to dive deeper?
 ```
 
 Handling:
 
 | User response | Behavior |
 |---------------|----------|
-| No response / unrelated next command | Do nothing. Source page user-half stays empty. Wiki sources index `My take` cell stays `pending` (set at step 8). |
-| `n`, `no`, `skip`, or equivalent no-reflection response | Skip reflection. Source page user-half stays empty. Wiki sources index `My take` cell stays `pending` (set at step 8). |
-| Freeform reflection text | Route the text into `My take`, `Open questions`, and/or `Dive deeper` by intent, regardless of order. |
+| No response / unrelated next command | Do nothing. Source page `My take` stays empty. No `questions.md` entry written. Wiki sources index `My take` cell stays `pending` (set at step 8). |
+| `n`, `no`, `skip`, or equivalent no-reflection response | Skip reflection. Source page `My take` stays empty. No `questions.md` entry written. Wiki sources index `My take` cell stays `pending` (set at step 8). |
+| Freeform reflection text | Route the text into `My take` (source page) and/or `questions.md` entries by intent, regardless of order. |
 
-Reflection routing:
+Reflection routing — two destinations:
 
-1. Treat the first substantive response to the Stage 2 prompt as a routing bundle. The user does NOT need to answer section prompts in order.
-2. Split explicitly labeled spans by section markers:
-   - `My take`: "my take", "take", "why it mattered", "o que eu achei", "minha visão", "minha leitura".
-   - `Open questions`: "open questions", "question", "dúvida", "pergunta", "unclear", "não entendi".
-   - `Dive deeper`: "dive deeper", "deep dive", "deep diver", "dive deepr", "follow up", "aprofundar", "quero dive deeper em", "quero me aprofundar em".
-3. Route semantically clear unlabeled clauses to the matching section even if they arrive while another section is displayed. Example: "quero dive deeper em graph databases" goes under `Dive deeper`, never under `My take`.
-4. If a response contains multiple routed spans, write each span under its matching heading in the source page.
-5. If a response contains substantive text with no routing signal, write it under `My take`.
-6. If a span could reasonably belong to multiple sections and misrouting would change meaning, ask one targeted clarification instead of writing it.
-7. Do not prompt for empty remaining sections after routing a freeform bundle. Empty sections can be filled later in Obsidian.
+| Destination | Receives | Where it is written |
+|-------------|----------|---------------------|
+| `My take` | "why it mattered" reflection content | The source page `## My take` section (UNCHANGED — still feeds the 3-state index cell below) |
+| `questions.md` | every question AND every dive-deeper / follow-up | One `{wiki_root}/questions.md` entry per question/dive-deeper, `seeded-by:` THIS source, per `../shared/question-entry-shapes.md` |
+
+1. Treat the first substantive response to the Stage 2 prompt as a routing bundle. The user does NOT need to answer in order.
+2. Split spans by intent markers:
+   - `My take` (→ source page): "my take", "take", "why it mattered", "o que eu achei", "minha visão", "minha leitura".
+   - `questions.md` (→ entry): "open questions", "question", "dúvida", "pergunta", "unclear", "não entendi", "dive deeper", "deep dive", "deep diver", "dive deepr", "follow up", "aprofundar", "quero dive deeper em", "quero me aprofundar em".
+3. Route semantically clear unlabeled clauses to the matching destination even if they arrive while another part is displayed. Example: "quero dive deeper em graph databases" becomes a `questions.md` entry, never `My take`.
+4. For each question/dive-deeper span, write ONE `questions.md` entry per the inlined shape below. For `My take` span(s), write the text under the source page `## My take` heading.
+5. If a response contains substantive text with no routing signal, write it under `My take` (source page).
+6. If a span could reasonably belong to either destination and misrouting would change meaning, ask one targeted clarification instead of writing it.
+7. Do not prompt for the unfilled destination after routing a freeform bundle. The user can add to `My take` or `questions.md` later in Obsidian.
+
+`questions.md` entry write — append per `../shared/question-entry-shapes.md`: one H2 entry per question/dive-deeper, `seeded-by: "[[<this-source>.md]]"`, `relates:` to any wiki page the question concerns (omit if cross-cutting), and NO `answer:` block (the entry is born `open`). Write NO `status` field.
+
+**Absent `questions.md` at capture time → CREATE-ON-FIRST-CAPTURE.** When the user routes a question/dive-deeper but `{wiki_root}/questions.md` does not yet exist, create the file (frontmatter `type: questions`, per `../../docs/wiki-schema.md` § "Questions layer — questions.md"), then append the entry. This is consistent with the Step 0.6 load contract: absence at LOAD time means the answer-scan held an empty set for THIS run (layer was OFF for scanning), but a user reflection is an explicit write intent — honor it by materializing the registry. Never silently drop a user-volunteered question. (Load-time absence = no-op for reading; capture-time routing = create-then-write.)
 
 After handling the Stage 2 response, re-sync the wiki sources index `My take` cell per `../shared/index-formats.md` "`My take` Cell — Three States" section. Source page is canonical; index is derived. **NEVER leave the cell blank.**
 
 | Stage 2 outcome | Index `My take` cell value |
 |-----------------|----------------------------|
 | `My take` received text after routing | 1-sentence reflected preview derived from the source page's `My take` section (≤280 chars; truncate with ellipsis) |
-| `My take` stayed empty AND at least one of `Open questions` or `Dive deeper` received text (Stage 2 finalization rule — user reflected but chose to record no take) | `—` (em-dash, U+2014) |
+| `My take` stayed empty AND ≥1 question/dive-deeper was routed to `questions.md` (Stage 2 finalization rule — user reflected but chose to record no take) | `—` (em-dash, U+2014) |
 | No reflection response, no-reflection response, or no routed content | `pending` (no change from step 8 — Stage 2 did not produce a finalization signal) |
 
 End of flow.
@@ -440,3 +504,4 @@ End of flow.
 | Raw index file missing at step 7 | Log a warning for lint; do not block the ingest. |
 | Wiki sources index file missing at step 8 | Create it with header row; proceed. |
 | `{wiki_root}/purpose.md` malformed at step 0.5 (unreadable, invalid frontmatter, or no parseable `## Focus areas`) | WARN and proceed **lens-OFF** — every later step behaves as it does today. NEVER abort the ingest (guarantee #5). (Absent `purpose.md` is NOT a failure — it is the clean no-op lens-OFF path handled at Step 0.5.) |
+| `{wiki_root}/questions.md` malformed at step 0.6 (unreadable, invalid frontmatter, or no parseable H2 entries) | WARN and proceed with an EMPTY question set (questions layer OFF) — the Step 10 `PROPOSED ANSWERS` block is omitted; every other step behaves as it does today. NEVER abort the ingest (guarantee #5). (Absent `questions.md` is NOT a failure — it is the clean no-op layer-OFF path handled at Step 0.6.) |

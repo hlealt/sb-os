@@ -32,7 +32,7 @@ Each subagent runs the unmodified `sb-wiki-ingest` workflow per source. This orc
 | Cross-origin parallelism | Batches of DIFFERENT origins MAY run in parallel, capped at **5** concurrent subagents per wave. |
 | Non-interactive ingest | Subagents invoke `/sb-wiki-ingest silent <slug>` per file; that mode owns every checkpoint auto-resolution. NO subagent ever pauses for user input. |
 | Model | Subagents run on **opus** (user-requested for ingest quality). |
-| No mid-run topic pages | Subagents DEFER all topics and REJECT all topic updates. Topic creation and cross-origin duplicate healing happen after, via the final lint pass. |
+| No mid-run topic pages | Subagents NEVER create topic pages mid-run — every proposed topic is deferred (the `candidate-topic` persists for the final lint pass). Topic-UPDATE resolution is owned by `/sb-wiki-ingest silent` (firm updates auto-apply append-only; speculative updates and proposed answers reject — see that mode's silent override); this caller NEVER re-states or overrides those defaults. Topic-page creation and cross-origin duplicate healing happen after, via the final lint pass. |
 
 ## Flow
 
@@ -77,6 +77,8 @@ After the final wave, run `/sb-wiki-lint` by reading and executing `{sb_os_path}
 
 ### Step 6 — Final report
 
+Tally the silent-mode `Flags` lines collected from every subagent (per the dispatch prompt) into run-wide counts: firm topic-updates applied, speculative updates rejected, and proposed answers rejected. Graduations are always 0 in silent mode (subagents NEVER promote topics — the final lint pass owns graduation); surface the lint pass's graduation count if its report emitted one, else `0`.
+
 Present a summary VERBATIM:
 
 ```
@@ -86,8 +88,11 @@ Sources ingested: <N> committed | <P> partial | <F> failed (of <missing> targete
 Origins: <list with per-origin committed/total>
 Failures (if any): <origin>/<filename> — <reason>
 Cross-origin duplicate slugs created by ≥2 batches: <slug list, or "none">
+Questions layer: <U> firm topic-updates applied | <S> speculative updates rejected | <A> proposed answers rejected | <G> graduations (lint)
 Lint: <one-line outcome — see LINT REPORT above>
 ```
+
+The `Questions layer` line reflects silent-mode auto-resolution: only FIRM topic updates auto-apply (append-only); speculative updates and proposed answers (both homes, including answer-origin firm entries) are rejected and recorded. When the questions layer is OFF for every source (no `questions.md`) and no firm/speculative topic-update fired, all four counts are `0`. Omit the line entirely only if every count is `0`.
 
 Delete `{wiki_root}/ingest-all-manifest.json` after the report (transient artifact).
 
@@ -106,7 +111,7 @@ For EACH file, in order:
 
 Do NOT run /sb-wiki-lint. Do NOT create topic pages. Do NOT touch files outside this batch.
 
-Report back, per file, the structured summary silent mode returns: per-file status `committed` | `partial (reason)` | `failed (reason)`, and the list of NEW concept/entity page slugs created (filename stems).
+Report back, per file, the FULL structured summary silent mode returns: per-file status `committed` | `partial (reason)` | `failed (reason)`; the list of NEW concept/entity page slugs created (filename stems); and the `Flags` lines verbatim (deferred candidate-topics, applied firm topic-updates, rejected speculative updates, rejected proposed answers). The orchestrator tallies the `Flags` into the final-report counts — do NOT drop or summarize them.
 ```
 
 ## Failure Modes
