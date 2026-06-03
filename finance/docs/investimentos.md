@@ -122,7 +122,7 @@ Broker/exchange configuration. Each source has: `name`, `type` (corretora/banco/
 
 ## Source Data Reference
 
-Source files (historical, archived) live in `4-archives/finance/investments/historical-data/` (read-only reference):
+Source files (historical, archived) live in `4-archives/sb-os/finance-module/bookeeper/investments/historical-data/` (read-only reference):
 
 | Folder | Content | Used by |
 |--------|---------|---------|
@@ -131,7 +131,13 @@ Source files (historical, archived) live in `4-archives/finance/investments/hist
 | `ok-safra-data/` | Safra Detalhes/Informe PDFs + brokerage notes | Phase 2 Safra parser |
 | `ok-xp-data/` | XP account statement CSV (Nov 2023 → Apr 2026) | Phase 2 one-time import |
 | `ok-avenue-data/` | Avenue trade confirmation PDFs | Phase 2 (low priority) |
+| `avenue-historical-fx/` | 21 Recibos/Contratos de Câmbio PDFs (2020-10 → 2024-03) + parsed `processed/avenue_fx.csv` | `avenue_fx.py` parser → `avenue_fx.csv` ledger |
+| `avenue-app-activity-2026-06/` | Avenue app activity screenshots (Jan–Mar 2024) | Evidence for the 2026-06 `orders.csv` date corrections + USD balance validation |
 | `print-screens/` | Spreadsheet screenshots for reference | Design reference |
+
+Additional archived source outside `historical-data/`: `4-archives/personal/finance/avenue-investment-extracts-2021-2022/` — 7 Avenue "Conta de Investimentos" statement CSV exports (Data transação, Data liquidação, Descrição, Valor, Saldo) covering 2020-10 → 2023-12 with no gaps.
+
+**USD dividends (Avenue) — reconciled and closed.** The USD dividend history is a closed set: no current USD holding pays dividends (last payer ICLN sold 2024-01-05). On 2026-06-03 all USD provento rows were reconciled against the statement CSVs above: 3 duplicate rows deleted (Jan-2021 phantoms of the Jan-2022 payments), 1 ticker corrected (2022-01-03 US$ 54.58 was a blank-ticker credit in the statement, attributed to KWEB — the only unaccounted distribution-payer; the manual entry had mis-attributed it to BRK.B, which pays no dividends), 1 missing payment added (CVS 2022-08-02), and `gross_value`/`withholding_tax` populated from the statements' gross + imposto lines (previously gross=net, wh=0). The 30 surviving USD rows are statement-verified; new USD dividends only become possible if a dividend-paying US asset is bought again — in that case parse the statement CSV export rather than manual entry.
 
 ## Broker Migration
 
