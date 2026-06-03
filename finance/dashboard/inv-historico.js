@@ -7,11 +7,12 @@
 // are not aggregated into the portfolio output. CSVs are kept fresh by the
 // bookkeeper workflow downstream of update_ledgers.py.
 
+// Ledger paths are vault-root-absolute via FIN_DATA_BASE (shared.js).
 const INV_HIST_LEDGERS = [
-  { id: 'orders',    file: './ledgers/investimentos/orders.csv',    label: 'Ordens'     },
-  { id: 'proventos', file: './ledgers/investimentos/proventos.csv', label: 'Proventos'  },
-  { id: 'balcao',    file: './ledgers/investimentos/balcao.csv',    label: 'Balcão'     },
-  { id: 'crypto',    file: './ledgers/investimentos/crypto.csv',    label: 'Crypto'     },
+  { id: 'orders',    file: `${FIN_DATA_BASE}/ledgers/investimentos/orders.csv`,    label: 'Ordens'     },
+  { id: 'proventos', file: `${FIN_DATA_BASE}/ledgers/investimentos/proventos.csv`, label: 'Proventos'  },
+  { id: 'balcao',    file: `${FIN_DATA_BASE}/ledgers/investimentos/balcao.csv`,    label: 'Balcão'     },
+  { id: 'crypto',    file: `${FIN_DATA_BASE}/ledgers/investimentos/crypto.csv`,    label: 'Crypto'     },
 ];
 
 // Investment broker label lookup — canonical map lives in shared.js (BROKER_LABELS).

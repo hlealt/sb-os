@@ -1,8 +1,10 @@
 // Investment data layer — loads portfolio.json and manages snapshots.
 // Loaded after shared.js. Pure data, no rendering.
-// All paths relative to dashboard.html in the parent directory.
+// Data paths are vault-root-absolute via FIN_DATA_BASE (shared.js) — the
+// entry HTML's install location is configurable, so nothing resolves
+// relative to the page.
 
-const INV_DATA_DIR = './ledgers/investimentos';
+const INV_DATA_DIR = `${FIN_DATA_BASE}/ledgers/investimentos`;
 const INV_CURRENT_FILE = 'portfolio.json';
 const INV_SNAPSHOTS_MANIFEST = 'snapshots.json';
 

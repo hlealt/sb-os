@@ -87,7 +87,7 @@ This adds no new data-access path, no ledger mutation, and no change to the read
 ## Path-resolution conventions
 
 - Python scripts use `_find_vault_root()` (looks for `sb-os.json` or `.obsidian/`) and build absolute paths from `VAULT_ROOT`.
-- Dashboard JS uses paths relative to the entry HTML (`.user/finance/dashboard.html`) — vault-root-absolute under `/sb-os/finance/dashboard/...` for code, `/.user/finance/bookkeeper/...` for data.
+- Dashboard paths are vault-root-absolute (the server serves the vault root as docroot; there is no `/sb-os/` route alias), never relative to the entry HTML — its location (`finance_dashboard_html_path`, default `.user/finance/dashboard.html`) is configurable. Asset (CSS/JS) URLs are rendered into the entry HTML at install time from `sb_os_path` (`/{sb_os_path}/finance/dashboard/...`); data fetches are fixed at `/.user/finance/bookkeeper/...` via `FIN_DATA_BASE` in `shared.js`. Render mechanism: sb-os `install/finance.py` + repo `docs/architecture.md` §6.
 - Workflow `.md` files use `{VARIABLE}` substitution defined in `bookkeeper.md` (e.g., `{RAW_DIR}`, `{PROCESSED_DIR}`, `{INV_LEDGER_DIR}`).
 
 ## Closing reports

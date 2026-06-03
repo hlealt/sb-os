@@ -11,7 +11,7 @@ O dashboard é **totalmente dinâmico** — alimentado por CSVs gerados pelo wor
 ```
 finance system (post-p1-11 layout):
 3-resources/tools/sb-os/finance/dashboard/    ← HTML/JS/CSS shipped via sb-os
-.user/finance/dashboard.html                  ← entry HTML (install destination, pending p1-13)
+.user/finance/dashboard.html                  ← entry HTML (rendered pelo install.py; destino configurável — finance_dashboard_html_path no sb-os.json)
 .user/finance/bookkeeper/{ledgers,config}/    ← personal data
 ├── dashboard/                                  (logical view — files below ship from sb-os/finance/dashboard/)
 │       ├── styles.css                     ← design system compartilhado
@@ -107,21 +107,26 @@ A sessão "Fundos" dentro do Balcão é separada da sessão "Renda Fixa" via `_I
 ### Fluxo de dados
 
 ```
-dashboard/data/fechamento/months.json       ← manifesto: array de meses disponíveis
-dashboard/data/fechamento/{YYYY-MM}/
+/.user/finance/bookkeeper/ledgers/fechamento/months.json     ← manifesto: array de meses disponíveis
+/.user/finance/bookkeeper/ledgers/fechamento/{YYYY-MM}/
   transactions.csv                          ← 19 colunas (ver data-model.md §1.1+§1.2)
         │
         ▼
-  dashboard.html                            ← fetch via HTTP, parse com PapaParse
+  dashboard.html                            ← fetch via HTTP (paths vault-root-absolute), parse com PapaParse
 ```
 
 ### Manifesto (`months.json`)
 
 Array JSON simples: `["2026-02", "2026-03"]`. O dashboard cria uma aba "Evolucao" (primeira, ativa por padrão) + uma aba por mês. O workflow de fechamento financeiro (Passo 8) atualiza este arquivo automaticamente ao fechar cada mês.
 
-### Caminhos relativos
+### Caminhos vault-root-absolute
 
-O HTML vive em `2-areas/finance/` e usa caminhos relativos `./dashboard/data/...` para acessar os dados. Os relatórios markdown (`{YYYY-MM}-fechamento-mensal.md`) estão em `0-periodic-notes/monthly/`, referenciados via caminho relativo. Paths nos JS são relativos ao HTML, não à pasta `dashboard/`.
+Todos os paths do dashboard são vault-root-absolute — o server serve a vault root como docroot e a localização do entry HTML é configurável (`finance_dashboard_html_path`), então nada resolve relativo à página:
+
+| Classe | Base | Origem |
+|--------|------|--------|
+| Assets (CSS/JS) | `/{sb_os_path}/finance/dashboard/` | Substituída no render do template pelo `install.py` (`{{DASHBOARD_ASSET_BASE}}`) |
+| Dados (ledgers/config) | `/.user/finance/bookkeeper/` | Constante `FIN_DATA_BASE` em `shared.js` (contrato fixo p1-3 — não configurável) |
 
 ### Dependências externas (CDN)
 
@@ -130,10 +135,10 @@ O HTML vive em `2-areas/finance/` e usa caminhos relativos `./dashboard/data/...
 
 ### Execução
 
-Requer HTTP server (fetch API não funciona com `file://`). Servidor custom em `.user/runtime/scripts/dashboard-server.py` — estende `SimpleHTTPRequestHandler` servindo arquivos estáticos da vault root e expõe `POST /api/refresh-prices` que executa `calculate.py` e retorna JSON (`{ok, returncode, stdout, stderr}`). Timeout de 180s. Função PowerShell:
+Requer HTTP server (fetch API não funciona com `file://`). Servidor custom em `3-resources/tools/sb-os/finance/dashboard/dashboard-server.py` — estende `SimpleHTTPRequestHandler` servindo arquivos estáticos da vault root e expõe `POST /api/refresh-prices` que executa `calculate.py` e retorna JSON (`{ok, returncode, stdout, stderr}`). Timeout de 180s. Função PowerShell:
 
 ```powershell
-function dashboard { Set-Location "$BRAIN"; Start-Process "http://localhost:8080/2.%20Areas/financeiro/dashboard.html"; python "$BRAIN\.user\scripts\dashboard-server.py" 8080 }
+function dashboard { Set-Location "$BRAIN"; Start-Process "http://localhost:8080/.user/finance/dashboard.html"; python "$BRAIN\3-resources\tools\sb-os\finance\dashboard\dashboard-server.py" 8080 }
 ```
 
 `Ctrl+C` no terminal para parar o server.
@@ -266,7 +271,7 @@ A coluna armazenada não tem flag `is_reimbursement` — a regra é replicada de
 | `amount > 0` AND `description.toUpperCase()` contém um substring de qualquer chave de `reimbursement_mappings` | É reembolso |
 | Caso contrário | Não é reembolso |
 
-Os patterns vêm de `categories.json` — fetched UMA VEZ no `init()` via `CATEGORIES_CONFIG_PATH` resolvido relativo ao HTML em `.user/finance/dashboard.html` apontando para `.user/finance/bookkeeper/config/categories.json`. Se o fetch falhar: graceful degradation — `_reimbursementPatterns = []`, `console.warn` emitido, netting vira no-op (reembolsos aparecem como linhas positivas sem subtrair). Decisão de p4-4 (Opção B — single source of truth).
+Os patterns vêm de `categories.json` — fetched UMA VEZ no `init()` via `CATEGORIES_CONFIG_PATH`, vault-root-absolute (`${FIN_DATA_BASE}/config/categories.json` → `/.user/finance/bookkeeper/config/categories.json`). Se o fetch falhar: graceful degradation — `_reimbursementPatterns = []`, `console.warn` emitido, netting vira no-op (reembolsos aparecem como linhas positivas sem subtrair). Decisão de p4-4 (Opção B — single source of truth).
 
 ### Onde aplica
 

@@ -30,10 +30,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Iterable
 
-from . import cli, loaders, manifest, markers
+from . import cli, finance, loaders, manifest, markers
 from .fresh import (
     CANONICAL_SB_OS_REL,
     CLAUDE_MD_MAP,
+    FINANCE_MODULE_NAME,
     WIKI_CLAUDE_MD_SOURCE,
     _module_has_wiki_artifacts,
 )
@@ -66,6 +67,13 @@ def run_upgrade(
     user_context_root = existing.get(
         "user_context_root", cli.DEFAULT_USER_CONTEXT_ROOT
     )
+    # Finance entry-HTML knob: prompted only on fresh installs. On upgrade the
+    # persisted value wins; older manifests without the field get the default
+    # (back-filled into sb-os.json below).
+    finance_html_path = (
+        existing.get("finance_dashboard_html_path")
+        or cli.DEFAULT_FINANCE_DASHBOARD_HTML_PATH
+    )
 
     all_modules = loaders.manifest_modules()
     if selected_modules is None:
@@ -78,6 +86,7 @@ def run_upgrade(
     else:
         excluded = tuple(excluded_components)
     install_wiki = _module_has_wiki_artifacts(all_modules, selected)
+    finance_selected = FINANCE_MODULE_NAME in selected
 
     # ----- Resolve loader path from clone location --------------------
     sb_os_loader_path = _loader_path_or_abort(sb_os_root, target_root)
@@ -88,7 +97,8 @@ def run_upgrade(
 
     # ----- Build plan + confirm ---------------------------------------
     plan = build_upgrade_plan(
-        wiki_root, user_context_root, selected, set(excluded), install_wiki
+        wiki_root, user_context_root, selected, set(excluded), install_wiki,
+        finance_dashboard_html_path=finance_html_path,
     )
     cli.print_plan(plan.actions)
     print(
@@ -113,6 +123,7 @@ def run_upgrade(
             selected_modules=selected,
             excluded_components=set(excluded),
             install_wiki=install_wiki,
+            finance_dashboard_html_path=finance_html_path,
         )
     except markers.MissingMarkersError as exc:
         cli.abort(str(exc))
@@ -131,6 +142,7 @@ def run_upgrade(
         sb_os_path=sb_os_path_for_manifest,
         selected_modules=list(selected),
         excluded_components=list(excluded),
+        finance_dashboard_html_path=finance_html_path if finance_selected else None,
     )
     manifest.write(target_root, updated)
 
@@ -284,11 +296,15 @@ def build_upgrade_plan(
     selected_modules: tuple[str, ...] | None = None,
     excluded_components: set[str] | None = None,
     install_wiki: bool = True,
+    finance_dashboard_html_path: str = cli.DEFAULT_FINANCE_DASHBOARD_HTML_PATH,
 ) -> cli.Plan:
     """Build the planned-action list for an upgrade. Pure — no FS writes."""
     plan = cli.Plan()
     modules_scoped = loaders.select_modules(selected_modules)
     excl = excluded_components or set()
+    finance_selected = (
+        selected_modules is None or FINANCE_MODULE_NAME in selected_modules
+    )
 
     for source_rel, dest_rel in CLAUDE_MD_MAP:
         plan.add(cli.Action(
@@ -326,6 +342,15 @@ def build_upgrade_plan(
             target=target_rel,
             detail="template (install-if-missing — skipped when target exists)",
         ))
+    if finance_selected:
+        plan.add(cli.Action(
+            category="file",
+            target=finance_dashboard_html_path,
+            detail=(
+                "finance dashboard entry HTML (rendered, install-if-missing "
+                "— skipped when target exists)"
+            ),
+        ))
     plan.add(cli.Action(
         category="manifest",
         target=manifest.MANIFEST_FILENAME,
@@ -346,6 +371,7 @@ def _execute_upgrade(
     selected_modules: tuple[str, ...],
     excluded_components: set[str],
     install_wiki: bool = True,
+    finance_dashboard_html_path: str = cli.DEFAULT_FINANCE_DASHBOARD_HTML_PATH,
 ) -> None:
     modules_scoped = loaders.select_modules(selected_modules)
 
@@ -400,6 +426,17 @@ def _execute_upgrade(
             sb_os_root=sb_os_root,
             source_rel=source_rel,
             target_rel=target_rel,
+        )
+
+    # Finance dashboard entry HTML — rendered with vault-root-absolute asset
+    # paths derived from sb_os_path; install-if-missing (never clobbers a
+    # user-placed/edited entry HTML). See install/finance.py.
+    if FINANCE_MODULE_NAME in selected_modules:
+        finance.install_dashboard_if_missing(
+            target_root=target_root,
+            sb_os_root=sb_os_root,
+            sb_os_path=sb_os_loader_path,
+            html_path=finance_dashboard_html_path,
         )
 
 

@@ -190,8 +190,8 @@ Editing the installed file directly is forbidden — the source is the repo. Re-
 
 | Detected | Mode | Behavior |
 |----------|------|----------|
-| No `sb-os.json` at the resolved target | Fresh | Bootstrap a clean vault: create PARA folders, root `CLAUDE.md`, all managed CLAUDE.mds, install thin loaders, optionally create `{wiki_root}/`, write the initial manifest, then relocate the running sb-os clone into `{target}/3-resources/tools/sb-os/`. |
-| `sb-os.json` present | Upgrade | Refresh an existing install: rewrite `.claude/` loaders, replace marker blocks in managed CLAUDE.mds, refresh rules. **Never** creates new top-level folders or modifies user-edited content outside markers. |
+| No `sb-os.json` at the resolved target | Fresh | Bootstrap a clean vault: create PARA folders, root `CLAUDE.md`, all managed CLAUDE.mds, install thin loaders, optionally create `{wiki_root}/`, render the finance dashboard entry HTML (finance module selected — see Finance dashboard entry HTML below), write the initial manifest, then relocate the running sb-os clone into `{target}/3-resources/tools/sb-os/`. |
+| `sb-os.json` present | Upgrade | Refresh an existing install: rewrite `.claude/` loaders, replace marker blocks in managed CLAUDE.mds, refresh rules, install missing install-if-missing artifacts (user templates, finance dashboard entry HTML). **Never** creates new top-level folders or modifies user-edited content outside markers. |
 
 ### Mode detection
 
@@ -218,15 +218,48 @@ The onboarder is resumable. State persists in `sb-os.json` under the `onboarder_
 
 The onboarder NEVER writes inside `.user/` — `.user/` is user-owned per §2 boundaries. State lives in `sb-os.json` (sb-os-owned, vault root). All vault writes (folders, indexes, tasks files, optional `Home.md`, optional CLAUDE.md routing-rule appends) go through the `sb-vault-ops` skill and are followed by a `sb-vault-integrity` post-op sweep.
 
+### Finance dashboard entry HTML
+
+When the finance module is selected, the installer renders
+`finance/dashboard/dashboard.html.template` to the vault (`install/finance.py`).
+The rendered page is the only finance artifact whose content is
+install-specific, so it cannot ship verbatim:
+
+- **Asset base substitution.** The template's `{{DASHBOARD_ASSET_BASE}}`
+  placeholder becomes `/{sb_os_path}/finance/dashboard` — vault-root-absolute,
+  derived from the install's `sb_os_path` (the dashboard server serves the
+  vault root as docroot; there is no `/sb-os/` route alias).
+- **Data paths are NOT rendered.** Data fetches are fixed vault-root-absolute
+  at `/.user/finance/bookkeeper/{ledgers,config}/...`, hardcoded in the
+  dashboard JS (`shared.js` `FIN_DATA_BASE`) per the finance module's
+  fixed-data-paths contract. Identical for every install — nothing to render.
+- **One knob.** The destination, `finance_dashboard_html_path`, is prompted on
+  interactive fresh installs (default `.user/finance/dashboard.html`) and
+  persisted in `sb-os.json`. This is the single carve-out to the never-write-
+  inside-`.user/` rule beyond templates: the entry HTML uses the same
+  install-if-missing semantics — rendered when absent, never overwritten.
+- **Upgrade.** Reuses the persisted `finance_dashboard_html_path` (back-filling
+  the field with the default on manifests predating it) and renders only when
+  the file is missing.
+
+The render is wired in `fresh.py`/`upgrade.py` gated on module selection — it
+is not a `module-manifest.json` entry, because manifest templates copy
+verbatim to a fixed target while this artifact needs substitution and a
+configurable destination.
+
 ### Manifest schema (`sb-os.json`)
 
 ```json
 {
-  "version": "0.1.0",
+  "version": "0.2.0",
   "installed_at": "2026-05-01T12:00:00Z",
   "mode": "fresh",
   "wiki_root": "3-resources/knowledge-base/",
   "user_context_root": ".user/context/",
+  "sb_os_path": "3-resources/tools/sb-os/",
+  "finance_dashboard_html_path": ".user/finance/dashboard.html",
+  "selected_modules": ["core", "wiki"],
+  "excluded_components": [],
   "created_paths": [
     "0-periodic-notes/",
     "1-projects/",
@@ -238,6 +271,10 @@ The onboarder NEVER writes inside `.user/` — `.user/` is user-owned per §2 bo
   ]
 }
 ```
+
+`finance_dashboard_html_path` is present only when the finance module is
+selected; an upgrade never overwrites an existing value (same back-fill-only
+rule as `sb_os_path`).
 
 The manifest tracks **what the installer created**, not file hashes. With thin loaders + marker blocks + one-shot files, no checksumming is needed.
 
@@ -335,6 +372,7 @@ No Obsidian plugins are required by sb-os. Users who build their own `Home.md` p
 | wiki v4 | `wiki` | `/sb-wiki-ingest` gains an optional `{wiki_root}/purpose.md` regulatory-layer focus lens (Step 0.5). When present, the lens modulates discretionary synthesis surfaces (depth, optional sections, stub bias, topic ranking, Stage-1 classification). When absent, ingest is identical to today. Schema canonical reference: `wiki/docs/wiki-schema.md`. |
 | wiki v5 | `wiki` | Questions layer: a dedicated `{wiki_root}/questions.md` (queue-style user agenda) + answer-scan wired into both `/sb-wiki-ingest` (active `PROPOSED ANSWERS` block at Stage-1, covering both homes) and `/sb-wiki-lint` (periodic sweep, graduation proposals, prune). Two-homes model: topic `Open questions` stay on topic pages; `questions.md` is the user's agenda only. No-op when `questions.md` is absent — ingest/lint identical to today. Silent-mode change: `/sb-wiki-ingest silent` now applies FIRM topic updates (append-only) and audits each to the silent-summary `Flags` channel; rejects speculative updates and proposed answers and audits each the same way (NOT to `log.md` — its `topic-updated` type is retired and the applied page is its own durable record); counts surface in the `ingest-all` report. Schema canonical reference: `wiki/docs/wiki-schema.md` v5 (questions-layer). |
 | v0.2.0 | `core` | `module-manifest.json` gains a `"stale"` component flag (+ optional `"stale_reason"`), enforced at `loaders._flatten`. Stale components are never installed or surfaced and are removed on upgrade; sources are preserved. Rules `sb-source-of-truth` and `sb-user-preferences` retired as stale — source-of-truth's principle lives in the managed CLAUDE.md + README; preference loading moves to host CLAUDE.md (cross-cutting) and per-workflow context-injection (workflow-scoped). |
+| v0.2.0 | `finance` | Installer renders the finance dashboard entry HTML (p1-3/p1-13): `finance/dashboard/dashboard.html.template` → `finance_dashboard_html_path` (prompted on fresh, default `.user/finance/dashboard.html`, persisted in `sb-os.json`, install-if-missing on upgrade). Asset URLs substituted vault-root-absolute from `sb_os_path` via `{{DASHBOARD_ASSET_BASE}}`; data fetches fixed vault-root-absolute at `/.user/finance/bookkeeper/...` via `shared.js` `FIN_DATA_BASE`. See §6 Finance dashboard entry HTML. |
 
 ---
 

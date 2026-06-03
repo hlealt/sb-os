@@ -4,13 +4,14 @@
 // formatMonth, catLabel, fullCatKey, toggleCollapse, createMultiSelect, getMultiSelectValues,
 // updateMultiSelectChips, togglePrivacy, updateChartsPrivacy.
 
-const MANIFEST_PATH = `./ledgers/fechamento/months.json${CACHE_BUST}`;
-const DATA_PATH = (month) => `./ledgers/fechamento/${month}/transactions.csv${CACHE_BUST}`;
+// Data paths are vault-root-absolute via FIN_DATA_BASE (shared.js): the
+// entry HTML's install location is configurable (finance_dashboard_html_path
+// in sb-os.json), so nothing may resolve relative to the page.
+const MANIFEST_PATH = `${FIN_DATA_BASE}/ledgers/fechamento/months.json${CACHE_BUST}`;
+const DATA_PATH = (month) => `${FIN_DATA_BASE}/ledgers/fechamento/${month}/transactions.csv${CACHE_BUST}`;
 // categories.json is the authoritative source for reimbursement_mappings.
 // Loading it at init avoids hardcoding the pattern list in JS (drift risk).
-// The dashboard server serves from vault root; this path is resolved relative
-// to dashboard.html (install destination `.user/finance/dashboard.html` pending p1-13).
-const CATEGORIES_CONFIG_PATH = `./config/categories.json${CACHE_BUST}`;
+const CATEGORIES_CONFIG_PATH = `${FIN_DATA_BASE}/config/categories.json${CACHE_BUST}`;
 const ROWS_PER_PAGE = 30;
 
 // --- Date-axis toggle (Caixa | Competencia) ---
@@ -188,7 +189,7 @@ function supplierDisplayName(row, displayMap) {
 //   contains any pattern key from `reimbursement_mappings` in categories.json.
 //
 // `reimbursement_mappings` is fetched once at init() from
-// `./config/categories.json` to avoid drift
+// `${FIN_DATA_BASE}/config/categories.json` to avoid drift
 // between Python source-of-truth and JS hardcoding. If the fetch fails (file
 // missing, server cannot reach it), the dashboard falls back to no
 // reimbursement netting (empty pattern list) and surfaces a console.warn —

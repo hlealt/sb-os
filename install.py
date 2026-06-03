@@ -147,6 +147,14 @@ def main(argv: list[str] | None = None) -> int:
             excluded_components=excluded,
         )
 
+    # Finance entry-HTML knob (p1-3): prompted once, on interactive fresh
+    # installs with the finance module selected. Upgrades reuse the value
+    # persisted in sb-os.json (resolved inside run_upgrade).
+    finance_html_path = cli_mod.DEFAULT_FINANCE_DASHBOARD_HTML_PATH
+    if "finance" in selected and not args.non_interactive:
+        print()
+        finance_html_path = cli_mod.prompt_finance_dashboard_html_path()
+
     print()
     preview = (
         not args.non_interactive
@@ -157,7 +165,9 @@ def main(argv: list[str] | None = None) -> int:
         )
     )
     if preview:
-        fresh_mod.dry_run_fresh(target, repo_root, selected, excluded)
+        fresh_mod.dry_run_fresh(
+            target, repo_root, selected, excluded, finance_html_path
+        )
         if not cli_mod.confirm("\nProceed with the actual install now?", default=True):
             cli_mod.abort("User declined.")
             return 1
@@ -166,6 +176,7 @@ def main(argv: list[str] | None = None) -> int:
             skip_confirm=True,
             selected_modules=selected,
             excluded_components=excluded,
+            finance_dashboard_html_path=finance_html_path,
         )
     else:
         code = fresh_mod.run_fresh(
@@ -173,6 +184,7 @@ def main(argv: list[str] | None = None) -> int:
             skip_confirm=args.non_interactive,
             selected_modules=selected,
             excluded_components=excluded,
+            finance_dashboard_html_path=finance_html_path,
         )
 
     if code == 0:

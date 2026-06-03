@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-<link rel="stylesheet" href="scripts/dashboard/styles.css">
+<link rel="stylesheet" href="{{DASHBOARD_ASSET_BASE}}/styles.css">
 </head>
 <body class="privacy-mode">
 <div class="container">
@@ -55,15 +55,15 @@ function switchMode(mode) {
   document.getElementById('subtitle').textContent = mode === 'financeiro' ? 'Despesas e receitas' : 'Carteira de investimentos';
 }
 </script>
-<script src="scripts/dashboard/shared.js"></script>
-<script src="scripts/dashboard/expenses.js"></script>
-<script src="scripts/dashboard/inv-data.js"></script>
-<script src="scripts/dashboard/inv-carteira.js"></script>
-<script src="scripts/dashboard/inv-bolsa.js"></script>
-<script src="scripts/dashboard/inv-balcao.js"></script>
-<script src="scripts/dashboard/inv-crypto.js"></script>
-<script src="scripts/dashboard/inv-proventos.js"></script>
-<script src="scripts/dashboard/inv-historico.js"></script>
-<script src="scripts/dashboard/investments.js"></script>
+<script src="{{DASHBOARD_ASSET_BASE}}/shared.js"></script>
+<script src="{{DASHBOARD_ASSET_BASE}}/expenses.js"></script>
+<script src="{{DASHBOARD_ASSET_BASE}}/inv-data.js"></script>
+<script src="{{DASHBOARD_ASSET_BASE}}/inv-carteira.js"></script>
+<script src="{{DASHBOARD_ASSET_BASE}}/inv-bolsa.js"></script>
+<script src="{{DASHBOARD_ASSET_BASE}}/inv-balcao.js"></script>
+<script src="{{DASHBOARD_ASSET_BASE}}/inv-crypto.js"></script>
+<script src="{{DASHBOARD_ASSET_BASE}}/inv-proventos.js"></script>
+<script src="{{DASHBOARD_ASSET_BASE}}/inv-historico.js"></script>
+<script src="{{DASHBOARD_ASSET_BASE}}/investments.js"></script>
 </body>
 </html>

@@ -32,7 +32,7 @@ import stat
 from pathlib import Path
 from typing import Iterable
 
-from . import cli, loaders, manifest, markers
+from . import cli, finance, loaders, manifest, markers
 
 
 # ---------------------------------------------------------------------------
@@ -50,6 +50,7 @@ RULES: tuple[str, ...] = loaders.manifest_rules()
 TEMPLATES: tuple[tuple[str, str], ...] = loaders.manifest_templates()
 
 WIKI_MODULE_NAME = "wiki"
+FINANCE_MODULE_NAME = "finance"
 
 
 def _module_has_wiki_artifacts(modules: dict, selected: list[str] | tuple[str, ...]) -> bool:
@@ -316,6 +317,7 @@ def build_fresh_plan(
     sb_os_root: Path,
     selected_modules: tuple[str, ...] | None = None,
     excluded_components: tuple[str, ...] | None = None,
+    finance_dashboard_html_path: str = cli.DEFAULT_FINANCE_DASHBOARD_HTML_PATH,
 ) -> cli.Plan:
     """Build the planned-action list for a fresh install. Pure — no FS writes."""
     plan = cli.Plan()
@@ -355,6 +357,15 @@ def build_fresh_plan(
     for _src, target_rel in templates:
         _add_file_action(plan, target_rel, detail="template (install-if-missing)")
 
+    # Finance dashboard entry HTML — rendered from the module template with
+    # vault-root-absolute asset paths (see install/finance.py).
+    if FINANCE_MODULE_NAME in selected:
+        _add_file_action(
+            plan,
+            finance_dashboard_html_path,
+            detail="finance dashboard entry HTML (rendered, install-if-missing)",
+        )
+
     # Manifest
     plan.add(cli.Action(
         category="manifest",
@@ -385,11 +396,15 @@ def dry_run_fresh(
     sb_os_root: Path | str,
     selected_modules: tuple[str, ...] | None = None,
     excluded_components: tuple[str, ...] | None = None,
+    finance_dashboard_html_path: str = cli.DEFAULT_FINANCE_DASHBOARD_HTML_PATH,
 ) -> int:
     """Print the planned-action list without writing anything."""
     target_root = Path(target_root)
     sb_os_root = Path(sb_os_root).resolve()
-    plan = build_fresh_plan(target_root, sb_os_root, selected_modules, excluded_components)
+    plan = build_fresh_plan(
+        target_root, sb_os_root, selected_modules, excluded_components,
+        finance_dashboard_html_path,
+    )
     cli.print_plan(plan.actions)
     print(cli.cyan("\n[Preview — no files will be written]"))
     return 0
@@ -402,6 +417,7 @@ def run_fresh(
     skip_confirm: bool = False,
     selected_modules: tuple[str, ...] | None = None,
     excluded_components: tuple[str, ...] | None = None,
+    finance_dashboard_html_path: str | None = None,
 ) -> int:
     """Execute the fresh install flow.
 
@@ -409,12 +425,19 @@ def run_fresh(
     caller already showed the plan as a dry-run preview and the user
     already confirmed.
 
+    ``finance_dashboard_html_path`` is the finance entry-HTML knob the
+    caller resolved (prompted on interactive fresh installs); None falls
+    back to the default. Ignored when the finance module is not selected.
+
     Returns 0 on success, 1 on abort or error.
     """
     target_root = Path(target_root)
     sb_os_root = Path(sb_os_root).resolve()
     sb_os_loader_path = cli.DEFAULT_SB_OS_PATH
     wiki_root = cli.detect_wiki_default_root(target_root)
+    finance_html_path = (
+        finance_dashboard_html_path or cli.DEFAULT_FINANCE_DASHBOARD_HTML_PATH
+    )
 
     if not _validate_target(target_root, sb_os_root):
         return 1
@@ -422,9 +445,12 @@ def run_fresh(
     all_modules = loaders.manifest_modules()
     selected = tuple(selected_modules) if selected_modules else tuple(all_modules.keys())
     excluded = tuple(excluded_components or ())
+    finance_selected = FINANCE_MODULE_NAME in selected
 
     if not skip_confirm:
-        plan = build_fresh_plan(target_root, sb_os_root, selected, excluded)
+        plan = build_fresh_plan(
+            target_root, sb_os_root, selected, excluded, finance_html_path
+        )
         cli.print_plan(plan.actions)
         if not cli.confirm("\nProceed with the install?", default=True):
             cli.abort("User declined.")
@@ -440,6 +466,7 @@ def run_fresh(
             created=created,
             selected_modules=selected,
             excluded_components=set(excluded),
+            finance_dashboard_html_path=finance_html_path,
         )
     except FileNotFoundError as exc:
         cli.abort(str(exc))
@@ -454,6 +481,7 @@ def run_fresh(
         created_paths=created,
         selected_modules=list(selected),
         excluded_components=list(excluded),
+        finance_dashboard_html_path=finance_html_path if finance_selected else None,
     )
     manifest.write(target_root, initial)
     created.append(manifest.MANIFEST_FILENAME)
@@ -479,6 +507,7 @@ def _execute_fresh(
     created: list[str],
     selected_modules: tuple[str, ...],
     excluded_components: set[str],
+    finance_dashboard_html_path: str = cli.DEFAULT_FINANCE_DASHBOARD_HTML_PATH,
 ) -> None:
     all_modules = loaders.manifest_modules()
     install_wiki = _module_has_wiki_artifacts(all_modules, selected_modules)
@@ -542,6 +571,19 @@ def _execute_fresh(
         )
         if written is not None and target_rel not in created:
             created.append(target_rel)
+
+    # Finance dashboard entry HTML — rendered with vault-root-absolute asset
+    # paths derived from sb_os_path; install-if-missing (never clobbers a
+    # user-placed/edited entry HTML). See install/finance.py.
+    if FINANCE_MODULE_NAME in selected_modules:
+        written = finance.install_dashboard_if_missing(
+            target_root=target_root,
+            sb_os_root=sb_os_root,
+            sb_os_path=sb_os_loader_path,
+            html_path=finance_dashboard_html_path,
+        )
+        if written is not None and finance_dashboard_html_path not in created:
+            created.append(finance_dashboard_html_path)
 
 
 __all__ = [

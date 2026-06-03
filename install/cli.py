@@ -458,6 +458,7 @@ DEFAULT_WIKI_ROOT = "3-resources/knowledge-base/"
 DEFAULT_WIKI_ROOT_NO_PARA = "knowledge-management/"
 DEFAULT_USER_CONTEXT_ROOT = ".user/context/"
 DEFAULT_SB_OS_PATH = "3-resources/tools/sb-os/"
+DEFAULT_FINANCE_DASHBOARD_HTML_PATH = ".user/finance/dashboard.html"
 
 
 def detect_wiki_default_root(target_root: Path | str) -> str:
@@ -495,6 +496,22 @@ def prompt_sb_os_path(default: str = DEFAULT_SB_OS_PATH) -> str:
     """
     return prompt_path(
         "sb-os repo path (vault-relative — loaders point here)",
+        default=default,
+    )
+
+
+def prompt_finance_dashboard_html_path(
+    default: str = DEFAULT_FINANCE_DASHBOARD_HTML_PATH,
+) -> str:
+    """Where the rendered finance dashboard entry HTML lands (vault-relative).
+
+    The single configurable knob of the finance dashboard install (p1-3) —
+    asset paths and the ``.user/finance/bookkeeper/`` data contract are
+    fixed. Persisted in ``sb-os.json`` under ``finance_dashboard_html_path``;
+    install-if-missing on upgrade (see ``install/finance.py``).
+    """
+    return prompt_path(
+        "finance_dashboard_html_path (vault-relative — dashboard entry HTML)",
         default=default,
     )
 
@@ -613,6 +630,7 @@ __all__ = [
     "DEFAULT_WIKI_ROOT_NO_PARA",
     "DEFAULT_USER_CONTEXT_ROOT",
     "DEFAULT_SB_OS_PATH",
+    "DEFAULT_FINANCE_DASHBOARD_HTML_PATH",
     "detect_wiki_default_root",
     "abort",
     "bold",
@@ -627,6 +645,7 @@ __all__ = [
     "print_section",
     "prompt_choice",
     "prompt_components",
+    "prompt_finance_dashboard_html_path",
     "prompt_modules",
     "prompt_module_components",
     "prompt_path",

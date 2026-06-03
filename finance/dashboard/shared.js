@@ -4,6 +4,15 @@
 
 const CACHE_BUST = `?v=${Date.now()}`;
 
+// Vault-root-absolute base for the bookkeeper data stores. The dashboard
+// server serves the vault root as docroot, and the entry HTML's location is
+// configurable (finance_dashboard_html_path) — so data fetches MUST be
+// root-absolute, never relative to the page. This path is FIXED by the
+// finance contract (p1-3: `.user/finance/bookkeeper/{ledgers,config}/` is
+// not configurable); all data consumers (expenses.js, inv-data.js,
+// inv-historico.js) build their fetch paths from this constant.
+const FIN_DATA_BASE = '/.user/finance/bookkeeper';
+
 const COLOR_PALETTE = [
   '#38BDF8', '#22C55E', '#2563EB', '#14B8A6', '#7C3AED',
   '#06B6D4', '#10B981', '#3B82F6', '#84CC16', '#0EA5E9',

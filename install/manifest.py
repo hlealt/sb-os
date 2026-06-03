@@ -43,6 +43,7 @@ _KEY_ORDER = (
     "wiki_root",
     "user_context_root",
     "sb_os_path",
+    "finance_dashboard_html_path",
     "selected_modules",
     "excluded_components",
     "created_paths",
@@ -104,6 +105,7 @@ def create_initial(
     created_paths: list[str] | None = None,
     selected_modules: list[str] | None = None,
     excluded_components: list[str] | None = None,
+    finance_dashboard_html_path: str | None = None,
 ) -> dict[str, Any]:
     """Build a fresh-install manifest dict.
 
@@ -112,9 +114,11 @@ def create_initial(
     `sb_os_path` is the vault-relative location of the sb-os repo clone (the
     path baked into thin loaders); convention is a trailing slash to match
     `wiki_root` and `user_context_root`.
+    `finance_dashboard_html_path` is the finance module's entry-HTML knob;
+    pass it only when the finance module is selected — None omits the field.
     Does not write — caller passes the result to `write()`.
     """
-    return {
+    initial = {
         "version": __VERSION__,
         "installed_at": _now_iso_utc(),
         "mode": mode,
@@ -125,6 +129,9 @@ def create_initial(
         "excluded_components": list(excluded_components) if excluded_components is not None else [],
         "created_paths": list(created_paths) if created_paths is not None else [],
     }
+    if finance_dashboard_html_path is not None:
+        initial["finance_dashboard_html_path"] = finance_dashboard_html_path
+    return initial
 
 
 def update_for_upgrade(
@@ -133,6 +140,7 @@ def update_for_upgrade(
     extra_created_paths: list[str] | None = None,
     selected_modules: list[str] | None = None,
     excluded_components: list[str] | None = None,
+    finance_dashboard_html_path: str | None = None,
 ) -> dict[str, Any]:
     """Read existing manifest, flip mode to 'upgrade', refresh installed_at.
 
@@ -140,11 +148,11 @@ def update_for_upgrade(
     list. New paths created during the upgrade (if any) are appended without
     de-duplication or reordering — the order reflects creation history.
 
-    `sb_os_path` is back-filled idempotently: when the existing manifest
-    lacks the field (older installs predating the v0.2.0 schema), the value
-    passed by the caller is written. When the field is already present, the
-    existing value is preserved verbatim — the upgrade NEVER overwrites a
-    user-set `sb_os_path`.
+    `sb_os_path` and `finance_dashboard_html_path` are back-filled
+    idempotently: when the existing manifest lacks the field (older installs
+    predating the field's schema version), the value passed by the caller is
+    written. When the field is already present, the existing value is
+    preserved verbatim — the upgrade NEVER overwrites a user-set value.
 
     Returns the updated dict. Caller passes it to `write()` to persist.
     Raises FileNotFoundError if no manifest exists at vault_root.
@@ -162,6 +170,11 @@ def update_for_upgrade(
     updated["mode"] = "upgrade"
     if "sb_os_path" not in updated and sb_os_path is not None:
         updated["sb_os_path"] = sb_os_path
+    if (
+        "finance_dashboard_html_path" not in updated
+        and finance_dashboard_html_path is not None
+    ):
+        updated["finance_dashboard_html_path"] = finance_dashboard_html_path
     if selected_modules is not None:
         updated["selected_modules"] = list(selected_modules)
     if excluded_components is not None:
