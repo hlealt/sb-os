@@ -222,13 +222,31 @@ class FXState:
                    if lot.ticker == ticker and lot.quantity > 0)
 
 
-def build_fx_state(cut_date: str = None) -> FXState:
-    """Build FX state by processing all USD events chronologically.
+def _intraday_tier(evt: dict) -> int:
+    """Intra-day processing tier: inflows before outflows within a date.
 
-    Reads avenue_fx.csv, USD orders, and USD proventos, sorts by date,
-    and processes in order.
+    Same-day settlement at the broker is atomic, so processing buys before
+    same-day sells (an artifact of CSV row order) produces false-negative
+    USD balance dips (e.g. 2022-07-15: 1 buy + 8 sells). Tiers mirror
+    position_calculator's orders/corp-actions tiebreaker pattern:
+    transfer_in (0) → provento (1) → sell (2) → buy (3) → transfer_out (4).
     """
-    state = FXState()
+    if evt['type'] == 'fx':
+        return 0 if evt['operation'] == 'transfer_in' else 4
+    if evt['type'] == 'provento':
+        return 1
+    if evt['type'] == 'order':
+        return 3 if evt['side'] == 'C' else 2
+    return 5
+
+
+def load_events(cut_date: str = None) -> list[dict]:
+    """Load all USD events (FX transfers, USD orders, USD proventos),
+    sorted by (date, intra-day tier).
+
+    Shared by build_fx_state and the trace_fx_balance diagnostic so both
+    always replay the exact same event stream.
+    """
     events = []
 
     # Load FX transfers
@@ -270,30 +288,43 @@ def build_fx_state(cut_date: str = None) -> FXState:
             'amount_usd': float(row.get('net_value', 0) or 0),
         })
 
-    # Sort by date (stable sort preserves order within same date)
-    events.sort(key=lambda e: e['date'])
+    # Sort by (date, intra-day tier) — inflows before outflows within a
+    # date; stable sort preserves file order within the same tier.
+    events.sort(key=lambda e: (e['date'], _intraday_tier(e)))
+    return events
 
-    # Process events
-    for evt in events:
-        if evt['type'] == 'fx':
-            if evt['operation'] == 'transfer_in':
-                state.process_transfer_in(evt['usd'], evt['fx_rate'])
-            elif evt['operation'] == 'transfer_out':
-                state.process_transfer_out(evt['usd'])
 
-        elif evt['type'] == 'order':
-            if evt['side'] == 'C':
-                state.process_buy(evt['ticker'], evt['date'],
-                                  evt['quantity'], evt['price'])
-            else:
-                state.process_sell(evt['ticker'], evt['quantity'])
-                # Add proceeds back to USD balance
-                state.usd_balance += evt['total']
+def apply_event(state: FXState, evt: dict) -> None:
+    """Apply a single event from load_events to the FX state."""
+    if evt['type'] == 'fx':
+        if evt['operation'] == 'transfer_in':
+            state.process_transfer_in(evt['usd'], evt['fx_rate'])
+        elif evt['operation'] == 'transfer_out':
+            state.process_transfer_out(evt['usd'])
 
-        elif evt['type'] == 'provento':
-            # USD dividend: ticker-weighted FX, balance update, BRL record.
-            state.process_provento(evt['ticker'], evt['date'], evt['amount_usd'])
+    elif evt['type'] == 'order':
+        if evt['side'] == 'C':
+            state.process_buy(evt['ticker'], evt['date'],
+                              evt['quantity'], evt['price'])
+        else:
+            state.process_sell(evt['ticker'], evt['quantity'])
+            # Add proceeds back to USD balance
+            state.usd_balance += evt['total']
 
+    elif evt['type'] == 'provento':
+        # USD dividend: ticker-weighted FX, balance update, BRL record.
+        state.process_provento(evt['ticker'], evt['date'], evt['amount_usd'])
+
+
+def build_fx_state(cut_date: str = None) -> FXState:
+    """Build FX state by processing all USD events chronologically.
+
+    Reads avenue_fx.csv, USD orders, and USD proventos, sorts by
+    (date, intra-day tier), and processes in order.
+    """
+    state = FXState()
+    for evt in load_events(cut_date):
+        apply_event(state, evt)
     return state
 
 

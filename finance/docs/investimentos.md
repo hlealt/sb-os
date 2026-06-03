@@ -177,6 +177,8 @@ After every corporate action, positions with `type ∈ {acao, opcao, direito_sub
 
 Consumers aggregating across currencies (dashboards, reports) MUST read the `*_brl` variants. Per-position displays SHOULD read native fields so the user sees the unit they actually bought in.
 
+**FX engine event ordering.** `fx_engine.build_fx_state` replays `avenue_fx.csv` + USD orders + USD proventos sorted by `(date, intra-day tier)`. Tiers process inflows before outflows within a date — `transfer_in` (0), provento (1), sell (2), buy (3), `transfer_out` (4) — because same-day settlement at the broker is atomic. Without tiers, CSV row order could process a buy before same-day sells and produce a false-negative USD balance dip (observed 2022-07-15).
+
 ### Crypto Per-Asset IRR
 
 Per-asset XIRR for crypto positions is computed in **BRL**, not in the native asset (BTC, ETH, USDT etc.).

@@ -472,3 +472,16 @@ canonical_reader_writer: writes {wiki_root}/raw/{origin}/<YYYY-MM-DD-slug>.{md,h
 dry_run: available
 last_validated: 2026-05-28
 ```
+
+```yaml
+tool: trace_fx_balance (python investimentos/trace_fx_balance.py [--strict] [--eps EPS])
+purpose: Replay the Avenue FX engine event stream (fx_engine.load_events/apply_event) with a per-event USD balance trace, reporting every negative-balance period and the final engine state; --strict exits non-zero if the balance ever drops below -EPS (the "usd_balance >= 0 across full history" verification gate).
+owner_script: investimentos/trace_fx_balance.py
+class: read
+use: audit-diagnostic
+expected_inputs: optional --strict flag; optional --eps tolerance (default 0.005); reads .user/finance/bookkeeper/ledgers/investimentos/avenue_fx.csv + orders.csv (currency=USD) + proventos.csv (currency=USD) via fx_engine
+outputs: Human-readable report: event counts by type, per-period negative-balance detail (entry/min/recovery + events while negative), final state (usd_balance, weighted_avg_rate, per-ticker qty/cost_brl/avg_fx). Exit 0 always in verbose mode; exit 0/1 in --strict mode (0 = never negative, 1 = negative period found).
+canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/investimentos/avenue_fx.csv + orders.csv + proventos.csv (no write)
+dry_run: not-applicable
+last_validated: 2026-06-03
+```
