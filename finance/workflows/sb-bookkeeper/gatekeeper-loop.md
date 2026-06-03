@@ -95,13 +95,13 @@ The reference list is `../../scripts/lib/source_of_truth_registry.py` (the 23 p2
 
 ### Seam 1 — `tool-builder` dispatch
 
-> Wired here as a SEAM. The `tool-builder` companion is built at `p5-4` (`../tool-builder/`). This dispatch point exists now; until `p5-4` lands, taking this branch surfaces to the user that the companion is not yet available (pt-BR: "preciso construir/ajustar uma tool para isto, mas o `tool-builder` ainda não está disponível — registro a pendência").
+> The `tool-builder` companion is BUILT and live at `../tool-builder/` (landed at `p5-4`). Taking this branch dispatches it via the Agent tool. If the dispatch fails, surface the actual error to the user — never report it as "not available".
 
 When a deviation needs a new or changed tool, dispatch the `tool-builder` sub-agent (`../tool-builder/`). Authority boundary (binding): `tool-builder` output is **tools only** — it NEVER writes ledgers, `portfolio.json`, or the dashboard directly. A generated tool conforms to the destination artifact's existing schema by default; a genuine schema gap is dual-surfaced (a user-facing prompt AND a `schema_gap_finding` audit event), never silently flattened. The new tool MUST be appended to `tools-index.md` as part of its definition-of-done. After the tool exists, route the original data access back through it (tools-only invariant).
 
 ### Seam 2 — `doc-maintainer` dispatch
 
-> Wired here as a SEAM. The `doc-maintainer` companion is built at `p5-5` (`../doc-maintainer/`). This dispatch point exists now; until `p5-5` lands, taking this branch surfaces to the user that the companion is not yet available (pt-BR: "a estrutura mudou e a documentação precisa ser atualizada, mas o `doc-maintainer` ainda não está disponível — registro a pendência").
+> The `doc-maintainer` companion is BUILT and live at `../doc-maintainer/` (landed at `p5-5`). Taking this branch dispatches it via the Agent tool. If the dispatch fails, surface the actual error to the user — never report it as "not available".
 
 When durable structure changes, dispatch the `doc-maintainer` sub-agent (`../doc-maintainer/`) to bring `sb-bookkeeper.md`, the affected step files, and `tools-index.md` current with the change. This is the doc-currency arm of the quality bar in step 3 above.
 
