@@ -116,5 +116,3 @@ The coupling above is also encoded, machine-readable, in `docs/doc-currency-mani
 | **4 — Reconciliation (`doc-maintainer`)** | The companion sub-agent that brings the docs current after an approved change and thereby CLEARS the layer-2 signal and lets the layer-3 block pass. It is the legitimate way through the hard block. | `workflows/doc-maintainer/doc-maintainer.md` |
 
 Layers 2 and 3 both read the manifest; layer 4 clears what layers 2 and 3 detect. A commit blocked by layer 3 is resolved by running `doc-maintainer` (layer 4) to reconcile the doc, then re-committing — NOT by bypassing the hook.
-
-> Codex mirror note: do not read the sibling `AGENTS.md`. It is an auto-generated mirror for Codex agents. This `CLAUDE.md` file is the source of truth.
