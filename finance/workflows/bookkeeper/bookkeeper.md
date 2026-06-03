@@ -72,11 +72,11 @@ INV_PROCESSED_DIR = .user/finance/bookkeeper/investimentos/tmp-processed
 5. If `{PATH}` is `gastos` or `ambos`:
    - Set `{RAW_DIR}` = `{RAW_ROOT}/{MONTH}/expenses`.
    - Set `{PROCESSED_DIR}` = `{PROCESSED_ROOT}/{MONTH}`.
-   - Verify `{RAW_DIR}` exists. If not, instruct: "Crie a pasta `{RAW_DIR}` e coloque os extratos e faturas do mês lá."
+   - Ensure `{RAW_DIR}` and its `wise/` subfolder exist — create them if missing (`mkdir -p "{RAW_DIR}/wise"`). If `{RAW_DIR}` had to be created (was absent), warn the user (pt-BR): "Criei a estrutura para `{MONTH}`: `{RAW_DIR}/` e `{RAW_DIR}/wise/`. Confirme que `{MONTH}` está correto e coloque os extratos e faturas nessas pastas antes de continuar." and STOP until the user confirms. If `{RAW_DIR}` already existed, proceed without the warning.
    - Read `{CONFIG_DIR}/banks.json`.
 6. If `{PATH}` is `investimentos` or `ambos`:
    - Set `{INV_RAW_DIR}` = `{RAW_ROOT}/{MONTH}/investment`.
-   - Verify `{INV_RAW_DIR}` exists. If not, instruct: "Crie a pasta `{INV_RAW_DIR}` e coloque os arquivos de investimentos do mês lá."
+   - Ensure `{INV_RAW_DIR}` exists — create it if missing (`mkdir -p "{INV_RAW_DIR}"`). If it had to be created (was absent), warn the user (pt-BR): "Criei `{INV_RAW_DIR}` para `{MONTH}`. Confirme que `{MONTH}` está correto e coloque os arquivos de investimentos lá antes de continuar." and STOP until the user confirms. If it already existed, proceed without the warning.
    - Read `{CONFIG_DIR}/investment-sources.json`.
 7. Routing:
    - `gastos` or `ambos` → proceed to `{GASTOS_WORKFLOW_DIR}/step-01-preflight.md`.

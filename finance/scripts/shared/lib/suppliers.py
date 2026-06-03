@@ -59,8 +59,20 @@ class SupplierIndex:
         return self.raw.get("suppliers", {}).get(slug)
 
     def find_by_canonical(self, canonical: str) -> dict[str, Any] | None:
-        for slug, supplier in self.raw.get("suppliers", {}).items():
+        if canonical is None:
+            return None
+        suppliers = self.raw.get("suppliers", {})
+        # Exact match takes priority.
+        for slug, supplier in suppliers.items():
             if supplier.get("canonical") == canonical:
+                return supplier
+        # Case-insensitive fallback: the stored canonical is raw, but a row's
+        # supplier_canonical is name-canonicalized (titlecase), so an acronym
+        # canonical ("TT Técnica") diverges from its row form ("Tt Técnica").
+        # The divergence is casing-only, so a lowercased compare re-binds it.
+        target = canonical.strip().lower()
+        for slug, supplier in suppliers.items():
+            if str(supplier.get("canonical", "")).strip().lower() == target:
                 return supplier
         return None
 

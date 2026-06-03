@@ -3,11 +3,22 @@
 File pattern: Fatura_*_HENRIQUE_*_VISA_*.PDF
 Password: full CPF (no punctuation).
 
-Known issue: pdfplumber merges adjacent table rows into single lines.
-Post-processing splits merged lines at embedded DD/MM date patterns.
+Layout handling:
+- Multi-card faturas (titular + adicionais) are laid out in TWO columns.
+  Each page is cropped into left/right halves and parsed per-column so
+  pdfplumber's full-page extraction does not interleave the cards' rows.
+- Within a column, adjacent table rows can still merge into one line;
+  _try_split splits them at embedded DD/MM date / IOF patterns.
+- Parcelamento rows carry the ORIGINAL purchase date; they are re-dated to
+  the invoice cycle (first day of the Vencimento month) so they land in the
+  current close, with the original date preserved in original_ref.
+- No value-based dedup: per-column parsing removed the double-extraction it
+  guarded, so identical (date, description, amount) rows are kept as the
+  distinct charges they are.
 """
 
 import re
+from datetime import date
 from pathlib import Path
 
 import pikepdf
@@ -45,6 +56,7 @@ _COTACAO_SUFFIX_RE = re.compile(r"\s+COTAÇÃO.*$", re.IGNORECASE)
 class SantanderFaturaParser(BaseParser):
     bank_id = "santander_fatura"
     source_type = "fatura"
+    _cycle_date: str | None = None
 
     def parse(self, filepath: Path, password: str | None = None) -> list[dict]:
         rows = []
@@ -59,15 +71,71 @@ class SantanderFaturaParser(BaseParser):
                 target = filepath
 
             with pdfplumber.open(target) as pdf:
+                page_texts = []      # full-page text — cycle-date detection
+                column_texts = []    # per-column text — de-interleaved parsing
                 for page in pdf.pages:
-                    text = page.extract_text() or ""
-                    rows.extend(self._parse_text(text))
+                    page_texts.append(page.extract_text() or "")
+                    # Santander faturas lay multiple cards (titular + adicionais)
+                    # in TWO columns; pdfplumber's full-page extract_text()
+                    # interleaves them line-by-line and the row regex then drops
+                    # the merged transactions. Crop each page into left/right
+                    # halves and parse each column separately so each card's
+                    # rows stay contiguous.
+                    w, h = page.width, page.height
+                    for bbox in ((0, 0, w / 2, h), (w / 2, 0, w, h)):
+                        column_texts.append(page.crop(bbox).extract_text() or "")
+
+            self._cycle_date = self._extract_cycle_date("\n".join(page_texts))
+            for text in column_texts:
+                rows.extend(self._parse_text(text))
 
         finally:
             if decrypted_path.exists():
                 decrypted_path.unlink()
 
-        return self._deduplicate(rows)
+        # No value-based dedup: per-column parsing (above) removed the
+        # full-page row-interleaving that caused double-extraction, so a
+        # (date, description, amount) collision now means two GENUINELY
+        # distinct charges (e.g. two identical subscriptions or IOF lines on
+        # the same day). Dropping them would lose real transactions; a
+        # spurious double-emit, if it ever recurs, is caught loudly by the
+        # fatura-total reconciliation rather than silently hidden here.
+        return rows
+
+    def _extract_cycle_date(self, text: str) -> str | None:
+        """Statement cycle date = first day of the Vencimento month.
+
+        Parcelamento rows carry the ORIGINAL purchase date in the "Compra"
+        column (an installment 18/21 shows the first-purchase date, years
+        back). The close needs them dated to the CURRENT invoice cycle so
+        they survive normalize's month filter and let categorize's
+        competencia rule derive the accrual month from (cycle - (N-1)
+        months). Anchor that cycle to the first day of the Vencimento month.
+        Returns None if Vencimento is not found (rows keep their parsed date).
+        """
+        m = re.search(
+            r"Vencimento.*?(\d{2})/(\d{2})/(\d{4})", text,
+            re.DOTALL | re.IGNORECASE,
+        )
+        if not m:
+            return None
+        _, month, year = m.group(1), m.group(2), m.group(3)
+        return date(int(year), int(month), 1).isoformat()
+
+    def _make_row(self, date_str: str, description: str, amount: float, **kwargs) -> dict:
+        """Re-date parcelamento installments to the invoice cycle.
+
+        For rows with installment_total > 1, replace the original "Compra"
+        purchase date with the statement cycle date (preserving the original
+        in original_ref) so the installment falls in the current close.
+        Non-installment rows are unchanged.
+        """
+        inst_total = kwargs.get("installment_total")
+        if self._cycle_date and isinstance(inst_total, int) and inst_total > 1:
+            if not kwargs.get("original_ref"):
+                kwargs["original_ref"] = f"compra:{date_str}"
+            date_str = self._cycle_date
+        return super()._make_row(date_str, description, amount, **kwargs)
 
     def extract_total(self, filepath: Path, password: str | None = None) -> float | None:
         """Extract fatura total from Santander Visa PDF."""
@@ -364,13 +432,3 @@ class SantanderFaturaParser(BaseParser):
         if len(date_str) == 5:  # DD/MM
             return date_str + "/2026"
         return date_str
-
-    def _deduplicate(self, rows: list[dict]) -> list[dict]:
-        seen = set()
-        unique = []
-        for row in rows:
-            key = (row["date"], row["description"], row["amount"])
-            if key not in seen:
-                seen.add(key)
-                unique.append(row)
-        return unique

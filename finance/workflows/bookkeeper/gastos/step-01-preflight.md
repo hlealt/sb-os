@@ -50,6 +50,7 @@ Standard: `{tipo}-{banco}.{ext}` — defined in the `standard_filename` field of
    - If the name already matches `standard_filename` → direct match.
    - For CSVs: read the first 5 lines and compare known headers (e.g., `Data;Hist` = Bradesco, `RELEASE_DATE;TRANSACTION_TYPE` = Mercado Pago bank statement, `Data;Estabelecimento;Portador` = XP credit card invoice).
    - For PDFs: use name heuristics (e.g., `extrato_conta` = Santander bank statement, `Fatura_*_VISA_*` = Santander credit card invoice, `Nubank_*` = Nubank credit card invoice).
+   - **Same-issuer multi-file disambiguation:** when two or more files come from the SAME issuer but map to DIFFERENT sources (e.g., two Santander faturas from different cards), filename and page-1 visual heuristics are NOT sufficient and file display/image order MUST NEVER be trusted to assign identity. Bind each physical file to its source by a deterministic parser signal: parse each candidate file and match its `extract_total` and transaction count to the card/source identity, and confirm that parsed total equals the file's OWN page-1 total before assigning a `standard_filename`.
 4. Present to the user:
 
 ```
@@ -73,7 +74,7 @@ Confirm mapping?
 
 5. STOP. Wait for user confirmation.
 6. After confirmation, rename all files in `{RAW_DIR}/` to their corresponding `standard_filename`.
-7. Verify that all files were renamed correctly.
+7. Verify that all files were renamed correctly. For same-issuer multi-file sources, re-verify AFTER renaming that each file's parser signal (`extract_total` + transaction count) matches the source its name now claims — a swap is silent-wrong. Halt and correct if the post-rename parser signal contradicts the page-1 identity.
 
 ## Completion Gate — Expected-Source Coverage (auto-halt)
 

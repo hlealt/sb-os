@@ -3,9 +3,15 @@
 File pattern: Fatura_MP_*.pdf
 Password: first 5 digits of CPF.
 Layout: Text-based fatura with transaction lines.
+
+Parcela rows ("Parcela X de Y") carry the ORIGINAL purchase date; they are
+re-dated to the invoice cycle (first day of the Vencimento month) so they
+land in the current close, with the original date preserved in original_ref.
+Tables and text are both extracted and merged by _deduplicate.
 """
 
 import re
+from datetime import date
 from pathlib import Path
 
 import pikepdf
@@ -18,6 +24,7 @@ from .base import BaseParser
 class MPFaturaParser(BaseParser):
     bank_id = "mp_fatura"
     source_type = "fatura"
+    _cycle_date: str | None = None
 
     def parse(self, filepath: Path, password: str | None = None) -> list[dict]:
         rows = []
@@ -32,7 +39,9 @@ class MPFaturaParser(BaseParser):
                 target = filepath
 
             with pdfplumber.open(target) as pdf:
-                for page in pdf.pages:
+                page_texts = [page.extract_text() or "" for page in pdf.pages]
+                self._cycle_date = self._extract_cycle_date("\n".join(page_texts))
+                for page, text in zip(pdf.pages, page_texts):
                     # Try table extraction
                     tables = page.extract_tables()
                     if tables:
@@ -40,7 +49,6 @@ class MPFaturaParser(BaseParser):
                             rows.extend(self._parse_table(table))
 
                     # Also try text
-                    text = page.extract_text() or ""
                     rows.extend(self._parse_text(text))
 
         finally:
@@ -48,6 +56,38 @@ class MPFaturaParser(BaseParser):
                 decrypted_path.unlink()
 
         return self._deduplicate(rows)
+
+    def _extract_cycle_date(self, text: str) -> str | None:
+        """Statement cycle date = first day of the Vencimento month.
+
+        Parcela rows ("Parcela X de Y") carry the ORIGINAL purchase date
+        (months/years back), so hardcoding the close year puts them in the
+        future or a past month and normalize's filter drops them. Re-date
+        them to the current invoice cycle so they land in this close and
+        categorize's competencia rule derives the accrual month. Returns
+        None if Vencimento is not found (rows keep their parsed date).
+        """
+        m = re.search(
+            r"Vencimento:?\s*(\d{2})/(\d{2})/(\d{4})", text, re.IGNORECASE,
+        )
+        if not m:
+            return None
+        _, month, year = m.group(1), m.group(2), m.group(3)
+        return date(int(year), int(month), 1).isoformat()
+
+    def _make_row(self, date_str: str, description: str, amount: float, **kwargs) -> dict:
+        """Re-date parcela installments to the invoice cycle.
+
+        For rows with installment_total > 1, replace the original purchase
+        date with the statement cycle date (preserving the original in
+        original_ref). Non-installment rows are unchanged.
+        """
+        inst_total = kwargs.get("installment_total")
+        if self._cycle_date and isinstance(inst_total, int) and inst_total > 1:
+            if not kwargs.get("original_ref"):
+                kwargs["original_ref"] = f"compra:{date_str}"
+            date_str = self._cycle_date
+        return super()._make_row(date_str, description, amount, **kwargs)
 
     def extract_total(self, filepath: Path, password: str | None = None) -> float | None:
         """Extract fatura total from Mercado Pago PDF."""
