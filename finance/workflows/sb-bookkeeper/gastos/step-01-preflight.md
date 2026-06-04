@@ -8,35 +8,35 @@ nextStepFile: step-02-normalize.md
 
 **Goal:** Identify each downloaded file, map it to the correct bank, and rename to the standard filename expected by `normalize.py`.
 
-## Help — Onde baixar e onde salvar
+## Help — Where to download and where to save
 
-ANTES de qualquer scan, leia `{CONFIG_DIR}/banks.json` e renderize uma tabela com uma linha por banco e três colunas:
+BEFORE any scan, read `{CONFIG_DIR}/banks.json` and render a table with one row per bank and three columns:
 
-| Coluna | Valor |
+| Column | Value |
 |--------|-------|
-| Fonte | `name` do banco |
-| O que baixar | `download_hint` do banco |
-| Onde salvar | `{RAW_DIR}/{standard_filename}` |
+| Source | bank `name` |
+| What to download | bank `download_hint` |
+| Where to save | `{RAW_DIR}/{standard_filename}` |
 
-Exemplo do que o usuário deve ver (para `{MONTH}=2026-04`):
+Example of what the user should see (for `{MONTH}=2026-04`):
 
 ```
-| Fonte                                  | O que baixar                                 | Onde salvar                                                          |
+| Source                                 | What to download                             | Where to save                                                        |
 |----------------------------------------|----------------------------------------------|----------------------------------------------------------------------|
-| Bradesco — Extrato Conta Corrente      | App Bradesco > Extrato > Exportar CSV        | .user/finance/bookkeeper/raw-data/2026-04/expenses/extrato-bradesco.csv |
-| Santander — Extrato Conta Corrente     | Internet Banking Santander > Extrato > PDF   | .user/finance/bookkeeper/raw-data/2026-04/expenses/extrato-santander.pdf|
-| Santander — Fatura Cartão Visa         | Email ou app Santander > Fatura > Baixar PDF | .user/finance/bookkeeper/raw-data/2026-04/expenses/fatura-santander.pdf |
-| Mercado Pago — Extrato Conta           | App Mercado Pago > Extrato > Exportar CSV    | .user/finance/bookkeeper/raw-data/2026-04/expenses/extrato-mercado-pago.csv |
-| Wise — Extrato Multi-Moeda             | Wise > Statements > Export CSV (por moeda)   | .user/finance/bookkeeper/raw-data/2026-04/expenses/wise/extrato-wise-{MOEDA}.csv |
-| Mercado Pago — Fatura Cartão           | Email Mercado Pago > Fatura anexa em PDF     | .user/finance/bookkeeper/raw-data/2026-04/expenses/fatura-mercado-pago.pdf |
-| Nubank — Fatura Cartão                 | App Nubank > Fatura > Baixar PDF ou email    | .user/finance/bookkeeper/raw-data/2026-04/expenses/fatura-nubank.pdf    |
-| XP — Fatura Cartão                     | App XP > Cartão > Fatura > Exportar CSV      | .user/finance/bookkeeper/raw-data/2026-04/expenses/fatura-xp.csv        |
+| Bradesco — Extrato Conta Corrente      | Bradesco app > Extrato > Export CSV          | .user/finance/bookkeeper/raw-data/2026-04/expenses/extrato-bradesco.csv |
+| Santander — Extrato Conta Corrente     | Santander Internet Banking > Extrato > PDF   | .user/finance/bookkeeper/raw-data/2026-04/expenses/extrato-santander.pdf|
+| Santander — Fatura Cartão Visa         | Santander email or app > Fatura > Download PDF | .user/finance/bookkeeper/raw-data/2026-04/expenses/fatura-santander.pdf |
+| Mercado Pago — Extrato Conta           | Mercado Pago app > Extrato > Export CSV      | .user/finance/bookkeeper/raw-data/2026-04/expenses/extrato-mercado-pago.csv |
+| Wise — Extrato Multi-Moeda             | Wise > Statements > Export CSV (per currency)| .user/finance/bookkeeper/raw-data/2026-04/expenses/wise/extrato-wise-{MOEDA}.csv |
+| Mercado Pago — Fatura Cartão           | Mercado Pago email > Fatura attached as PDF  | .user/finance/bookkeeper/raw-data/2026-04/expenses/fatura-mercado-pago.pdf |
+| Nubank — Fatura Cartão                 | Nubank app > Fatura > Download PDF or email  | .user/finance/bookkeeper/raw-data/2026-04/expenses/fatura-nubank.pdf    |
+| XP — Fatura Cartão                     | XP app > Cartão > Fatura > Export CSV        | .user/finance/bookkeeper/raw-data/2026-04/expenses/fatura-xp.csv        |
 ```
 
-Após renderizar a tabela, pergunte: "Já baixou todos os arquivos para `{RAW_DIR}/`? [S/N]".
+After rendering the table, ask: "Have you downloaded all the files to `{RAW_DIR}/`? [S/N]".
 
-- Se **N** → use a tabela como guia, aguarde o usuário baixar, e só então prossiga.
-- Se **S** ou se já houver arquivos em `{RAW_DIR}/` → prossiga. O agente cuida de identificação e renomeação automaticamente — o usuário NÃO precisa renomear manualmente.
+- If **N** → use the table as a guide, wait for the user to download, and only then proceed.
+- If **S** or if files already exist in `{RAW_DIR}/` → proceed. The agent handles identification and renaming automatically — the user does NOT need to rename manually.
 
 ## Naming Convention
 
@@ -83,7 +83,7 @@ Before advancing, confirm every source expected for a close is actually present.
 Compare the expected set against the files identified in step 4. If an expected source has NO file:
 
 - This is a Rule C **blocking** issue (`../gatekeeper-loop.md`). The close cannot proceed with a silently-missing expected source — a missing month of bank data would understate spending without any signal (silent-wrong is the worst outcome).
-- Surface it inline (pt-BR): name the missing source(s), propose the fix (download the missing file into `{RAW_DIR}/`, or — if the source is genuinely not expected this month — set `enabled_for_close: false` for it in `sources.yaml`), and offer `[S]` aprovar / `[N]` rejeitar.
+- Surface it inline: name the missing source(s), propose the fix (download the missing file into `{RAW_DIR}/`, or — if the source is genuinely not expected this month — set `enabled_for_close: false` for it in `sources.yaml`), and offer `[S]` approve / `[N]` reject.
 - **STOP. Do NOT advance to step-02 while an expected source is missing and unresolved.** `manual_cash` is satisfied if the user confirms there were no cash expenses (it is reconciled in step-05 Section 2, not a file in `{RAW_DIR}/`).
 
 ## Step Menu

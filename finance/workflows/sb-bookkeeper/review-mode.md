@@ -8,10 +8,10 @@ runtime: agent-loop
 Scoped revision pass — user picks a specific month AND a specific revision type, then works through only those issues for that scope. This is distinct from the full monthly close: no new data is ingested, no new snapshots are generated. The purpose is to resolve issues that were deferred during a close or to apply targeted corrections to a completed month.
 
 **Two entry points:**
-1. **Gatekeeper deferral.** At the end of a gastos or investimentos close, the gatekeeper loop (`gatekeeper-loop.md` Rule C) may have accumulated deferrable issues. After presenting the deferrable list, the loop asks: "Rodar o modo de revisão agora ou depois?" — [S] now or [D] defer. Choosing [S] calls this file with the deferrable list pre-loaded as the initial queue.
-2. **Direct activation.** User runs `sb-bookkeeper` and selects `[4] Revisão` at the flow prompt. No pre-loaded queue; user picks month and revision type interactively.
+1. **Gatekeeper deferral.** At the end of a gastos or investimentos close, the gatekeeper loop (`gatekeeper-loop.md` Rule C) may have accumulated deferrable issues. After presenting the deferrable list, the loop asks: "Run review mode now or later?" — [S] now or [D] defer. Choosing [S] calls this file with the deferrable list pre-loaded as the initial queue.
+2. **Direct activation.** User runs `sb-bookkeeper` and selects `[4] Review` at the flow prompt. No pre-loaded queue; user picks month and revision type interactively.
 
-**Language and UI (binding).** User-facing strings in PT-BR. Load `communication` and `batch_ui` from `{CONFIG_DIR}/standing-rules.yaml` via `lib.standing_rules.load_communication()` and `load_batch_ui()`. Decision surface shapes follow `batch_ui` — one row = one decision (`batch_ui.tags.one_row_one_decision`); do not aggregate suppliers (`batch_ui.sub_items.aggregate_suppliers: false`).
+**Language and UI (binding).** User-facing strings in `communication.language`. Load `communication` and `batch_ui` from `{CONFIG_DIR}/standing-rules.yaml` via `lib.standing_rules.load_communication()` and `load_batch_ui()`. Decision surface shapes follow `batch_ui` — one row = one decision (`batch_ui.tags.one_row_one_decision`); do not aggregate suppliers (`batch_ui.sub_items.aggregate_suppliers: false`).
 
 ---
 
@@ -34,7 +34,7 @@ DASHBOARD_DATA = .user/finance/bookkeeper/ledgers/fechamento
 2. If called directly (Entry point 2), ask the user:
 
    ```
-   Modo de revisão — qual mês? (e.g., 2026-03)
+   Review mode — which month? (e.g., 2026-03)
    ```
 
    STOP. Await response. Set `{MONTH}`.
@@ -42,44 +42,44 @@ DASHBOARD_DATA = .user/finance/bookkeeper/ledgers/fechamento
 3. Present the revision-type menu:
 
    ```
-   Qual tipo de revisão para {MONTH}?
+   Which revision type for {MONTH}?
 
-     [1] Categorias — revisar ou corrigir categorias de transações
-     [2] Fornecedores — renomear canônicos, ajustar aliases ou movable
-     [3] Tags — aceitar, mesclar ou rejeitar tags pendentes
-     [4] Competência — ajustar datas de competência (Pass 3 / cross-month)
-     [5] Itens adiados — resolver itens marcados como deferrable no fechamento
-     [6] Livre — digitar uma instrução de revisão específica
+     [1] Categories — review or correct transaction categories
+     [2] Suppliers — rename canonicals, adjust aliases or movable
+     [3] Tags — accept, merge, or reject pending tags
+     [4] Competência — adjust competência dates (Pass 3 / cross-month)
+     [5] Deferred items — resolve items flagged as deferrable in the close
+     [6] Free — type a specific revision instruction
 
-   Escolha um ou mais tipos (ex: "1,3" ou "5"):
+   Choose one or more types (e.g.: "1,3" or "5"):
    ```
 
    STOP. Await response. Set `{REVISION_TYPES}` as the chosen list.
 
-4. Confirm scope in PT-BR:
+4. Confirm scope:
 
    ```
-   Revisão de {MONTH}: {lista de tipos escolhidos}. Carregando…
+   Reviewing {MONTH}: {list of chosen types}. Loading…
    ```
 
 ### Section 2 — Load the scoped queue
 
-1. Load `{DASHBOARD_DATA}/{MONTH}/transactions.csv`. If the file does not exist, report: "Mês {MONTH} não encontrado em `ledgers/fechamento/`. Verifique o mês e tente novamente." Halt.
+1. Load `{DASHBOARD_DATA}/{MONTH}/transactions.csv`. If the file does not exist, report: "Month {MONTH} not found in `ledgers/fechamento/`. Check the month and try again." Halt.
 
 2. Load supporting config files needed by the chosen revision types:
-   - Tipos 1, 2, 3: load `{CONFIG_DIR}/suppliers.json`, `{CONFIG_DIR}/tags.json`, `{CONFIG_DIR}/categories.json`.
-   - Tipo 4: load `{CONFIG_DIR}/corrections/competencia-overrides.csv` via `lib.queue.load_competencia_overrides`.
-   - Tipo 5: use the deferrable list passed in from the gatekeeper loop (already in memory if Entry point 1; otherwise report "Nenhum item adiado encontrado para {MONTH}." and ask whether to continue with another revision type).
+   - Types 1, 2, 3: load `{CONFIG_DIR}/suppliers.json`, `{CONFIG_DIR}/tags.json`, `{CONFIG_DIR}/categories.json`.
+   - Type 4: load `{CONFIG_DIR}/corrections/competencia-overrides.csv` via `lib.queue.load_competencia_overrides`.
+   - Type 5: use the deferrable list passed in from the gatekeeper loop (already in memory if Entry point 1; otherwise report "No deferred items found for {MONTH}." and ask whether to continue with another revision type).
 
 3. Build the revision queue for each chosen revision type:
-   - **Tipo 1 (Categorias):** filter `transactions.csv` for rows with `category` matching a value the user flags as needing review, OR rows with `manual_override = false` in a contested category. The user may also type a category name to scope further.
-   - **Tipo 2 (Fornecedores):** filter for rows where `supplier_canonical` is blank, a known alias has drifted, or the user wants to batch-rename. Present per-canonical groups.
-   - **Tipo 3 (Tags):** filter for rows with blank `tags` (untagged) or with `proposed_token` items deferred from Pass 1. Use the same `build_pass_1_queue` tag sub-queue over the scoped month.
-   - **Tipo 4 (Competência):** filter for reimbursement-matched rows whose `data_competencia == data_caixa` (potential cross-month candidates), plus any rows in the Pass 3 queue (`lib.queue.build_pass_3_queue`).
-   - **Tipo 5 (Itens adiados):** the deferrable list from the gatekeeper. Each item carries a `why_deferred` note; present it alongside the item.
-   - **Tipo 6 (Livre):** present a plain-text prompt; the user drives the revision step by step. No structured queue.
+   - **Type 1 (Categories):** filter `transactions.csv` for rows with `category` matching a value the user flags as needing review, OR rows with `manual_override = false` in a contested category. The user may also type a category name to scope further.
+   - **Type 2 (Suppliers):** filter for rows where `supplier_canonical` is blank, a known alias has drifted, or the user wants to batch-rename. Present per-canonical groups.
+   - **Type 3 (Tags):** filter for rows with blank `tags` (untagged) or with `proposed_token` items deferred from Pass 1. Use the same `build_pass_1_queue` tag sub-queue over the scoped month.
+   - **Type 4 (Competência):** filter for reimbursement-matched rows whose `data_competencia == data_caixa` (potential cross-month candidates), plus any rows in the Pass 3 queue (`lib.queue.build_pass_3_queue`).
+   - **Type 5 (Deferred items):** the deferrable list from the gatekeeper. Each item carries a `why_deferred` note; present it alongside the item.
+   - **Type 6 (Free):** present a plain-text prompt; the user drives the revision step by step. No structured queue.
 
-4. If all queues for the chosen revision types are empty, report: "Nenhum item para revisão do tipo selecionado em {MONTH}." Ask whether to pick another revision type or exit.
+4. If all queues for the chosen revision types are empty, report: "No items to review of the selected type in {MONTH}." Ask whether to pick another revision type or exit.
 
 ### Section 3 — Process the queue
 
@@ -87,13 +87,13 @@ Present items batch-by-batch (5–7 per batch), one item per row, following `bat
 
 **For each item, display:**
 - `data_caixa · supplier_canonical · amount · category · tags` (as applicable to the revision type)
-- The specific decision prompt for the revision type (PT-BR):
+- The specific decision prompt for the revision type:
 
-  - Tipo 1: `Categoria atual: {category}. Manter, ou nova categoria?`
-  - Tipo 2: `Canônico atual: {canonical}. Renomear, ou adicionar alias?`
-  - Tipo 3: `Tag proposta: {token}. [A] Aceitar / [M] Mesclar com {existing} / [R] Rejeitar`
-  - Tipo 4: `Competência atual: {data_competencia}. Manter = {data_caixa}, ou mover para qual mês?`
-  - Tipo 5: `Motivo do adiamento: {why_deferred}. {prompt específico do tipo original}`
+  - Type 1: `Current category: {category}. Keep, or new category?`
+  - Type 2: `Current canonical: {canonical}. Rename, or add alias?`
+  - Type 3: `Proposed tag: {token}. [A] Accept / [M] Merge with {existing} / [R] Reject`
+  - Type 4: `Current competência: {data_competencia}. Keep = {data_caixa}, or move to which month?`
+  - Type 5: `Reason for deferral: {why_deferred}. {original type's specific prompt}`
 
 **Apply resolutions** via the same lib functions used in Step 5 (gastos review):
 - Category changes → `lib.queue.apply_pass_1_resolution(..., {"category": ...})` + update `{CONFIG_DIR}/categories.json` if a new category is created.
@@ -108,15 +108,15 @@ After each batch, persist changes to the relevant config files and to a working 
 
 1. Write the revised `transactions.csv` back to `{DASHBOARD_DATA}/{MONTH}/transactions.csv` using `atomic_write` (from `shared/lib/safe_write.py`) — same atomic-write pattern as the main close.
 
-2. Confirm to the user (PT-BR):
+2. Confirm to the user:
 
    ```
-   Revisão concluída — {MONTH}, tipo(s): {REVISION_TYPES}.
-   {N_resolved} itens resolvidos. {N_skipped} ignorados.
-   CSV salvo.
+   Review complete — {MONTH}, type(s): {REVISION_TYPES}.
+   {N_resolved} items resolved. {N_skipped} skipped.
+   CSV saved.
    ```
 
-3. If there are remaining unresolved items in the queue, ask: "Há {N_remaining} itens restantes. Continuar agora ou adiar para uma próxima sessão?"
+3. If there are remaining unresolved items in the queue, ask: "{N_remaining} items remaining. Continue now or defer to a next session?"
 
 4. STOP. Await confirmation.
 
@@ -125,13 +125,13 @@ After each batch, persist changes to the relevant config files and to a working 
 ## Step Menu
 
 - **Gatekeeper checkpoint** → before saving, run § Per-Step Checkpoint in `../gatekeeper-loop.md`. A revision that creates or modifies a data store, config dict, or dashboard-consumed script triggers Rule A.1 (ME gate).
-- **[N] Novo mês / tipo** → return to Section 1 without exiting (pick a different month or revision type).
-- **[X] Sair** → exit review mode. Changes already applied and saved are preserved.
+- **[N] New month / type** → return to Section 1 without exiting (pick a different month or revision type).
+- **[X] Exit** → exit review mode. Changes already applied and saved are preserved.
 
 ---
 
 ## Wire Notes
 
 - **Gatekeeper seam.** Rule C of `gatekeeper-loop.md` (deferrable → review-mode) routes to this file. The gatekeeper loop records items in the deferrable list and surfaces them at close end; this file is where those items are resolved. The gatekeeper does not implement the per-revision-type scoping — this file does.
-- **`batch_ui` binding.** `batch_ui.tags.one_row_one_decision = true` and `batch_ui.sub_items.aggregate_suppliers: false` are enforced here. Every queue item is one row, one prompt, one decision. The sub-items rule is especially load-bearing for Tipo 2 (fornecedores) — do not batch multiple canonical proposals into one prompt.
+- **`batch_ui` binding.** `batch_ui.tags.one_row_one_decision = true` and `batch_ui.sub_items.aggregate_suppliers: false` are enforced here. Every queue item is one row, one prompt, one decision. The sub-items rule is especially load-bearing for Type 2 (suppliers) — do not batch multiple canonical proposals into one prompt.
 - **Corrections convention.** Revisions to a frozen past-close month write to the corrections side-ledger (append-only), not directly to `transactions.csv` rows. The corrected value is re-stamped on next regeneration via the corrections protocol (`categorize.py` loads `manual-overrides.csv` and `competencia-overrides.csv`). This preserves the append-only-ledger constraint for months that have been closed with `--force`.

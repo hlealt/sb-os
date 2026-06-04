@@ -81,7 +81,7 @@ Test the thesis against the assembled evidence (prior + new, including the Step 
 Source tensions: #{a} ↔ #{b} — {one-line description of the disagreement}.
 ```
 
-A source tension is a flag the user weighs, not a separate analysis pass: it reads only metadata and stated conclusions already assembled. If the evidence shows no contradiction, write none — do not fetch text to manufacture one. The verdict (Step 5) MUST reflect these tensions: a criterion whose evidence is internally contradicted is `near`, not `clear`, until the contradiction resolves.
+A source tension is a flag the user weighs, not a separate analysis pass: it reads only metadata and stated conclusions already assembled. If the evidence shows no contradiction, write none — do not fetch text to manufacture one. The verdict (Step 5) MUST reflect these tensions: a criterion whose evidence is internally contradicted is `near`, not `clear`, until the contradiction resolves. A numeric market figure the sources state differently is presented as the source-attributed range per `./thesis.md` Step 2 § Market-figure range rule — unless a registered read tool resolves it.
 
 Read a related company's `## Financials` table off its wiki entity page directly when fundamentals inform the evaluation (no fundamentals tool in v1). Surface any reasoning problem — a contradicted premise, an unresolved source, a thesis already resting on tripped criteria — per `./investor-loop.md` § Issue-surfacing; a blocking issue halts the step until resolved.
 

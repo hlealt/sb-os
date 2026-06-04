@@ -4,77 +4,77 @@ stepId: review
 nextStepFile: step-07-snapshot.md
 ---
 
-# Step 6: Review — Apresentar Mudanças e Anomalias
+# Step 6: Review — Present Changes and Anomalies
 
-**Goal:** Apresentar ao usuário um resumo das mudanças do mês (deltas) e anomalias detectadas, para confirmação antes de criar o snapshot.
+**Goal:** Present the user a summary of the month's changes (deltas) and detected anomalies, for confirmation before creating the snapshot.
 
 ## Mandatory Sequence
 
-1. Compare `portfolio.json` recém-gerado com o snapshot anterior em `{INV_LEDGER_DIR}/snapshots.json` (último entry). Calcule:
-   - Δ valor total (BRL e %)
-   - Δ por classe (variable_income, fixed_income, crypto, funds)
-   - Δ por broker
-   - Top movers (maiores variações absolutas e percentuais por posição)
+1. Compare the freshly-generated `portfolio.json` with the previous snapshot in `{INV_LEDGER_DIR}/snapshots.json` (last entry). Compute:
+   - Δ total value (BRL and %)
+   - Δ per class (variable_income, fixed_income, crypto, funds)
+   - Δ per broker
+   - Top movers (largest absolute and percentage changes per position)
 
-2. Apresente:
+2. Present:
 
 ```
-Revisão {MONTH}:
+Review {MONTH}:
 
   Total: R$ X.XXX.XXX → R$ X.XXX.XXX (+R$ XX.XXX, +X.X%)
   
-  Por classe:
+  By class:
     Variável: +R$ XX (+X.X%)
     RF:       +R$ XX (+X.X%)
     Crypto:   −R$ XX (−X.X%)
     Fundos:   +R$ XX (+X.X%)
 
   Top movers:
-    +R$ X.XXX  PETR4 (preço ↑ + compras)
-    −R$ X.XXX  BTC (preço ↓)
+    +R$ X.XXX  PETR4 (price ↑ + purchases)
+    −R$ X.XXX  BTC (price ↓)
     +R$ X.XXX  SAFRA ABS (aplicação)
 
-  Anomalias detectadas:
-    - <vazia> | OU lista (variação >20%, posição zerada inesperadamente, novo ticker, etc.)
+  Detected anomalies:
+    - <empty> | OR list (change >20%, position unexpectedly zeroed, new ticker, etc.)
 ```
 
-3. Para cada anomalia, peça classificação ao usuário: aceitar (movimento real) ou investigar (provável bug).
+3. For each anomaly, ask the user to classify: accept (real movement) or investigate (probable bug).
 
-4. Se houver anomalias para investigar, NÃO prossiga — volte ao Step 02-03-04 conforme o caso.
+4. If there are anomalies to investigate, do NOT proceed — go back to Step 02-03-04 as appropriate.
 
-5. **Completion gates — pré-snapshot (auto-halt).** Antes de criar o snapshot (Step 07), rode os três gates de portfolio. Todos leem `portfolio.json` recém-gerado; nenhum auto-loopa (o usuário decide a próxima ação). Cada falha é Rule C **blocking** — NÃO avance ao Step 07 enquanto não resolver ou o usuário aceitar explicitamente.
+5. **Completion gates — pre-snapshot (auto-halt).** Before creating the snapshot (Step 07), run the three portfolio gates. All read the freshly-generated `portfolio.json`; none auto-loops (the user decides the next action). Each failure is Rule C **blocking** — do NOT advance to Step 07 until it is resolved or the user explicitly accepts.
 
-   a. **Anomalia de delta de portfolio (`gate_portfolio_delta.py`, gate #8):**
+   a. **Portfolio delta anomaly (`gate_portfolio_delta.py`, gate #8):**
 
       ```bash
       python "{SCRIPTS_DIR}/gate_portfolio_delta.py" --portfolio "{INV_LEDGER_DIR}/portfolio.json" --flagged-ids "{IDS_ACEITOS}"
       ```
 
-      Mecaniza a lista "Anomalias detectadas" do passo 2: variação por posição >20%, posição zerada inesperadamente, ticker novo vs snapshot anterior. Passe em `{IDS_ACEITOS}` (vírgula-separado) os `id`s que o usuário classificou como "aceitar (movimento real)" no passo 3 — assim o gate só falha em anomalias NÃO reconhecidas. Exit 0 = nenhuma anomalia não-flagada; exit 1 = anomalias não-flagadas restam; exit 2 = arquivos ausentes. Sem snapshot anterior → pass vácuo.
+      Mechanizes the "Detected anomalies" list of step 2: per-position change >20%, position unexpectedly zeroed, new ticker vs previous snapshot. Pass in `{IDS_ACEITOS}` (comma-separated) the `id`s the user classified as "accept (real movement)" in step 3 — so the gate only fails on UNrecognized anomalies. Exit 0 = no unflagged anomaly; exit 1 = unflagged anomalies remain; exit 2 = files missing. No previous snapshot → vacuous pass.
 
-   b. **Sanidade de IRR + banda rf_balcao (`gate_irr_sanity.py`, gate #9):**
+   b. **IRR sanity + rf_balcao band (`gate_irr_sanity.py`, gate #9):**
 
       ```bash
       python "{SCRIPTS_DIR}/gate_irr_sanity.py"
       ```
 
-      Falha (exit 1) se `|irr| > 200%` em qualquer posição/classe, se `irr_quality` faltar numa posição balcão com valor, ou se uma posição `rf_balcao` tiver retorno anualizado fora da banda `[7%, 15%]` (lida de `investment_rules.sanity_bands.rf_balcao` em `standing-rules.yaml`). Exit 0 = sem violações; exit 2 = `portfolio.json` ausente.
+      Fails (exit 1) if `|irr| > 200%` on any position/class, if `irr_quality` is missing on a balcão position with value, or if an `rf_balcao` position has an annualized return outside the band `[7%, 15%]` (read from `investment_rules.sanity_bands.rf_balcao` in `standing-rules.yaml`). Exit 0 = no violations; exit 2 = `portfolio.json` missing.
 
-   c. **Divergência de bucket IRR (`gate_bucket_divergence.py`, gate #10):**
+   c. **IRR bucket divergence (`gate_bucket_divergence.py`, gate #10):**
 
       ```bash
       python "{SCRIPTS_DIR}/gate_bucket_divergence.py"
       ```
 
-      Falha (exit 1) se, em qualquer bucket (rv_br/rv_eua/rf_balcao/fundos/crypto), `|média-simples-por-ativo − IRR-do-bucket-armazenado| > 5%`. Exit 0 = todos dentro da tolerância; exit 2 = `portfolio.json` ausente.
+      Fails (exit 1) if, in any bucket (rv_br/rv_eua/rf_balcao/fundos/crypto), `|per-asset-simple-mean − stored-bucket-IRR| > 5%`. Exit 0 = all within tolerance; exit 2 = `portfolio.json` missing.
 
-   Para CADA gate com exit 1: Rule C **blocking** (`../gatekeeper-loop.md`). Surface as violações inline (pt-BR), proponha o fix (investigar bug de dados/parser → corrigir e re-rodar Step 02-05; ou aceitar explicitamente a anomalia — para o #8, re-rodar com o `id` adicionado a `--flagged-ids`), e ofereça `[S]`/`[N]`. Exit 2 em qualquer gate → `portfolio.json` não foi gerado; volte ao Step 05.
+   For EACH gate with exit 1: Rule C **blocking** (`../gatekeeper-loop.md`). Surface the violations inline, propose the fix (investigate a data/parser bug → correct and re-run Step 02-05; or explicitly accept the anomaly — for #8, re-run with the `id` added to `--flagged-ids`), and offer `[S]`/`[N]`. Exit 2 on any gate → `portfolio.json` was not generated; go back to Step 05.
 
-6. STOP. Aguarde confirmação do usuário ("OK, snapshot pode ser criado").
+6. STOP. Wait for the user's confirmation ("OK, the snapshot can be created").
 
 ## Step Menu
 
-- **Gatekeeper checkpoint** → before advancing, run § Per-Step Checkpoint in `../gatekeeper-loop.md`. This step is the canonical Rule C surface for investimentos: an anomaly classified "investigar" (variação >20%, posição zerada, novo ticker) is BLOCKING — surface inline with a proposed fix and do not advance until resolved; a low-materiality quality flag (`seed_only`, `short_window`) is DEFERRABLE — record it and route to review-mode. Three completion gates auto-halt here before the snapshot: `gate_portfolio_delta.py` (#8), `gate_irr_sanity.py` (#9), `gate_bucket_divergence.py` (#10).
+- **Gatekeeper checkpoint** → before advancing, run § Per-Step Checkpoint in `../gatekeeper-loop.md`. This step is the canonical Rule C surface for investimentos: an anomaly classified "investigate" (change >20%, position zeroed, new ticker) is BLOCKING — surface inline with a proposed fix and do not advance until resolved; a low-materiality quality flag (`seed_only`, `short_window`) is DEFERRABLE — record it and route to review-mode. Three completion gates auto-halt here before the snapshot: `gate_portfolio_delta.py` (#8), `gate_irr_sanity.py` (#9), `gate_bucket_divergence.py` (#10).
 - **[C] Continue** → proceed to Step 07 (Snapshot)
-- **[B] Back] → voltar para investigar
+- **[B] Back** → go back to investigate
 - **[X] Exit** → halt workflow

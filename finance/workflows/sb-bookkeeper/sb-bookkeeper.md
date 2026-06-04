@@ -1,6 +1,6 @@
 ---
 name: sb-bookkeeper
-description: Monthly financial closing — gastos, investimentos, or both.
+description: Monthly financial close — gastos, investimentos, or both.
 model: opus
 ---
 
@@ -64,19 +64,19 @@ INV_PROCESSED_DIR = .user/finance/bookkeeper/investimentos/tmp-processed
 
 0. Load the gatekeeper runtime: read `{WORKFLOW_DIR}/gatekeeper-loop.md`. It is the active-agency runtime protocol (the three gatekeeper rules) and stays in force across every step. Load `communication` and `batch_ui` from `{CONFIG_DIR}/standing-rules.yaml` (via `lib.standing_rules.load_communication()` and `load_batch_ui()`) as that file directs.
 0b. **Onboarding check.** Read `{CONFIG_DIR}/sources.yaml`. If the file does not exist or `sources:` is empty (no entries), route to `{WORKFLOW_DIR}/step-00-onboarding.md` before proceeding. Do not ask for a flow or month until onboarding is complete and at least one source is enabled.
-1. Ask the user: "Qual fluxo? [1] Gastos / [2] Investimentos / [3] Ambos / [4] Revisão"
+1. Ask the user: "Which flow? [1] Gastos / [2] Investimentos / [3] Both / [4] Review"
 2. Set `{PATH}` from the response: `1` → `gastos`, `2` → `investimentos`, `3` → `ambos`, `4` → `revisao`.
    - If `{PATH}` is `revisao` → proceed to `{WORKFLOW_DIR}/review-mode.md`. Skip steps 3–8 below.
-3. Ask: "Qual mês? (e.g., 2026-03)"
+3. Ask: "Which month? (e.g., 2026-03)"
 4. Set `{MONTH}` with the response.
 5. If `{PATH}` is `gastos` or `ambos`:
    - Set `{RAW_DIR}` = `{RAW_ROOT}/{MONTH}/expenses`.
    - Set `{PROCESSED_DIR}` = `{PROCESSED_ROOT}/{MONTH}`.
-   - Ensure `{RAW_DIR}` and its `wise/` subfolder exist — create them if missing (`mkdir -p "{RAW_DIR}/wise"`). If `{RAW_DIR}` had to be created (was absent), warn the user (pt-BR): "Criei a estrutura para `{MONTH}`: `{RAW_DIR}/` e `{RAW_DIR}/wise/`. Confirme que `{MONTH}` está correto e coloque os extratos e faturas nessas pastas antes de continuar." and STOP until the user confirms. If `{RAW_DIR}` already existed, proceed without the warning.
+   - Ensure `{RAW_DIR}` and its `wise/` subfolder exist — create them if missing (`mkdir -p "{RAW_DIR}/wise"`). If `{RAW_DIR}` had to be created (was absent), warn the user: "Created the structure for `{MONTH}`: `{RAW_DIR}/` and `{RAW_DIR}/wise/`. Confirm that `{MONTH}` is correct and place the statements and invoices in those folders before continuing." and STOP until the user confirms. If `{RAW_DIR}` already existed, proceed without the warning.
    - Read `{CONFIG_DIR}/banks.json`.
 6. If `{PATH}` is `investimentos` or `ambos`:
    - Set `{INV_RAW_DIR}` = `{RAW_ROOT}/{MONTH}/investment`.
-   - Ensure `{INV_RAW_DIR}` exists — create it if missing (`mkdir -p "{INV_RAW_DIR}"`). If it had to be created (was absent), warn the user (pt-BR): "Criei `{INV_RAW_DIR}` para `{MONTH}`. Confirme que `{MONTH}` está correto e coloque os arquivos de investimentos lá antes de continuar." and STOP until the user confirms. If it already existed, proceed without the warning.
+   - Ensure `{INV_RAW_DIR}` exists — create it if missing (`mkdir -p "{INV_RAW_DIR}"`). If it had to be created (was absent), warn the user: "Created `{INV_RAW_DIR}` for `{MONTH}`. Confirm that `{MONTH}` is correct and place the investment files there before continuing." and STOP until the user confirms. If it already existed, proceed without the warning.
    - Read `{CONFIG_DIR}/investment-sources.json`.
 7. Routing:
    - `gastos` or `ambos` → proceed to `{GASTOS_WORKFLOW_DIR}/step-01-preflight.md`.
@@ -87,7 +87,7 @@ INV_PROCESSED_DIR = .user/finance/bookkeeper/investimentos/tmp-processed
 
 ## Rules
 
-- Communicate in Brazilian Portuguese.
+- Communicate with the user in `communication.language` (standing-rules.yaml).
 - NEVER skip steps. Each step ends with STOP and wait for confirmation (unless marked otherwise).
 - If a script fails, report the complete error and ask how to proceed.
 - Credit card invoice transactions are NEGATIVE (money outflows).

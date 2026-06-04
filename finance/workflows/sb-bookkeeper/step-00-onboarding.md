@@ -5,127 +5,127 @@ nextStepFile: null
 
 # Step 00: Source Onboarding
 
-**Quando executar.** Este step só é chamado quando `{CONFIG_DIR}/sources.yaml` está vazio (sem entradas sob `sources:`). Se o arquivo já tem pelo menos uma entrada, pular direto para o step de preflight do fluxo escolhido. Não executar durante um fechamento normal.
+**When to run.** This step is called ONLY when `{CONFIG_DIR}/sources.yaml` is empty (no entries under `sources:`). If the file already has at least one entry, skip straight to the preflight step of the chosen flow. Never run during a normal close.
 
-**Objetivo.** Guiar o usuário na seleção das suas fontes de dados (bancos, corretoras, exchanges) a partir do manifesto público e popular `sources.yaml` com as fontes escolhidas. Para fontes ainda não suportadas, acionar `tool-builder` para criar o parser.
+**Goal.** Guide the user in selecting their data sources (banks, brokers, exchanges) from the public manifest and populate `sources.yaml` with the chosen sources. For sources not yet supported, trigger `tool-builder` to create the parser.
 
 ---
 
 ## Mandatory Sequence
 
-### Section 1 — Apresentar o manifesto
+### Section 1 — Present the manifest
 
-1. Ler o manifesto público: `3-resources/tools/sb-os/finance/docs/sources-manifest.md`.
-2. Exibir ao usuário (PT-BR) a lista de fontes disponíveis, agrupadas por categoria:
+1. Read the public manifest: `3-resources/tools/sb-os/finance/docs/sources-manifest.md`.
+2. Display to the user the list of available sources, grouped by category:
 
    ```
-   Fontes de despesas disponíveis:
-     [ ] bradesco_extrato — Bradesco — Extrato Conta Corrente (csv)
-     [ ] santander_extrato — Santander — Extrato Conta Corrente (pdf)
-     [ ] santander_fatura — Santander — Fatura Cartão Visa (pdf)
-     [ ] mp_extrato — Mercado Pago — Extrato Conta (csv)
-     [ ] mp_fatura — Mercado Pago — Fatura Cartão (pdf)
-     [ ] wise_extrato — Wise — Extrato Multi-Moeda (csv)
-     [ ] manual_cash — Gastos em Dinheiro — Entrada Manual
-     [ ] nubank_fatura — Nubank — Fatura Cartão (pdf) [historical only]
-     [ ] xp_fatura — XP — Fatura Cartão (csv) [historical only]
+   Available expense sources:
+     [ ] bradesco_extrato — Bradesco — Checking Account Statement (csv)
+     [ ] santander_extrato — Santander — Checking Account Statement (pdf)
+     [ ] santander_fatura — Santander — Visa Card Invoice (pdf)
+     [ ] mp_extrato — Mercado Pago — Account Statement (csv)
+     [ ] mp_fatura — Mercado Pago — Card Invoice (pdf)
+     [ ] wise_extrato — Wise — Multi-Currency Statement (csv)
+     [ ] manual_cash — Cash Expenses — Manual Entry
+     [ ] nubank_fatura — Nubank — Card Invoice (pdf) [historical only]
+     [ ] xp_fatura — XP — Card Invoice (csv) [historical only]
 
-   Fontes de investimentos disponíveis:
+   Available investment sources:
      [ ] safra — Banco Safra / Safra Corretora (pdf, csv)
-     [ ] b3 — B3 — Bolsa Brasileira via Safra (pdf, csv)
+     [ ] b3 — B3 — Brazilian Exchange via Safra (pdf, csv)
      [ ] avenue — Avenue Securities (csv)
      [ ] mercado_bitcoin — Mercado Bitcoin (csv)
      [ ] bipa — Bipa (csv)
-     [ ] funds — Fundos de Investimento via Safra (pdf, csv)
+     [ ] funds — Investment Funds via Safra (pdf, csv)
 
-   Quais fontes você usa? Liste os ids separados por vírgula, ou "todas" para selecionar todas as fontes ativas.
+   Which sources do you use? List the ids separated by commas, or "all" to select every active source.
    ```
 
-3. STOP. Aguardar resposta do usuário.
+3. STOP. Wait for the user's response.
 
-### Section 2 — Emitir instruções por fonte selecionada
+### Section 2 — Emit instructions per selected source
 
-Para cada fonte selecionada pelo usuário (na ordem em que aparecem no manifesto):
+For each source selected by the user (in the order they appear in the manifest):
 
-1. Exibir as instruções de download/extração da fonte conforme o manifesto:
+1. Display the source's download/extraction instructions per the manifest:
 
    ```
    📥 {name}
-   Formato: {input_format}
-   Como baixar: {download_instructions}
-   {extraction_instructions, se existir}
+   Format: {input_format}
+   How to download: {download_instructions}
+   {extraction_instructions, if present}
    ```
 
-2. Perguntar se a fonte deve ser habilitada para fechamentos futuros ou apenas para backfill (historical):
+2. Ask whether the source must be enabled for future closes or only for backfill (historical):
 
    ```
-   Usar {name} em fechamentos mensais regulares?
-     [S] Sim — habilitada para novos fechamentos
-     [N] Não — somente para reprocessamento de meses anteriores (historical)
+   Use {name} in regular monthly closes?
+     [S] Yes — enabled for new closes
+     [N] No — only for reprocessing previous months (historical)
    ```
 
-3. STOP. Aguardar confirmação para cada fonte antes de prosseguir.
+3. STOP. Wait for confirmation on each source before proceeding.
 
-### Section 3 — Fontes não listadas (desvio-para-estrutura)
+### Section 3 — Unlisted sources (deviation-to-structure)
 
-Se o usuário mencionar uma fonte que NÃO consta no manifesto:
+If the user mentions a source NOT in the manifest:
 
-1. Seguir **Rule A** do `gatekeeper-loop.md` — nomear o desvio em PT-BR:
+1. Follow **Rule A** of `gatekeeper-loop.md` — name the deviation:
 
    ```
-   A fonte "{nome_informado}" não tem parser neste sistema.
+   The source "{name_given}" has no parser in this system.
 
-   Como proceder?
-     [A] Construir o parser agora — você nos envia um arquivo de exemplo e
-         acionamos o tool-builder para criar e testar o parser.
-     [B] Ignorar esta fonte no momento — registramos como pendência.
-     [C] Você descreve o formato agora e registramos para build posterior.
+   How do you want to proceed?
+     [A] Build the parser now — you send us a sample file and
+         we trigger the tool-builder to create and test the parser.
+     [B] Ignore this source for now — we log it as a pending item.
+     [C] You describe the format now and we log it for a later build.
    ```
 
-2. STOP. Aguardar escolha do usuário.
+2. STOP. Wait for the user's choice.
 
-3. Roteamento:
-   - `[A]` → Acionar **Rule B / Seam 1 (`tool-builder`)** do `gatekeeper-loop.md`:
-     - Solicitar ao usuário um arquivo de amostra real da fonte.
-     - Despachar `tool-builder` via Agent tool com o contexto de despacho:
+3. Routing:
+   - `[A]` → Trigger **Rule B / Seam 1 (`tool-builder`)** of `gatekeeper-loop.md`:
+     - Request a real sample file of the source from the user.
+     - Dispatch `tool-builder` via the Agent tool with the dispatch context:
        ```
-       need: "Parser para a fonte '{nome}' (formato {formato})"
+       need: "Parser for the source '{name}' (format {format})"
        class: write
        use: parser
-       destination_artifact: transactions.csv  # (ou o artefato correto para a scope)
-       real_sample: {caminho do arquivo fornecido pelo usuário}
+       destination_artifact: transactions.csv  # (or the correct artifact for the scope)
+       real_sample: {path to the file provided by the user}
        ```
-     - Depois que `tool-builder` retornar o parser aceito, acionar **Seam 2 (`doc-maintainer`)** para atualizar `sources-manifest.md` com a nova entrada.
-   - `[B]` → Registrar a fonte como pendência (um item no log de pendências). Não bloquear o onboarding.
-   - `[C]` → Registrar a descrição do formato e despachar `doc-maintainer` para criar um rascunho de entrada no manifesto. Marcar `last_validated: pending` na entrada criada.
+     - After `tool-builder` returns the accepted parser, trigger **Seam 2 (`doc-maintainer`)** to update `sources-manifest.md` with the new entry.
+   - `[B]` → Log the source as a pending item (one entry in the pending log). Do not block onboarding.
+   - `[C]` → Log the format description and dispatch `doc-maintainer` to create a draft manifest entry. Mark `last_validated: pending` on the created entry.
 
-### Section 4 — Popular `sources.yaml` e confirmar
+### Section 4 — Populate `sources.yaml` and confirm
 
-1. Para cada fonte confirmada pelo usuário, escrever uma entrada em `{CONFIG_DIR}/sources.yaml`:
+1. For each source confirmed by the user, write an entry in `{CONFIG_DIR}/sources.yaml`:
 
    ```yaml
    - id: {source_id}
-     enabled_for_close: {true|false}   # true se Section 2 resposta [S]; false se [N]
-     note: {nota opcional, ex: "historical only"}
+     enabled_for_close: {true|false}   # true if Section 2 answer [S]; false if [N]
+     note: {optional note, e.g.: "historical only"}
    ```
 
-2. Salvar `sources.yaml`.
+2. Save `sources.yaml`.
 
-3. Confirmar ao usuário (PT-BR):
+3. Confirm to the user:
 
    ```
-   Onboarding concluído. {N} fontes registradas em sources.yaml.
-   {N_enabled} habilitadas para fechamentos regulares.
-   {N_pending} pendências registradas.
+   Onboarding complete. {N} sources registered in sources.yaml.
+   {N_enabled} enabled for regular closes.
+   {N_pending} pending items logged.
 
-   Para iniciar o fechamento, execute bookkeeper novamente.
+   To start the close, run bookkeeper again.
    ```
 
-4. STOP. O workflow encerra aqui. O usuário executa `sb-bookkeeper` de novo para iniciar o fechamento com as fontes configuradas.
+4. STOP. The workflow ends here. The user runs `sb-bookkeeper` again to start the close with the configured sources.
 
 ---
 
 ## Step Menu
 
-- **Gatekeeper checkpoint** → antes de encerrar, rodar § Per-Step Checkpoint em `../gatekeeper-loop.md`. Uma nova fonte adicionada ao manifesto (Seam 1 + Seam 2 completos) = estrutura + docs atualizados = desvio resolvido.
-- **[X] Sair** → encerrar sem salvar (sources.yaml permanece vazio; onboarding será executado novamente na próxima ativação).
+- **Gatekeeper checkpoint** → before ending, run § Per-Step Checkpoint in `../gatekeeper-loop.md`. A new source added to the manifest (Seam 1 + Seam 2 complete) = structure + docs updated = deviation resolved.
+- **[X] Exit** → end without saving (sources.yaml stays empty; onboarding runs again on the next activation).

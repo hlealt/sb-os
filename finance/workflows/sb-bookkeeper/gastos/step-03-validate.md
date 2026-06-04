@@ -38,7 +38,7 @@ Any issues? If not, I'll proceed to categorization.
    The gate fail-loud halts when any present CSV has zero rows or when >10% of its rows fall outside the expected month ±5 days — the machine-checkable form of the manual checks in step 2. Exit 0 = pass; exit 1 = fail; exit 2 = directory error.
 
    - **Exit 0** → record the pass and continue to step 5.
-   - **Exit 1 (FAIL)** → Rule C **blocking** (`../gatekeeper-loop.md`). Do NOT advance. Surface the failing file(s) inline (pt-BR), propose the fix (re-export the empty/short file, or correct a parser/date issue, then re-run step-02 and this gate), and offer `[S]`/`[N]`. The step does not advance until the gate returns exit 0.
+   - **Exit 1 (FAIL)** → Rule C **blocking** (`../gatekeeper-loop.md`). Do NOT advance. Surface the failing file(s) inline, propose the fix (re-export the empty/short file, or correct a parser/date issue, then re-run step-02 and this gate), and offer `[S]`/`[N]`. The step does not advance until the gate returns exit 0.
    - **Exit 2** → report the directory error and ask how to proceed.
 
 5. STOP. Wait for user confirmation.

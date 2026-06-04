@@ -4,72 +4,72 @@ stepId: preflight
 nextStepFile: step-02-parse.md
 ---
 
-# Step 1: Pre-flight — Identificação e Renomeação de Arquivos de Investimentos
+# Step 1: Pre-flight — Investment File Identification and Renaming
 
-**Goal:** Verificar quais fontes de investimentos têm arquivos para o mês, identificar cada arquivo em `{INV_RAW_DIR}/`, e renomear para o padrão esperado pelos parsers.
+**Goal:** Check which investment sources have files for the month, identify each file in `{INV_RAW_DIR}/`, and rename to the pattern expected by the parsers.
 
-## Help — Onde baixar e onde salvar
+## Help — Where to download and where to save
 
-Apresente esta tabela ao usuário ANTES de qualquer scan:
+Present this table to the user BEFORE any scan:
 
-| Fonte | O que baixar | Onde salvar |
-|-------|--------------|-------------|
+| Source | What to download | Where to save |
+|--------|------------------|---------------|
 | B3 | Área do Investidor (investidor.b3.com.br) → Extrato de Movimentação → xlsx | `{INV_RAW_DIR}/b3-movimentacao.xlsx` |
-| Safra (movimentações — todos os ativos) | Logue no Internet Banking PF → Meus Investimentos → aba **Histórico Mensal**. Cole o prompt `3-resources/tools/prompts/safra-extrair-movimentacoes.md` na extensão Claude do Chrome e informe o ano. O agente gera **dois CSVs** por ano: um de fundos (com cota e quantidade) e um de RF (CRA/Deb/LCA/CDB/Tesouro). Ambos consumidos pelos parsers `safra_fundos_movimentacoes` e `safra_rf_movimentacoes` no step-02 | `{INV_RAW_DIR}/safra-fundos-{ANO}.csv` e `{INV_RAW_DIR}/safra-rf-{ANO}.csv` |
-| Avenue (operações) | App/site Avenue → Notas de corretagem (PDFs) — apenas se houve operação | `{INV_RAW_DIR}/avenue-notas/*.pdf` |
-| Avenue (câmbio) | App/site Avenue → Recibos de câmbio (PDFs) — apenas se houve câmbio no mês | `{INV_RAW_DIR}/avenue-cambio/*.pdf` |
-| Bipa | App Bipa → Extrato (CSV) | `{INV_RAW_DIR}/bipa-extrato.csv` |
-| Mercado Bitcoin | Site Mercado Bitcoin → Extrato (CSV) | `{INV_RAW_DIR}/mb-extrato.csv` |
-| Mercado Pago (investimentos) | Automático — vem do fluxo de gastos em `.user/finance/bookkeeper/ledgers/expenses/{MONTH}/mp_extrato.csv` | (não baixar) |
+| Safra (movements — all assets) | Log into Internet Banking PF → Meus Investimentos → **Histórico Mensal** tab. Paste the prompt `3-resources/tools/prompts/safra-extrair-movimentacoes.md` into the Claude Chrome extension and provide the year. The agent generates **two CSVs** per year: one for funds (with quota and quantity) and one for RF (CRA/Deb/LCA/CDB/Tesouro). Both consumed by the `safra_fundos_movimentacoes` and `safra_rf_movimentacoes` parsers in step-02 | `{INV_RAW_DIR}/safra-fundos-{ANO}.csv` and `{INV_RAW_DIR}/safra-rf-{ANO}.csv` |
+| Avenue (trades) | Avenue app/site → Notas de corretagem (PDFs) — only if there was a trade | `{INV_RAW_DIR}/avenue-notas/*.pdf` |
+| Avenue (FX) | Avenue app/site → Recibos de câmbio (PDFs) — only if there was FX this month | `{INV_RAW_DIR}/avenue-cambio/*.pdf` |
+| Bipa | Bipa app → Extrato (CSV) | `{INV_RAW_DIR}/bipa-extrato.csv` |
+| Mercado Bitcoin | Mercado Bitcoin site → Extrato (CSV) | `{INV_RAW_DIR}/mb-extrato.csv` |
+| Mercado Pago (investments) | Automatic — comes from the gastos flow at `.user/finance/bookkeeper/ledgers/expenses/{MONTH}/mp_extrato.csv` | (do not download) |
 
-Em seguida pergunte: "Já baixou os arquivos disponíveis para `{INV_RAW_DIR}/`? [S/N]". Se N, aguarde. Se S ou se a pasta já tiver conteúdo, prossiga — o agente cuida de identificação + renomeação. O usuário NÃO precisa renomear manualmente.
+Then ask: "Have you downloaded the available files to `{INV_RAW_DIR}/`? [S/N]". If N, wait. If S or if the folder already has content, proceed — the agent handles identification + renaming. The user does NOT need to rename manually.
 
-Nota sobre Safra: o site Safra tem problemas conhecidos de download. Se o usuário não conseguir baixar, prosseguir sem essa fonte e registrar pendência ao final.
+Note on Safra: the Safra site has known download issues. If the user cannot download, proceed without that source and log a pending item at the end.
 
 ## Mandatory Sequence
 
-1. Read `{CONFIG_DIR}/investment-sources.json` para listar fontes ativas.
-2. Scan `{INV_RAW_DIR}/` (incluindo subpastas `avenue-notas/` e `avenue-cambio/`). Crie a pasta se não existir.
-3. Para cada arquivo encontrado, tente identificação automática:
-   - Se o nome já segue o padrão (`b3-movimentacao.xlsx`, `safra-fundos-{ANO}.csv`, `safra-rf-{ANO}.csv`, `bipa-extrato.csv`, `mb-extrato.csv`) → match direto.
-   - Se o nome difere mas é identificável por heurística (extensão + heurística de nome, ex.: `movimentacao-2026-04.xlsx` → b3, `bipa_*.csv` → bipa, `extrato-mb*.csv` → mercado_bitcoin) → mapear automaticamente.
-   - PDFs em `avenue-notas/` ou nomes com padrão de nota Avenue → roteia para `avenue-notas/`. PDFs com `cambio` ou `fx` no nome → `avenue-cambio/`.
-   - Nomes ambíguos → perguntar ao usuário antes de renomear. NÃO abrir o arquivo para tentar identificar.
-4. Verifique completude: para cada fonte da tabela, se o usuário indicou que houve movimentação no mês, o arquivo correspondente deve existir.
-5. Verifique MP: se houver expectativa de movimentação no Mercado Pago, confirmar que `.user/finance/bookkeeper/ledgers/expenses/{MONTH}/mp_extrato.csv` existe. Se não, instruir: "O fechamento de gastos do mês `{MONTH}` precisa rodar antes para gerar `mp_extrato.csv`. Rode `/sb-bookkeeper` com path=Gastos primeiro."
-6. Apresente ao usuário:
+1. Read `{CONFIG_DIR}/investment-sources.json` to list active sources.
+2. Scan `{INV_RAW_DIR}/` (including the `avenue-notas/` and `avenue-cambio/` subfolders). Create the folder if it does not exist.
+3. For each file found, attempt automatic identification:
+   - If the name already follows the pattern (`b3-movimentacao.xlsx`, `safra-fundos-{ANO}.csv`, `safra-rf-{ANO}.csv`, `bipa-extrato.csv`, `mb-extrato.csv`) → direct match.
+   - If the name differs but is identifiable by heuristic (extension + name heuristic, e.g.: `movimentacao-2026-04.xlsx` → b3, `bipa_*.csv` → bipa, `extrato-mb*.csv` → mercado_bitcoin) → map automatically.
+   - PDFs in `avenue-notas/` or names with an Avenue nota pattern → route to `avenue-notas/`. PDFs with `cambio` or `fx` in the name → `avenue-cambio/`.
+   - Ambiguous names → ask the user before renaming. Do NOT open the file to try to identify it.
+4. Check completeness: for each source in the table, if the user indicated there was activity this month, the corresponding file must exist.
+5. Check MP: if Mercado Pago activity is expected, confirm that `.user/finance/bookkeeper/ledgers/expenses/{MONTH}/mp_extrato.csv` exists. If not, instruct: "The gastos close for month `{MONTH}` must run first to generate `mp_extrato.csv`. Run `/sb-bookkeeper` with path=Gastos first."
+6. Present to the user:
 
 ```
-Arquivos encontrados em {INV_RAW_DIR}/:
+Files found in {INV_RAW_DIR}/:
 
-  Identificados:
+  Identified:
   [✓] B3 — movimentacao-2026-04.xlsx → b3-movimentacao.xlsx
   [✓] Safra Fundos — fundos-2026.csv → safra-fundos-2026.csv
   [✓] Safra RF — rf-2026.csv → safra-rf-2026.csv
-  [✓] Avenue Notas — 3 PDFs em avenue-notas/
+  [✓] Avenue Notas — 3 PDFs in avenue-notas/
 
-  Não identificados (atribuir manualmente):
-  [?] outro_arquivo.csv — qual fonte?
+  Not identified (assign manually):
+  [?] outro_arquivo.csv — which source?
 
-  Ausentes (confirmar):
-  [ ] Bipa — não encontrei arquivo. Houve movimentação?
-  [ ] Mercado Bitcoin — não encontrei arquivo. Houve movimentação?
+  Missing (confirm):
+  [ ] Bipa — no file found. Was there activity?
+  [ ] Mercado Bitcoin — no file found. Was there activity?
 
-  MP investimentos: ✓ encontrado em .user/finance/bookkeeper/ledgers/expenses/2026-04/
+  MP investments: ✓ found in .user/finance/bookkeeper/ledgers/expenses/2026-04/
 
-Confirmar mapeamento?
+Confirm mapping?
 ```
 
-7. STOP. Aguarde confirmação do usuário (mapeamento + confirmação de ausentes).
-8. Após confirmação, renomeie todos os arquivos para os nomes-padrão. Para Avenue, garanta que os PDFs estejam em `avenue-notas/` ou `avenue-cambio/`.
-9. Verifique que a renomeação completou sem erros.
+7. STOP. Wait for the user's confirmation (mapping + confirmation of missing sources).
+8. After confirmation, rename all files to the standard names. For Avenue, ensure the PDFs are in `avenue-notas/` or `avenue-cambio/`.
+9. Verify that the renaming completed without errors.
 
 ## Completion Gate — Expected-Source Coverage (auto-halt)
 
 Read `{CONFIG_DIR}/sources.yaml` and collect every entry with `enabled_for_close: true`. For the investimentos flow, split the enabled sources into two groups:
 
-- **Always-expected** (a file/feed every close): `b3` and `safra` (plus `funds` if the user maintains a funds feed). A missing always-expected source is a Rule C **blocking** issue — surface it inline (pt-BR), propose the fix (download the file into `{INV_RAW_DIR}/`, or — if genuinely not expected this month — set `enabled_for_close: false` in `sources.yaml`), offer `[S]`/`[N]`, and **STOP**. Do NOT advance to step-02 while an always-expected source is missing and unresolved. (`safra` is exempt only when the user confirms the known Safra download outage — record the pendency instead of halting, per the Safra note above.)
-- **Intermittent** (only when there was activity): `avenue`, `mercado_bitcoin`, `bipa`. Their absence is NOT a halt — it is the "Ausentes (confirmar)" prompt in step 6. When such a source IS present, its rows are gated downstream by `gate_spot_check_coverage.py` (#7) in step-04.
+- **Always-expected** (a file/feed every close): `b3` and `safra` (plus `funds` if the user maintains a funds feed). A missing always-expected source is a Rule C **blocking** issue — surface it inline, propose the fix (download the file into `{INV_RAW_DIR}/`, or — if genuinely not expected this month — set `enabled_for_close: false` in `sources.yaml`), offer `[S]`/`[N]`, and **STOP**. Do NOT advance to step-02 while an always-expected source is missing and unresolved. (`safra` is exempt only when the user confirms the known Safra download outage — record the pendency instead of halting, per the Safra note above.)
+- **Intermittent** (only when there was activity): `avenue`, `mercado_bitcoin`, `bipa`. Their absence is NOT a halt — it is the "Missing (confirm)" prompt in step 6. When such a source IS present, its rows are gated downstream by `gate_spot_check_coverage.py` (#7) in step-04.
 
 This is the investimentos counterpart of the gastos step-01 expected-source gate; it respects that broker/exchange activity is intermittent while still halting on a silently-missing always-expected source.
 

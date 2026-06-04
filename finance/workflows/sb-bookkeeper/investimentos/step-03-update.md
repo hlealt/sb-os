@@ -4,9 +4,9 @@ stepId: update
 nextStepFile: step-04-validate.md
 ---
 
-# Step 3: Update — Atualização dos Ledgers
+# Step 3: Update — Ledger Update
 
-**Goal:** Aplicar os CSVs normalizados de `{INV_PROCESSED}/` aos ledgers permanentes em `{INV_LEDGER_DIR}` via `update_ledgers.py`. Match exato (tolerância 0) — fluxo mensal recorrente.
+**Goal:** Apply the normalized CSVs from `{INV_PROCESSED}/` to the permanent ledgers in `{INV_LEDGER_DIR}` via `update_ledgers.py`. Exact match (tolerance 0) — recurring monthly flow.
 
 ## Pre-Script Action — Lot Splits
 
@@ -36,55 +36,55 @@ If `splits:` is empty or no processed file contains matching rows, skip silently
 
 ## Mandatory Sequence
 
-1. Execute o script (com `--report-out` para alimentar o gate #6 no passo 7):
+1. Run the script (with `--report-out` to feed gate #6 in step 7):
 
 ```
 python {INV_SCRIPTS_DIR}/update_ledgers.py "{INV_PROCESSED}" --tolerance 0 --report-out "{INV_PROCESSED}/.upsert-report.json"
 ```
 
-2. O script:
-   - Identifica o ledger destino pelo prefixo do arquivo normalizado (`b3_orders.csv → orders.csv`, `safra_balcao.csv → balcao.csv`, etc.).
-   - Aplica match exato em campos de identidade + numéricos.
-   - Insere apenas linhas novas (dedup garante idempotência — seguro re-executar).
-   - Retorna relatório com: tolerância usada, inseridas por ledger, ignoradas (match exato), ignoradas (match fuzzy — não deve ocorrer com tolerance 0), duplicadas forçadas.
+2. The script:
+   - Identifies the destination ledger by the normalized file's prefix (`b3_orders.csv → orders.csv`, `safra_balcao.csv → balcao.csv`, etc.).
+   - Applies an exact match on identity + numeric fields.
+   - Inserts only new rows (dedup guarantees idempotency — safe to re-run).
+   - Returns a report with: tolerance used, inserted per ledger, skipped (exact match), skipped (fuzzy match — must not occur with tolerance 0), forced duplicates.
 
-3. Se o script falhar no meio da execução, ledgers podem estar parcialmente atualizados. Re-executar é seguro — dedup previne duplicação. Reporte o erro completo e pergunte como proceder.
+3. If the script fails mid-execution, ledgers may be partially updated. Re-running is safe — dedup prevents duplication. Report the complete error and ask how to proceed.
 
-4. Apresente o relatório ao usuário em formato resumido:
+4. Present the report to the user in summary form:
 
 ```
-Ledgers atualizados (tolerance 0):
-  orders.csv      +12 (3 já existentes ignoradas)
+Ledgers updated (tolerance 0):
+  orders.csv      +12 (3 already existing skipped)
   proventos.csv   +8
   balcao.csv      +5
   crypto.csv      +6
   corporate_actions.csv  +1
   avenue_fx.csv   +2
 
-Casos especiais: nenhum | OU lista detalhada
+Special cases: none | OR detailed list
 ```
 
-5. **Matches fuzzy ou duplicatas forçadas** — se aparecerem (não devem com tolerance 0), liste individualmente. O usuário deve confirmar que são duplicatas reais ou flagar como bug.
+5. **Fuzzy matches or forced duplicates** — if they appear (they must not with tolerance 0), list them individually. The user must confirm they are real duplicates or flag them as a bug.
 
-6. **Atualização de fees por fonte autoritativa** (`--update-fees`) — NÃO usar no fluxo mensal por padrão. Reservado para reconciliação histórica quando uma fonte mais autoritativa (B3) corrige fees imprecisos de fonte anterior (planilha). Mencione a opção apenas se o usuário pedir.
+6. **Fee update from authoritative source** (`--update-fees`) — do NOT use in the monthly flow by default. Reserved for historical reconciliation when a more authoritative source (B3) corrects imprecise fees from an earlier source (spreadsheet). Mention the option only if the user asks.
 
-7. **Completion gate — tolerância de match = 0 (`gate_ledger_tolerance.py`, gate #6 — auto-halt).** Rode o gate sobre o relatório de upsert escrito no passo 1:
+7. **Completion gate — match tolerance = 0 (`gate_ledger_tolerance.py`, gate #6 — auto-halt).** Run the gate over the upsert report written in step 1:
 
    ```bash
    python "{SCRIPTS_DIR}/gate_ledger_tolerance.py" --report "{INV_PROCESSED}/.upsert-report.json"
    ```
 
-   O gate falha (exit 1) se QUALQUER ledger tiver `skipped_fuzzy` não-vazio — com `--tolerance 0` um match fuzzy indica bug de parser ou de dados. Exit 0 = nenhum match fuzzy; exit 2 = relatório ausente/malformado.
+   The gate fails (exit 1) if ANY ledger has a non-empty `skipped_fuzzy` — with `--tolerance 0` a fuzzy match indicates a parser or data bug. Exit 0 = no fuzzy match; exit 2 = report missing/malformed.
 
-   - **Exit 0** → registre o pass e prossiga.
-   - **Exit 1 (FAIL)** → Rule C **blocking** (`../gatekeeper-loop.md`). Mecaniza o passo 5 acima como gate de exit-code. Surface os matches fuzzy inline (pt-BR), proponha o fix (confirmar duplicata real → registrar; ou flag como bug → corrigir parser e re-rodar Step 02-03), e ofereça `[S]`/`[N]`. NÃO prossiga ao Step 04 enquanto houver match fuzzy não resolvido.
-   - **Exit 2** → relatório ausente; re-rode o passo 1 com `--report-out` e tente de novo.
+   - **Exit 0** → record the pass and proceed.
+   - **Exit 1 (FAIL)** → Rule C **blocking** (`../gatekeeper-loop.md`). Mechanizes step 5 above as an exit-code gate. Surface the fuzzy matches inline, propose the fix (confirm a real duplicate → record it; or flag as a bug → fix the parser and re-run Step 02-03), and offer `[S]`/`[N]`. Do NOT proceed to Step 04 while a fuzzy match remains unresolved.
+   - **Exit 2** → report missing; re-run step 1 with `--report-out` and try again.
 
-8. STOP. Aguarde confirmação do usuário antes de prosseguir.
+8. STOP. Wait for the user's confirmation before proceeding.
 
 ## Step Menu
 
 - **Gatekeeper checkpoint** → before advancing, run § Per-Step Checkpoint in `../gatekeeper-loop.md`. A fuzzy match or forced duplicate (should not occur at tolerance 0) is a Rule C blocking issue — surface inline with a proposed fix; a lot-split ratio mismatch is a deviation (Rule A). The ledger-tolerance gate (#6) above is the exit-code form of this blocking check.
 - **[C] Continue** → proceed to Step 04 (Validate)
-- **[R] Re-run] → re-executar update_ledgers.py
+- **[R] Re-run** → re-run update_ledgers.py
 - **[X] Exit** → halt workflow

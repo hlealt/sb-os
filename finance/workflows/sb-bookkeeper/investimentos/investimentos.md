@@ -1,6 +1,6 @@
 # Investimentos
 
-> **RETIRED — este índice de passos está desatualizado.** Lista 3 passos com nomes pré-restruturação; existem 8 passos em disco (`step-01-preflight.md` … `step-08-report.md`). A descrição canônica de "o que o workflow `sb-bookkeeper` faz" — incluindo o modo investimentos — é a seção `## What This Workflow Does` em [`../bookkeeper.md`](../bookkeeper.md). Para os passos individuais, ler diretamente os arquivos `step-NN-*.md` nesta pasta. O conteúdo abaixo é mantido apenas como registro histórico.
+> **RETIRED — this step index is out of date.** It lists 3 steps with pre-restructure names; there are 8 steps on disk (`step-01-preflight.md` … `step-08-report.md`). The canonical description of "what the `sb-bookkeeper` workflow does" — including the investimentos mode — is the `## What This Workflow Does` section in [`../bookkeeper.md`](../bookkeeper.md). For the individual steps, read the `step-NN-*.md` files in this folder directly. The content below is kept only as a historical record.
 
 Investment tracking workflow — import historical data, ingest new source files, compute positions, validate against brokerage statements.
 
@@ -42,7 +42,7 @@ INV_PROCESSED    = .user/finance/bookkeeper/investimentos/tmp-processed  # inter
 
 ## Rules
 
-- Communicate in Brazilian Portuguese
+- Communicate with the user in `communication.language` (standing-rules.yaml)
 - Ledgers are append-only — never delete or modify existing rows
 - Every row has a `source` column identifying data origin
 - Never skip steps. Each step ends with STOP for user confirmation

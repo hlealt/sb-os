@@ -11,9 +11,9 @@ The runtime protocol that makes `sb-bookkeeper` an active-agency gatekeeper inst
 
 **Load at activation.** `sb-bookkeeper.md` (Activation) loads this file before routing to any step. It stays in force across every gastos and investimentos step. Every step's STOP is a Gatekeeper Checkpoint (see § Per-Step Checkpoint).
 
-**Language (binding).** Load `communication` from `{CONFIG_DIR}/standing-rules.yaml` via `lib.standing_rules.load_communication()`. Every user-facing string the loop emits is in `communication.language` (Brazilian Portuguese). Technical terms — function names, paths, column identifiers, tool names — stay in English per `communication.technical_terms`.
+**Language (binding).** Load `communication` from `{CONFIG_DIR}/standing-rules.yaml` via `lib.standing_rules.load_communication()`. Every user-facing string the loop emits is in `communication.language`. Technical terms — function names, paths, column identifiers, tool names — stay in English per `communication.technical_terms`.
 
-**Decision-surface shapes (binding).** Load `batch_ui` from `{CONFIG_DIR}/standing-rules.yaml` via `lib.standing_rules.load_batch_ui()`. When a deviation or issue produces a per-item decision queue (categorias, fornecedores, tags), use `batch_ui`'s field lists and option sets to shape the prompts: one row = one decision (`batch_ui.tags.one_row_one_decision`), never aggregate suppliers (`batch_ui.sub_items.aggregate_suppliers: false`).
+**Decision-surface shapes (binding).** Load `batch_ui` from `{CONFIG_DIR}/standing-rules.yaml` via `lib.standing_rules.load_batch_ui()`. When a deviation or issue produces a per-item decision queue (categories, suppliers, tags), use `batch_ui`'s field lists and option sets to shape the prompts: one row = one decision (`batch_ui.tags.one_row_one_decision`), never aggregate suppliers (`batch_ui.sub_items.aggregate_suppliers: false`).
 
 ## Tools-only data access (architectural invariant)
 
@@ -29,20 +29,20 @@ The loop NEVER reads a ledger CSV, `portfolio.json`, or a raw source file direct
 
 ### Procedure
 
-1. **Name the deviation** in one plain-language sentence (pt-BR): what was asked/found, and which part of the structure it does not fit.
-2. **Present exactly these three named options** (pt-BR), each with its one-line consequence:
+1. **Name the deviation** in one plain-language sentence: what was asked/found, and which part of the structure it does not fit.
+2. **Present exactly these three named options**, each with its one-line consequence:
 
    ```
-   Isto está fora da estrutura atual: {descrição do desvio}.
+   This is outside the current structure: {deviation description}.
 
-   Como proceder?
-     [A] Tratar pelo protocolo de desvio — construímos a estrutura que falta
-         (nova entrada de config / mapeamento / parser / tool) e a partir daí
-         isto resolve sozinho. (vai para o protocolo de desvio-para-estrutura)
-     [B] Ignorar este item neste fechamento — não processamos, registramos a
-         pendência e seguimos. (nada é construído; o item fica de fora)
-     [C] Estender a estrutura antes de continuar — você decide a regra/estrutura
-         agora; eu a registro e só então retomo o fechamento.
+   How do you want to proceed?
+     [A] Handle via the deviation protocol — we build the missing structure
+         (new config entry / mapping / parser / tool) and from then on
+         this resolves on its own. (goes to the deviation-to-structure protocol)
+     [B] Ignore this item in this close — we don't process it, we log the
+         pending item and continue. (nothing is built; the item is left out)
+     [C] Extend the structure before continuing — you decide the rule/structure
+         now; I log it and only then resume the close.
    ```
 
 3. **STOP. Wait for the user's choice.** Do not proceed on any branch without it.
@@ -65,7 +65,7 @@ python ../../scripts/shared/me_gate.py --concept "{plain description of the data
 ```
 
 - **Exit 0 (no overlap)** → the concept is genuinely new; the edit may proceed (then complete it through Rule B's durable-structure path).
-- **Exit 1 (overlap)** → the gate REFUSES and the CLI prints the three named options (pt-BR): `[R]` reusar a store existente, `[J]` justificar uma store nova (only if genuinely new — requires registering the new store in `lib/source_of_truth_registry.py` / p2-7 in the same change), `[C]` consolidar na existente. STOP and surface these to the user exactly as Rule A surfaces its options; do not create the overlapping store on any branch without the user's choice.
+- **Exit 1 (overlap)** → the gate REFUSES and the CLI prints the three named options: `[R]` reuse the existing store, `[J]` justify a new store (only if genuinely new — requires registering the new store in `lib/source_of_truth_registry.py` / p2-7 in the same change), `[C]` consolidate into the existing one. STOP and surface these to the user exactly as Rule A surfaces its options; do not create the overlapping store on any branch without the user's choice.
 
 The reference list is `../../scripts/lib/source_of_truth_registry.py` (the 23 p2-7 domains). A justified-new store (`[J]`) is not resolved until its registry entry exists — this is the same "structure + docs current" quality bar Rule B enforces. The gate composes the optional cross-config duplicate auditor (`audit-data-duplication.py`, deferred — plan p5-12) as a tertiary confirmation when present; until it ships the gate runs on the primary registry check alone and NEVER blocks on the missing net.
 
@@ -91,7 +91,7 @@ The reference list is `../../scripts/lib/source_of_truth_registry.py` (the 23 p2
 
 2. **Prioritize building structure over a one-off fix.** If the deviation needs a new or changed tool, dispatch `tool-builder` (Seam 1) — do not hand-edit a ledger or `portfolio.json` to work around the gap.
 3. **Update documentation in the same resolution.** When the durable structure changes (a new tool, a renamed tag, a new config contract, a new parser), dispatch `doc-maintainer` (Seam 2) so `sb-bookkeeper.md`, the step files, and `tools-index.md` do not drift. The deviation is not resolved until docs are current.
-4. **Confirm to the user (pt-BR)** what durable structure was built/changed and that the same input now resolves on the next run. Then resume the current step.
+4. **Confirm to the user** what durable structure was built/changed and that the same input now resolves on the next run. Then resume the current step.
 
 ### Seam 1 — `tool-builder` dispatch
 
@@ -124,16 +124,16 @@ When in doubt, classify as **blocking** — surfacing too much beats shipping a 
 
 ### Blocking → inline (propose a fix + approve/reject)
 
-1. **State the issue** in plain language (pt-BR): what is wrong and why it blocks.
-2. **Propose a concrete fix** (pt-BR): the specific action that resolves it (re-run a tool, append a correction row, flag an anomaly as acknowledged, route to Rule B for a structural fix).
+1. **State the issue** in plain language: what is wrong and why it blocks.
+2. **Propose a concrete fix**: the specific action that resolves it (re-run a tool, append a correction row, flag an anomaly as acknowledged, route to Rule B for a structural fix).
 3. **Offer approve/reject:**
 
    ```
-   Problema (bloqueante): {descrição}.
-   Correção proposta: {ação concreta}.
+   Problem (blocking): {description}.
+   Proposed fix: {concrete action}.
 
-     [S] Aprovar a correção — aplico e sigo.
-     [N] Rejeitar — você indica outra ação ou paramos aqui.
+     [S] Approve the fix — I apply it and continue.
+     [N] Reject — you indicate another action or we stop here.
    ```
 
 4. **STOP. Wait.** `[S]` → apply the proposed fix (routing through Rule B if it needs structure), then re-check the gate before proceeding. `[N]` → take the user's alternative or halt the close. The step does NOT advance while a blocking issue is unresolved.
@@ -144,19 +144,19 @@ When in doubt, classify as **blocking** — surfacing too much beats shipping a 
 
 1. **Record the issue** to the close's deferrable list (one line each: what, where, why deferred).
 2. **Do not block the current step.** Continue the close.
-3. **At close end, surface the deferrable list to the user (pt-BR)** and route it to review-mode for scoped handling:
+3. **At close end, surface the deferrable list to the user** and route it to review-mode for scoped handling:
 
    ```
-   {N} itens foram adiados para revisão:
-   {lista de itens, um por linha, com motivo}
+   {N} items were deferred for review:
+   {list of items, one per line, with reason}
 
-   Rodar o modo de revisão agora ou depois?
-     [S] Agora — entrar em review-mode para {MONTH}, tipo: Itens adiados
-     [D] Depois — encerrar o fechamento; revisar em outra sessão
+   Run review mode now or later?
+     [S] Now — enter review-mode for {MONTH}, type: Deferred items
+     [D] Later — end the close; review in another session
    ```
 
    `[S]` → proceed to `../review-mode.md` with `{MONTH}` already set and `REVISION_TYPES = [5]` (deferrable items) and the deferrable list passed as the initial queue.
-   `[D]` → close the workflow. The deferrable list is recorded; user runs `bookkeeper [4] Revisão` in a future session.
+   `[D]` → close the workflow. The deferrable list is recorded; user runs `bookkeeper [4] Review` in a future session.
 
 ---
 

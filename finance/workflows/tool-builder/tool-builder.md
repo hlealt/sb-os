@@ -84,7 +84,7 @@ python {ME_GATE} --concept "{plain description of the data the new store holds}"
 ```
 
 - **Exit 0 (no overlap)** → the store/schema is genuinely new; proceed to Step 3.
-- **Exit 1 (overlap)** → the gate prints the existing canonical store + the three pt-BR options (Reusar / Justificar nova / Consolidar). STOP and return the gate's output to the caller — the caller surfaces it to the user. Do NOT create the overlapping store on any branch without the user's choice routed back through a re-dispatch.
+- **Exit 1 (overlap)** → the gate prints the existing canonical store + the three pt-BR options (Reuse / Justify new / Consolidate). STOP and return the gate's output to the caller — the caller surfaces it to the user. Do NOT create the overlapping store on any branch without the user's choice routed back through a re-dispatch.
 
 A tool that reads/writes an EXISTING store (the common case — a parser feeding `balcao.csv`, a reader over `portfolio.json`) skips this step; its `destination_artifact` already has a canonical home.
 
@@ -135,17 +135,17 @@ A tool whose output fields are all present in the destination schema conforms an
 
 A schema gap is NEVER silently flattened (dropping the new field) and NEVER unilaterally migrated (adding the field to the destination without approval). It is **dual-surfaced** the moment it is detected (Step 4.2), via `tool_schema_check.surface_schema_gap(...)`, which performs BOTH:
 
-1. **User-facing prompt** (returned to the caller, surfaced to the user in pt-BR) — names the gap field, the destination, and three options:
+1. **User-facing prompt** (returned to the caller, surfaced to the user) — names the gap field, the destination, and three options:
 
    ```
-   O tool gera o campo `{field}`, que não existe no schema atual de `{destination}`.
+   The tool generates the field `{field}`, which does not exist in the current schema of `{destination}`.
 
-   Como proceder?
-     [E] Estender o schema de `{destination}` para incluir `{field}` — você aprova
-         a mudança de schema; o tool passa a escrever o campo novo.
-     [F] Achatar (flatten) — o tool descarta `{field}` e escreve só os campos
-         existentes. (o dado novo é perdido)
-     [J] Justificar e adiar — registramos o gap e seguimos sem o campo por ora.
+   How do you want to proceed?
+     [E] Extend the schema of `{destination}` to include `{field}` — you approve
+         the schema change; the tool starts writing the new field.
+     [F] Flatten — the tool drops `{field}` and writes only the existing
+         fields. (the new data is lost)
+     [J] Justify and defer — we log the gap and continue without the field for now.
    ```
 
 2. **`schema_gap_finding` audit event** — emitted via `tool_schema_check.surface_schema_gap(...)` (which calls `audit.emit("schema_gap_finding", ...)`). The event carries the destination, the gap fields, and the tool name in `trigger_context`. Best-effort (never raises into the companion); rides the existing audit protocol at `.user/finance/bookkeeper/audit/events-{YYYY}.jsonl`.

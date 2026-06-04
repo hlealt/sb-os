@@ -72,7 +72,7 @@ The `My take` cell encodes one of three explicit states. **Blank is BANNED** as 
 |--------|-----------|------|
 | `File` | Lint (creates rows) — ingest may add defensively | Lint sweep; ingest may add missing rows |
 | `Title` | Lint | On index creation when deterministic from frontmatter or H1; otherwise LLM judgment pass |
-| `Date` | Lint | On index creation when deterministic from frontmatter or filename; otherwise LLM judgment pass |
+| `Date` | Lint | On index creation — ALWAYS the capture date (the filename's `YYYY-MM-DD` prefix), NEVER the source's publication date; LLM judgment pass only when no filename date exists |
 | `Wiki` | Agent (ingest sets `Yes`; rollback sets `No`) | Updated during ingest step 7; downgraded to `Partial` if downstream pages are rejected at Stage 1 |
 
 - Raw index creation and maintenance is lint's job. Ingest defensively adds a missing row but does NOT create the index file if it is absent (logs a warning for lint).

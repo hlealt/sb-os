@@ -40,6 +40,8 @@ Develop the thesis content through reasoning. The thesis is a single falsifiable
 
 The Assumption Audit (Step 2a) is the METHOD that fills `Hypotheses`, `Invalidation criteria`, and the Disconfirm targets; the Disconfirm dispatch (Step 2b) is the METHOD that fills `Evidence against`. They are not new output sections — they are how the elements above get reasoned. Run Step 2a, then Step 2b, then complete the remaining elements.
 
+**Market-figure range rule.** When cited sources disagree on a numeric market figure (price level, drawdown magnitude, multiple, growth rate), resolve it ONLY through a registered `class: read` tool in `../../scripts/tools-index.md` (tools-only invariant). If no registered tool resolves the figure, the draft states the source-attributed RANGE — e.g. `-35% [^a] to -66% [^b]` — and NEVER silently picks one source's value.
+
 Surface a problem with the reasoning or its inputs (a source failing the `source-policy` trust bar, a contradicted premise) per `./investor-loop.md` § Issue-surfacing — never pass it silently.
 
 ### Step 2a — Assumption Audit (first-principles lens)

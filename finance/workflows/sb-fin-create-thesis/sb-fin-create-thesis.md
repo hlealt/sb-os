@@ -56,7 +56,7 @@ The base wiki conventions still apply: read `{sb_os_path}/wiki/workflows/shared/
    - `abort` — no writes.
    This check fires for the authoring (new) path — NEVER for the `extend` entry point, which already names its target. Surface it as an inline prompt before commit. Skipping this check on the authoring (new) path is a workflow violation.
 4. Determine if invocation is from a candidate or fresh:
-   - **From candidate-thesis** — the investor provides the candidate-thesis timestamp. Read `{wiki_root}/log.md`, locate the `candidate-thesis` entry by timestamp + slug/entity. Extract: trigger type (Recurring Claim / Mispricing Signal / Thesis Invalidation), source filenames, the shared claim, and the investment entity(ies).
+   - **From candidate-thesis** — the investor provides the candidate-thesis timestamp. Read `{wiki_root}/log.md`, locate the `candidate-thesis` entry by timestamp + slug/entity. Extract: trigger type (Recurring Claim / Mispricing Signal / Thesis Invalidation / Thesis-Shaped Page Created), source filenames, the shared claim, and the investment entity(ies). For a Thesis-Shaped Page Created candidate, ALSO cross-link the originating `kind: thesis` concept page in `related:` and reconcile it (the concept page stays a concept; the new thesis page is the falsifiable record).
    - **Fresh proposal** — no candidate exists. The investor supplies the claim, source filenames, and related entities directly.
 5. Read `{sb_os_path}/finance/wiki-ext/page-types.ext.md` to confirm the `thesis` definition and the `status` rule: a thesis cannot reach `status: active` without `Evidence against` and `Invalidation criteria`. A fresh or candidate-derived thesis defaults to `status: seed` unless the user/investor specifies otherwise.
 

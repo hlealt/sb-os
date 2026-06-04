@@ -4,34 +4,34 @@ stepId: snapshot
 nextStepFile: step-08-report.md
 ---
 
-# Step 7: Snapshot — Persistir Snapshot do Mês
+# Step 7: Snapshot — Persist the Month's Snapshot
 
-**Goal:** Copiar `portfolio.json` para `portfolio-{MONTH}-LAST_DAY.json` e atualizar `snapshots.json` para o seletor de datas do dashboard.
+**Goal:** Copy `portfolio.json` to `portfolio-{MONTH}-LAST_DAY.json` and update `snapshots.json` for the dashboard's date selector.
 
 ## Mandatory Sequence
 
-1. Defina `{SNAPSHOT_DATE}` = último dia do mês `{MONTH}` (ex.: `2026-04-30`).
+1. Set `{SNAPSHOT_DATE}` = last day of month `{MONTH}` (e.g.: `2026-04-30`).
 
-2. Copie `{INV_LEDGER_DIR}/portfolio.json` → `{INV_LEDGER_DIR}/portfolio-{SNAPSHOT_DATE}.json`. Se o arquivo já existir (re-execução), sobrescreva e reporte.
+2. Copy `{INV_LEDGER_DIR}/portfolio.json` → `{INV_LEDGER_DIR}/portfolio-{SNAPSHOT_DATE}.json`. If the file already exists (re-run), overwrite and report.
 
-3. Atualize `{INV_LEDGER_DIR}/snapshots.json`:
-   - Adicione entry com `date: {SNAPSHOT_DATE}` apontando para o arquivo recém-criado.
-   - Inclua resumo: `total_brl`, `total_by_class`, `position_count`.
-   - Mantenha o array ordenado cronologicamente.
-   - Se já existir entry para `{SNAPSHOT_DATE}`, sobrescreva.
+3. Update `{INV_LEDGER_DIR}/snapshots.json`:
+   - Add an entry with `date: {SNAPSHOT_DATE}` pointing to the freshly-created file.
+   - Include a summary: `total_brl`, `total_by_class`, `position_count`.
+   - Keep the array sorted chronologically.
+   - If an entry for `{SNAPSHOT_DATE}` already exists, overwrite it.
 
-4. Reporte:
+4. Report:
 
 ```
-Snapshot persistido:
-  portfolio-{SNAPSHOT_DATE}.json (R$ X.XXX.XXX, 78 posições)
-  snapshots.json: +1 entry (ou atualizada)
+Snapshot persisted:
+  portfolio-{SNAPSHOT_DATE}.json (R$ X.XXX.XXX, 78 positions)
+  snapshots.json: +1 entry (or updated)
 ```
 
-5. STOP. Aguarde confirmação.
+5. STOP. Wait for confirmation.
 
 ## Step Menu
 
 - **Gatekeeper checkpoint** → before advancing, run § Per-Step Checkpoint in `../gatekeeper-loop.md` (out-of-structure → Rule A; detected issue, e.g. snapshot-triplet drift → Rule C blocking; direct data read → re-route through a `tools-index.md` tool).
 - **[C] Continue** → proceed to Step 08 (Report)
-- **[X] Exit] → halt workflow
+- **[X] Exit** → halt workflow
