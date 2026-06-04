@@ -49,7 +49,7 @@ Decompose reasons only; it writes nothing and fetches nothing. Keep it lightweig
 
 Run a **parallel width sweep**: fan out web-search sub-agents — **one wave per Step 2.5 sub-question** — dispatched concurrently so breadth is covered in a single pass rather than one serial search. Each wave hunts OPEN sources for its own sub-question and the angle/source-type the coverage matrix assigned it. The fan-out MUST keep the mode plugin-agnostic — discovery is NOT wired to any single search plugin, preserving sb-os finance-module portability.
 
-**The Step 7a Disconfirm wave fires in THIS same discovery pass** (it is numbered 7a for dispatch-identity only — see Step 7a § Where it runs; it is NOT a post-ingest step). Dispatch it concurrently with the width-sweep waves here; its disconfirming candidates merge into the same Step 4 Propose table. The remaining acquisition steps (Capture → Gated → Auto-ingest, Steps 5–7) act ONLY on the subset the user approves at Step 4.
+**The Step 7a Disconfirm wave fires in THIS same discovery pass** (it is numbered 7a for dispatch-identity only — see Step 7a § Where it runs; it is NOT a post-ingest step). Dispatch it concurrently with the width-sweep waves here; its disconfirming candidates merge into the same Step 4 Propose table. The remaining acquisition steps (Capture → Gated → Auto-ingest, Steps 5–7) act ONLY on approved sources — the Step 4 user-approved subset plus any standing-policy AUTO captures (Step 4 auto-capture partition).
 
 **Cost cap (every discovery wave — width sweep AND the Step 7a Disconfirm wave).** This is the explicit cheap-model override the deepening mandates (it overrides the `sb-sub-agents` default of `sonnet`); name it in each wave's dispatch:
 
@@ -64,13 +64,22 @@ Each discovery sub-agent's prompt MUST:
 
 1. **Invoke the `rbtv-web-searching` skill before any web work and follow it exactly** (per the sub-agents rule — a sub-agent does not inherit this requirement; the parent states it explicitly and imperatively).
 2. Carry its assigned sub-question, the anchor (thesis claim / research question), the entity(ies), and the `research-policy` scope and exclusions so the sub-agent does not surface excluded topics.
-3. **Return ONLY ranked candidates + metadata** — `| title | url | source | trust class | why it matters | relation to the thesis |`. The **full source text MUST stay inside the sub-agent** and NEVER returns to this mode or `sb-investor.md` (anti-context-rot — the parent context stays clean; only ranked candidates + metadata cross back).
+3. **Verify every candidate URL is live before returning it** — the wave's own fetch of the page, or a HEAD-level liveness check when the page was not fetched, MUST confirm the URL resolves. A dead, 404, or unresolvable URL is dropped, NEVER returned as a candidate.
+4. **Assign each candidate's trust class against the rubric carried in the prompt.** The parent passes the `source-policy.md` trust tiers (loaded in Step 1) into the wave prompt; while those tiers are unfilled, pass the seed rubric: `1 = primary (filings, regulator/company official) · 2 = trusted analysis (named research firm/analyst with a track record) · 3 = established press · 4 = unverified (blog / UGC / aggregator)`. When in doubt between two classes, assign the LOWER trust (the higher number) — never inflate.
+5. **Return ONLY ranked candidates + metadata** — `| title | url | source | trust class | why it matters | relation to the thesis |`. The **full source text MUST stay inside the sub-agent** and NEVER returns to this mode or `sb-investor.md` (anti-context-rot — the parent context stays clean; only ranked candidates + metadata cross back).
 
 Merge the waves' returned candidates and rank them by relevance to the anchor AND by `source-policy` trust class (loaded in Step 1). A candidate that fails the `source-policy` trust bar is surfaced per `./investor-loop.md` § Issue-surfacing — never silently dropped or silently kept. Discovery writes NOTHING; it only returns ranked candidates with metadata. The merged candidate set (plus the Step 7a disconfirming candidates) is what Step 4 Propose presents.
 
 ## Step 4 — Propose (present-and-confirm; DEFAULT = propose before capture)
 
-Run `./investor-loop.md` § Present-and-confirm. Default behavior is propose-before-capture: present the ranked candidates and STOP for the user's selection — NEVER capture before approval. Present each candidate as a row, including the Step 7a disconfirming candidates merged into the same table:
+**Auto-capture partition (standing pre-approval — runs FIRST).** If `source-policy.md` (loaded in Step 1) declares an `Auto-Capture Pre-Approved Origins` table, partition the merged candidates (width-sweep and Step 7a disconfirming alike) BEFORE presenting:
+
+- **AUTO** — the candidate URL is `https` AND its host equals a listed host pattern or ends with `.` + the pattern (dot-boundary suffix, never substring — `sec.gov.evil.com` does not match `sec.gov`), AND the candidate addresses the anchor or a Step 2.5 sub-question (the same relevance bar as the propose table — pre-approval covers trust, never relevance). Set state `approved_for_capture` (granted by standing policy — record `approved_by: policy`) and capture via Step 5 IMMEDIATELY, before this checkpoint presents; the allowlist row IS the user's confirmation (`./investor-loop.md` § Present-and-confirm, standing carve-out).
+- **REST** — every other candidate, including an allowlist match that fails the relevance bar (flag its row `allowlist-match, low relevance`) → the propose flow below, unchanged.
+
+Agent-judged trust class NEVER triggers auto-capture — only the deterministic URL-host match does. No such table in `source-policy.md` → no partition; every candidate is REST.
+
+Run `./investor-loop.md` § Present-and-confirm. Default behavior is propose-before-capture: present the ranked candidates and STOP for the user's selection — NEVER capture a REST candidate before approval (AUTO candidates above carry standing approval). When the AUTO partition captured sources, open the presentation with an informational **auto-captured block** — `| source (slug) | origin | state | saved path | relation to the thesis |` (disconfirming candidates tagged) — it reports completed captures and asks nothing. If REST is empty, SKIP this checkpoint's STOP — proceed to Step 7, whose Ingest gate presents the block instead (zero-touch capture; the run still stops ONCE, at that gate). Present each candidate as a row, including the Step 7a disconfirming candidates merged into the same table:
 
 ```
 | # | title | url | source | trust class | why it matters | relation to the thesis |
@@ -78,10 +87,12 @@ Run `./investor-loop.md` § Present-and-confirm. Default behavior is propose-bef
 
 Tag every Step 7a Disconfirm-wave candidate in its `relation to the thesis` cell as **disconfirming (evidence-against)** so the user sees, in one table, both the sources that support the anchor and the source(s) that would overturn it — never an undifferentiated list. (Step 7a defines the disconfirming wave; its candidates arrive here pre-tagged.)
 
+**Below-bar flag (trust gate).** A candidate below the `source-policy` trust bar (tier 4 / unclassifiable) arrives with its `trust class` cell flagged `4 — below evidence bar`. This flag IS the Step 3 issue-surfacing for discovery candidates — the user approves or rejects it eyes-open at this checkpoint; NEVER add a separate inline stop per flagged row, and NEVER drop a flagged candidate silently.
+
 **Coverage gaps (from Step 2.5).** Cross-check the merged candidates against the Step 2.5 coverage matrix and surface, beneath the table, any **sub-question with no candidate** — an explicit "coverage gaps" note so the user sees what the sweep did not cover before approving:
 
 ```
-Lacunas de cobertura: sub-questions {#…} têm zero candidatos.
+Coverage gaps: sub-questions {#…} have zero candidates.
 ```
 
 A coverage gap is informational, not blocking — the user MAY approve the subset anyway, widen scope, or re-run discovery for the uncovered sub-questions.
@@ -89,7 +100,7 @@ A coverage gap is informational, not blocking — the user MAY approve the subse
 **Source tensions (lightweight flag).** From the candidates' titles and `why it matters` / `relation to the thesis` metadata ALREADY on the table — never by pulling full source text (anti-context-rot holds) — flag pairs or clusters of candidates that **contradict each other** (e.g. opposite conclusions on the same sub-question). Surface them as a short note beneath the table so the user weighs the disagreement instead of an undifferentiated list:
 
 ```
-Tensões entre fontes: #{a} ↔ #{b} — {one-line description of the disagreement}.
+Source tensions: #{a} ↔ #{b} — {one-line description of the disagreement}.
 ```
 
 This is a flag the user can act on, not a separate analysis pass: it reads only the metadata already returned. If no contradiction is evident from the metadata, write none — do not fetch text to manufacture one. The signal stays legible for `review` to consume downstream.
@@ -104,7 +115,7 @@ For EACH `approved_for_capture` OPEN source, call the registered `investment_sou
 
 The tool saves to `{wiki_root}/raw/{origin}/` and returns a **metadata summary only** (state, saved path, title, origin, related thesis, byte count) — full source text NEVER enters this mode's context. On success → state `captured_to_raw`; capture the returned raw filename for Step 7. A tool result of `state=blocked` (unreachable / fetch failed) → surface it per `./investor-loop.md` § Issue-surfacing; that source stops at `blocked` and is NOT ingested.
 
-**Blocked-fetch recovery (manual path).** The tool itself transparently retries a transport-level fetch failure (403 / bot-fingerprint rejection / connection reset) via an in-tool subprocess-curl fallback with the same UA BEFORE returning `state=blocked` — the metadata return records which method fetched (`fetch_method: httpx | curl-fallback`), so a returned `blocked` already means BOTH methods failed. When a source the user approved still returns `state=blocked`, offer the manual path at the checkpoint instead of escalating an unstructured doubt: the USER fetches the page by their own means and provides a local file path; the agent re-runs the tool with `--mode manual --manual-file <path>` — the tool (still the SOLE writer) saves it into `raw/{origin}/` with standard naming and the source resumes the normal lifecycle (`captured_to_raw` → Step 7). The agent NEVER fetches outside the tool, NEVER stores files outside `raw/`, and NEVER hand-places the content itself.
+**Blocked-fetch recovery (manual path).** The tool itself transparently retries a transport-level fetch failure (403 / bot-fingerprint rejection / connection reset) via an in-tool subprocess-curl fallback with the same UA BEFORE returning `state=blocked` — the metadata return records which method fetched (`fetch_method: httpx | curl-fallback`), so a returned `blocked` already means BOTH methods failed. When an approved source (user-approved or standing-policy AUTO) still returns `state=blocked`, offer the manual path at the checkpoint instead of escalating an unstructured doubt: the USER fetches the page by their own means and provides a local file path; the agent re-runs the tool with `--mode manual --manual-file <path>` — the tool (still the SOLE writer) saves it into `raw/{origin}/` with standard naming and the source resumes the normal lifecycle (`captured_to_raw` → Step 7). The agent NEVER fetches outside the tool, NEVER stores files outside `raw/`, and NEVER hand-places the content itself.
 
 ## Step 6 — Gated sources register (NOT fetched)
 
@@ -112,7 +123,33 @@ A gated source (paywall / login / IR / broker portal) is NEVER fetched — the p
 
 ## Step 7 — Auto-ingest (one sub-agent per captured source, SEQUENTIAL)
 
-After capture, file each `captured_to_raw` source into the wiki by dispatching **one sub-agent per source, ONE AT A TIME — never in parallel**. Full text still stays in each sub-agent's context, so this mode and `sb-investor.md` stay clean (anti-context-rot holds). The agent invokes the real ingest command via the sub-agent; it NEVER reimplements ingest.
+### Ingest gate (MANDATORY — ONE stop before any ingest dispatch)
+
+Fires on EVERY run that captured at least one source — even when every capture was pre-approved (a zero-touch capture run stops HERE, once). Ingest is the heavy, shared-surface half of the pipeline; this gate is the user's ingest delegation / context-refresh point and the no-silent-ingest guarantee. Before dispatching the FIRST ingest sub-agent:
+
+1. **Present the consolidated capture state** — every capture this run, auto and user-approved alike, plus failures:
+
+   ```
+   | source (slug) | origin | approved_by (user/policy) | state | saved path |
+   ```
+
+   A `blocked` row names its error; the Step 5 manual path is its recovery.
+
+2. **Growth prompt (batched, non-blocking).** If this run captured sources whose origins are NOT in `source-policy.md` § Auto-Capture Pre-Approved Origins and NOT on its declined line, offer ONCE — every such origin in one prompt, each with a proposed host pattern derived from the captured URL host. Approval → append the row(s) to that table; decline → record the origin on the table's declined line and never re-offer it. Both are user-approved policy edits inside the own-workspace boundary (this exchange IS their present-and-confirm). The answers never block ingest. Skip silently when `source-policy.md` has no such table.
+
+3. **STOP and offer:**
+
+   ```
+     [S] Ingest all now — sequential dispatch per § Dispatch below.
+     [E] Adjust — exclude sources from this ingest, or hand the list to another agent / a fresh session (non-ingested sources stay captured_to_raw).
+     [N] Defer — nothing ingests; record the deferred set per ./investor-loop.md § Issue-surfacing so it cannot rot silently.
+   ```
+
+Wait for the user's choice — this is a mode checkpoint per `./investor-loop.md` § Per-Step Checkpoint.
+
+### Dispatch
+
+After the gate clears (`[S]`, or `[E]`'s adjusted list), file each `captured_to_raw` source into the wiki by dispatching **one sub-agent per source, ONE AT A TIME — never in parallel**. Full text still stays in each sub-agent's context, so this mode and `sb-investor.md` stay clean (anti-context-rot holds). The agent invokes the real ingest command via the sub-agent; it NEVER reimplements ingest.
 
 **Why sequential (BINDING).** Ingest sub-agents write SHARED wiki surfaces — topic hubs, concept/entity stubs, leaf indexes, `log.md` — and parallel ingests race on them (observed 2026-06-03: a lost-then-restored section and four duplicate-stub clusters from a 16-agent fan-out). Dispatch sub-agent N+1 only after sub-agent N returns its summary. Parallel ingest dispatch returns ONLY if `sb-wiki-ingest` ever gains page-level write locking.
 
@@ -132,7 +169,7 @@ After all sub-agents return, present a consolidated report so a misfire is catch
 | source (slug) | ingest status | pages created/updated | scope-overlaps / lint flags |
 ```
 
-Summarize the pages created/updated and any scope-overlaps or lint flags the sub-agents surfaced. A flag is an issue → route it per `./investor-loop.md` § Issue-surfacing (blocking vs deferrable). The report is informational-by-default; it does NOT re-prompt for the already-committed ingests (the Step 4 approval authorized capture-and-file).
+Summarize the pages created/updated and any scope-overlaps or lint flags the sub-agents surfaced. A flag is an issue → route it per `./investor-loop.md` § Issue-surfacing (blocking vs deferrable). The report is informational-by-default; it does NOT re-prompt for the already-committed ingests (the Ingest gate authorized the dispatch).
 
 ## Step 7a — Disconfirm (adversarial discovery wave)
 
@@ -152,9 +189,10 @@ The highest-value discovery primitive: instead of asking "what supports the anch
 1. **Invoke the `rbtv-web-searching` skill before any web work and follow it exactly** (the sub-agent does not inherit this requirement; state it explicitly and imperatively), keeping the wave plugin-agnostic (no hard-wired search plugin).
 2. Frame the hunt adversarially: search for the data, analysis, or primary source that, if it exists and holds, breaks the anchor — not for confirmation of it.
 3. Obey the **same cost cap as the width sweep** (Step 3 table): **Haiku model · ≤ 5 fetches · single-pass, never loops**.
-4. **Return ONLY ranked disconfirming candidates + metadata + the why-it-would-overturn note.** The **full source text MUST stay inside the sub-agent** (anti-context-rot — the parent context stays clean).
+4. Carry the **same URL-liveness verification and trust-class rubric requirements as the Step 3 wave prompts** (Step 3 prompt items 3–4).
+5. **Return ONLY ranked disconfirming candidates + metadata + the why-it-would-overturn note.** The **full source text MUST stay inside the sub-agent** (anti-context-rot — the parent context stays clean).
 
-Rank the returned disconfirming candidates by `source-policy` trust class (loaded in Step 1) exactly as Step 3 does; a candidate that fails the trust bar is surfaced per `./investor-loop.md` § Issue-surfacing — never silently dropped or kept. The wave writes NOTHING and fetches nothing into this mode; it adds no new data-access path. Its candidates feed the Step 4 Propose checkpoint, where the user approves or rejects them through the unchanged present-and-confirm subset flow — nothing disconfirming is captured before approval.
+Rank the returned disconfirming candidates by `source-policy` trust class (loaded in Step 1) exactly as Step 3 does; a candidate that fails the trust bar is surfaced per `./investor-loop.md` § Issue-surfacing — never silently dropped or kept. The wave writes NOTHING and fetches nothing into this mode; it adds no new data-access path. Its candidates feed the Step 4 Propose checkpoint, where the user approves or rejects them through the unchanged present-and-confirm subset flow — nothing disconfirming is captured before approval, per-run or standing (the Step 4 auto-capture partition applies to disconfirming candidates identically).
 
 ## Step 8 — Feed forward
 
@@ -171,7 +209,7 @@ State the chain options to the user; do NOT auto-chain without the routing the u
 ## Boundaries (this mode)
 
 - Read-only on portfolio/ledger data; position data ONLY through registered read tools (`./investor-loop.md` § Tools-only data access). This mode reads no position data directly.
-- Writes ONLY to `raw/` via the `investment_source_capture` tool (including the gated `raw/{origin}/log.md` record), to `.user/finance/investor/log.md` (deferred-issue records per § Issue-surfacing), and to the wiki via `sb-wiki-ingest` run through sub-agents — the agent NEVER hand-writes a raw source file or a wiki page (`./investor-loop.md` § Own-workspace-writes boundary).
+- Writes ONLY to `raw/` via the `investment_source_capture` tool (including the gated `raw/{origin}/log.md` record), to `.user/finance/investor/log.md` (deferred-issue records per § Issue-surfacing), to `source-policy.md` § Auto-Capture Pre-Approved Origins ONLY via the Ingest-gate growth prompt (a user-approved policy edit), and to the wiki via `sb-wiki-ingest` run through sub-agents — the agent NEVER hand-writes a raw source file or a wiki page (`./investor-loop.md` § Own-workspace-writes boundary).
 - NEVER bypasses a paywall and NEVER uses bank/brokerage credentials — gated sources register `gated_pending_access` only (permanent source boundary in `./investor-loop.md`).
 - Never mutates ledgers, `portfolio.json`, or the dashboard. A request to do so, to bypass a paywall, or to hand-write a raw/wiki file is out-of-structure → Rule A in `./investor-loop.md`.
 - Every user-facing turn ends at an Investor Checkpoint (`./investor-loop.md` § Per-Step Checkpoint).
