@@ -13,7 +13,8 @@ Bootstraps a clean vault per architecture §3:
 NEVER writes ``.claude/settings.json`` (architecture §8 + §10 item 14).
 NEVER writes inside ``.user/`` except for the single templates carve-out
 documented in architecture §3 — manifest-declared templates are installed
-under ``.user/config/templates/`` using install-if-missing semantics so
+at their manifest-declared ``.user/`` targets (periodic-note templates,
+finance investor policy skeletons) using install-if-missing semantics so
 user edits are never overwritten.
 NEVER ships ``_system/``.
 

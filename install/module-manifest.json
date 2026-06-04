@@ -236,7 +236,23 @@
           "description": "Read-only investment-reasoning agent — thesis, research, review, portfolio, decision, policy modes."
         }
       ],
-      "rules": []
+      "rules": [],
+      "templates": [
+        {
+          "name": "investor-source-policy",
+          "module": "finance",
+          "source": "finance/templates/source-policy.md",
+          "target": ".user/finance/investor/source-policy.md",
+          "description": "Investor source-policy skeleton — trust tiers + empty named-origin map + allowed-use + auto-capture allowlist (install-if-missing)."
+        },
+        {
+          "name": "investor-research-policy",
+          "module": "finance",
+          "source": "finance/templates/research-policy.md",
+          "target": ".user/finance/investor/research-policy.md",
+          "description": "Investor research-policy skeleton — scope, priorities, exclusions, watchlist rule, horizons (install-if-missing)."
+        }
+      ]
     }
   }
 }
