@@ -48,7 +48,7 @@ This workflow is read-mostly by contract. Auto-applied writes are SCOPED to inde
 | Write | Scope | Authorization |
 |-------|-------|--------------|
 | Re-sync wiki sources `My take` column from each source page (step 6) | `{wiki_root}/wiki/sources/{origin}/{origin}.md` | Auto-applied — no user diff |
-| Renumber footnotes; remove genuinely-stale footnote definitions per `../shared/citation-format.md` stub-provenance exemption (step 6) | Per source page touched | Auto-applied — no user diff |
+| Renumber footnotes — safe bijections only; stale-def removal is REPORT-ONLY per `../shared/citation-format.md` (step 6) | Per source page touched | Auto-applied — no user diff |
 | Create missing raw `{origin}.md` indexes; add missing rows with `Wiki = No` default (step 7) | `{wiki_root}/raw/{origin}/{origin}.md`, `{wiki_root}/raw/studies/studies.md` | Auto-applied — no user diff |
 | Create missing wiki leaf indexes (`concepts.md`, `entities.md`, `topics.md`) (step 7) | `{wiki_root}/wiki/concepts/concepts.md`, `entities/entities.md`, `topics/topics.md` | Auto-applied — no user diff |
 | Prune spent/retired entries from `log.md` (step 8) — delete `candidate-topic`/`candidate-mention` entries whose page now exists, and delete retired history entries | `{wiki_root}/log.md` | Auto-applied — no user diff |
@@ -68,10 +68,33 @@ NEVER edit page bodies, frontmatter (other than `last-touched` on indexes and on
 Before Step 1, run the deterministic helper from the vault root with the active Python interpreter:
 
 ```bash
-python 3-resources/tools/sb-os/wiki/scripts/sb-wiki-lint-deterministic.py --apply --report 3-resources/knowledge-base/lint-deterministic-report.json
+python {sb_os_path}/wiki/scripts/sb-wiki-lint-deterministic.py --apply --report {wiki_root}/lint-deterministic-report.json
 ```
 
-The helper is mandatory. It performs only script-safe work: raw index creation when `Title` and `Date` are deterministic, wiki leaf-index header creation, wiki source `My take` re-sync, broken-wikilink inventory, and a JSON queue named `judgment_needed`.
+The helper is mandatory. It executes the deterministic halves of the lint steps in one pass — NEVER re-derive these by walking files with LLM reads. Consume the JSON report keys per this map:
+
+| Report key | Feeds step | Content |
+|------------|-----------|---------|
+| `writes`, `judgment_needed` | 6, 7 | Auto-applied index writes; queue of judgment-bearing cells (incl. `row-shape` malformed rows) |
+| `detected.stubs_aged_gt30`, `stubs_fresh_count`, `stubs_no_created` | 1 | Stub state + age (user-half exemption applied) |
+| `detected.orphans` | 2 | STRICT-scope orphans (concept/entity/topic inbound only) |
+| `detected.broken_wikilinks` | 5 | Unresolved wikilink inventory |
+| `detected.questions_broken_links` | 5 | `questions.md` `relates:`/`seeded-by:` targets that do not resolve (absent file → key empty) |
+| `detected.footnote_issues`, `provenance_only_count`, `renumbered` | 6 | Set-mismatch findings (report-only); pages with defs-and-no-inline (never touched); safe-bijection renumbers auto-applied under `--apply` |
+| `detected.log_spent_entries`, `log_retired_entries`, `log_unknown_type_entries`, `log_aging_candidate_topics` | 4, 8 | Prune-test results + aging candidates + non-canonical entries (kept) |
+| `detected.rename_proposals`, `duplicate_raws`, `title_disambiguation_needed` | 7.6 | PDF title-conformance detection; same-title collisions surface as disambiguation, never proposals |
+| `detected.subdivision_proposals`, `subdivision_stragglers`, `kind_missing`, `generic_kind_flags` | 7.5 | Folder-subdivision detection |
+
+Execution flags — the helper also owns the mechanical halves of the write paths:
+
+| Flag | Class | Used at |
+|------|-------|---------|
+| `--apply` | Safe auto-apply | The mandatory pre-Step-1 run — index sync writes + safe footnote renumber |
+| `--prune-log` | Safe auto-apply (lint-contract-authorized) | Step 8 — deletes spent + retired `log.md` entries exactly as steps 8.2-8.4 specify; unknown types and plain headings always survive |
+| `--execute-renames <plan.json>` | USER-GATED executor | Step 9, on RENAME PROPOSAL accept — plan rows `{origin, old_stem, new_stem}`; rewrites scoped wikilink patterns in non-raw files + raw indexes only, then moves the two files (per step 7.6 execution) |
+| `--execute-subdivision <plan.json>` | USER-GATED executor | Step 9, on SUBDIVISION PROPOSAL accept — plan rows `{type_folder, slug, target_subfolder}`; moves pages, bumps `last-touched`, performs index row surgery. `CLAUDE.md` routing rows and first-time router rewrites are returned as `claude_md_pending`/errors for the AGENT to apply — the script never edits CLAUDE.md |
+
+NEVER run an executor flag without an explicit user accept at step 9. After any executor run, apply every `claude_md_pending` row and resolve every error surfaced in `detected.renames` / `detected.subdivision`.
 
 The helper MUST NOT fill judgment-bearing cells. `Description`, `Scope`, and `What it says` require LLM judgment. After the helper runs, read the JSON report and resolve every `judgment_needed` item by reading the referenced file and writing the required semantic cell before Step 8.
 
@@ -160,9 +183,9 @@ For each wiki page (concepts, entities, topics, source pages):
 1. Apply footnote rules per `../shared/citation-format.md`:
    - Renumber inline `[^N]` markers and matching `[^N]: [[<filename>.md]]` definitions sequentially per page (start at `[^1]`).
    - Preserve user prose appended to a definition (e.g., `[^1]: [[file.md]] — note: this is the original`).
-   - Remove a definition with no inline reference ONLY when the page has ≥1 inline-referenced footnote AND every inline marker has a matching definition (the definition was genuinely orphaned by an edit).
-   - NEVER remove definitions from a page with ZERO inline markers — that is the ingest-built stub-provenance shape (`../shared/stub-policy.md`); its definitions are the page's only source links and graph edges.
-   - Set mismatches (inline marker without definition, duplicate definitions) are content defects: report in the LINT REPORT, never auto-repair, never remove definitions from such a page.
+   - NEVER auto-remove a footnote definition. A def with no inline reference is mechanically indistinguishable from stub provenance (stubs are born with defs and no inline markers; later ingests append inline-cited sections while the original def stays unreferenced) — auto-removal strips the page's graph edge to that source. REPORT unreferenced defs in the LINT REPORT for hand-reconciliation.
+   - A page with definitions and ZERO inline markers is the ingest-built stub-provenance shape (`../shared/stub-policy.md`) — not a finding; never touched.
+   - Set mismatches (inline marker without definition, duplicate definitions) are content defects: report in the LINT REPORT, never auto-repair.
 2. Capture `footnotes-renumbered` count (pages touched) for the LINT REPORT.
 
 ### Step 7 — Verify and create raw indexes; verify wiki leaf indexes
@@ -223,7 +246,7 @@ If a kind not in the table appears at threshold, surface the proposal with a `(n
 
 #### Subdivision execution (only on user accept at step 9)
 
-For each accepted subfolder:
+Run the mechanical moves and index row surgery via the deterministic helper: `--execute-subdivision <plan.json>` (plan rows `{type_folder, slug, target_subfolder}`), then apply its `claude_md_pending` rows and any first-time router rewrite yourself — the helper never edits CLAUDE.md or authors router/leaf `Description` judgment content. The procedure below is the contract the executor + agent jointly implement. For each accepted subfolder:
 
 1. Resolve target path: `{wiki_root}/wiki/{type}/{subfolder}/`. Create the directory if absent.
 2. Create the leaf index `{wiki_root}/wiki/{type}/{subfolder}/{subfolder}.md` with header `| File | Description |` per `../shared/index-formats.md` "Wiki Leaf Indexes" section. For each page being moved, add a row with the same `Description` value the parent leaf index used; if the parent leaf row was missing or blank, generate a 1-sentence factual description from the page body (judgment-bearing).
@@ -250,7 +273,7 @@ Detection ONLY — NEVER rename at this step. Markdown raw sources are out of sc
 
 #### PDF title-conformance execution (only on user accept at step 9)
 
-For each accepted rename, update the FULL referrer set atomically — a filesystem rename does NOT trigger Obsidian backlink updates:
+Run accepted renames via the deterministic helper: `--execute-renames <plan.json>` (plan rows `{origin, old_stem, new_stem}`) — it implements the scoped rewrite + moves + verify below and reports `skipped_url_mentions`/`errors` for review. For each accepted rename, update the FULL referrer set atomically — a filesystem rename does NOT trigger Obsidian backlink updates:
 
 1. Rewrite referrers with SCOPED WIKILINK PATTERNS ONLY — NEVER a blind global string replace:
    - **Patterns:** wikilink/embed targets `[[{old-stem}.pdf` and `[[{old-stem}.md` (with any `#anchor` or `|alias` tail) → same form with `{title-slug}`. These cover every referrer: body wikilinks, `[^N]:` footnote definitions, quoted frontmatter values (`raw:`, `related:`), the raw index `File` cell, the wiki sources index `File` cell, and `log.md` references.
@@ -301,7 +324,7 @@ Detection ONLY. Build `graduation-proposals` for the Step 9 GRADUATION PROPOSAL 
 
 ### Step 8 — Prune the log
 
-The log is an actionable queue. Lint NEVER writes a `lint` entry — findings live in the LINT REPORT (step 9) only. Lint's only write to `log.md` is PRUNING:
+The log is an actionable queue. Lint NEVER writes a `lint` entry — findings live in the LINT REPORT (step 9) only. Lint's only write to `log.md` is PRUNING. Execute the prune via the deterministic helper's `--prune-log` flag (it implements items 2-4 below exactly); the rules below remain the contract the flag implements:
 
 1. Read `{wiki_root}/log.md` in full. Parse H2 entries per `../shared/log-entry-shapes.md`.
 2. DELETE every retired-type entry (`ingest`, `concept-created`, `entity-created`, `topic-created`, `topic-updated`, `topic-coverage-candidate`, `lint`, `query`) — these are no longer active. Remove the full entry (header + body).

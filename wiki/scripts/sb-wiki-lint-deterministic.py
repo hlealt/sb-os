@@ -9,6 +9,7 @@ Those gaps are emitted as a JSON queue for the LLM lint workflow.
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import os
 import re
@@ -20,8 +21,23 @@ RAW_HEADER = "| File | Title | Date | Wiki |\n|------|-------|------|------|\n"
 CONCEPT_HEADER = "| File | Description |\n|------|-------------|\n"
 ENTITY_HEADER = "| File | Description |\n|------|-------------|\n"
 TOPIC_HEADER = "| File | Scope |\n|------|-------|\n"
+LEAF_INDEX_FRONTMATTER = "---\ntype: index\n---\n\n"
 DASH = "\u2014"
 NON_SOURCE_FILES = {"AGENTS.md", "CLAUDE.md", "README.md"}
+ACTIVE_LOG_TYPES = {"candidate-topic", "candidate-mention"}
+RETIRED_LOG_TYPES = {
+    "ingest",
+    "concept-created",
+    "entity-created",
+    "topic-created",
+    "topic-updated",
+    "topic-coverage-candidate",
+    "lint",
+    "query",
+}
+LOG_HEADER_RE = re.compile(r"^## \[([^\]]+)\]\s+([a-z0-9-]+)\s*\|\s*(.*)$")
+STUB_AGE_FLOOR_DAYS = 30
+SOURCE_AGENT_HALF = {"Substance", "Notable quotes", "Connections"}
 
 
 @dataclass
@@ -29,7 +45,16 @@ class Report:
     mode: str
     writes: list[str] = field(default_factory=list)
     judgment_needed: list[dict[str, str]] = field(default_factory=list)
-    detected: dict[str, list[str]] = field(default_factory=dict)
+    detected: dict[str, object] = field(default_factory=dict)
+
+
+def today() -> datetime.date:
+    return datetime.date.today()
+
+
+def excluded_dir(path: Path) -> bool:
+    """Asset-folder exclusion: any path segment named `assets` or `*-assets`."""
+    return any(part == "assets" or part.endswith("-assets") for part in path.parts)
 
 
 def _fspath(path: Path) -> str:
@@ -457,6 +482,520 @@ def detect_broken_wikilinks(wiki_root: Path, report: Report) -> None:
     report.detected["broken_wikilinks"] = broken
 
 
+# ---------------------------------------------------------------------------
+# C1 — log prune-test + questions.md link check (always-on detection)
+# ---------------------------------------------------------------------------
+
+
+def normalize_slug(name: str) -> str:
+    return re.sub(r"[^a-z0-9.-]+", "-", name.lower()).strip("-")
+
+
+def wiki_page_names(wiki_root: Path) -> tuple[set[str], set[str]]:
+    """(all wiki page filenames, topic page filenames) — leaf indexes excluded."""
+    all_names: set[str] = set()
+    topic_names: set[str] = set()
+    wiki_dir = wiki_root / "wiki"
+    if not wiki_dir.exists():
+        return all_names, topic_names
+    for page in wiki_dir.rglob("*.md"):
+        if page.name in NON_SOURCE_FILES or page.stem == page.parent.name or excluded_dir(page):
+            continue
+        all_names.add(page.name)
+        if "topics" in page.relative_to(wiki_dir).parts:
+            topic_names.add(page.name)
+    return all_names, topic_names
+
+
+def split_log_blocks(text: str) -> tuple[str, list[str]]:
+    """(preamble, H2 blocks). Split on every `^## ` line — plain headings
+    (e.g. `## Candidate-mentions (review queue ...)`) survive as their own
+    blocks (pitfall 4)."""
+    lines = text.splitlines(keepends=True)
+    preamble: list[str] = []
+    blocks: list[list[str]] = []
+    current: list[str] | None = None
+    for line in lines:
+        if line.startswith("## "):
+            if current is not None:
+                blocks.append(current)
+            current = [line]
+        elif current is None:
+            preamble.append(line)
+        else:
+            current.append(line)
+    if current is not None:
+        blocks.append(current)
+    return "".join(preamble), ["".join(b) for b in blocks]
+
+
+def scan_log(wiki_root: Path, report: Report, prune: bool) -> None:
+    log_path = wiki_root / "log.md"
+    if not os.path.exists(_fspath(log_path)):
+        return
+    all_names, topic_names = wiki_page_names(wiki_root)
+    preamble, blocks = split_log_blocks(read_text(log_path))
+    spent: list[dict[str, str]] = []
+    aging: list[dict[str, object]] = []
+    unknown: list[str] = []
+    retired: list[str] = []
+    keep: list[str] = []
+    for block in blocks:
+        header = block.splitlines()[0].rstrip()
+        match = LOG_HEADER_RE.match(header)
+        if not match:
+            keep.append(block)  # plain heading — never an entry, never pruned
+            continue
+        timestamp, entry_type, brief = match.groups()
+        if entry_type in RETIRED_LOG_TYPES:
+            retired.append(header)
+            continue  # dropped on prune
+        if entry_type not in ACTIVE_LOG_TYPES:
+            unknown.append(header)  # kept + reported, never deleted (Defect 3)
+            keep.append(block)
+            continue
+        candidates = {normalize_slug(brief)}
+        name_match = re.search(r"^- name:\s*(.+)$", block, flags=re.M)
+        if name_match:
+            candidates.add(normalize_slug(name_match.group(1)))
+        page_set = topic_names if entry_type == "candidate-topic" else all_names
+        matched = next((f"{c}.md" for c in candidates if f"{c}.md" in page_set), None)
+        if matched:
+            spent.append({"header": header, "matched_page": matched})
+            continue  # dropped on prune (resolution = page exists)
+        if entry_type == "candidate-topic":
+            date_match = re.match(r"(\d{4}-\d{2}-\d{2})", timestamp)
+            if date_match:
+                age = (today() - datetime.date.fromisoformat(date_match.group(1))).days
+                if age > STUB_AGE_FLOOR_DAYS:
+                    aging.append({"slug": brief, "logged": date_match.group(1), "age_days": age})
+        keep.append(block)
+    report.detected["log_spent_entries"] = spent
+    report.detected["log_retired_entries"] = retired
+    report.detected["log_unknown_type_entries"] = unknown
+    report.detected["log_aging_candidate_topics"] = aging
+    if prune and (spent or retired):
+        write_text(log_path, preamble + "".join(keep), report, apply_changes=True)
+        report.detected["log_pruned"] = {"spent": len(spent), "retired": len(retired)}
+
+
+def check_questions_links(wiki_root: Path, report: Report) -> None:
+    questions_path = wiki_root / "questions.md"
+    if not os.path.exists(_fspath(questions_path)):
+        return  # questions layer OFF — skip silently
+    targets: set[str] = set()
+    for root in [wiki_root / "wiki", wiki_root / "raw"]:
+        if not root.exists():
+            continue
+        for item in root.rglob("*.md"):
+            if not excluded_dir(item.relative_to(wiki_root)):
+                targets.add(item.name)
+    broken = [
+        target
+        for target in re.findall(r"\[\[([^\]|#]+?\.md)\]\]", read_text(questions_path))
+        if Path(target).name not in targets
+    ]
+    report.detected["questions_broken_links"] = broken
+
+
+# ---------------------------------------------------------------------------
+# C2 — structural walk: stubs, orphans, footnote state (+ C3 safe renumber)
+# ---------------------------------------------------------------------------
+
+
+def collect_wiki_pages(wiki_root: Path) -> tuple[list[Path], list[Path]]:
+    """(cet_pages, source_pages) — leaf indexes, CLAUDE.md, assets excluded."""
+    cet: list[Path] = []
+    sources: list[Path] = []
+    for type_folder in ("concepts", "entities", "topics"):
+        type_dir = wiki_root / "wiki" / type_folder
+        if not type_dir.exists():
+            continue
+        for page in type_dir.rglob("*.md"):
+            if page.name in NON_SOURCE_FILES or page.stem == page.parent.name or excluded_dir(page):
+                continue
+            cet.append(page)
+    sources_dir = wiki_root / "wiki" / "sources"
+    if sources_dir.exists():
+        for page in sources_dir.rglob("*.md"):
+            if page.name in NON_SOURCE_FILES or page.stem == page.parent.name or excluded_dir(page):
+                continue
+            sources.append(page)
+    return cet, sources
+
+
+def body_after_frontmatter(text: str) -> str:
+    match = re.match(r"^---\s*\n.*?\n---\s*\n", text, flags=re.S)
+    return text[match.end():] if match else text
+
+
+def split_h2_sections(body: str) -> dict[str, str]:
+    sections: dict[str, list[str]] = {"_pre": []}
+    current = "_pre"
+    for line in body.splitlines():
+        match = re.match(r"^##\s+(.+?)\s*$", line)
+        if match:
+            current = match.group(1)
+            sections.setdefault(current, [])
+        else:
+            sections[current].append(line)
+    return {name: "\n".join(lines) for name, lines in sections.items()}
+
+
+def substantive_word_count(text: str) -> int:
+    flat = flatten_wikilinks(text)
+    flat = re.sub(r"\[\^\d+\]:?", " ", flat)
+    flat = re.sub(r"!\[[^\]]*\]\([^)]*\)", " ", flat)
+    flat = re.sub(r"[#>*`|]+", " ", flat)
+    return len(flat.split())
+
+
+def footnote_state(text: str) -> dict[str, object]:
+    defs = re.findall(r"^\[\^(\d+)\]:", text, flags=re.M)
+    inline_all = re.findall(r"\[\^(\d+)\](?!:)", text)
+    order: list[str] = []
+    for marker in inline_all:
+        if marker not in order:
+            order.append(marker)
+    return {"defs": defs, "inline": inline_all, "order": order}
+
+
+def structural_walk(wiki_root: Path, report: Report, apply_changes: bool) -> None:
+    cet_pages, source_pages = collect_wiki_pages(wiki_root)
+    stubs_aged: list[dict[str, object]] = []
+    stubs_no_created: list[str] = []
+    stubs_fresh = 0
+    footnote_issues: list[dict[str, object]] = []
+    provenance_only = 0
+    renumbered: list[dict[str, object]] = []
+    inbound: dict[str, int] = {}
+    cet_names = {p.name for p in cet_pages}
+
+    for page in cet_pages + source_pages:
+        text = read_text(page)
+        rel = str(page.relative_to(wiki_root)).replace("\\", "/")
+        is_source = page in source_pages
+        body = body_after_frontmatter(text)
+        sections = split_h2_sections(body)
+
+        # --- C2a stub state + age ---
+        substantive = False
+        for name, content in sections.items():
+            if name in {"_pre", "Sources"}:
+                continue
+            if is_source and name not in SOURCE_AGENT_HALF:
+                continue  # user-half exemption
+            if substantive_word_count(content) > 50:
+                substantive = True
+                break
+        if not substantive:
+            fm = frontmatter(text)
+            created = fm.get("created", "") or fm.get("date", "")
+            try:
+                age = (today() - datetime.date.fromisoformat(created)).days
+            except ValueError:
+                age = None
+            if age is None:
+                stubs_no_created.append(rel)
+            elif age > STUB_AGE_FLOOR_DAYS:
+                stubs_aged.append({"page": rel, "created": created, "age": age})
+            else:
+                stubs_fresh += 1
+
+        # --- C2b orphan inbound map (STRICT: cet pages are the only sources) ---
+        if not is_source:
+            for target in set(re.findall(r"\[\[([^\]|#]+?\.md)\]\]", text)):
+                target_name = Path(target).name
+                if target_name != page.name and target_name in cet_names:
+                    inbound[target_name] = inbound.get(target_name, 0) + 1
+
+        # --- C2c footnote state ---
+        state = footnote_state(text)
+        defs, inline, order = state["defs"], state["inline"], state["order"]
+        if defs and not inline:
+            provenance_only += 1  # stub-provenance shape — report bucket only, NEVER touch
+            continue
+        issues: list[str] = []
+        if len(defs) != len(set(defs)):
+            issues.append("duplicate defs")
+        missing = sorted(set(inline) - set(defs), key=int)
+        if missing:
+            issues.append(f"inline without def: {','.join(missing)}")
+        stale = sorted(set(defs) - set(inline), key=int)
+        if inline and stale:
+            issues.append(f"stale defs: {','.join(stale)}")
+        non_sequential = order != [str(i) for i in range(1, len(order) + 1)]
+        if non_sequential:
+            issues.append("non-sequential")
+        # --- C3 safe renumber: ONLY pure bijections with no other issue ---
+        if non_sequential and len(issues) == 1 and set(inline) == set(defs):
+            mapping = {old: str(new) for new, old in enumerate(order, start=1)}
+            new_text = text
+            for old in mapping:
+                new_text = new_text.replace(f"[^{old}]", f"[^@TMP{old}@]")
+            for old, new in mapping.items():
+                new_text = new_text.replace(f"[^@TMP{old}@]", f"[^{new}]")
+            write_text(page, new_text, report, apply_changes)
+            renumbered.append({"page": rel, "map": mapping})
+        elif issues:
+            footnote_issues.append({"page": rel, "issues": issues})
+
+    report.detected["stubs_aged_gt30"] = stubs_aged
+    report.detected["stubs_fresh_count"] = stubs_fresh
+    report.detected["stubs_no_created"] = stubs_no_created
+    report.detected["orphans"] = sorted(p.name for p in cet_pages if inbound.get(p.name, 0) == 0)
+    report.detected["footnote_issues"] = footnote_issues
+    report.detected["provenance_only_count"] = provenance_only
+    report.detected["renumbered"] = renumbered
+
+
+# ---------------------------------------------------------------------------
+# C4 — PDF title-conformance: detection (always-on) + rename executor (gated)
+# ---------------------------------------------------------------------------
+
+
+def title_slug(title: str) -> str:
+    """Kebab-slug per naming-convention.md § Title-slug algorithm."""
+    slug = title.lower()
+    slug = re.sub(r"[\s+/:–—]+", "-", slug)
+    slug = re.sub(r"[?!,.\"'()\[\]‘’“”]", "", slug)
+    slug = re.sub(r"-{2,}", "-", slug)
+    return slug.strip("-")
+
+
+def raw_index_titles(origin_dir: Path) -> dict[str, str]:
+    """Map raw filename -> index Title cell (empty when no row)."""
+    index_path = origin_dir / f"{origin_dir.name}.md"
+    titles: dict[str, str] = {}
+    if not index_path.exists():
+        return titles
+    for line in read_text(index_path).splitlines():
+        if not line.strip().startswith("|") or re.match(r"^\s*\|\s*-+", line):
+            continue
+        cells = split_row_cells(line)
+        if len(cells) < 2 or cells[0] == "File":
+            continue
+        match = re.search(r"\[\[([^\]|#]+?)\]\]", cells[0])
+        if match:
+            titles[Path(match.group(1)).name] = cells[1]
+    return titles
+
+
+def detect_pdf_title_conformance(wiki_root: Path, report: Report) -> None:
+    proposals: list[dict[str, str]] = []
+    duplicates: list[dict[str, str]] = []
+    disambiguation: list[dict[str, str]] = []
+    raw_root = wiki_root / "raw"
+    if not raw_root.exists():
+        for key in ("rename_proposals", "duplicate_raws", "title_disambiguation_needed"):
+            report.detected[key] = []
+        return
+    for origin_dir in sorted(p for p in raw_root.iterdir() if p.is_dir() and not excluded_dir(p.relative_to(wiki_root))):
+        titles = raw_index_titles(origin_dir)
+        slug_groups: dict[str, list[tuple[str, str]]] = {}
+        for pdf in sorted(origin_dir.glob("*.pdf")):
+            title = titles.get(pdf.name, "")
+            if not title:
+                continue  # no index Title — step 7 / judgment pass owns the row first
+            slug_groups.setdefault(title_slug(title), []).append((pdf.stem, title))
+        for slug, members in slug_groups.items():
+            if not slug:
+                continue
+            nonconforming = [(stem, title) for stem, title in members if stem != slug]
+            if not nonconforming:
+                continue
+            if len(members) > 1:
+                disambiguation.extend(
+                    {"origin": origin_dir.name, "file": f"{stem}.pdf", "title": title, "title_slug": slug}
+                    for stem, title in members
+                )
+                continue
+            stem, _title = nonconforming[0]
+            if (origin_dir / f"{slug}.pdf").exists():
+                duplicates.append({"origin": origin_dir.name, "file": f"{stem}.pdf", "existing": f"{slug}.pdf"})
+            else:
+                proposals.append({"origin": origin_dir.name, "old_stem": stem, "new_stem": slug})
+    report.detected["rename_proposals"] = proposals
+    report.detected["duplicate_raws"] = duplicates
+    report.detected["title_disambiguation_needed"] = disambiguation
+
+
+def rename_referrer_files(wiki_root: Path) -> list[Path]:
+    """Rewrite scope per Defect-4 fix: wiki/**, log.md, raw INDEX files only."""
+    files: list[Path] = []
+    wiki_dir = wiki_root / "wiki"
+    if wiki_dir.exists():
+        files.extend(
+            p for p in wiki_dir.rglob("*.md")
+            if p.name not in NON_SOURCE_FILES and not excluded_dir(p.relative_to(wiki_root))
+        )
+    log_path = wiki_root / "log.md"
+    if log_path.exists():
+        files.append(log_path)
+    raw_root = wiki_root / "raw"
+    if raw_root.exists():
+        for origin_dir in raw_root.iterdir():
+            if origin_dir.is_dir() and not excluded_dir(origin_dir.relative_to(wiki_root)):
+                index_path = origin_dir / f"{origin_dir.name}.md"
+                if index_path.exists():
+                    files.append(index_path)
+    return files
+
+
+def execute_renames(wiki_root: Path, plan_path: Path, report: Report) -> None:
+    plan = json.loads(read_text(plan_path))
+    rewritten: list[str] = []
+    moved: list[str] = []
+    skipped_url_mentions: list[str] = []
+    errors: list[str] = []
+    for row in plan:
+        origin, old, new = row["origin"], row["old_stem"], row["new_stem"]
+        raw_old = wiki_root / "raw" / origin / f"{old}.pdf"
+        raw_new = wiki_root / "raw" / origin / f"{new}.pdf"
+        source_old = wiki_root / "wiki" / "sources" / origin / f"{old}.md"
+        source_new = wiki_root / "wiki" / "sources" / origin / f"{new}.md"
+        if not raw_old.exists():
+            errors.append(f"{origin}/{old}.pdf: raw file missing — row skipped")
+            continue
+        if raw_new.exists() or (source_old.exists() and source_new.exists()):
+            errors.append(f"{origin}/{old}.pdf: target name taken (duplicate-raw contract) — row skipped")
+            continue
+        for path in rename_referrer_files(wiki_root):
+            text = read_text(path)  # re-read immediately before writing (pitfall 6)
+            updated = text.replace(f"[[{old}.pdf", f"[[{new}.pdf").replace(f"[[{old}.md", f"[[{new}.md")
+            if updated != text:
+                write_text(path, updated, report, apply_changes=True)
+                rewritten.append(str(path.relative_to(wiki_root)).replace("\\", "/"))
+        os.replace(_fspath(raw_old), _fspath(raw_new))
+        moved.append(f"raw/{origin}/{old}.pdf -> {new}.pdf")
+        if source_old.exists():
+            os.replace(_fspath(source_old), _fspath(source_new))
+            moved.append(f"wiki/sources/{origin}/{old}.md -> {new}.md")
+        # Verify: remaining old-stem occurrences must be legitimate (URLs, raw bodies)
+        for path in (wiki_root / "wiki").rglob("*.md") if (wiki_root / "wiki").exists() else []:
+            if excluded_dir(path.relative_to(wiki_root)):
+                continue
+            for line in read_text(path).splitlines():
+                if old in line:
+                    bucket = skipped_url_mentions if "http" in line else errors
+                    bucket.append(f"{path.relative_to(wiki_root)}: {line.strip()[:160]}")
+    report.detected["renames"] = {
+        "rewritten_files": sorted(set(rewritten)),
+        "moved": moved,
+        "skipped_url_mentions": skipped_url_mentions,
+        "errors": errors,
+    }
+
+
+# ---------------------------------------------------------------------------
+# C5 — subdivision executor (user-gated)
+# ---------------------------------------------------------------------------
+
+
+def execute_subdivision(wiki_root: Path, plan_path: Path, report: Report) -> None:
+    plan = json.loads(read_text(plan_path))
+    moved: list[str] = []
+    rows_moved = 0
+    claude_md_pending: list[dict[str, str]] = []
+    errors: list[str] = []
+    today_str = today().isoformat()
+    for row in plan:
+        type_folder, slug, subfolder = row["type_folder"], row["slug"], row["target_subfolder"]
+        type_dir = wiki_root / "wiki" / type_folder
+        src = type_dir / f"{slug}.md"
+        dst_dir = type_dir / subfolder
+        dst = dst_dir / f"{slug}.md"
+        if not src.exists():
+            errors.append(f"{type_folder}/{slug}.md: source missing — row skipped")
+            continue
+        if dst.exists():
+            errors.append(f"{type_folder}/{subfolder}/{slug}.md: target exists — row skipped")
+            continue
+        text = read_text(src)
+        kind = frontmatter(text).get("kind", "")
+        text = re.sub(r"^last-touched:.*$", f"last-touched: {today_str}", text, count=1, flags=re.M)
+        os.makedirs(_fspath(dst_dir), exist_ok=True)
+        with open(_fspath(dst), "w", encoding="utf-8") as handle:
+            handle.write(text)
+        os.remove(_fspath(src))
+        moved.append(f"{type_folder}/{slug}.md -> {type_folder}/{subfolder}/{slug}.md")
+
+        # Index row surgery — key on the `| [[{slug}.md]] |` prefix only (pitfall 8)
+        parent_index = type_dir / f"{type_folder}.md"
+        row_line: str | None = None
+        if parent_index.exists():
+            lines = read_text(parent_index).splitlines()  # re-read before write (pitfall 6)
+            kept: list[str] = []
+            for line in lines:
+                if row_line is None and line.strip().startswith(f"| [[{slug}.md]]"):
+                    row_line = line
+                else:
+                    kept.append(line)
+            if row_line is not None:
+                write_text(parent_index, "\n".join(kept) + "\n", report, apply_changes=True)
+        leaf_index = dst_dir / f"{subfolder}.md"
+        if row_line is not None:
+            leaf_text = (
+                read_text(leaf_index)
+                if leaf_index.exists()
+                else LEAF_INDEX_FRONTMATTER + f"# {subfolder}\n\n" + CONCEPT_HEADER
+            )
+            if not leaf_text.endswith("\n"):
+                leaf_text += "\n"
+            write_text(leaf_index, leaf_text + row_line + "\n", report, apply_changes=True)
+            rows_moved += 1
+        else:
+            report.judgment_needed.append(
+                {
+                    "index": str(leaf_index),
+                    "file": str(dst),
+                    "cell": "Description",
+                    "reason": "moved page had no parent-index row; leaf row needs LLM judgment",
+                }
+            )
+        # Router `## Subfolders` table: insert the subfolder row (alphabetical)
+        # when the parent is already a router; a first-time router rewrite is
+        # judgment content and stays with the agent.
+        if parent_index.exists():
+            router_text = read_text(parent_index)
+            if f"[[{subfolder}]]" not in router_text and "## Subfolders" in router_text:
+                new_row = f"| [[{subfolder}]] | `kind: {kind}` | [[{subfolder}.md]] |"
+                lines = router_text.splitlines()
+                section_rows: list[int] = []
+                in_section = False
+                for i, line in enumerate(lines):
+                    if line.startswith("## "):
+                        in_section = line.strip() == "## Subfolders"
+                    elif in_section and re.match(r"^\|\s*\[\[", line):
+                        section_rows.append(i)
+                if section_rows:
+                    insert_at = next(
+                        (i for i in section_rows if lines[i] > new_row), section_rows[-1] + 1
+                    )
+                    lines.insert(insert_at, new_row)
+                    router_text = "\n".join(lines) + ("\n" if not router_text.endswith("\n") else "")
+                    router_text = re.sub(
+                        r"^last-touched:.*$", f"last-touched: {today_str}", router_text, count=1, flags=re.M
+                    )
+                    write_text(parent_index, router_text, report, apply_changes=True)
+            elif "## Subfolders" not in router_text:
+                errors.append(
+                    f"{type_folder}/{type_folder}.md: not in router format — agent must rewrite it as a router"
+                )
+        claude_md_pending.append(
+            {
+                "file": str(type_dir / "CLAUDE.md"),
+                "row": f"| `{subfolder}/` | `{kind}` | — |",
+            }
+        )
+    report.detected["subdivision"] = {
+        "moved": moved,
+        "rows_moved": rows_moved,
+        "claude_md_pending": claude_md_pending,
+        "errors": errors,
+    }
+
+
 def resolve_wiki_root(vault_root: Path) -> Path:
     manifest = json.loads(read_text(vault_root / "sb-os.json"))
     return vault_root / manifest["wiki_root"]
@@ -467,16 +1006,45 @@ def main() -> int:
     parser.add_argument("--vault-root", type=Path, default=Path.cwd())
     parser.add_argument("--apply", action="store_true", help="write deterministic changes")
     parser.add_argument("--report", type=Path, help="optional JSON report path")
+    parser.add_argument(
+        "--prune-log",
+        action="store_true",
+        help="delete spent/retired log.md entries (lint-contract-authorized prune)",
+    )
+    parser.add_argument(
+        "--execute-renames",
+        type=Path,
+        metavar="PLAN_JSON",
+        help="USER-GATED: execute PDF title-conformance renames from a step-9 plan",
+    )
+    parser.add_argument(
+        "--execute-subdivision",
+        type=Path,
+        metavar="PLAN_JSON",
+        help="USER-GATED: execute folder-subdivision moves from a step-9 plan",
+    )
     args = parser.parse_args()
 
     wiki_root = resolve_wiki_root(args.vault_root.resolve())
-    report = Report(mode="apply" if args.apply else "check")
 
-    sync_raw_indexes(wiki_root, report, args.apply)
-    sync_wiki_leaf_headers_and_queue(wiki_root, report, args.apply)
-    sync_source_my_take_and_queue(wiki_root, report, args.apply)
-    detect_broken_wikilinks(wiki_root, report)
-    detect_subdivision(wiki_root, report)
+    if args.execute_renames or args.execute_subdivision:
+        # Executor mode: run ONLY the requested user-gated executor(s).
+        report = Report(mode="execute")
+        if args.execute_renames:
+            execute_renames(wiki_root, args.execute_renames, report)
+        if args.execute_subdivision:
+            execute_subdivision(wiki_root, args.execute_subdivision, report)
+    else:
+        report = Report(mode="apply" if args.apply else "check")
+        sync_raw_indexes(wiki_root, report, args.apply)
+        sync_wiki_leaf_headers_and_queue(wiki_root, report, args.apply)
+        sync_source_my_take_and_queue(wiki_root, report, args.apply)
+        detect_broken_wikilinks(wiki_root, report)
+        detect_subdivision(wiki_root, report)
+        scan_log(wiki_root, report, prune=args.prune_log)
+        check_questions_links(wiki_root, report)
+        structural_walk(wiki_root, report, args.apply)
+        detect_pdf_title_conformance(wiki_root, report)
 
     payload = {
         "mode": report.mode,
@@ -485,7 +1053,7 @@ def main() -> int:
         "detected": report.detected,
     }
     output = json.dumps(payload, indent=2, ensure_ascii=False)
-    if args.report and args.apply:
+    if args.report and (args.apply or report.mode == "execute"):
         args.report.parent.mkdir(parents=True, exist_ok=True)
         args.report.write_text(output + "\n", encoding="utf-8")
     print(output)
