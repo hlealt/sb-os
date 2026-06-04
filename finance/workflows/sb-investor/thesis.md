@@ -152,4 +152,4 @@ Do not pre-empt this prompt and do not suppress it — it is the scribe's struct
 - Read-only on portfolio/ledger data; position data ONLY through registered read tools (`./investor-loop.md` § Tools-only data access).
 - Writes ONLY by invoking `sb-fin-create-thesis` — the agent NEVER hand-writes a thesis page (`./investor-loop.md` § Own-workspace-writes boundary).
 - Never mutates ledgers, `portfolio.json`, or the dashboard. A request to do so, or to author the page by hand, is out-of-structure → Rule A in `./investor-loop.md`.
-- Every user-facing turn ends at an Investor Checkpoint (`./investor-loop.md` § Per-Step Checkpoint). User-facing strings are in `communication.language` per `./investor.md` § Rules and `./investor-loop.md` § Language.
+- Every user-facing turn ends at an Investor Checkpoint (`./investor-loop.md` § Per-Step Checkpoint).

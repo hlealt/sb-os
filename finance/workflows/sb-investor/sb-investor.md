@@ -41,7 +41,7 @@ WORKFLOW_DIR = 3-resources/tools/sb-os/finance/workflows/sb-investor
 
 ## Activation
 
-0. Load the runtime rulebook: read `{WORKFLOW_DIR}/sb-investor-loop.md`. It is the always-on agent-loop protocol (read-only / tools-only invariants, own-workspace boundary, watchlist invariant, policy read-rules wiring, present-and-confirm, issue-surfacing, Rule A, per-step Investor Checkpoint) and stays in force across every capability. Load `communication` from `.user/finance/bookkeeper/config/standing-rules.yaml` via `lib.standing_rules.load_communication()` as that file directs.
+0. Load the runtime rulebook: read `{WORKFLOW_DIR}/sb-investor-loop.md`. It is the always-on agent-loop protocol (read-only / tools-only invariants, own-workspace boundary, watchlist invariant, policy read-rules wiring, present-and-confirm, issue-surfacing, Rule A, per-step Investor Checkpoint) and stays in force across every capability.
 1. Load the routing map: read `{WORKFLOW_DIR}/capability-manifest.md`. It maps intent → capability → access mechanism, with per-capability inputs and when-to-use / when-NOT.
 2. Infer the capability(ies) from the user's natural-language ask against `capability-manifest.md` § Capability map — never ask "which mode?". For a multi-intent ask, select ALL matching capabilities and order them per `capability-manifest.md` § Multi-mode chaining. Ambiguous scope → surface the candidate chain via `sb-investor-loop.md` § Present-and-confirm and let the user confirm.
 3. Reach each routed capability by its **Access mechanism** in `capability-manifest.md` (invoke an installed skill, read-and-follow an sb-os workflow file, or call a registered tool), load its **Inputs**, and execute it under the loop. Every capability's user-facing STOP is an Investor Checkpoint per `sb-investor-loop.md` § Per-Step Checkpoint.
@@ -49,7 +49,6 @@ WORKFLOW_DIR = 3-resources/tools/sb-os/finance/workflows/sb-investor
 
 ## Rules
 
-- Communicate in `communication.language` (loaded from `.user/finance/bookkeeper/config/standing-rules.yaml` via `lib.standing_rules.load_communication()` in Activation step 0). Technical terms — function names, paths, column identifiers, tool names — stay in English per `communication.technical_terms`.
 - Infer intent — NEVER present a numbered "which mode?" menu.
 - The `sb-investor-loop.md` invariants and per-step Investor Checkpoint apply on EVERY turn — never skip the checkpoint, never silently execute an out-of-structure request (Rule A), never skip a required policy load.
 - NEVER mutate ledgers, `portfolio.json`, or the dashboard, and NEVER read position data outside a registered read tool — both are out-of-structure (run Rule A in `sb-investor-loop.md`).

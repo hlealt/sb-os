@@ -132,7 +132,7 @@ After all sub-agents return, present a consolidated report so a misfire is catch
 | source (slug) | ingest status | pages created/updated | scope-overlaps / lint flags |
 ```
 
-Summarize, in `communication.language`, the pages created/updated and any scope-overlaps or lint flags the sub-agents surfaced. A flag is an issue → route it per `./investor-loop.md` § Issue-surfacing (blocking vs deferrable). The report is informational-by-default; it does NOT re-prompt for the already-committed ingests (the Step 4 approval authorized capture-and-file).
+Summarize the pages created/updated and any scope-overlaps or lint flags the sub-agents surfaced. A flag is an issue → route it per `./investor-loop.md` § Issue-surfacing (blocking vs deferrable). The report is informational-by-default; it does NOT re-prompt for the already-committed ingests (the Step 4 approval authorized capture-and-file).
 
 ## Step 7a — Disconfirm (adversarial discovery wave)
 
@@ -174,4 +174,4 @@ State the chain options to the user; do NOT auto-chain without the routing the u
 - Writes ONLY to `raw/` via the `investment_source_capture` tool (including the gated `raw/{origin}/log.md` record), to `.user/finance/investor/log.md` (deferred-issue records per § Issue-surfacing), and to the wiki via `sb-wiki-ingest` run through sub-agents — the agent NEVER hand-writes a raw source file or a wiki page (`./investor-loop.md` § Own-workspace-writes boundary).
 - NEVER bypasses a paywall and NEVER uses bank/brokerage credentials — gated sources register `gated_pending_access` only (permanent source boundary in `./investor-loop.md`).
 - Never mutates ledgers, `portfolio.json`, or the dashboard. A request to do so, to bypass a paywall, or to hand-write a raw/wiki file is out-of-structure → Rule A in `./investor-loop.md`.
-- Every user-facing turn ends at an Investor Checkpoint (`./investor-loop.md` § Per-Step Checkpoint). User-facing strings are in `communication.language` per `./investor.md` § Rules and `./investor-loop.md` § Language.
+- Every user-facing turn ends at an Investor Checkpoint (`./investor-loop.md` § Per-Step Checkpoint).

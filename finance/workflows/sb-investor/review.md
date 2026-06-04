@@ -160,4 +160,4 @@ After persistence, route any implied next step — surface it, never auto-chain 
 - Writes ONLY by invoking `sb-fin-create-thesis` in its named investor-orchestrated `extend` entry point (thesis-page updates) and by dispatching `./research.md` (which persists `raw/` + wiki only through its own tool and ingest sub-agents). The agent NEVER hand-writes a thesis page or a raw/wiki file (`./investor-loop.md` § Own-workspace-writes boundary).
 - `status` downgrades are ALWAYS surfaced for approval, NEVER applied silently.
 - Never mutates ledgers, `portfolio.json`, or the dashboard. A request to do so, or to hand-write the thesis page instead of delegating to the scribe, is out-of-structure → Rule A in `./investor-loop.md`.
-- Every user-facing turn ends at an Investor Checkpoint (`./investor-loop.md` § Per-Step Checkpoint). User-facing strings are in `communication.language` per `./investor.md` § Rules and `./investor-loop.md` § Language.
+- Every user-facing turn ends at an Investor Checkpoint (`./investor-loop.md` § Per-Step Checkpoint).

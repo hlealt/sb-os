@@ -11,8 +11,6 @@ The always-on runtime rulebook that makes `/sb-investor` a read-only reasoning a
 
 **Load at activation.** `sb-investor.md` loads this file before routing to any capability (`thesis`, `research`, `review`, `portfolio`, `decision`) or running the inline `policy` mode. Every capability's user-facing decision point is an Investor Checkpoint (see § Per-Step Checkpoint).
 
-**Language (binding).** Load `communication` from `.user/finance/bookkeeper/config/standing-rules.yaml` via `lib.standing_rules.load_communication()`. Every user-facing string the loop emits is in `communication.language` (currently: Brazilian Portuguese). Technical terms — function names, paths, column identifiers, tool names — stay in English per `communication.technical_terms`.
-
 ---
 
 ## Read-only invariant (architectural)

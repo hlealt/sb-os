@@ -117,4 +117,4 @@ A decision that revises the conviction or status of its related thesis → sugge
 - Writes ONLY by invoking `sb-fin-create-decision` — the agent NEVER hand-writes a decision page (`./investor-loop.md` § Own-workspace-writes boundary).
 - Never reasons or records transaction price / quantity / fees / position size — the `sb-bookkeeper` ledger owns those. A request to do so is out-of-structure → Rule A in `./investor-loop.md`.
 - Never mutates ledgers, `portfolio.json`, or the dashboard. A request to do so, or to author the page by hand, is out-of-structure → Rule A.
-- Every user-facing turn ends at an Investor Checkpoint (`./investor-loop.md` § Per-Step Checkpoint). User-facing strings are in `communication.language` per `./investor.md` § Rules and `./investor-loop.md` § Language.
+- Every user-facing turn ends at an Investor Checkpoint (`./investor-loop.md` § Per-Step Checkpoint).

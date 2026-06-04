@@ -108,4 +108,4 @@ The agent-performed join is v1's coherence engine; no `thesis-map` / `unmapped` 
 - Persists NOTHING: the coherence map is read-only output. No wiki page, no policy file, no ledger, no `portfolio.json` is written by this mode.
 - `watchlist: true` is set ONLY after explicit user approval, routed through the `policy` thin mode — NEVER auto-set to clear a coherence gap (`./investor-loop.md` § Watchlist invariant).
 - Never mutates ledgers, `portfolio.json`, or the dashboard. A request to do so, to read position data off a non-tool path, or to set `watchlist` without approval is out-of-structure → Rule A in `./investor-loop.md`. A suspected data problem is recorded and routed to `sb-bookkeeper`, never fixed here.
-- Every user-facing turn ends at an Investor Checkpoint (`./investor-loop.md` § Per-Step Checkpoint). User-facing strings are in `communication.language` per `./investor.md` § Rules and `./investor-loop.md` § Language.
+- Every user-facing turn ends at an Investor Checkpoint (`./investor-loop.md` § Per-Step Checkpoint).
