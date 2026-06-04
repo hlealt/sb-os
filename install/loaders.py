@@ -30,6 +30,7 @@ Pure stdlib (json, pathlib).
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -207,6 +208,65 @@ def manifest_rule_sources(
         (f"{entry['name']}.md", entry["source"], _entry_module(entry))
         for entry in _flatten(mods, "rules", excluded)
     )
+
+
+#: Imperative directive emitted by every sb-os thin loader. Used by orphan
+#: detection to recover the source path a loader points at.
+_READ_DIRECTIVE_RE = re.compile(r"Read and execute `([^`]+)`")
+
+
+def find_orphaned_loaders(
+    target_root: Path | str,
+    sb_os_path: str | Path,
+    known_targets: set[str],
+    excluded: set[str] | None = None,
+) -> list[str]:
+    """Return vault-relative paths of sb-os-shaped loaders with no manifest entry.
+
+    Scans ``.claude/commands/*.md`` and ``.claude/skills/*/SKILL.md``. A file
+    is an orphan when ALL hold (architecture §6, Orphaned loaders):
+
+    * its ``Read and execute`` directive resolves into ``sb_os_path`` —
+      loaders pointing anywhere else (user, RBTV, personal) are never flagged;
+    * its vault-relative path is absent from ``known_targets`` (the full
+      manifest universe, stale entries included);
+    * its vault-relative path is absent from ``excluded`` — exclusion is an
+      explicit user signal, never deleted.
+
+    Returns a sorted list of forward-slash vault-relative paths. Pure scan —
+    no deletion happens here.
+    """
+    root = Path(target_root)
+    base = _normalize_sb_os_path(sb_os_path)
+    excluded = excluded or set()
+
+    candidates: list[Path] = []
+    commands_dir = root / ".claude" / "commands"
+    if commands_dir.is_dir():
+        candidates.extend(p for p in commands_dir.glob("*.md") if p.is_file())
+    skills_dir = root / ".claude" / "skills"
+    if skills_dir.is_dir():
+        candidates.extend(
+            p for p in skills_dir.glob("*/SKILL.md") if p.is_file()
+        )
+
+    orphans: list[str] = []
+    for path in candidates:
+        rel = path.relative_to(root).as_posix()
+        if rel in known_targets or rel in excluded:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue  # unreadable file: leave it alone
+        match = _READ_DIRECTIVE_RE.search(text)
+        if not match:
+            continue  # self-contained file, not a thin loader
+        ref = match.group(1).replace("\\", "/").lstrip("/")
+        # Segment-aware prefix match: `sb-os-extras/...` must not match `sb-os`.
+        if ref == base or ref.startswith(base + "/"):
+            orphans.append(rel)
+    return sorted(orphans)
 
 
 def _normalize_sb_os_path(sb_os_path: str | Path) -> str:

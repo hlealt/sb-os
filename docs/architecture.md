@@ -205,6 +205,10 @@ The installer prompts before any vault-modifying action and shows a planned-acti
 
 A component entry in `module-manifest.json` may carry `"stale": true` (with an optional `"stale_reason"`). Stale components are retired: the installer never installs them, never surfaces them in the interactive picker, and an upgrade run removes any previously-installed copy. Their source files remain in the repo for reference and history. Reviving one is a manifest edit (remove the flag) plus a re-install. Staleness is enforced at a single chokepoint (`loaders._flatten`), so every reader — fresh install, upgrade, orphan-cleanup, and tests — treats stale entries identically.
 
+### Orphaned loaders
+
+Renaming or removing a component in `module-manifest.json` leaves the previously-installed loader behind — no manifest entry remains to match it against, so selection-aware cleanup cannot see it. An upgrade run closes this gap: it scans the vault's installed loaders (`.claude/commands/*.md`, `.claude/skills/*/SKILL.md`) and deletes any loader that (a) is sb-os-shaped — its `Read and execute` directive resolves into the install's `sb_os_path` — and (b) has no `target` entry anywhere in the manifest (stale entries count as known). Loaders pointing anywhere else (user, RBTV, personal) are never touched. Targets listed in `excluded_components` are never deleted — exclusion is an explicit user signal. Planned deletions appear in the upgrade plan before the confirm prompt.
+
 ### Out of v1 scope
 
 - `integrate` mode (interactive merge into a non-sb-os existing PARA-like structure). README recommends manual setup if the vault has pre-existing PARA folders.
@@ -330,7 +334,7 @@ Contents of each managed CLAUDE.md are defined in the source files under `sb-os/
 | Folders created on the initial fresh install | sb-os | Never recreated; user can delete/rename freely |
 | Managed CLAUDE.md content **inside markers** | sb-os | Replaced verbatim |
 | Managed CLAUDE.md content **outside markers** | User | Preserved |
-| `.claude/` thin loaders | sb-os | Always rewritten |
+| `.claude/` thin loaders | sb-os | Always rewritten; sb-os-shaped loaders with no manifest entry are deleted (orphan pruning, §6) |
 | `.claude/rules/` files | sb-os | Always rewritten |
 | `.claude/settings.json` | User | sb-os never creates or modifies |
 | `sb-os.json` | sb-os | Updated each run |

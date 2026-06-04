@@ -520,8 +520,9 @@ def prompt_finance_dashboard_html_path(
 # Planned-action list
 # ---------------------------------------------------------------------------
 
-_CATEGORY_ORDER = ("folder", "file", "loader", "manifest")
+_CATEGORY_ORDER = ("delete", "folder", "file", "loader", "manifest")
 _CATEGORY_TITLES = {
+    "delete": "Loaders to DELETE (orphaned)",
     "folder": "Folders to create",
     "file": "Files to write",
     "loader": "Loaders to install",
@@ -573,7 +574,8 @@ def print_plan(actions: list[Action] | list[dict]) -> None:
         title = _CATEGORY_TITLES.get(category, category.capitalize())
         print(f"\n{bold(title)} ({len(entries)})")
         for action in entries:
-            line = f"  {green('+')} {action.target}"
+            sign = red("-") if category == "delete" else green("+")
+            line = f"  {sign} {action.target}"
             if action.detail:
                 line += f"  {dim(action.detail)}"
             print(line)

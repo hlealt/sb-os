@@ -95,10 +95,19 @@ def run_upgrade(
     if not _preflight_markers(target_root, wiki_root, install_wiki):
         return 1
 
+    # ----- Scan for orphaned loaders (renamed/removed components) -----
+    orphaned_loaders = loaders.find_orphaned_loaders(
+        target_root,
+        sb_os_loader_path,
+        known_targets=_all_manifest_loader_targets(),
+        excluded=set(excluded),
+    )
+
     # ----- Build plan + confirm ---------------------------------------
     plan = build_upgrade_plan(
         wiki_root, user_context_root, selected, set(excluded), install_wiki,
         finance_dashboard_html_path=finance_html_path,
+        orphaned_loaders=orphaned_loaders,
     )
     cli.print_plan(plan.actions)
     print(
@@ -115,6 +124,7 @@ def run_upgrade(
     # ----- Execute -----------------------------------------------------
     try:
         _clear_orphans(target_root, selected, set(excluded))
+        _prune_orphaned_loaders(target_root, orphaned_loaders)
         _execute_upgrade(
             target_root=target_root,
             sb_os_root=sb_os_root,
@@ -236,6 +246,44 @@ def _clear_orphans(
             f.unlink()
 
 
+def _all_manifest_loader_targets() -> set[str]:
+    """Return every skill/command ``target`` across ALL modules, stale included.
+
+    This is the orphan scan's "known" universe: anything the manifest has EVER
+    declared under its current entries is handled by the selection-aware
+    ``_clear_orphans`` path; only loaders absent from this set can be orphans
+    left behind by a rename or removal.
+    """
+    out: set[str] = set()
+    for mod in loaders.manifest_modules().values():
+        for kind in ("skills", "commands"):
+            for entry in mod.get(kind, []):
+                target = entry.get("target", "")
+                if target:
+                    out.add(target.replace("\\", "/"))
+    return out
+
+
+def _prune_orphaned_loaders(target_root: Path, orphans: Iterable[str]) -> None:
+    """Delete orphaned loader files found by ``loaders.find_orphaned_loaders``.
+
+    For skill loaders, the containing ``.claude/skills/<name>/`` directory is
+    removed only when emptied by the deletion — user-added files inside the
+    directory are never touched.
+    """
+    for rel in orphans:
+        f = target_root / rel
+        if f.is_file():
+            f.unlink()
+        parent = f.parent
+        if (
+            parent.parent.name == "skills"
+            and parent.is_dir()
+            and not any(parent.iterdir())
+        ):
+            parent.rmdir()
+
+
 def _preflight_markers(target_root: Path, wiki_root: str, install_wiki: bool = True) -> bool:
     """Validate every managed file has its marker block before any write.
 
@@ -297,14 +345,27 @@ def build_upgrade_plan(
     excluded_components: set[str] | None = None,
     install_wiki: bool = True,
     finance_dashboard_html_path: str = cli.DEFAULT_FINANCE_DASHBOARD_HTML_PATH,
+    orphaned_loaders: Iterable[str] = (),
 ) -> cli.Plan:
-    """Build the planned-action list for an upgrade. Pure — no FS writes."""
+    """Build the planned-action list for an upgrade. Pure — no FS writes.
+
+    ``orphaned_loaders`` is the pre-computed scan result from
+    ``loaders.find_orphaned_loaders`` — surfaced in the plan so the user sees
+    every planned deletion before the confirm prompt (architecture §6).
+    """
     plan = cli.Plan()
     modules_scoped = loaders.select_modules(selected_modules)
     excl = excluded_components or set()
     finance_selected = (
         selected_modules is None or FINANCE_MODULE_NAME in selected_modules
     )
+
+    for rel in orphaned_loaders:
+        plan.add(cli.Action(
+            category="delete",
+            target=rel,
+            detail="delete orphaned loader (no manifest entry: component renamed or removed)",
+        ))
 
     for source_rel, dest_rel in CLAUDE_MD_MAP:
         plan.add(cli.Action(
