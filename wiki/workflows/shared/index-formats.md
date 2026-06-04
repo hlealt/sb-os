@@ -37,6 +37,8 @@ The `My take` cell encodes one of three explicit states. **Blank is BANNED** as 
 | Post-reflect-empty | `—` (em-dash, U+2014) | Stage 2 ran and the user explicitly recorded reflection content without a take. Finalized. | `My take` heading present, body empty while `Open questions` or `Dive deeper` has substantive content |
 | Reflected | 1-sentence opinion derived from the source page's `My take` section (≤280 chars; truncate with ellipsis) | The user filled `My take` on the source page | `My take` heading present, body has substantive content |
 
+**Table-safety (reflected previews).** A preview cell MUST never split the 3-column row: flatten wikilinks to their display text BEFORE truncating (a cut mid-`[[target\|alias]]` leaks a raw `|`), then escape any remaining literal `|` as `\|`. Applies to every writer of the cell — agent and script alike.
+
 **Write rules.**
 
 | Trigger | Cell value to write |

@@ -170,11 +170,37 @@ def section_body(text: str, heading: str) -> str:
     return re.sub(r"^\s*---\s*$", "", body, flags=re.M).strip()
 
 
+def flatten_wikilinks(text: str) -> str:
+    """Replace [[target|alias]] with alias and [[target]] with target text."""
+    return re.sub(
+        r"\[\[([^\]|]+?)(?:\|([^\]]*?))?\]\]",
+        lambda m: (m.group(2) if m.group(2) is not None else m.group(1)).strip(),
+        text,
+    )
+
+
 def preview(text: str) -> str:
-    one_line = re.sub(r"\s+", " ", text).strip()
-    if len(one_line) <= 280:
-        return one_line
-    return one_line[:277].rstrip() + "..."
+    """One-line, table-safe preview (<=280 chars before pipe escaping).
+
+    Wikilinks are flattened to display text BEFORE truncation (a cut
+    mid-wikilink leaks a raw `|` that splits the table row), then any
+    remaining literal pipes are escaped. Normalize-then-escape keeps the
+    result idempotent across re-sync passes.
+    """
+    one_line = re.sub(r"\s+", " ", flatten_wikilinks(text)).strip()
+    if len(one_line) > 280:
+        one_line = one_line[:277].rstrip() + "..."
+    return one_line.replace("\\|", "|").replace("|", "\\|")
+
+
+def split_row_cells(line: str) -> list[str]:
+    """Split a Markdown table row on UNESCAPED pipes only (`\\|` stays in-cell)."""
+    inner = line.strip()
+    if inner.startswith("|"):
+        inner = inner[1:]
+    if inner.endswith("|") and not inner.endswith("\\|"):
+        inner = inner[:-1]
+    return [cell.strip() for cell in re.split(r"(?<!\\)\|", inner)]
 
 
 def sync_source_my_take_and_queue(wiki_root: Path, report: Report, apply_changes: bool) -> None:
@@ -187,6 +213,7 @@ def sync_source_my_take_and_queue(wiki_root: Path, report: Report, apply_changes
             continue
         lines = read_text(index_path).splitlines()
         changed = False
+        modified_rows: list[int] = []
         linked = table_links("\n".join(lines))
         for source_page in sorted(origin_dir.glob("*.md")):
             if source_page.name == index_path.name or source_page.name in linked:
@@ -202,11 +229,23 @@ def sync_source_my_take_and_queue(wiki_root: Path, report: Report, apply_changes
         for idx, line in enumerate(lines):
             if not line.strip().startswith("|") or re.match(r"^\s*\|\s*-+", line):
                 continue
-            cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-            if len(cells) < 3 or cells[0] == "File":
+            cells = split_row_cells(line)
+            if not cells or cells[0] == "File":
                 continue
             match = re.search(r"\[\[([^\]]+?\.md)\]\]", cells[0])
             if not match:
+                continue
+            if len(cells) != 3:
+                # Malformed data row (e.g. prior unescaped-pipe corruption):
+                # never process it — re-syncing would perpetuate the damage.
+                report.judgment_needed.append(
+                    {
+                        "index": str(index_path),
+                        "file": str(origin_dir / match.group(1)),
+                        "cell": "row-shape",
+                        "reason": f"row has {len(cells)} cells, expected 3 — malformed; repair manually",
+                    }
+                )
                 continue
             source_path = origin_dir / match.group(1)
             if not os.path.exists(_fspath(source_path)):
@@ -221,8 +260,18 @@ def sync_source_my_take_and_queue(wiki_root: Path, report: Report, apply_changes
             if new_value != cells[2]:
                 cells[2] = new_value
                 lines[idx] = make_row(cells)
+                modified_rows.append(idx)
                 changed = True
         if changed:
+            # Post-rewrite shape guard: every row this pass modified must still
+            # split into exactly 3 cells. A violation is a script bug — refuse
+            # the write and surface it rather than persist a broken table.
+            broken = [lines[i] for i in modified_rows if len(split_row_cells(lines[i])) != 3]
+            if broken:
+                report.detected.setdefault("row_shape_errors", []).extend(
+                    f"{index_path}: {row}" for row in broken
+                )
+                continue
             write_text(index_path, "\n".join(lines) + "\n", report, apply_changes)
 
 

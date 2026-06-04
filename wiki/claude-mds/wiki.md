@@ -112,7 +112,9 @@ Lint detects stub-state structurally (frontmatter + ≤2-sentence preamble + Sou
 | Sources section | `[^N]: [[YYYY-MM-DD-slug.md]]` | Agent (during ingest); renumbered by lint |
 | Frontmatter `sources:` | NOT USED | — |
 
-Footnote definitions ARE wikilinks — Obsidian indexes them in the graph. One footnote per source, never merged. Multi-source claims get multiple markers on the same sentence: `...claim X[^1][^2][^3]`. Lint preserves any user prose appended to a definition; only renumbers and removes stale (no-longer-referenced) definitions. Number footnotes locally per page (start from `[^1]`).
+Citation targets are wiki pages, NEVER raw files. Concept, entity, and topic pages cite **source pages** (`wiki/sources/`). Raw files are referenced ONLY by their 1:1 source page (the `raw:` frontmatter field and that source page's own Sources footnote).
+
+Footnote definitions ARE wikilinks — Obsidian indexes them in the graph. One footnote per source, never merged. Multi-source claims get multiple markers on the same sentence: `...claim X[^1][^2][^3]`. Lint preserves any user prose appended to a definition; only renumbers and removes genuinely-stale definitions — a definition is stale ONLY when the page still has ≥1 inline-referenced footnote and every inline marker has a matching definition; a stub's definitions-without-inline-markers are its provenance links and are NEVER removed. Number footnotes locally per page (start from `[^1]`).
 
 The user NEVER writes citations manually.
 

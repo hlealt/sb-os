@@ -48,3 +48,7 @@ NEVER use a synthetic collective slug (e.g., `seal-researchers`, `ai-ethics-inst
 ## Retired Types (NO LONGER written)
 
 `ingest`, `concept-created`, `entity-created`, `topic-created`, `topic-updated`, `topic-coverage-candidate`, `lint`, and `query` were logged pre-v1. They are no longer emitted — the source pages, raw indexes, and wiki pages are the record. Lint deletes any surviving instances on its next pass.
+
+## Unknown Types
+
+An entry whose type is neither active nor retired is NON-CANONICAL — a writer violated the queue contract. Lint KEEPS the entry (it may carry unrecovered content) and surfaces it in the LINT REPORT for manual routing to the correct vault home — NEVER auto-deletes it. Fix the misbehaving writer; NEVER register a personal capture type here — the log holds exclusively the two active types, and personal captures route to vault files.

@@ -392,7 +392,7 @@ The user never writes citations manually. Renumbering on edit is agent-handled.
 - Citation targets are wiki pages, NEVER raw files. Concept, entity, and topic pages cite **source pages** (`wiki/sources/`). Raw files are referenced ONLY by their 1:1 source page (the `raw:` frontmatter field and that source page's own Sources footnote).
 - One footnote per source, never merged. Multi-source claims get multiple markers on the same sentence: `...claim X[^1][^2][^3]`.
 - Lint rebuilds the Sources section by reading inline `[^N]` markers. If the user manually added prose context within a footnote definition (e.g., `[^1]: [[file.md]] — note: this is the original`), lint preserves user prose; only renumbers.
-- Stale footnote definitions (no longer referenced inline) are removed by lint.
+- Stale footnote definitions are removed by lint ONLY when the page has ≥1 inline-referenced footnote AND every inline marker has a matching definition (the definition was genuinely orphaned by an edit). **Stub-provenance exemption:** a page whose definitions have ZERO inline markers is the ingest-built stub shape — its definitions are the page's only provenance links and graph edges; lint NEVER removes them. Set mismatches (inline marker without definition, duplicate definitions) are content defects — reported, never auto-repaired.
 
 ## Wiki sources index format
 
@@ -417,7 +417,7 @@ The `My take` cell distinguishes **pre-reflect** (the user has not yet been prom
 |-------|---------------|---------|-------------------|
 | Pre-reflect | `pending` | Stage 2 was skipped, ignored, or never reached — the source page's `My take` section is an empty shell awaiting user action. | `My take` heading present, body empty |
 | Post-reflect-empty | `—` (em-dash, U+2014) | Stage 2 ran and the user explicitly routed reflection content to `questions.md` without recording a take. Finalized. | `My take` heading present, body empty while Stage 2 captured one or more `questions.md` entries (`seeded-by:` this source) |
-| Reflected | 1-sentence opinion derived from the source page's `My take` section (≤280 chars; truncate with ellipsis if longer) | The user filled `My take` on the source page. Index cell mirrors the take. | `My take` heading present, body has substantive content |
+| Reflected | 1-sentence opinion derived from the source page's `My take` section (≤280 chars; truncate with ellipsis if longer). Table-safe: wikilinks flattened to display text BEFORE truncation, remaining literal `\|` escaped — the cell must never split the 3-column row | The user filled `My take` on the source page. Index cell mirrors the take. | `My take` heading present, body has substantive content |
 
 **Rationale.** The two empty states have different downstream behaviors (see below) and different remediations from the user's standpoint. Blank conflates them. Two human-readable, typographically distinct tokens preserve the distinction at a glance and let lint detect each state programmatically. `pending` was chosen for its action-pending semantics (a verb-shaped keyword the user reads as "needs me to act"); `—` (em-dash) was chosen for its long-standing convention as a typographic null marker (the user reads it as "nothing here, intentionally").
 
@@ -971,11 +971,11 @@ The script performs deterministic maintenance and emits `judgment_needed`. The a
 | 3 | Walk wiki concept/entity pages — detect unresolved Disputed callouts (older than 30 days without resolution) |
 | 4 | Walk `log.md` — flag `candidate-topic` entries aged >30 days whose topic page does NOT yet exist (resolution = page exists, so a candidate with a live page is not "aging", it is spent and pruned at step 8) |
 | 5 | Walk all wiki pages — verify wikilinks resolve (broken if target file missing); collect broken links |
-| 6 | For each `wiki/sources/{origin}/` — re-sync `My take` column from each source page's `My take` section per the three-state rule (`pending` / `—` / reflected preview — see "Wiki sources index format" §); renumber footnotes; remove stale footnote definitions |
+| 6 | For each `wiki/sources/{origin}/` — re-sync `My take` column from each source page's `My take` section per the three-state rule (`pending` / `—` / reflected preview — see "Wiki sources index format" §); renumber footnotes; remove stale footnote definitions per the stub-provenance exemption ("Citation format" § — NEVER from a page with zero inline markers) |
 | 7 | For each `raw/{origin}/` — verify `{origin}.md` index exists; if missing, create it with the standard `\| File \| Title \| Date \| Wiki \|` columns. For each raw file in `{origin}/`, ensure a row exists with `Wiki = No` (default) or `Yes/Partial` (preserved). Same for `raw/studies/studies.md`. **Index creation and maintenance is the agent's job**, not the user's. |
 | 7.5 | Folder-subdivision detection. For `wiki/concepts/` and `wiki/entities/`, group pages by `kind:` frontmatter. Surface kinds at ≥5 pages as a SUBDIVISION PROPOSAL block. Skip `wiki/topics/` (count <20) and `wiki/sources/` (already subdivided by origin). On user accept at step 9, the agent creates `{type}/{subfolder}/`, leaf index, parent CLAUDE.md marker-block routing rules, moves pages, and rewrites parent index as router. The folder structure and indexes are the record — NO log entry. Naming and policy per schema § "Folder subdivision". |
 | 7.6 | **PDF title-conformance detection.** For each PDF in `raw/{origin}/`, compare the stem to the kebab-slug of the raw index `Title` (Naming convention § "Raw PDF title-conformance"). Mismatch + no name collision → `rename-proposals` row; mismatch + `{title-slug}.pdf` already exists → `duplicate-raws` finding (no rename). Detection only — execution is USER-GATED at step 9, updating the full referrer set per "PDF title-conformance (lint)" below. Markdown sources exempt. |
-| 8 | Prune `log.md`: DELETE every `candidate-topic` / `candidate-mention` entry whose matching page now exists (resolution = page exists), and DELETE any retired history entries (`ingest`, `concept-created`, `entity-created`, `topic-created`, `topic-updated`, `topic-coverage-candidate`, `lint`, `query`). NO `lint` entry is written — findings live in the report only. `candidate-mention` entries with no matching page are NEVER auto-aged; they persist until the page exists or the user dismisses them |
+| 8 | Prune `log.md`: DELETE every `candidate-topic` / `candidate-mention` entry whose matching page now exists (resolution = page exists), and DELETE any retired history entries (`ingest`, `concept-created`, `entity-created`, `topic-created`, `topic-updated`, `topic-coverage-candidate`, `lint`, `query`). NO `lint` entry is written — findings live in the report only. `candidate-mention` entries with no matching page are NEVER auto-aged; they persist until the page exists or the user dismisses them. Entries of an UNKNOWN type (neither active nor retired) are KEPT and surfaced in the report for manual routing — never auto-deleted |
 | 9 | Present findings to the user (read-only summary for findings 1-7; the `candidate-mention` review queue is surfaced here; SUBDIVISION PROPOSAL is the only interactive block — user accepts per kind or defers all) |
 
 #### Lint output format
@@ -1015,7 +1015,7 @@ Step 7.6 compares each raw PDF stem to the kebab-slug of its raw-index `Title`. 
 | Wiki sources index `File` cell | `[[{old}.md]]` → `[[{title-slug}.md]]` |
 | Other wikilinks + `log.md` | any `[[{old}.md]]` / `[[{old}.pdf]]` → new stem |
 
-Mechanically: replace every occurrence of the old stem with `{title-slug}` across all `.md` files under `{wiki_root}`, then move the two files. Content is never edited. `duplicate-raws` are reported, never auto-renamed — the user merges or deletes them.
+Mechanically: rewrite SCOPED wikilink patterns only — targets `[[{old-stem}.pdf` and `[[{old-stem}.md` (any `#anchor`/`|alias` tail), which cover every referrer row above — in NON-raw `.md` files (`wiki/**`, `log.md`) plus raw index files (`raw/{origin}/{origin}.md`); then move the two files. NEVER a blind global string replace: raw content file bodies are immutable, and `http(s)://` URLs containing the old stem (arXiv, repository deep links) are NEVER rewritten. After the move, verify remaining `{old-stem}` occurrences are only legitimate remnants (external URLs, raw bodies). `duplicate-raws` are reported, never auto-renamed — the user merges or deletes them.
 
 #### Orphan-detection scope (STRICT)
 
@@ -1078,6 +1078,8 @@ The log is an ACTIONABLE QUEUE, not an event history. It holds ONLY items awaiti
 | `candidate-mention` | Auto-fired during `ingest` step 3 when an entity/concept name surfaces but the stub-creation rule does NOT fire (per Stub policy). Standalone H2 entry | Review → promote to a stub, or dismiss | The matching page exists (lint prunes), or the user dismisses it. NEVER auto-aged — mentions persist until actioned |
 
 **Resolution signal = the page exists.** There is no `topic-created` / `concept-created` / `entity-created` / `ingest` / `topic-updated` / `query` / `lint` entry. A candidate is "spent" the moment its page exists; lint detects this by filename and removes the entry. This replaces the old `topic-created`-as-resolution-signal model.
+
+**Unknown types.** An entry whose type is neither active nor retired is NON-CANONICAL — a writer violated the queue contract. Lint KEEPS it and surfaces it in the LINT REPORT for manual routing; it NEVER auto-deletes unknown content. Personal capture types are never registered into this enum — the log holds exclusively the two active types; personal captures route to vault files instead.
 
 ### Entry shapes
 

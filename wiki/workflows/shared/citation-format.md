@@ -21,7 +21,9 @@ Rules for inline citations and Sources section format. Validated canonical forma
 - **One footnote per source** — never merge multiple sources into one footnote definition.
 - **Multi-source claims** — multiple markers on the same sentence: `...claim X[^1][^2][^3]`.
 - **User prose preservation** — if the user manually added prose context within a footnote definition (e.g., `[^1]: [[file.md]] — note: this is the original`), lint preserves the user prose and only renumbers.
-- **Stale removal** — footnote definitions no longer referenced inline are removed by lint.
+- **Stale removal** — lint removes a footnote definition with no inline reference ONLY when the page has ≥1 inline-referenced footnote AND every inline marker has a matching definition (the definition was genuinely orphaned by an edit).
+- **Stub-provenance exemption** — a page whose definitions have ZERO inline markers is the ingest-built stub shape (frontmatter + preamble + Sources): its definitions are the page's only provenance links and only graph edges to its sources. NEVER remove them.
+- **Set mismatches** — inline markers without a matching definition (or duplicate definitions) are content defects: report in the LINT REPORT, never auto-repair, never remove definitions from such a page.
 
 ## Sources Section Format
 

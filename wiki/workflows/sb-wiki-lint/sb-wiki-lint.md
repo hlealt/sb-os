@@ -48,7 +48,7 @@ This workflow is read-mostly by contract. Auto-applied writes are SCOPED to inde
 | Write | Scope | Authorization |
 |-------|-------|--------------|
 | Re-sync wiki sources `My take` column from each source page (step 6) | `{wiki_root}/wiki/sources/{origin}/{origin}.md` | Auto-applied — no user diff |
-| Renumber footnotes; remove stale footnote definitions (step 6) | Per source page touched | Auto-applied — no user diff |
+| Renumber footnotes; remove genuinely-stale footnote definitions per `../shared/citation-format.md` stub-provenance exemption (step 6) | Per source page touched | Auto-applied — no user diff |
 | Create missing raw `{origin}.md` indexes; add missing rows with `Wiki = No` default (step 7) | `{wiki_root}/raw/{origin}/{origin}.md`, `{wiki_root}/raw/studies/studies.md` | Auto-applied — no user diff |
 | Create missing wiki leaf indexes (`concepts.md`, `entities.md`, `topics.md`) (step 7) | `{wiki_root}/wiki/concepts/concepts.md`, `entities/entities.md`, `topics/topics.md` | Auto-applied — no user diff |
 | Prune spent/retired entries from `log.md` (step 8) — delete `candidate-topic`/`candidate-mention` entries whose page now exists, and delete retired history entries | `{wiki_root}/log.md` | Auto-applied — no user diff |
@@ -145,7 +145,7 @@ For each `{wiki_root}/wiki/sources/{origin}/` directory (including `studies/`):
 
    | Source page's `My take` body | Current cell value | Action |
    |------------------------------|--------------------|--------|
-   | Has substantive content | Any | Write 1-sentence reflected preview (≤280 chars; truncate with ellipsis), overwriting prior cell value |
+   | Has substantive content | Any | Write 1-sentence reflected preview (≤280 chars; truncate with ellipsis; table-safe — flatten wikilinks to display text BEFORE truncating, escape remaining literal `\|`), overwriting prior cell value |
    | Empty | `—` | Preserve `—` (final, do NOT age out) |
    | Empty | `pending` | Preserve `pending` |
    | Empty | Anything else (legacy blank, stray content) | Write `pending` (default to action-pending; safer to over-prompt than to over-finalize) |
@@ -160,7 +160,9 @@ For each wiki page (concepts, entities, topics, source pages):
 1. Apply footnote rules per `../shared/citation-format.md`:
    - Renumber inline `[^N]` markers and matching `[^N]: [[<filename>.md]]` definitions sequentially per page (start at `[^1]`).
    - Preserve user prose appended to a definition (e.g., `[^1]: [[file.md]] — note: this is the original`).
-   - Remove footnote definitions from the `Sources` section that are no longer referenced inline.
+   - Remove a definition with no inline reference ONLY when the page has ≥1 inline-referenced footnote AND every inline marker has a matching definition (the definition was genuinely orphaned by an edit).
+   - NEVER remove definitions from a page with ZERO inline markers — that is the ingest-built stub-provenance shape (`../shared/stub-policy.md`); its definitions are the page's only source links and graph edges.
+   - Set mismatches (inline marker without definition, duplicate definitions) are content defects: report in the LINT REPORT, never auto-repair, never remove definitions from such a page.
 2. Capture `footnotes-renumbered` count (pages touched) for the LINT REPORT.
 
 ### Step 7 — Verify and create raw indexes; verify wiki leaf indexes
@@ -250,10 +252,14 @@ Detection ONLY — NEVER rename at this step. Markdown raw sources are out of sc
 
 For each accepted rename, update the FULL referrer set atomically — a filesystem rename does NOT trigger Obsidian backlink updates:
 
-1. Replace EVERY occurrence of `{old-stem}` with `{title-slug}` across ALL `.md` files under `{wiki_root}`. One pass rewrites: the source page `raw:` frontmatter, every `[^N]: [[{old-stem}.pdf]]` footnote on any wiki page, the raw index `File` cell, the wiki sources index `File` cell, any `[[{old-stem}.md]]` wikilink, and `log.md` references.
+1. Rewrite referrers with SCOPED WIKILINK PATTERNS ONLY — NEVER a blind global string replace:
+   - **Patterns:** wikilink/embed targets `[[{old-stem}.pdf` and `[[{old-stem}.md` (with any `#anchor` or `|alias` tail) → same form with `{title-slug}`. These cover every referrer: body wikilinks, `[^N]:` footnote definitions, quoted frontmatter values (`raw:`, `related:`), the raw index `File` cell, the wiki sources index `File` cell, and `log.md` references.
+   - **File scope:** NON-raw `.md` files only — `{wiki_root}/wiki/**` and `{wiki_root}/log.md` — plus raw INDEX files (`raw/{origin}/{origin}.md`; indexes are agent-owned). NEVER edit a raw content file body (raw-immutability contract).
+   - **Exempt:** `http(s)://` URL strings that happen to contain `{old-stem}` (arXiv, repository deep links) and plain-prose stem mentions — NEVER rewritten, in any file.
 2. Move `raw/{origin}/{old-stem}.pdf` → `raw/{origin}/{title-slug}.pdf`.
 3. Move `wiki/sources/{origin}/{old-stem}.md` → `wiki/sources/{origin}/{title-slug}.md`.
 4. The raw PDF content is never edited — rename only. NO log entry — the renamed files and rewritten links are the record.
+5. Verify: search remaining `{old-stem}` occurrences under `{wiki_root}`. Expect ONLY legitimate remnants (external URLs, raw content bodies). Surface unexpected remnants in the LINT REPORT.
 
 `duplicate-raws` findings are REPORTED, never auto-renamed — the user merges (repoint references to the canonical copy, then delete the duplicate raw + source page) or deletes them manually.
 
@@ -302,7 +308,8 @@ The log is an actionable queue. Lint NEVER writes a `lint` entry — findings li
 3. DELETE every `candidate-topic` whose matching topic page exists at `{wiki_root}/wiki/topics/` (flat or subfolder) — spent (resolution = page exists).
 4. DELETE every `candidate-mention` whose matching page exists anywhere under `{wiki_root}/wiki/` (any type, flat or subfolder) — spent. Match by the entry's slug/`name:` normalized to the page filename.
 5. KEEP every `candidate-topic` and `candidate-mention` whose page does NOT yet exist. NEVER auto-age a `candidate-mention` — it persists until its page exists or the user dismisses it. NEVER edit the body of a kept entry.
-6. Preserve the file preamble. Capture `entries-pruned` count (by reason: spent vs retired) for the LINT REPORT.
+6. KEEP every entry whose type is neither active nor retired — NON-CANONICAL per `../shared/log-entry-shapes.md` "Unknown Types". NEVER delete or edit it; capture it for the LINT REPORT `Non-canonical log entries` line so the user routes it manually.
+7. Preserve the file preamble. Capture `entries-pruned` count (by reason: spent vs retired) for the LINT REPORT.
 
 **`questions.md` prune (skip-if-absent — `{wiki_root}/questions.md` absent or malformed → skip this whole sub-step; nothing else changes).** When `questions.md` is present and parseable, prune it by the SAME "page exists" mechanism the `candidate-mention` clause (item 4) uses — do NOT invent a parallel test. Read `{wiki_root}/questions.md` in full and parse every H2 entry per `../shared/question-entry-shapes.md`, then:
 
@@ -376,6 +383,7 @@ Index sync — wiki leaf indexes: <N> created (wiki/<type>/<type>.md), <M> rows 
 Footnotes renumbered: <N> source pages
 Pages without `kind:` (N): [[<file>.md]]
 Log pruned: <N> spent (page now exists), <M> retired history entries removed
+Non-canonical log entries (N): "<type> | <brief>" — kept, route manually (omit when zero)
 Questions pruned: <N> promoted (page now exists), <M> retired entries removed (omit when questions layer OFF)
 Open gaps regenerated: <N> open questions across both homes → open-gaps.md (or "empty" / omit when questions layer OFF and no topic open questions)
 Candidate-mentions to review (N): "<slug>", "<slug>", … (the actionable queue — promote to a stub or dismiss)
