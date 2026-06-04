@@ -33,7 +33,7 @@ Develop the thesis content through reasoning. The thesis is a single falsifiable
 | Claim | The single falsifiable statement the thesis defends — written first |
 | Hypotheses | The sub-claims that, if true, make the claim hold — populated from the Step 2a Assumption Audit's testable questions |
 | Causal mechanism | WHY the claim would play out — the chain from cause to outcome |
-| Evidence for | Concrete, sourced support; tie each item to a captured source filename where one exists |
+| Evidence for | Concrete, sourced support; tie each item to the EXACT captured raw file that carries the claim — before the Step 4 checkpoint, VERIFY the cited file actually contains the stat/claim (a targeted Grep of the raw, never a full-text read into context). A claim attributed to the wrong captured file is a citation defect, not a formatting nit |
 | Evidence against | MANDATORY and substantive — the strongest disconfirming evidence and counter-arguments; never an empty placeholder. Populated by the Step 2b Disconfirm dispatch (not reasoned from context alone) |
 | Risks | What could break the thesis or the position independent of the core claim |
 | Invalidation criteria | MANDATORY and substantive — the specific, observable conditions under which the thesis is wrong and must be retired — seeded from the Step 2a Assumption Audit's testable questions on weak assumptions |
@@ -74,7 +74,7 @@ For the audit's weak assumptions (the `unproven` / `convenience` testable questi
 2. **Retain `./research.md`'s propose→approve checkpoint** for any source that would enter the wiki — the user still approves which disconfirming sources are captured. ONLY the hunt is automatic; there are NO silent web writes and NO bypassed approval.
 3. **Return only the structured result `./research.md` produces** — the ranked disconfirming candidates + metadata + each candidate's why-it-would-overturn note (Step 7a's documented output). Full source text MUST NOT return to this mode (anti-context-rot — the parent context stays clean).
 
-Fold the returned disconfirming candidates into `Evidence against`, each tied to its source per the element table. If the dispatch returns no disconfirming candidate that clears the `source-policy` trust bar, `Evidence against` is still filled by reasoning (the element stays MANDATORY and substantive — never an empty placeholder), and the empty hunt is surfaced per `./investor-loop.md` § Issue-surfacing. The agent NEVER hand-writes a raw source or wiki page from this dispatch — `./research.md`'s own tool and ingest sub-agents persist anything captured (delegate-not-replace).
+Fold the returned disconfirming candidates into `Evidence against`, each tied to its source per the element table. A disconfirming candidate that was NOT approved/captured contributes METADATA only — mark its evidence item **`not captured`** explicitly (its claim rests on title/metadata, not a readable source) and NEVER cite it as if a raw file existed. If the dispatch returns no disconfirming candidate that clears the `source-policy` trust bar, `Evidence against` is still filled by reasoning (the element stays MANDATORY and substantive — never an empty placeholder), and the empty hunt is surfaced per `./investor-loop.md` § Issue-surfacing. The agent NEVER hand-writes a raw source or wiki page from this dispatch — `./research.md`'s own tool and ingest sub-agents persist anything captured (delegate-not-replace).
 
 ## Step 3 — Select related entities + position mapping
 
@@ -90,10 +90,10 @@ This is the mode's single user-facing checkpoint. Per the handoff contract there
 
 | User choice | Action |
 |-------------|--------|
-| `[R]` Refutar | Run a second-model refutation of this proposed thesis before deciding (§ Adversarial refuter below); re-present THIS checkpoint with the critique added — `[R]` never persists, never auto-acts, never replaces `[S]/[E]/[N]` |
-| `[S]` Aprovar | Proceed to Step 5 — invoke the scribe |
-| `[E]` Editar | Apply the user's edits to the reasoning; re-present; loop until `[S]` or `[N]` |
-| `[N]` Rejeitar | Persist nothing; take the user's alternative path or halt |
+| `[R]` Refute | Run a second-model refutation of this proposed thesis before deciding (§ Adversarial refuter below); re-present THIS checkpoint with the critique added — `[R]` never persists, never auto-acts, never replaces `[S]/[E]/[N]` |
+| `[S]` Approve | Proceed to Step 5 — invoke the scribe |
+| `[E]` Edit | Apply the user's edits to the reasoning; re-present; loop until `[S]` or `[N]` |
+| `[N]` Reject | Persist nothing; take the user's alternative path or halt |
 
 ### Adversarial refuter (`[R]`) — dispatch with the thesis rubric
 
@@ -102,7 +102,7 @@ On `[R]`, read-and-follow `./adversarial-refuter.md` (the shared refuter-dispatc
 | Input | What this mode passes |
 |-------|------------------------|
 | Drafted artifact | the Step 4 proposed-thesis block above — the Claim, Hypotheses, Causal mechanism, Evidence for, Evidence against, Risks, and Invalidation criteria exactly as drafted, plus the proposed `status`/`conviction`/`time_horizon` |
-| Cited sources | the full text of every source the thesis cites (the Step 2–2b evidence already in hand) — passed inline so the refuter reads it in its OWN context; full text never re-enters this mode (anti-context-rot) |
+| Cited sources | every source the thesis cites (the Step 2–2b evidence already in hand) — passed per `./adversarial-refuter.md` § Step 1: inline for small payloads, or as the closed read-set of cited file paths for large ones; full text never re-enters this mode (anti-context-rot) |
 | The thesis rubric | the ordered attack questions below — this mode OWNS its rubric; `./adversarial-refuter.md` never hard-codes it |
 | `research-policy` scope | the scope / exclusions loaded at Step 1 |
 

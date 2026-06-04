@@ -59,10 +59,10 @@ This is the mode's single user-facing checkpoint. Per the scribe's investor-orch
 
 | User choice | Action |
 |-------------|--------|
-| `[R]` Refutar | Run a second-model refutation of this decision reasoning before deciding (§ Adversarial refuter below); re-present THIS checkpoint with the critique added — `[R]` never persists, never auto-acts, never replaces `[S]/[E]/[N]` |
-| `[S]` Aprovar | Proceed to Step 5 — invoke the scribe |
-| `[E]` Editar | Apply the user's edits to the reasoning; re-present; loop until `[S]` or `[N]` |
-| `[N]` Rejeitar | Persist nothing; take the user's alternative path or halt |
+| `[R]` Refute | Run a second-model refutation of this decision reasoning before deciding (§ Adversarial refuter below); re-present THIS checkpoint with the critique added — `[R]` never persists, never auto-acts, never replaces `[S]/[E]/[N]` |
+| `[S]` Approve | Proceed to Step 5 — invoke the scribe |
+| `[E]` Edit | Apply the user's edits to the reasoning; re-present; loop until `[S]` or `[N]` |
+| `[N]` Reject | Persist nothing; take the user's alternative path or halt |
 
 ### Adversarial refuter (`[R]`) — dispatch with the decision rubric
 
@@ -71,7 +71,7 @@ On `[R]`, read-and-follow `./adversarial-refuter.md` (the shared refuter-dispatc
 | Input | What this mode passes |
 |-------|------------------------|
 | Drafted artifact | the Step 4 decision record above — the Context, Action, Related thesis, Rationale, What I believed at the time, What would prove me wrong, Acknowledged risks, and Review trigger exactly as drafted (reasoning only — no price/qty/fees) |
-| Cited sources | the full text of every source the decision cites (the source pages and entity `## Financials` rows reasoned in Step 2) — passed inline so the refuter reads it in its OWN context; full text never re-enters this mode (anti-context-rot) |
+| Cited sources | every source the decision cites (the source pages and entity `## Financials` rows reasoned in Step 2) — passed per `./adversarial-refuter.md` § Step 1: inline for small payloads, or as the closed read-set of cited file paths for large ones; full text never re-enters this mode (anti-context-rot) |
 | The decision rubric | the ordered attack questions below — this mode OWNS its rubric; `./adversarial-refuter.md` never hard-codes it |
 | `research-policy` scope | the scope / exclusions loaded at Step 1 |
 

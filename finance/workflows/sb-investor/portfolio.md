@@ -77,9 +77,9 @@ This map is read-only output: presenting it persists nothing. Any follow-up — 
 
 | User choice | Action |
 |-------------|--------|
-| `[S]` Aprovar | Acknowledge the map; route any follow-up the user names per § Step 6 |
-| `[E]` Editar | Refine the framing / scope the user adjusts (e.g. a different bucket or concentration threshold); re-derive from Steps 2–4 and re-present |
-| `[N]` Rejeitar | Drop the map; take the user's alternative path or halt |
+| `[S]` Approve | Acknowledge the map; route any follow-up the user names per § Step 6 |
+| `[E]` Edit | Refine the framing / scope the user adjusts (e.g. a different bucket or concentration threshold); re-derive from Steps 2–4 and re-present |
+| `[N]` Reject | Drop the map; take the user's alternative path or halt |
 
 ## Step 6 — Handoff
 

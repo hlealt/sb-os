@@ -78,7 +78,7 @@ Test the thesis against the assembled evidence (prior + new, including the Step 
 **Source tensions in the evidence balance.** Do not report only a net direction — surface which sources DISAGREE and on what, so the verdict rests on the visible disagreement rather than a collapsed average. CONSUME the source-tension signal `./research.md` § Step 4 Propose produces: any Step 3b Disconfirm wave that returned a tension flag already carries it in the `relation to the thesis` / why-it-would-overturn metadata. Read those flags AND cross-read the assembled evidence (prior + new) for the same contradictions — from the metadata and the sources' stated conclusions already in hand, NEVER by pulling full source text (anti-context-rot holds). Surface each as a short note, in the same format `./research.md` emits:
 
 ```
-Tensões entre fontes: #{a} ↔ #{b} — {one-line description of the disagreement}.
+Source tensions: #{a} ↔ #{b} — {one-line description of the disagreement}.
 ```
 
 A source tension is a flag the user weighs, not a separate analysis pass: it reads only metadata and stated conclusions already assembled. If the evidence shows no contradiction, write none — do not fetch text to manufacture one. The verdict (Step 5) MUST reflect these tensions: a criterion whose evidence is internally contradicted is `near`, not `clear`, until the contradiction resolves.
@@ -94,7 +94,7 @@ Run `./investor-loop.md` § Present-and-confirm. State the review outcome and ST
 | Verdict | **holding** (evidence supports the claim; no criterion tripped) / **weakening** (evidence-against accumulating or a criterion near) / **invalidated** (a criterion tripped or the claim contradicted) — the verdict MUST reflect the source tensions and decayed assumptions below, not a collapsed net average |
 | Decayed assumptions | the standing assumptions the Step 3a audit re-classified `unproven` / `outdated`, each as the testable question that exposed the decay |
 | New evidence-against | the disconfirming sources/arguments found in Steps 3–4 (including each criterion's targeted Step 3b Disconfirm result), each tied to its source |
-| Source tensions | the `Tensões entre fontes: #{a} ↔ #{b} — …` flags from Step 4 — which sources contradict each other and on what; empty only if the evidence shows no contradiction |
+| Source tensions | the `Source tensions: #{a} ↔ #{b} — …` flags from Step 4 — which sources contradict each other and on what; empty only if the evidence shows no contradiction |
 | Per-criterion status | each invalidation criterion marked tripped / near / clear |
 | Recommended change | the proposed `status` and `conviction` change (and `last_reviewed` advance), with one-line rationale |
 
@@ -102,10 +102,10 @@ A `status` downgrade (e.g. `active` → `developing`, or → `rejected` / `archi
 
 | User choice | Action |
 |-------------|--------|
-| `[R]` Refutar | Run a second-model refutation of this verdict before deciding (§ Adversarial refuter below); re-present THIS checkpoint with the critique added — `[R]` never persists, never auto-acts, never replaces `[S]/[E]/[N]` |
-| `[S]` Aprovar | Proceed to Step 6 — delegate the update to the scribe |
-| `[E]` Editar | Apply the user's edits to the verdict / recommended change; re-present; loop until `[S]` or `[N]` |
-| `[N]` Rejeitar | Persist nothing; take the user's alternative path or halt |
+| `[R]` Refute | Run a second-model refutation of this verdict before deciding (§ Adversarial refuter below); re-present THIS checkpoint with the critique added — `[R]` never persists, never auto-acts, never replaces `[S]/[E]/[N]` |
+| `[S]` Approve | Proceed to Step 6 — delegate the update to the scribe |
+| `[E]` Edit | Apply the user's edits to the verdict / recommended change; re-present; loop until `[S]` or `[N]` |
+| `[N]` Reject | Persist nothing; take the user's alternative path or halt |
 
 ### Adversarial refuter (`[R]`) — dispatch with the review rubric
 
@@ -114,7 +114,7 @@ On `[R]`, read-and-follow `./adversarial-refuter.md` (the shared refuter-dispatc
 | Input | What this mode passes |
 |-------|------------------------|
 | Drafted artifact | the Step 5 verdict block above — the verdict, decayed assumptions, new evidence-against, source tensions, per-criterion status, and recommended change exactly as drafted |
-| Cited sources | the full text of every source the verdict cites (the Step 3–4 evidence already in hand) — passed inline so the refuter reads it in its OWN context; full text never re-enters this mode (anti-context-rot) |
+| Cited sources | every source the verdict cites (the Step 3–4 evidence already in hand) — passed per `./adversarial-refuter.md` § Step 1: inline for small payloads, or as the closed read-set of cited file paths for large ones; full text never re-enters this mode (anti-context-rot) |
 | The review rubric | the ordered attack questions below — this mode OWNS its rubric; `./adversarial-refuter.md` never hard-codes it |
 | `research-policy` scope | the scope / exclusions loaded at Step 1 |
 

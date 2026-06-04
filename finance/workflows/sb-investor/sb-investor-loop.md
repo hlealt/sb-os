@@ -66,20 +66,22 @@ The investor proposes; the user decides. Before persisting anything (a thesis vi
 2. **Offer named options**, each with its one-line consequence:
 
    ```
-   Proposta: {o que será persistido / a ação}.
+   Proposal: {what will be persisted / the action}.
 
-     [S] Aprovar — eu persisto/aplico como apresentado.
-     [E] Editar — você ajusta o conteúdo; eu reapresento.
-     [N] Rejeitar — nada é persistido; você indica outro caminho ou paramos aqui.
+     [S] Approve — I persist/apply as presented.
+     [E] Edit — you adjust the content; I re-present.
+     [N] Reject — nothing is persisted; you name another path or we stop here.
    ```
 
 3. **STOP. Wait for the user's choice.** `[S]` → persist/act via the owning scribe or tool (own-workspace boundary applies). `[E]` → apply edits, re-present. `[N]` → persist nothing; take the user's alternative or halt.
 
 One carve-out: when persistence delegates to `sb-fin-create-thesis`, that scribe's own scope-overlap `extend`/`new`/`abort` prompt MAY fire as the single allowed interrupt inside the handoff — the agent does not pre-empt it.
 
+A second carve-out — standing capture pre-approval: a source whose URL matches the user-owned `Auto-Capture Pre-Approved Origins` table in `source-policy.md` is captured via the capture tool WITHOUT a per-run confirm — the table row IS the user's confirmation, granted in advance through the `policy` thin mode or the research Ingest-gate growth prompt. Every auto-capture still surfaces in that gate's consolidated capture report, ingest dispatch still stops at the gate (`research.md` Step 7), and the agent NEVER adds a row to that table on its own initiative (mirrors the watchlist invariant).
+
 ### Optional adversarial refuter (`[R]`) — refuter-enabled modes only
 
-`thesis` / `review` / `decision` (the refuter-enabled modes) offer ONE additional option at their checkpoint, ADDED to the `[S]/[E]/[N]` set above — never replacing it: `[R] Refutar — rodar uma refutação por um segundo modelo antes de decidir`. `research` / `portfolio` / `policy` NEVER offer it. On `[R]`, the mode reads-and-follows `./adversarial-refuter.md` (the shared refuter-dispatch workflow; the manifest registers it as a cross-mode mechanism), then RE-PRESENTS the SAME checkpoint with the critique added:
+`thesis` / `review` / `decision` (the refuter-enabled modes) offer ONE additional option at their checkpoint, ADDED to the `[S]/[E]/[N]` set above — never replacing it: `[R] Refute — run a second-model refutation before deciding`. `research` / `portfolio` / `policy` NEVER offer it. On `[R]`, the mode reads-and-follows `./adversarial-refuter.md` (the shared refuter-dispatch workflow; the manifest registers it as a cross-mode mechanism), then RE-PRESENTS the SAME checkpoint with the critique added:
 
 - The refutation is shown **RAW + flagged** as a distinct "Adversarial critique" block beside the draft; the agent may add a one-line agree/disagree per item but NEVER edits or suppresses it.
 - The existing `[S]/[E]/[N]` choices then follow unchanged — the user still decides. Accepted points fold into the draft via the existing `[E]` edit path.
@@ -115,16 +117,16 @@ When in doubt, classify as **blocking** — surfacing too much beats shipping a 
 
 ### Blocking → inline
 
-1. **State the issue** in plain language (pt-BR): what is wrong and why it blocks.
-2. **Propose a concrete next action** (pt-BR): re-pull fresh sources via research mode, drop the failing source, route a suspected data problem to `sb-bookkeeper`, or narrow the claim.
+1. **State the issue** in plain language: what is wrong and why it blocks.
+2. **Propose a concrete next action**: re-pull fresh sources via research mode, drop the failing source, route a suspected data problem to `sb-bookkeeper`, or narrow the claim.
 3. **Offer approve/reject:**
 
    ```
-   Problema (bloqueante): {descrição}.
-   Próxima ação proposta: {ação concreta}.
+   Problem (blocking): {description}.
+   Proposed next action: {concrete action}.
 
-     [S] Aprovar — eu sigo com a ação.
-     [N] Rejeitar — você indica outra ação ou paramos aqui.
+     [S] Approve — I proceed with the action.
+     [N] Reject — you name another action or we stop here.
    ```
 
 4. **STOP. Wait.** `[S]` → take the proposed action, then re-check the issue before proceeding. `[N]` → take the user's alternative or halt. The step does NOT advance while a blocking issue is unresolved.
@@ -133,7 +135,7 @@ When in doubt, classify as **blocking** — surfacing too much beats shipping a 
 
 1. **Record the issue** to `.user/finance/investor/log.md` (one line: what, where, why deferred).
 2. **Do not block the current step.** Continue.
-3. **At the end of the interaction, surface the deferred list to the user (pt-BR)** so nothing dies silently; the user decides whether to act now or later.
+3. **At the end of the interaction, surface the deferred list to the user** so nothing dies silently; the user decides whether to act now or later.
 
 ---
 
@@ -163,22 +165,23 @@ The user-facing `policy` capability is thin — it lives here, not in a separate
 
 ### Procedure
 
-1. **Name the deviation** in one plain-language sentence (pt-BR): what was asked, and which invariant or boundary it crosses.
-2. **Present named options** (pt-BR), each with its one-line consequence. The set adapts to the deviation; offer the applicable subset of:
+1. **Name the deviation** in one plain-language sentence: what was asked, and which invariant or boundary it crosses.
+2. **Present named options**, each with its one-line consequence. The set adapts to the deviation; offer the applicable subset of:
 
    ```
-   Isto está fora da estrutura do investor: {descrição do desvio}.
+   This is outside the investor's structure: {description of the deviation}.
 
-   Como proceder?
-     [A] Redirecionar pelo caminho correto — se a operação for legítima mas
-         pertencer a outro agente/ferramenta (ex.: mexer em ledger → bookkeeper;
-         ler dados sem tool → falta uma read tool a registrar no build), eu
-         registro a pendência e indico o caminho certo. Nada é executado aqui.
-     [B] Ignorar este item nesta sessão — não processamos; registro a pendência
-         em log.md e seguimos.
-     [C] Ajustar a política antes de continuar — se o bloqueio for de escopo
-         (research-policy/source-policy), você decide a mudança agora (via modo
-         policy, present-and-confirm) e só então retomo.
+   How to proceed?
+     [A] Redirect through the correct path — if the operation is legitimate but
+         belongs to another agent/tool (e.g. touching a ledger → bookkeeper;
+         reading data without a tool → a missing read tool to register in the
+         build), I record the pending item and point to the right path. Nothing
+         is executed here.
+     [B] Skip this item for this session — we do not process it; I record the
+         pending item in log.md and we continue.
+     [C] Adjust the policy before continuing — if the block is scope
+         (research-policy/source-policy), you decide the change now (via the
+         policy mode, present-and-confirm) and only then I resume.
    ```
 
 3. **STOP. Wait for the user's choice.** Do not proceed on any branch without it.

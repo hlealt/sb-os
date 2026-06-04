@@ -17,7 +17,7 @@ The `/sb-investor` shared refuter-dispatch workflow. An **independent second mod
 
 | The refuter MUST | The refuter MUST NEVER |
 |------------------|------------------------|
-| Read the drafted artifact + its already-cited sources in its OWN context | Fetch the web, call any tool, or run a search |
+| Read the drafted artifact + its already-cited sources in its OWN context | Fetch the web, run a search, or read ANYTHING outside the closed read-set |
 | Return a structured per-rubric-item verdict + the disconfirming reason | Generate a new finding, source, claim, or evidence item |
 | Run exactly once (single-pass), then return | Loop, re-draft, or iterate on its own output |
 | Stay read-only and persist nothing | Write any file, page, ledger, policy, or capture |
@@ -34,7 +34,7 @@ The calling mode hands the refuter a CLOSED input set. Assemble all four; pass n
 | Input | What it is | Source |
 |-------|-----------|--------|
 | **Drafted artifact** | The exact draft the mode is about to present at its checkpoint (thesis draft / review verdict block / decision record) | The calling mode's pre-checkpoint output |
-| **Cited sources** | The full text of every source the draft cites — passed inline so the refuter reads them in its OWN context (anti-context-rot: full text never enters the parent) | The captured `raw/` + wiki source/entity pages the draft references |
+| **Cited sources** | Every source the draft cites, passed as a CLOSED READ-SET in one of two transports: **inline** (full text in the prompt — small payloads) or **by path** (the explicit list of cited file paths — the default for large payloads, e.g. multi-MB raw captures). Path transport authorizes the refuter to read the LISTED files ONLY — never anything beyond the list. Either transport keeps the input set closed and the full text out of the parent (anti-context-rot) | The captured `raw/` + wiki source/entity pages the draft references |
 | **The calling mode's rubric** | The per-rubric-item list of attack questions THIS mode defines (thesis rubric / review rubric / decision rubric) — see § Rubric schema | The calling mode (`review`/`thesis`/`decision`), never this file |
 | **`research-policy` scope** | The scope / exclusions loaded at the mode's Step 1 policy gate — bounds what the refuter treats as in-scope | Already loaded by the calling mode per `./investor-loop.md` § Policy read-rules wiring |
 
@@ -54,11 +54,11 @@ A Codex failure NEVER blocks the checkpoint and NEVER aborts the mode — it fal
 
 ## Step 3a — Backend: Claude sub-agent (default)
 
-Dispatch ONE sub-agent (per `./investor-loop.md`; default model per `sb-sub-agents`). Its prompt MUST be SELF-CONTAINED — it requires NO web skill, NO vault skill, NO tool access, and reads ONLY what the prompt carries. The prompt MUST:
+Dispatch ONE sub-agent (per `./investor-loop.md`; default model per `sb-sub-agents`). Its prompt MUST be SELF-CONTAINED — it requires NO web skill and NO vault skill; with inline transport it reads ONLY what the prompt carries and needs NO tool access; with path transport its ONLY tool access is read-only (Read/Grep) on the listed read-set paths. The prompt MUST:
 
-1. State the refute-only role: *"You are an adversarial reviewer. You may ONLY refute the argument below. You MUST NOT add new findings, fetch anything, call any tool, or rewrite the draft. Read the draft and its cited sources, then return a verdict for each rubric item."*
-2. Inline the four inputs from Step 1 (drafted artifact, full cited-source text, the rubric items, the policy scope).
-3. Demand the § Output schema verbatim — one verdict row per rubric item, nothing else.
+1. State the refute-only role: *"You are an adversarial reviewer. You may ONLY refute the argument below. You MUST NOT add new findings, fetch anything, run a search, or rewrite the draft. Read the draft and its cited sources, then return a verdict for each rubric item."*
+2. Carry the four inputs from Step 1 (drafted artifact, cited sources — inline text OR the closed read-set path list per § Step 1, the rubric items, the policy scope). With path transport, state the closure explicitly: *"You may Read/Grep ONLY the files listed below; reading ANY other path is forbidden."*
+3. Demand the § Output schema verbatim — one verdict row per rubric item, nothing else: the response MUST BEGIN with the `## Adversarial critique` heading and END after the last verdict; any preamble or trailing prose is a contract violation.
 4. Forbid generation explicitly: *"If a rubric item cannot be judged from the draft + cited sources alone, mark it `survives` and note 'not assessable from the cited evidence' — NEVER hunt for new evidence."*
 
 The sub-agent returns ONLY the structured verdict. Full source text stays in the sub-agent's context; only the verdict crosses back to the parent (anti-context-rot — the parent context stays clean, the same pattern as the `research` Disconfirm wave).
@@ -89,7 +89,7 @@ codex exec \
 | `-o "$LAST_MSG_FILE"` | Writes ONLY the agent's final message to a file for clean capture; stdout still streams progress. Read this file for the verdict. (Omit to read the final message from stdout directly.) |
 | `-` (trailing) | Read the prompt from stdin — pipe the same self-contained refute-only prompt as Step 3a (role + four inputs + output schema + no-generation clause). |
 
-**Timeout:** wrap the call at **120 s**. On timeout, SIGTERM the process and fall back to the sub-agent per Step 2 + emit the one-line note. The prompt piped to stdin is the SAME self-contained refute-only prompt the sub-agent receives — Codex reads the draft + cited sources from the prompt, never from the web or the filesystem.
+**Timeout:** wrap the call at **120 s**. On timeout, SIGTERM the process and fall back to the sub-agent per Step 2 + emit the one-line note. The prompt piped to stdin is the SAME self-contained refute-only prompt the sub-agent receives — with inline transport Codex reads everything from the prompt; with path transport its read-only sandbox reads the LISTED read-set files only (the prompt forbids any path beyond the list); it never reads the web either way.
 
 > If `codex` does not resolve on a given machine (a non-Codex installer), Step 2 routes to the sub-agent automatically. The command above is the verified invocation where Codex IS present; its absence is a documented, graceful fallback, NOT an error.
 
@@ -129,7 +129,7 @@ Each calling mode passes a rubric = an ordered list of attack questions. The ref
 | `weakened` | The item is not falsified but is materially undercut — evidence is thinner, hedged, or partly contradicted |
 | `survives` | The item holds against the draft + its cited sources (including "not assessable from the cited evidence" — never a prompt to hunt) |
 
-The refuter returns NOTHING beyond this block — no prose preamble, no recommendation, no new sources, no draft edits.
+The refuter returns NOTHING beyond this block — the response BEGINS at the `## Adversarial critique` heading and ENDS after the last verdict: no prose preamble, no closing remarks, no recommendation, no new sources, no draft edits.
 
 ---
 
@@ -140,12 +140,12 @@ A calling mode that dispatches this refuter inherits ALL of the following — it
 | Invariant | How the refuter preserves it |
 |-----------|------------------------------|
 | **Read-only** (`./investor-loop.md` § Read-only invariant) | Reads the artifact + already-cited sources only. No position data, no ledger, no `portfolio.json`, no dashboard — directly or via any path. The Codex backend enforces this with `--sandbox read-only`. |
-| **No-generation** (plan Architectural-Constraints refuter row) | Closed input set (artifact + its citations). Returns ONLY verdicts. Never fetches the web, calls a tool, or emits a new finding/source/claim. An unjudgeable item is `survives`, never a hunt. |
-| **Tools-only data access** (`./investor-loop.md` § Tools-only) | The refuter touches NO position data, so no read tool is involved. It reads markdown the calling mode passed in — not the store. |
+| **No-generation** (plan Architectural-Constraints refuter row) | Closed input set (artifact + its citations). Returns ONLY verdicts. Never fetches the web, runs a search, reads outside the read-set, or emits a new finding/source/claim. An unjudgeable item is `survives`, never a hunt. |
+| **Tools-only data access** (`./investor-loop.md` § Tools-only) | The refuter touches NO position data, so no read tool is involved. It reads ONLY the markdown the calling mode passed in or listed (the closed read-set) — not the store. |
 | **Own-workspace-writes / delegate-not-replace** (`./investor-loop.md` § Own-workspace-writes boundary) | The refuter persists NOTHING — no page, source, policy, capture, or session file (`--ephemeral`). It produces a critique; the calling mode and its scribe own all persistence. |
 | **Present-and-confirm** (`./investor-loop.md` § Present-and-confirm) | The critique feeds the EXISTING checkpoint as a distinct block; the user still decides `[S]/[E]/[N]`. The refuter never persists or acts on its verdict and never collapses the checkpoint. |
 | **Single-pass / interactive rhythm** (plan Architectural-Constraints) | Runs exactly once and returns; never loops. It is one informational block at one already-present checkpoint — it adds no new STOP and buries no rhythm. |
-| **Anti-context-rot** (`shape.md` Constraints) | Full source text stays in the refuter's own context (sub-agent or Codex process); only the structured verdict crosses back. The parent context stays clean — same pattern as the `research` Disconfirm wave. |
+| **Anti-context-rot** (`shape.md` Constraints) | Full source text stays in the refuter's own context (sub-agent or Codex process); only the structured verdict crosses back. With path transport the full text never even transits the parent — the refuter reads the listed files in its own context. The parent context stays clean — same pattern as the `research` Disconfirm wave. |
 | **Portability** (`sb-source-of-truth`; `shape.md` § 2026-06-01 #1) | Backend-agnostic: default Claude sub-agent needs no plugin; Codex is opt-in with auto-fallback. A non-Codex installer is never broken — the refuter runs on the sub-agent. |
 | **Rule A / per-step checkpoint / watchlist** (`./investor-loop.md`) | Untouched. The refuter introduces no out-of-structure act, no watchlist change, and runs inside the calling mode's existing checkpoint. |
 
@@ -155,7 +155,7 @@ A failed or unavailable refuter NEVER blocks the checkpoint: the calling mode pr
 
 ## Boundaries (this workflow)
 
-- Read-only: reads ONLY the passed-in artifact + its cited sources; never position/ledger/dashboard data, never the web, never a tool.
+- Read-only: reads ONLY the passed-in artifact + its cited sources (inline or via the closed read-set paths); never position/ledger/dashboard data, never the web, never any file outside the read-set.
 - Refute-only / no-generation: returns ONLY a per-rubric-item verdict; never a new finding, source, draft edit, or persisted file.
 - Backend-agnostic: Claude sub-agent default; Codex CLI opt-in via the verified `codex exec --sandbox read-only` invocation; absent/slow/error → sub-agent fallback + a one-line note.
 - Single-pass: runs once, returns the critique, never loops. Accepted points fold in via the calling mode's `[E]` path, never a re-run.
