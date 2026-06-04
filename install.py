@@ -145,6 +145,7 @@ def main(argv: list[str] | None = None) -> int:
             target, repo_root,
             selected_modules=selected,
             excluded_components=excluded,
+            skip_confirm=args.non_interactive,
         )
 
     # Finance entry-HTML knob (p1-3): prompted once, on interactive fresh

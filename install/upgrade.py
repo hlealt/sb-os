@@ -21,7 +21,8 @@ Idempotent refresh of an existing sb-os install. Per architecture §6/§8:
   ``mode`` flips to ``"upgrade"``, ``installed_at`` refreshed,
   ``wiki_root`` / ``user_context_root`` / ``created_paths`` preserved.
 
-Public API: ``run_upgrade(target_root, sb_os_root) -> int``.
+Public API: ``run_upgrade(target_root, sb_os_root, *,
+skip_confirm=False, ...) -> int``.
 
 Pure stdlib.
 """
@@ -49,8 +50,14 @@ def run_upgrade(
     sb_os_root: Path | str,
     selected_modules: tuple[str, ...] | None = None,
     excluded_components: tuple[str, ...] | None = None,
+    skip_confirm: bool = False,
 ) -> int:
-    """Execute the upgrade flow. Returns 0 on success, 1 on abort or error."""
+    """Execute the upgrade flow. Returns 0 on success, 1 on abort or error.
+
+    ``skip_confirm`` skips the "Proceed with the upgrade?" prompt — used by
+    ``--non-interactive`` runs so scripted upgrades complete with zero
+    prompts. The plan is still printed either way.
+    """
     target_root = Path(target_root)
     sb_os_root = Path(sb_os_root).resolve()
 
@@ -117,7 +124,9 @@ def run_upgrade(
             "those files will be lost. Edit at the source: sb-os/rules/."
         )
     )
-    if not cli.confirm("\nProceed with the upgrade?", default=True):
+    if not skip_confirm and not cli.confirm(
+        "\nProceed with the upgrade?", default=True
+    ):
         cli.abort("User declined.")
         return 1
 

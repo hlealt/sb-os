@@ -195,11 +195,11 @@ Editing the installed file directly is forbidden — the source is the repo. Re-
 
 ### Mode detection
 
-The installer walks upward from cwd looking for `sb-os.json`. If found, it offers to upgrade that install. Otherwise it prompts for a target vault path; if the typed path holds an `sb-os.json` it runs upgrade, otherwise fresh. There are no flags — the installer is fully interactive.
+The installer walks upward from cwd looking for `sb-os.json`. If found, it offers to upgrade that install. Otherwise it prompts for a target vault path; if the typed path holds an `sb-os.json` it runs upgrade, otherwise fresh. Flags: `--target PATH` skips the upward search and resolves mode directly against that path; `--modules a,b` pins the module selection without the interactive picker; `--non-interactive` reuses the prior selection from `sb-os.json` and skips every prompt.
 
 ### Installer interactivity
 
-The installer prompts before any vault-modifying action and shows a planned-action list. On a fresh install it offers a dry-run preview before any writes. v1 ships without a separate module system — the component count is small enough to ship one bundle by default; defaults are baked, advanced overrides live in `sb-os.json` and can be edited after install.
+The installer prompts before any vault-modifying action and shows a planned-action list. Under `--non-interactive` the planned-action list still prints, but every prompt — including the final proceed confirm in both fresh and upgrade modes — is skipped. On a fresh install it offers a dry-run preview before any writes. v1 ships without a separate module system — the component count is small enough to ship one bundle by default; defaults are baked, advanced overrides live in `sb-os.json` and can be edited after install.
 
 ### Stale components
 
