@@ -37,6 +37,8 @@ Fits an existing file → append. Index files (`{dir-name}.md`) are NEVER conten
 
 **Auto-memory.** Claude Code's auto-memory serves ONLY for agent behavior feedback (preferences, corrections, workflow tweaks). Content goes to the vault. When in doubt, vault wins.
 
+**Parallel sessions — write collisions.** On an Edit rejection for "file modified since read" (another session wrote the file), re-read the file and re-apply ONLY your delta to the fresh state — never restore frontmatter or body content from your earlier read. This retry is the canonical discipline; do not add lock or marker machinery.
+
 Users extend these defaults by adding their own routing rules below the marker block — anything outside the markers wins over the marker-block defaults (agents read top-to-bottom).
 
 ---
