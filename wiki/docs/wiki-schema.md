@@ -933,6 +933,9 @@ Silent mode runs the full append-only protection, clustering, and trigger detect
 | 4 | Dispatch one Opus subagent per batch per wave; subagents run `/sb-wiki-ingest silent <slug>` (silent mode owns every checkpoint auto-resolution — see "Silent (non-interactive) mode"), one file at a time | Agent + Subagents |
 | 5 | After the last wave, run `/sb-wiki-lint` to dedupe cross-origin duplicate stubs, renumber footnotes, repair indexes, and prune the log | Agent |
 | 6 | Report committed/partial/failed counts, cross-origin duplicate slugs, and the lint outcome | Agent |
+| 7 | Create the run's SINGLE git commit (see Git discipline) — never per source, per batch, or per wave | Agent |
+
+**Git discipline.** No git command runs during ingestion — subagents NEVER git-commit, and the orchestrator NEVER commits per source, per batch, or per wave. When the vault root is a git repository, the orchestrator creates EXACTLY ONE git commit after step 6, covering every change the run produced (source pages, stubs, indexes, log entries, lint heals). When it is not, skip step 7 — nothing else changes. The per-file status `committed` refers to staged FILE changes written to disk (the Stage-1 commit gate), never to git.
 
 **Why origin-serial.** Same-origin sources reuse the same entities/concepts, so concurrent ingestion races to create the same stub. Serializing per origin removes the dense-overlap collisions; the rarer cross-origin collisions (globally-common entities) are healed by the step-5 lint pass. There is no user checkpoint during the run — each subagent runs `/sb-wiki-ingest silent`, which auto-resolves both checkpoints; the only interactive surface is lint's step-9 report at the end.
 

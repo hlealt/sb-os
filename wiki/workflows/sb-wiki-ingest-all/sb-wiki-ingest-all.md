@@ -33,6 +33,7 @@ Each subagent runs the unmodified `sb-wiki-ingest` workflow per source. This orc
 | Non-interactive ingest | Subagents invoke `/sb-wiki-ingest silent <slug>` per file; that mode owns every checkpoint auto-resolution. NO subagent ever pauses for user input. |
 | Model | Subagents run on **opus** (user-requested for ingest quality). |
 | No mid-run topic pages | Subagents NEVER create topic pages mid-run — every proposed topic is deferred (the `candidate-topic` persists for the final lint pass). Topic-UPDATE resolution is owned by `/sb-wiki-ingest silent` (firm updates auto-apply append-only; speculative updates and proposed answers reject — see that mode's silent override); this caller NEVER re-states or overrides those defaults. Topic-page creation and cross-origin duplicate healing happen after, via the final lint pass. |
+| Single git commit | NO git command runs during ingestion — subagents NEVER git-commit, and the orchestrator NEVER commits per source, per batch, or per wave. The orchestrator creates EXACTLY ONE git commit at the end of the run (step 6). Per-file status `committed` means staged FILE changes written to disk, never git. |
 
 ## Flow
 
@@ -96,6 +97,8 @@ The `Questions layer` line reflects silent-mode auto-resolution: only FIRM topic
 
 Delete `{wiki_root}/ingest-all-manifest.json` after the report (transient artifact).
 
+Then create the run's SINGLE git commit, covering every change this run produced (source pages, stubs, indexes, log entries, lint heals). Skip when the vault root is not a git repository. This is the ONLY git commit of the entire run — never commit per source, per batch, or per wave.
+
 ## Subagent dispatch prompt
 
 Fill `<files>` with the batch's source filenames and dispatch with `subagent_type: general-purpose`, `model: opus`:
@@ -107,9 +110,9 @@ Ingest these raw wiki sources, one at a time, in this exact order:
 For EACH file, in order:
 1. If `{user_context_root}/sb-wiki-ingest/sb-wiki-ingest.yaml` exists, read it and apply its `context:` entries BEFORE ingesting (you do not inherit workspace rules — load it yourself).
 2. Run `/sb-wiki-ingest silent <slug>` with this file as `<slug>` by reading and executing `{sb_os_path}/wiki/workflows/sb-wiki-ingest/sb-wiki-ingest.md` in its silent mode. Follow it EXACTLY — it is the sole authority on how a source is distilled and on every checkpoint auto-resolution. PDFs (`.pdf`) are valid slugs; the workflow resolves and reads them natively.
-3. Fully complete and commit one file before starting the next. Never run two ingests at once.
+3. Fully complete one file — every staged change written to disk — before starting the next. Never run two ingests at once.
 
-Do NOT run /sb-wiki-lint. Do NOT create topic pages. Do NOT touch files outside this batch.
+Do NOT run /sb-wiki-lint. Do NOT create topic pages. Do NOT touch files outside this batch. NEVER run any git command (add/commit/push) — the orchestrator makes the run's single git commit at the end.
 
 Report back, per file, the FULL structured summary silent mode returns: per-file status `committed` | `partial (reason)` | `failed (reason)`; the list of NEW concept/entity page slugs created (filename stems); and the `Flags` lines verbatim (deferred candidate-topics, applied firm topic-updates, rejected speculative updates, rejected proposed answers). The orchestrator tallies the `Flags` into the final-report counts — do NOT drop or summarize them.
 ```
