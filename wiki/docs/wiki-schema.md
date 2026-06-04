@@ -389,6 +389,7 @@ The `My take` user-half section is created as an **empty shell** (heading only, 
 The user never writes citations manually. Renumbering on edit is agent-handled.
 
 **Footnote rules:**
+- Citation targets are wiki pages, NEVER raw files. Concept, entity, and topic pages cite **source pages** (`wiki/sources/`). Raw files are referenced ONLY by their 1:1 source page (the `raw:` frontmatter field and that source page's own Sources footnote).
 - One footnote per source, never merged. Multi-source claims get multiple markers on the same sentence: `...claim X[^1][^2][^3]`.
 - Lint rebuilds the Sources section by reading inline `[^N]` markers. If the user manually added prose context within a footnote definition (e.g., `[^1]: [[file.md]] — note: this is the original`), lint preserves user prose; only renumbers.
 - Stale footnote definitions (no longer referenced inline) are removed by lint.
@@ -477,7 +478,7 @@ Speculative tier is mechanical (token overlap is computed, not LLM-judged) but h
 
 | Operation | Detail |
 |-----------|--------|
-| Add citation | Append `[^N]: [[<raw-filename>]]` to the topic's `Sources` section (renumber locally; lint normalizes globally) |
+| Add citation | Append `[^N]: [[<source-page-filename>]]` to the topic's `Sources` section (renumber locally; lint normalizes globally) |
 | Append section entry | Add ONE bullet under the topic-shape-appropriate section (`Key positions / Angles` for debate-shaped topics; `Timeline` for evolution-shaped; otherwise `Key concepts` / `Key entities` if the source introduces a new wikilinkable page; otherwise no body bullet — citation-only update) with inline `[^N]` marker |
 | Bump frontmatter | Update `last-touched: <today>` |
 | NEVER overwrite | Existing prose, `Scope`, position bullets, or `Open questions` content stays untouched. Append-only, per stub-policy "Append-Only Protection" |

@@ -10,6 +10,12 @@ Rules for inline citations and Sources section format. Validated canonical forma
 | Sources section | `[^N]: [[YYYY-MM-DD-slug.md]]` | Agent (during ingest; renumbered by lint) |
 | Frontmatter `sources:` | NOT USED | — |
 
+## Citation Targets
+
+- Footnote definitions MUST cite wiki pages — NEVER raw files.
+- Concept, entity, and topic pages cite **source pages** (`wiki/sources/`).
+- Raw files are referenced ONLY by their 1:1 source page: the `raw:` frontmatter field and that source page's own Sources footnote. No other page links a raw file.
+
 ## Footnote Rules
 
 - **One footnote per source** — never merge multiple sources into one footnote definition.
