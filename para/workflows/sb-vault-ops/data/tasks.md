@@ -25,6 +25,7 @@ Completion: `- [x] 📅 2026-03-31 Close design partner ✅ 2026-04-01` — keep
 |--------|---------|
 | `_Why:_` | Justification for MoSCoW priority — when classification is not obvious |
 | `_Goal:_` | Why this task exists — when objective is not obvious from the action |
+| `_Context:_` | Execution-relevant knowledge gathered, discovered, or available at creation time — facts, exact paths, root causes, prior attempts, related artifacts. Always include at creation |
 | `_Criteria:_` | Concrete completion criteria — always include |
 | `_Ref:_` | External references (links, IDs, contacts) — each in own sub-bullet |
 | `_Review:_` | Weekly review observations |
@@ -38,7 +39,7 @@ Completion: `- [x] 📅 2026-03-31 Close design partner ✅ 2026-04-01` — keep
 
 ### Order
 
-Why → Goal → Done → Ref → Review → Reschedule → Subtasks
+Why → Goal → Context → Criteria → Ref → Review → Reschedule → Subtasks
 
 ## Example
 
@@ -48,6 +49,7 @@ Why → Goal → Done → Ref → Review → Reschedule → Subtasks
 - [ ] 📅 2026-04-15 Submit court filing for case
   - _Why:_ statutory deadline imminent
   - _Goal:_ ensure evidence specification filed on time
+  - _Context:_ lawyer confirmed the evidence list complete on 04-10; filing goes through the court portal under case nº below
   - _Criteria:_ filing protocoled at court
   - _Ref:_
     - Case nº [number]
