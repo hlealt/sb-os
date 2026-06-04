@@ -8,6 +8,7 @@ CLI:
         [--vault-root PATH]
         [--user-agent UA]
         [--manual-file PATH]
+        [--no-curl-fallback]
         [--dry-run]
 
 Returns a metadata summary only — never dumps fetched text into stdout.
@@ -24,6 +25,14 @@ override with --user-agent). Fair-access endpoints such as SEC EDGAR 403
 undeclared default-library UAs — pass a contact-bearing UA per the endpoint's
 policy when required (e.g. "Name contact@example.com").
 
+When the native httpx fetch fails at transport level (403, bot-fingerprint
+rejection, connection reset), fetch modes retry once via subprocess curl with
+the same User-Agent — curl's HTTP stack and TLS fingerprint pass some bot
+walls that reject httpx. The metadata summary records which method fetched
+(fetch_method: "httpx" | "curl-fallback") — never a silent fallback. Disable
+with --no-curl-fallback. Only after BOTH methods fail does the source return
+state=blocked.
+
 Fetch modes:
     markdown      — GET URL, save response body as .md  (default)
     html-archive  — GET URL, save response body as .html
@@ -39,6 +48,8 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
+import subprocess
 import sys
 from datetime import date
 from pathlib import Path
@@ -162,6 +173,38 @@ def _fetch_text(url: str, user_agent: str = DEFAULT_USER_AGENT) -> tuple[str, st
     return body, _extract_title(body)
 
 
+def _curl_fetch_text(url: str, user_agent: str = DEFAULT_USER_AGENT) -> tuple[str, str]:
+    """Fetch URL via subprocess curl with the same User-Agent.
+
+    Fallback for transport-level blocks that reject httpx's fingerprint.
+    Resolves the curl binary explicitly via shutil.which — never a shell
+    alias (PowerShell aliases `curl` to Invoke-WebRequest).
+    Returns (body_text, page_title). Raises RuntimeError on any failure.
+    """
+    curl_bin = shutil.which("curl")
+    if curl_bin is None:
+        raise RuntimeError("curl binary not found on PATH")
+    cmd = [
+        curl_bin,
+        "--silent",
+        "--show-error",
+        "--fail",
+        "--location",
+        "--max-time", "30",
+        "--user-agent", user_agent,
+        url,
+    ]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, timeout=60)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise RuntimeError(f"curl invocation failed: {exc}")
+    if proc.returncode != 0:
+        stderr = proc.stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(f"curl exit {proc.returncode}: {stderr or 'no stderr'}")
+    body = proc.stdout.decode("utf-8", errors="replace")
+    return body, _extract_title(body)
+
+
 def _save(dest: Path, content: str, dry_run: bool) -> int:
     """Write content to dest. Return byte length."""
     if not dry_run:
@@ -187,6 +230,7 @@ def capture(
     gated_why: str,
     user_agent: str = DEFAULT_USER_AGENT,
     manual_file: Optional[Path] = None,
+    curl_fallback: bool = True,
 ) -> dict:
     """Capture a source and return a metadata summary dict."""
     wiki = _wiki_root(vault_root)
@@ -205,17 +249,31 @@ def capture(
             dry_run=dry_run,
         )
 
-    # Open-web fetch
+    # Open-web fetch — httpx first; on transport-level failure retry once via
+    # subprocess curl with the same UA (unless disabled). state=blocked only
+    # after BOTH methods fail.
     if mode in ("markdown", "html-archive", "both"):
+        fetch_method = "httpx"
         try:
             body, page_title = _fetch_text(url, user_agent)
         except Exception as exc:
-            return {
-                "state": "blocked",
-                "url": url,
-                "origin": origin,
-                "error": str(exc),
-            }
+            if not curl_fallback:
+                return {
+                    "state": "blocked",
+                    "url": url,
+                    "origin": origin,
+                    "error": str(exc),
+                }
+            try:
+                body, page_title = _curl_fetch_text(url, user_agent)
+                fetch_method = "curl-fallback"
+            except Exception as curl_exc:
+                return {
+                    "state": "blocked",
+                    "url": url,
+                    "origin": origin,
+                    "error": f"httpx: {exc}; curl-fallback: {curl_exc}",
+                }
         resolved_title = title or page_title or url
         saved = []
         total_bytes = 0
@@ -242,6 +300,7 @@ def capture(
             "related_thesis": thesis,
             "saved_paths": saved,
             "bytes": total_bytes,
+            "fetch_method": fetch_method,
             "dry_run": dry_run,
         }
 
@@ -319,6 +378,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Path to user-fetched content (required by --mode browser|manual; no fetch performed)",
     )
+    p.add_argument(
+        "--no-curl-fallback",
+        action="store_true",
+        help="Disable the subprocess-curl retry on transport-level fetch failure (fallback is ON by default)",
+    )
     p.add_argument("--dry-run", action="store_true", help="Report what would be saved; write nothing")
     p.add_argument("--gated", action="store_true", help="Declare source gated (no fetch; register only)")
     p.add_argument("--gated-why", default="(not specified)", help="Why this source matters (for log.md)")
@@ -349,6 +413,7 @@ def main(argv: list[str] | None = None) -> int:
         gated_why=args.gated_why,
         user_agent=args.user_agent,
         manual_file=Path(args.manual_file) if args.manual_file else None,
+        curl_fallback=not args.no_curl_fallback,
     )
 
     # Print metadata summary only — never the fetched content
