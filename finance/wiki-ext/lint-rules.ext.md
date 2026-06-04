@@ -13,6 +13,7 @@ Mirrors the base lint presentation: each rule is one scannable row (condition �
 | Folders | `theses/`, `decisions/` under `{wiki_root}/wiki/` |
 | Entity kinds | `company`, `asset`, `country`, `sector` (the investment kinds from `./page-types.ext.md`) |
 | Section | the `## Financials` body section on those entity kinds (schema in `./section-menus.ext.md`) |
+| Source queue | `{wiki_root}/source-queue.md` — exists ONLY via the finance capture tool, so the file itself is the scope guard |
 
 A rule below NEVER evaluates a page outside its stated scope. The base structural lint still applies to every page; these rows ADD investment checks on top.
 
@@ -49,7 +50,38 @@ Scope: the `## Financials` table on investment entity kinds (`company`, `asset`,
 | 6 | Two or more rows giving conflicting `value`s for the same `metric` + `period_end` + entity from different sources | SURFACE the conflict — NEVER auto-resolve |
 | 7 | A `## Financials` table grown unwieldy on a single page | PROPOSE splitting it to a companion page (mirrors the entity-folder subdivision pattern; split on evidence, never upfront) |
 
+## Source-Lifecycle Rules (`source-queue.md`)
+
+Scope: `{wiki_root}/source-queue.md` — the investment source queue, a root-level sibling of `log.md` (frontmatter `type: source-queue` per `./frontmatter-schemas.ext.md`). It holds the open lifecycle states of investment sources that could not complete the capture→ingest path: `gated_pending_access` (paywalled/login — awaits user action) and `blocked` (fetch failed after both tool methods — retry candidate). The `investment_source_capture` tool is the SOLE writer of entries; lint's only write is the rule-3 prune; the user retires a source by deleting its entry.
+
+File absent → no sources are queued; skip these rules silently. Present but malformed (unreadable, or no parseable H2 entries) → WARN, skip these rules, NEVER abort the lint. Mirrors the `questions.md` skip-if-absent contract.
+
+Entry shape (tool-written): `## {state} — YYYY-MM-DD` H2 + `- title:`, `- url:`, `- source:` (origin), `- related_thesis:`, `- why_it_matters:` (gated), `- failure:` (blocked), `- required_user_action:` bullets.
+
+Process rule 3 (prune) FIRST, then surface the remaining entries via rules 1, 2, and 4 — a just-resolved entry never appears in the report.
+
+| # | Condition | Lint surfaces |
+|---|-----------|---------------|
+| 1 | An open `gated_pending_access` entry | EVERY open gated entry with its `required_user_action`; append `[AGED]` when the entry date is >30 days old |
+| 2 | An open `blocked` entry | EVERY open blocked entry as a retry candidate (re-run the capture tool); append `[AGED]` when the entry date is >30 days old |
+| 3 | An entry whose wiki source page now EXISTS under `wiki/sources/` (resolution = page exists; match the entry's `url`/`title` against raw indexes and wiki source pages — LLM judgment, no tool-side markers) | PRUNE the entry — auto-applied write mirroring the base `log.md` prune; count for the report |
+| 4 | An entry whose raw file exists but whose wiki source page does NOT (a manually-recovered source awaiting ingest) | KEEP the entry open; append `[captured, awaiting ingest]` to its report row |
+
+Report block — append to the LINT REPORT after the base findings. Omit the whole block when the file is absent or holds zero entries after the prune; omit the `pruned` line when 0:
+
+```
+SOURCE QUEUE — open lifecycle states:
+Gated pending access (N, M aged >30d):
+  "<title>" (<origin>) — registered YYYY-MM-DD — action: <required_user_action> [AGED]
+Blocked, retry candidates (N, M aged >30d):
+  "<title>" (<origin>) — blocked YYYY-MM-DD [AGED] [captured, awaiting ingest]
+Source queue pruned: <N> resolved (page now exists)
+```
+
+One row per open entry under its state line; `[AGED]` and `[captured, awaiting ingest]` appear only when rule 1/2/4 marks them.
+
 ## Governance
 
 - **Lint shows state; it never decides.** It surfaces findings only — the `sb-investor` proposes next actions from the lint output. Lint NEVER auto-resolves a conflict, NEVER edits a thesis or `## Financials` row, NEVER promotes or archives a page.
+- **Lint NEVER writes a source-queue entry.** The capture tool is the sole entry writer; lint's only queue write is the rule-3 prune of spent entries.
 - **Implement incrementally — not all rules are required at MVP.** Add rules as the investment wiki grows; an unimplemented rule simply does not fire.

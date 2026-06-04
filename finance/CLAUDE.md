@@ -16,7 +16,7 @@ The finance module ships investment definitions as **extension data files** unde
 | `./wiki-ext/frontmatter-schemas.ext.md` | `thesis` and `decision` frontmatter; the entity `## Financials` note |
 | `./wiki-ext/section-menus.ext.md` | thesis sections, decision sections, the `## Financials` long-format table schema |
 | `./wiki-ext/metric-vocab.md` | controlled metric / unit / period / method vocabulary per entity kind |
-| `./wiki-ext/lint-rules.ext.md` | investment-semantic and fundamentals lint rules (scoped — see Lint Scoping) |
+| `./wiki-ext/lint-rules.ext.md` | investment-semantic, fundamentals, and source-lifecycle lint rules (scoped — see Lint Scoping) |
 | `./wiki-ext/candidate-thesis-triggers.md` | ingest trigger that flags candidate theses |
 
 For each file's definitions, read that file directly. This module doc never restates them.
@@ -37,7 +37,7 @@ For each file's definitions, read that file directly. This module doc never rest
 
 ## Lint Scoping
 
-The investment lint rules in `./wiki-ext/lint-rules.ext.md` are loaded by `sb-wiki-lint` Step 0 and MUST fire ONLY on investment folders and investment entity kinds (`thesis`, `decision`, `asset`, `country`, `sector`). They MUST NEVER fire on a general-wiki run — this is the guard against investment rules flagging general pages.
+The investment lint rules in `./wiki-ext/lint-rules.ext.md` are loaded by `sb-wiki-lint` Step 0 and MUST fire ONLY on investment scopes: investment folders, investment entity kinds (`thesis`, `decision`, `asset`, `country`, `sector`), and `{wiki_root}/source-queue.md` (the investment source queue — written only by the finance capture tool, so the file's existence is itself the scope guard). They MUST NEVER fire on a general-wiki run — this is the guard against investment rules flagging general pages.
 
 The base structural lint (broken wikilinks, stub aging, orphans, raw-without-ingest, source-without-raw, slug convention, frontmatter validity) applies to all pages and is reused, not redefined, by the extension.
 
@@ -53,6 +53,8 @@ Two user-owned policy files live under `.user/finance/investor/`. Their CONTENT 
 |-------------|-------|
 | `.user/finance/investor/research-policy.md` | user-approved scope, priorities, exclusions, watchlist-approval rule, horizon preferences |
 | `.user/finance/investor/source-policy.md` | source trust classification and allowed-use rules |
+
+Both files are bootstrapped by the installer from the user-agnostic skeletons in `./templates/` (manifest-template mechanism, install-if-missing — fresh installs get the designed structure with `_Fill in_` slots; an existing file is never overwritten). Structure ships with this module; content is the user's. While a policy remains unfilled, `research.md` Step 3 item 4's seed rubric is the degradation path.
 
 **Read-rules:**
 

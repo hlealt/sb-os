@@ -4,7 +4,8 @@ Asserts (per the p3-1 task definition, Phase-3 checkpoint: dry-trace, no live fe
 
   (a) An approved open URL → saved to raw/{origin}/<slug>.md; state=captured_to_raw.
   (b) Return is metadata-only — no full fetched text in the summary dict.
-  (c) Gated path → gated_pending_access in log.md WITHOUT fetching.
+  (c) Gated path → gated_pending_access in {wiki_root}/source-queue.md
+      WITHOUT fetching — v1.2 retarget (was raw/{origin}/log.md).
   (d) --dry-run → writes nothing (raw dir absent or unchanged).
   (e) Fetch modes send a declared User-Agent (default + override) — 2026-06-04 fix.
   (f) --manual-file: browser/manual modes save user-fetched content without
@@ -12,6 +13,11 @@ Asserts (per the p3-1 task definition, Phase-3 checkpoint: dry-trace, no live fe
   (g) curl fallback: httpx transport failure → subprocess curl retry with the
       same UA; provenance recorded in fetch_method; --no-curl-fallback disables;
       curl-binary-missing and both-fail degrade to state=blocked — 2026-06-04.
+  (h) source-queue registration — v1.2 (§10 source-lifecycle): gated AND
+      transport-level blocked register an H2 entry in {wiki_root}/source-queue.md
+      (file created with type: source-queue frontmatter when absent); same
+      (state, url) pair never duplicates; usage-error blocked (missing
+      --manual-file, unknown mode) and dry-run register NOTHING.
 
 All HTTP is mocked via unittest.mock. No live network fetch is performed.
 """
@@ -139,7 +145,8 @@ def test_return_is_metadata_only(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# (c) Gated path → registers gated_pending_access in log.md WITHOUT fetching
+# (c) Gated path → registers gated_pending_access in {wiki_root}/source-queue.md
+#     WITHOUT fetching (v1.2 retarget — was raw/{origin}/log.md)
 # ---------------------------------------------------------------------------
 
 def test_gated_registers_without_fetching(tmp_path):
@@ -162,14 +169,48 @@ def test_gated_registers_without_fetching(tmp_path):
 
     assert result["state"] == "gated_pending_access"
     assert result["url"] == "https://paywalled-site.com/report"
+    assert result["queue"] == "registered"
 
-    # log.md must have been written
-    log_path = Path(result["log_path"])
-    assert log_path.exists(), "log.md must be created for gated sources"
-    log_content = log_path.read_text(encoding="utf-8")
-    assert "gated_pending_access" in log_content
-    assert "https://paywalled-site.com/report" in log_content
-    assert "paywalled" in log_content
+    # source-queue.md must have been written at the wiki root — NOT a per-origin log
+    queue_path = Path(result["queue_path"])
+    assert queue_path == vault / "knowledge-base" / "source-queue.md"
+    assert queue_path.exists(), "source-queue.md must be created for gated sources"
+    content = queue_path.read_text(encoding="utf-8")
+    # Created with the source-queue frontmatter
+    assert content.startswith("---\ntype: source-queue\n---\n")
+    # Entry shape: H2 state header + bullet fields
+    assert "## gated_pending_access — " in content
+    assert "- title: Paywalled Report" in content
+    assert "- url: https://paywalled-site.com/report" in content
+    assert "- source: paywalled" in content
+    assert "- related_thesis: some-thesis" in content
+    assert "- why_it_matters: Key industry analysis behind paywall" in content
+    assert "- required_user_action: " in content
+    # The legacy per-origin log must NOT be written
+    assert not (vault / "knowledge-base" / "raw" / "paywalled" / "log.md").exists()
+
+
+def test_gated_same_url_never_duplicates(tmp_path):
+    vault = _make_vault(tmp_path)
+    kwargs = dict(
+        url="https://paywalled-site.com/report",
+        origin="paywalled",
+        mode="markdown",
+        title="Paywalled Report",
+        thesis=None,
+        vault_root=vault,
+        dry_run=False,
+        gated=True,
+        gated_why="test",
+    )
+
+    first = capture(**kwargs)
+    second = capture(**kwargs)
+
+    assert first["queue"] == "registered"
+    assert second["queue"] == "already-registered"
+    content = (vault / "knowledge-base" / "source-queue.md").read_text(encoding="utf-8")
+    assert content.count("## gated_pending_access — ") == 1
 
 
 # ---------------------------------------------------------------------------
@@ -229,9 +270,9 @@ def test_dry_run_gated_writes_nothing(tmp_path):
     assert result["state"] == "gated_pending_access"
     assert result["dry_run"] is True
 
-    # log.md must NOT exist (dry-run writes nothing)
-    log_path = vault / "knowledge-base" / "raw" / "gated-origin" / "log.md"
-    assert not log_path.exists(), "dry-run must not write log.md"
+    # source-queue.md must NOT exist (dry-run writes nothing)
+    queue_path = vault / "knowledge-base" / "source-queue.md"
+    assert not queue_path.exists(), "dry-run must not write source-queue.md"
 
 
 # ---------------------------------------------------------------------------
@@ -616,6 +657,162 @@ def test_fetch_method_is_httpx_on_native_success(tmp_path):
         )
 
     assert result["fetch_method"] == "httpx"
+
+
+# ---------------------------------------------------------------------------
+# (h) source-queue registration — blocked transport failures register;
+#     usage errors and dry-run do NOT
+# ---------------------------------------------------------------------------
+
+def test_blocked_both_fail_registers_in_queue(tmp_path):
+    vault = _make_vault(tmp_path)
+
+    with patch("httpx.get", side_effect=Exception("403 Forbidden")), \
+         patch("investment_source_capture.shutil.which", return_value=_CURL_BIN), \
+         patch("investment_source_capture.subprocess.run",
+               return_value=_mock_curl_failure()):
+        result = capture(
+            url="https://hard-wall.example.com/report",
+            origin="example",
+            mode="markdown",
+            title="Hard Wall Report",
+            thesis="some-thesis",
+            vault_root=vault,
+            dry_run=False,
+            gated=False,
+            gated_why="",
+        )
+
+    assert result["state"] == "blocked"
+    assert result["queue"] == "registered"
+    queue_path = Path(result["queue_path"])
+    assert queue_path == vault / "knowledge-base" / "source-queue.md"
+    content = queue_path.read_text(encoding="utf-8")
+    assert "## blocked — " in content
+    assert "- url: https://hard-wall.example.com/report" in content
+    assert "- source: example" in content
+    assert "- related_thesis: some-thesis" in content
+    # The failure bullet names both failed methods — no silent fallback
+    assert "- failure: " in content
+    assert "httpx" in content and "curl" in content
+    assert "- required_user_action: " in content
+
+
+def test_blocked_no_fallback_registers_in_queue(tmp_path):
+    vault = _make_vault(tmp_path)
+
+    with patch("httpx.get", side_effect=Exception("403 Forbidden")):
+        result = capture(
+            url="https://example.com/x",
+            origin="example",
+            mode="markdown",
+            title="",
+            thesis=None,
+            vault_root=vault,
+            dry_run=False,
+            gated=False,
+            gated_why="",
+            curl_fallback=False,
+        )
+
+    assert result["state"] == "blocked"
+    assert result["queue"] == "registered"
+    assert (vault / "knowledge-base" / "source-queue.md").exists()
+
+
+def test_blocked_same_url_never_duplicates(tmp_path):
+    vault = _make_vault(tmp_path)
+
+    for _ in range(2):
+        with patch("httpx.get", side_effect=Exception("403 Forbidden")), \
+             patch("investment_source_capture.shutil.which", return_value=_CURL_BIN), \
+             patch("investment_source_capture.subprocess.run",
+                   return_value=_mock_curl_failure()):
+            result = capture(
+                url="https://hard-wall.example.com/report",
+                origin="example",
+                mode="markdown",
+                title="",
+                thesis=None,
+                vault_root=vault,
+                dry_run=False,
+                gated=False,
+                gated_why="",
+            )
+
+    assert result["queue"] == "already-registered"
+    content = (vault / "knowledge-base" / "source-queue.md").read_text(encoding="utf-8")
+    assert content.count("## blocked — ") == 1
+
+
+def test_gated_then_blocked_same_url_both_register(tmp_path):
+    # Dedup is per (state, url) — the same url may hold one gated AND one
+    # blocked entry (distinct lifecycle facts), never two of the same state.
+    vault = _make_vault(tmp_path)
+    url = "https://example.com/same-source"
+
+    capture(
+        url=url, origin="example", mode="markdown", title="", thesis=None,
+        vault_root=vault, dry_run=False, gated=True, gated_why="test",
+    )
+    with patch("httpx.get", side_effect=Exception("403 Forbidden")), \
+         patch("investment_source_capture.shutil.which", return_value=_CURL_BIN), \
+         patch("investment_source_capture.subprocess.run",
+               return_value=_mock_curl_failure()):
+        result = capture(
+            url=url, origin="example", mode="markdown", title="", thesis=None,
+            vault_root=vault, dry_run=False, gated=False, gated_why="",
+        )
+
+    assert result["queue"] == "registered"
+    content = (vault / "knowledge-base" / "source-queue.md").read_text(encoding="utf-8")
+    assert content.count("## gated_pending_access — ") == 1
+    assert content.count("## blocked — ") == 1
+
+
+def test_blocked_usage_errors_do_not_register(tmp_path):
+    vault = _make_vault(tmp_path)
+    queue_path = vault / "knowledge-base" / "source-queue.md"
+
+    # Missing --manual-file (usage error, not a source lifecycle state)
+    result = capture(
+        url="https://example.com/x", origin="example", mode="manual", title="",
+        thesis=None, vault_root=vault, dry_run=False, gated=False, gated_why="",
+    )
+    assert result["state"] == "blocked"
+
+    # Unknown mode (usage error)
+    result = capture(
+        url="https://example.com/x", origin="example", mode="bogus", title="",
+        thesis=None, vault_root=vault, dry_run=False, gated=False, gated_why="",
+    )
+    assert result["state"] == "blocked"
+
+    assert not queue_path.exists(), "usage-error blocked must register nothing"
+
+
+def test_blocked_dry_run_does_not_register(tmp_path):
+    vault = _make_vault(tmp_path)
+
+    with patch("httpx.get", side_effect=Exception("403 Forbidden")), \
+         patch("investment_source_capture.shutil.which", return_value=_CURL_BIN), \
+         patch("investment_source_capture.subprocess.run",
+               return_value=_mock_curl_failure()):
+        result = capture(
+            url="https://hard-wall.example.com/report",
+            origin="example",
+            mode="markdown",
+            title="",
+            thesis=None,
+            vault_root=vault,
+            dry_run=True,
+            gated=False,
+            gated_why="",
+        )
+
+    assert result["state"] == "blocked"
+    assert not (vault / "knowledge-base" / "source-queue.md").exists(), \
+        "dry-run must not write source-queue.md"
 
 
 def test_gated_never_invokes_curl(tmp_path):

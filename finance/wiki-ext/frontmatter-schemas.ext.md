@@ -35,6 +35,16 @@ related_company:
 
 Filename convention: `YYYY-MM-DD-<action>-<asset-or-thesis>.md`, where `<action>` is one of the action enum: `buy | sell | trim | add | hold | pass | reject | pause | review | rebalance` (the same values as `decision_type`). The wiki holds the reasoning; the bookkeeper ledger holds the transaction (price/qty) — do NOT duplicate transaction data here.
 
+## Source queue (`type: source-queue`)
+
+`{wiki_root}/source-queue.md` — a root-level sibling of `log.md` (NOT a wiki page, NOT raw). Holds the open investment source-lifecycle entries (`gated_pending_access`, `blocked`) written by the `investment_source_capture` tool and surfaced/pruned by lint per `./lint-rules.ext.md` § Source-Lifecycle Rules.
+
+```yaml
+type: source-queue
+```
+
+`source-queue` is a non-page type value: the file is excluded from page-type checks, leaf indexes, stub/orphan detection, and every wiki/raw validation walk (it lives outside `wiki/` and `raw/`, mirroring the base `questions.md` pattern). The tool creates the file with this frontmatter when absent; no other agent or workflow creates it.
+
 ## Entity `## Financials` note
 
 Investment entity kinds (`company`, `asset`, `country`, `sector`) carry a `## Financials` section of structured fundamentals on the entity's own page. Its structure is defined in `./section-menus.ext.md`. The `person`, `tool`, and `model` kinds never carry one. This is a body section, not frontmatter — no `financials:` frontmatter field is added.

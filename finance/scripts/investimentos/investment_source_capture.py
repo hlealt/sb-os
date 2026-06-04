@@ -17,8 +17,16 @@ Honors the 6-state source lifecycle:
     | gated_pending_access | blocked
 
 Gated sources (paywall / login required) are NOT fetched — they are registered
-as gated_pending_access in {origin}/log.md. Pass --gated to declare a source
-gated.
+as gated_pending_access in {wiki_root}/source-queue.md. Pass --gated to declare
+a source gated.
+
+Source-queue registration (§10 source-lifecycle): gated registrations AND
+transport-level blocked outcomes (fetch failed after the curl fallback, or
+with the fallback disabled) append an H2 entry to {wiki_root}/source-queue.md
+— the investment source queue that sb-wiki-lint (finance extension) surfaces
+and prunes. The file is created with `type: source-queue` frontmatter when
+absent. The same (state, url) pair never registers twice. Usage-error blocked
+results (missing --manual-file, unknown mode) and dry-run register NOTHING.
 
 All fetch modes send a declared User-Agent (default: a descriptive tool UA;
 override with --user-agent). Fair-access endpoints such as SEC EDGAR 403
@@ -99,39 +107,79 @@ def _filename(title: str, url: str, ext: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Gated registration
+# Source-queue registration (gated + blocked lifecycle states)
 # ---------------------------------------------------------------------------
 
-def _register_gated(
-    log_path: Path,
+QUEUE_FILENAME = "source-queue.md"
+
+_QUEUE_HEADER = """---
+type: source-queue
+---
+
+# Source queue
+
+> Open investment source-lifecycle states (`gated_pending_access`, `blocked`).
+> Written by `investment_source_capture` only; surfaced and pruned by
+> `sb-wiki-lint` (finance extension) — an entry is spent once its wiki source
+> page exists. Delete an entry to retire the source.
+"""
+
+
+def _queue_has_open_entry(text: str, state: str, url: str) -> bool:
+    """True if an entry with this (state, url) pair already exists."""
+    for block in text.split("\n## ")[1:]:
+        if block.startswith(f"{state} — ") and f"\n- url: {url}\n" in f"\n{block}\n":
+            return True
+    return False
+
+
+def _register_queue_entry(
+    queue_path: Path,
     *,
+    state: str,
     title: str,
     url: str,
     origin: str,
     thesis: Optional[str],
-    why: str,
+    why: str = "",
+    failure: str = "",
     dry_run: bool,
 ) -> dict:
-    entry = (
-        f"\n## gated_pending_access — {date.today().isoformat()}\n"
-        f"- title: {title or '(unknown)'}\n"
-        f"- url: {url}\n"
-        f"- source: {origin}\n"
-        f"- related_thesis: {thesis or 'none'}\n"
-        f"- why_it_matters: {why}\n"
-        f"- required_user_action: Fetch manually and place in raw/{origin}/\n"
+    """Append a lifecycle entry to {wiki_root}/source-queue.md (dedup by state+url)."""
+    manual_hint = (
+        f"fetch manually and re-run the tool with "
+        f"--mode manual --manual-file <path> --origin {origin}"
     )
+    lines = [
+        f"\n## {state} — {date.today().isoformat()}\n",
+        f"- title: {title or '(unknown)'}\n",
+        f"- url: {url}\n",
+        f"- source: {origin}\n",
+        f"- related_thesis: {thesis or 'none'}\n",
+    ]
+    if why:
+        lines.append(f"- why_it_matters: {why}\n")
+    if failure:
+        lines.append(f"- failure: {failure}\n")
+        lines.append(f"- required_user_action: Retry later, or {manual_hint}\n")
+    else:
+        lines.append(f"- required_user_action: {manual_hint[0].upper() + manual_hint[1:]}\n")
+
+    queue_status = "dry-run"
     if not dry_run:
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        with log_path.open("a", encoding="utf-8") as fh:
-            fh.write(entry)
+        existing = queue_path.read_text(encoding="utf-8") if queue_path.exists() else ""
+        if _queue_has_open_entry(existing, state, url):
+            queue_status = "already-registered"
+        else:
+            queue_path.parent.mkdir(parents=True, exist_ok=True)
+            with queue_path.open("a", encoding="utf-8") as fh:
+                if not existing:
+                    fh.write(_QUEUE_HEADER)
+                fh.write("".join(lines))
+            queue_status = "registered"
     return {
-        "state": "gated_pending_access",
-        "url": url,
-        "origin": origin,
-        "related_thesis": thesis,
-        "log_path": str(log_path),
-        "dry_run": dry_run,
+        "queue": queue_status,
+        "queue_path": str(queue_path),
     }
 
 
@@ -143,7 +191,7 @@ def _register_gated(
 # default-library UAs. Override per call with --user-agent when an endpoint
 # requires a contact-bearing UA.
 DEFAULT_USER_AGENT = (
-    "sb-os-investment-source-capture/1.1 (+https://github.com/hlealt/sb-os)"
+    "sb-os-investment-source-capture/1.2 (+https://github.com/hlealt/sb-os)"
 )
 
 
@@ -235,12 +283,13 @@ def capture(
     """Capture a source and return a metadata summary dict."""
     wiki = _wiki_root(vault_root)
     raw_dir = wiki / "raw" / origin
-    log_path = raw_dir / "log.md"
+    queue_path = wiki / QUEUE_FILENAME
 
     # Gated path — register only, no fetch
     if gated:
-        return _register_gated(
-            log_path,
+        queue = _register_queue_entry(
+            queue_path,
+            state="gated_pending_access",
             title=title,
             url=url,
             origin=origin,
@@ -248,6 +297,14 @@ def capture(
             why=gated_why,
             dry_run=dry_run,
         )
+        return {
+            "state": "gated_pending_access",
+            "url": url,
+            "origin": origin,
+            "related_thesis": thesis,
+            "dry_run": dry_run,
+            **queue,
+        }
 
     # Open-web fetch — httpx first; on transport-level failure retry once via
     # subprocess curl with the same UA (unless disabled). state=blocked only
@@ -258,21 +315,44 @@ def capture(
             body, page_title = _fetch_text(url, user_agent)
         except Exception as exc:
             if not curl_fallback:
+                queue = _register_queue_entry(
+                    queue_path,
+                    state="blocked",
+                    title=title,
+                    url=url,
+                    origin=origin,
+                    thesis=thesis,
+                    failure=str(exc),
+                    dry_run=dry_run,
+                )
                 return {
                     "state": "blocked",
                     "url": url,
                     "origin": origin,
                     "error": str(exc),
+                    **queue,
                 }
             try:
                 body, page_title = _curl_fetch_text(url, user_agent)
                 fetch_method = "curl-fallback"
             except Exception as curl_exc:
+                error = f"httpx: {exc}; curl-fallback: {curl_exc}"
+                queue = _register_queue_entry(
+                    queue_path,
+                    state="blocked",
+                    title=title,
+                    url=url,
+                    origin=origin,
+                    thesis=thesis,
+                    failure=error,
+                    dry_run=dry_run,
+                )
                 return {
                     "state": "blocked",
                     "url": url,
                     "origin": origin,
-                    "error": f"httpx: {exc}; curl-fallback: {curl_exc}",
+                    "error": error,
+                    **queue,
                 }
         resolved_title = title or page_title or url
         saved = []
@@ -385,7 +465,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--dry-run", action="store_true", help="Report what would be saved; write nothing")
     p.add_argument("--gated", action="store_true", help="Declare source gated (no fetch; register only)")
-    p.add_argument("--gated-why", default="(not specified)", help="Why this source matters (for log.md)")
+    p.add_argument("--gated-why", default="(not specified)", help="Why this source matters (for source-queue.md)")
     return p
 
 
