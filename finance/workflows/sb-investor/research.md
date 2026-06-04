@@ -100,15 +100,21 @@ The user approves a SUBSET (supporting and/or disconfirming candidates alike). A
 
 For EACH `approved_for_capture` OPEN source, call the registered `investment_source_capture` tool (`../../scripts/tools-index.md`) — the SOLE writer of `raw/` files; the agent NEVER hand-writes a raw source file (`./investor-loop.md` § Own-workspace-writes boundary). Pass the url, the origin folder, the fetch mode, and the anchoring thesis slug per the tool's `expected_inputs`.
 
+**User-Agent.** If `source-policy.md` (loaded in Step 1) declares a `Capture User-Agent`, pass it via `--user-agent` on EVERY capture call. Fair-access endpoints (e.g. SEC EDGAR) 403 non-contact UAs — the tool's default UA is NOT sufficient there; the contact-bearing UA from `source-policy.md` is.
+
 The tool saves to `{wiki_root}/raw/{origin}/` and returns a **metadata summary only** (state, saved path, title, origin, related thesis, byte count) — full source text NEVER enters this mode's context. On success → state `captured_to_raw`; capture the returned raw filename for Step 7. A tool result of `state=blocked` (unreachable / fetch failed) → surface it per `./investor-loop.md` § Issue-surfacing; that source stops at `blocked` and is NOT ingested.
+
+**Blocked-fetch recovery (manual path).** When a source the user approved returns `state=blocked`, offer the manual path at the checkpoint instead of escalating an unstructured doubt: the USER fetches the page by their own means and provides a local file path; the agent re-runs the tool with `--mode manual --manual-file <path>` — the tool (still the SOLE writer) saves it into `raw/{origin}/` with standard naming and the source resumes the normal lifecycle (`captured_to_raw` → Step 7). The agent NEVER fetches outside the tool, NEVER stores files outside `raw/`, and NEVER hand-places the content itself.
 
 ## Step 6 — Gated sources register (NOT fetched)
 
 A gated source (paywall / login / IR / broker portal) is NEVER fetched — the permanent source boundary in `./investor-loop.md` (no paywall bypass, no bank/brokerage credentials). Register it as `gated_pending_access` by calling the `investment_source_capture` tool with its `--gated` path — the SOLE writer of the gated record (it appends to `raw/{origin}/log.md` without fetching, co-located with where the user later drops the manual fetch; the agent NEVER hand-writes that record, per `./investor-loop.md` § Own-workspace-writes boundary). Pass title, url, origin, the related thesis slug, and why it matters per the tool's `expected_inputs`; the tool records the required user action. So the gated source surfaces at end-of-interaction instead of dying in chat, ALSO record it as a deferrable issue per `./investor-loop.md` § Issue-surfacing. State → `gated_pending_access`. Never advance a gated source to capture or ingest.
 
-## Step 7 — Auto-ingest (one sub-agent per captured source)
+## Step 7 — Auto-ingest (one sub-agent per captured source, SEQUENTIAL)
 
-After capture, file each `captured_to_raw` source into the wiki by dispatching **one sub-agent per source** (fanned out — full text stays in each sub-agent's context, so this mode and `sb-investor.md` stay clean). The agent invokes the real ingest command via the sub-agent; it NEVER reimplements ingest.
+After capture, file each `captured_to_raw` source into the wiki by dispatching **one sub-agent per source, ONE AT A TIME — never in parallel**. Full text still stays in each sub-agent's context, so this mode and `sb-investor.md` stay clean (anti-context-rot holds). The agent invokes the real ingest command via the sub-agent; it NEVER reimplements ingest.
+
+**Why sequential (BINDING).** Ingest sub-agents write SHARED wiki surfaces — topic hubs, concept/entity stubs, leaf indexes, `log.md` — and parallel ingests race on them (observed 2026-06-03: a lost-then-restored section and four duplicate-stub clusters from a 16-agent fan-out). Dispatch sub-agent N+1 only after sub-agent N returns its summary. Parallel ingest dispatch returns ONLY if `sb-wiki-ingest` ever gains page-level write locking.
 
 Each sub-agent prompt MUST direct it to:
 

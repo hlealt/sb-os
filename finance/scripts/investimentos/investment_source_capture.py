@@ -6,6 +6,8 @@ CLI:
         [--title TITLE]
         [--thesis THESIS_SLUG]
         [--vault-root PATH]
+        [--user-agent UA]
+        [--manual-file PATH]
         [--dry-run]
 
 Returns a metadata summary only — never dumps fetched text into stdout.
@@ -17,12 +19,17 @@ Gated sources (paywall / login required) are NOT fetched — they are registered
 as gated_pending_access in {origin}/log.md. Pass --gated to declare a source
 gated.
 
+All fetch modes send a declared User-Agent (default: a descriptive tool UA;
+override with --user-agent). Fair-access endpoints such as SEC EDGAR 403
+undeclared default-library UAs — pass a contact-bearing UA per the endpoint's
+policy when required (e.g. "Name contact@example.com").
+
 Fetch modes:
     markdown      — GET URL, save response body as .md  (default)
     html-archive  — GET URL, save response body as .html
     both          — save as .md AND .html
-    browser       — stub; user must provide content via --manual-file
-    manual        — stub; user must provide content via --manual-file
+    browser       — no fetch; saves the user-fetched file passed via --manual-file
+    manual        — no fetch; saves the user-fetched file passed via --manual-file
 
 Exit 0 = success (captured or dry-run).
 Exit 1 = error (bad args, fetch failed, unknown origin, etc.).
@@ -121,7 +128,21 @@ def _register_gated(
 # Fetch (open-web only)
 # ---------------------------------------------------------------------------
 
-def _fetch_text(url: str) -> tuple[str, str]:
+# Declared default UA — fair-access endpoints (e.g. SEC EDGAR) 403 blank or
+# default-library UAs. Override per call with --user-agent when an endpoint
+# requires a contact-bearing UA.
+DEFAULT_USER_AGENT = (
+    "sb-os-investment-source-capture/1.1 (+https://github.com/hlealt/sb-os)"
+)
+
+
+def _extract_title(body: str) -> str:
+    """Return the <title> text if present, else empty string."""
+    m = re.search(r"<title[^>]*>([^<]+)</title>", body, re.IGNORECASE)
+    return m.group(1).strip() if m else ""
+
+
+def _fetch_text(url: str, user_agent: str = DEFAULT_USER_AGENT) -> tuple[str, str]:
     """Return (body_text, page_title). Raises on HTTP error."""
     try:
         import httpx  # type: ignore
@@ -130,13 +151,15 @@ def _fetch_text(url: str) -> tuple[str, str]:
             "httpx is required for fetch modes. "
             "Install it: pip install httpx"
         )
-    resp = httpx.get(url, follow_redirects=True, timeout=30)
+    resp = httpx.get(
+        url,
+        headers={"User-Agent": user_agent},
+        follow_redirects=True,
+        timeout=30,
+    )
     resp.raise_for_status()
     body = resp.text
-    # Extract <title> if present
-    m = re.search(r"<title[^>]*>([^<]+)</title>", body, re.IGNORECASE)
-    page_title = m.group(1).strip() if m else ""
-    return body, page_title
+    return body, _extract_title(body)
 
 
 def _save(dest: Path, content: str, dry_run: bool) -> int:
@@ -162,6 +185,8 @@ def capture(
     dry_run: bool,
     gated: bool,
     gated_why: str,
+    user_agent: str = DEFAULT_USER_AGENT,
+    manual_file: Optional[Path] = None,
 ) -> dict:
     """Capture a source and return a metadata summary dict."""
     wiki = _wiki_root(vault_root)
@@ -183,7 +208,7 @@ def capture(
     # Open-web fetch
     if mode in ("markdown", "html-archive", "both"):
         try:
-            body, page_title = _fetch_text(url)
+            body, page_title = _fetch_text(url, user_agent)
         except Exception as exc:
             return {
                 "state": "blocked",
@@ -220,16 +245,42 @@ def capture(
             "dry_run": dry_run,
         }
 
+    # Manual path — no fetch; the user already retrieved the content
     if mode in ("browser", "manual"):
+        if manual_file is None:
+            return {
+                "state": "blocked",
+                "url": url,
+                "origin": origin,
+                "error": (
+                    f"mode={mode!r} requires --manual-file. "
+                    "Fetch the page manually and re-run with "
+                    f"--mode {mode} --manual-file <path>."
+                ),
+            }
+        src = Path(manual_file)
+        if not src.is_file():
+            return {
+                "state": "blocked",
+                "url": url,
+                "origin": origin,
+                "error": f"--manual-file not found: {src}",
+            }
+        body = src.read_text(encoding="utf-8")
+        resolved_title = title or _extract_title(body) or url
+        fname = _filename(resolved_title, url, "md")
+        dest = raw_dir / fname
+        n = _save(dest, body, dry_run)
         return {
-            "state": "blocked",
+            "state": "captured_to_raw" if not dry_run else "approved_for_capture",
             "url": url,
+            "title": resolved_title,
             "origin": origin,
-            "error": (
-                f"mode={mode!r} requires --manual-file (not implemented in v1). "
-                "Fetch the page manually and re-run with --mode manual "
-                "--manual-file <path>."
-            ),
+            "related_thesis": thesis,
+            "saved_paths": [str(dest)],
+            "bytes": n,
+            "manual_source": str(src),
+            "dry_run": dry_run,
         }
 
     return {
@@ -258,6 +309,16 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--title", default="", help="Override page title for filename slug")
     p.add_argument("--thesis", default=None, help="Related thesis slug (optional)")
     p.add_argument("--vault-root", default=None, help="Path to vault root (auto-detected if omitted)")
+    p.add_argument(
+        "--user-agent",
+        default=DEFAULT_USER_AGENT,
+        help="User-Agent header for fetch modes (use a contact-bearing UA for fair-access endpoints like SEC EDGAR)",
+    )
+    p.add_argument(
+        "--manual-file",
+        default=None,
+        help="Path to user-fetched content (required by --mode browser|manual; no fetch performed)",
+    )
     p.add_argument("--dry-run", action="store_true", help="Report what would be saved; write nothing")
     p.add_argument("--gated", action="store_true", help="Declare source gated (no fetch; register only)")
     p.add_argument("--gated-why", default="(not specified)", help="Why this source matters (for log.md)")
@@ -286,6 +347,8 @@ def main(argv: list[str] | None = None) -> int:
         dry_run=args.dry_run,
         gated=args.gated,
         gated_why=args.gated_why,
+        user_agent=args.user_agent,
+        manual_file=Path(args.manual_file) if args.manual_file else None,
     )
 
     # Print metadata summary only — never the fetched content

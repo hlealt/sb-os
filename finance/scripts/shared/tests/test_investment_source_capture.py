@@ -6,6 +6,9 @@ Asserts (per the p3-1 task definition, Phase-3 checkpoint: dry-trace, no live fe
   (b) Return is metadata-only — no full fetched text in the summary dict.
   (c) Gated path → gated_pending_access in log.md WITHOUT fetching.
   (d) --dry-run → writes nothing (raw dir absent or unchanged).
+  (e) Fetch modes send a declared User-Agent (default + override) — 2026-06-04 fix.
+  (f) --manual-file: browser/manual modes save user-fetched content without
+      any HTTP call; missing/absent file → blocked — 2026-06-04 fix.
 
 All HTTP is mocked via unittest.mock. No live network fetch is performed.
 """
@@ -250,3 +253,171 @@ def test_cli_dry_run_exits_zero(tmp_path):
     raw_dir = vault / "knowledge-base" / "raw" / "example"
     if raw_dir.exists():
         assert list(raw_dir.glob("*.md")) == []
+
+
+# ---------------------------------------------------------------------------
+# (e) Fetch modes send a declared User-Agent (SEC EDGAR fair-access fix)
+# ---------------------------------------------------------------------------
+
+def test_fetch_sends_default_user_agent(tmp_path):
+    vault = _make_vault(tmp_path)
+    mock_resp = _mock_response("Body", title_tag="UA Test")
+
+    with patch("httpx.get", return_value=mock_resp) as mock_get:
+        capture(
+            url="https://example.com/ua-test",
+            origin="example",
+            mode="markdown",
+            title="",
+            thesis=None,
+            vault_root=vault,
+            dry_run=True,
+            gated=False,
+            gated_why="",
+        )
+
+    _, kwargs = mock_get.call_args
+    ua = kwargs.get("headers", {}).get("User-Agent", "")
+    assert ua == _mod.DEFAULT_USER_AGENT
+    assert ua, "fetch must always declare a User-Agent"
+
+
+def test_fetch_user_agent_override(tmp_path):
+    vault = _make_vault(tmp_path)
+    mock_resp = _mock_response("Body", title_tag="UA Override")
+    contact_ua = "Henri Example contact@example.com"
+
+    with patch("httpx.get", return_value=mock_resp) as mock_get:
+        capture(
+            url="https://www.sec.gov/some-filing",
+            origin="sec",
+            mode="markdown",
+            title="",
+            thesis=None,
+            vault_root=vault,
+            dry_run=True,
+            gated=False,
+            gated_why="",
+            user_agent=contact_ua,
+        )
+
+    _, kwargs = mock_get.call_args
+    assert kwargs.get("headers", {}).get("User-Agent") == contact_ua
+
+
+# ---------------------------------------------------------------------------
+# (f) --manual-file: manual/browser modes save user-fetched content, no HTTP
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("mode", ["manual", "browser"])
+def test_manual_file_captures_without_fetching(tmp_path, mode):
+    vault = _make_vault(tmp_path)
+    fetched = tmp_path / "hand-fetched.md"
+    fetched.write_text("HAND FETCHED FILING BODY", encoding="utf-8")
+
+    with patch("httpx.get") as mock_get:
+        result = capture(
+            url="https://www.sec.gov/exhibit-99-1",
+            origin="sec",
+            mode=mode,
+            title="Some Filing EX-99.1",
+            thesis="some-thesis",
+            vault_root=vault,
+            dry_run=False,
+            gated=False,
+            gated_why="",
+            manual_file=fetched,
+        )
+        # No HTTP call in manual/browser modes
+        mock_get.assert_not_called()
+
+    assert result["state"] == "captured_to_raw"
+    assert result["manual_source"] == str(fetched)
+    saved = Path(result["saved_paths"][0])
+    assert saved.exists()
+    assert saved.suffix == ".md"
+    assert "sec" in saved.parts
+    assert saved.read_text(encoding="utf-8") == "HAND FETCHED FILING BODY"
+    # Metadata-only contract holds
+    assert "HAND FETCHED FILING BODY" not in json.dumps(result)
+
+
+def test_manual_mode_without_file_is_blocked(tmp_path):
+    vault = _make_vault(tmp_path)
+
+    result = capture(
+        url="https://example.com/x",
+        origin="example",
+        mode="manual",
+        title="",
+        thesis=None,
+        vault_root=vault,
+        dry_run=False,
+        gated=False,
+        gated_why="",
+    )
+
+    assert result["state"] == "blocked"
+    assert "--manual-file" in result["error"]
+
+
+def test_manual_file_missing_is_blocked(tmp_path):
+    vault = _make_vault(tmp_path)
+
+    result = capture(
+        url="https://example.com/x",
+        origin="example",
+        mode="manual",
+        title="",
+        thesis=None,
+        vault_root=vault,
+        dry_run=False,
+        gated=False,
+        gated_why="",
+        manual_file=tmp_path / "does-not-exist.md",
+    )
+
+    assert result["state"] == "blocked"
+    assert "not found" in result["error"]
+
+
+def test_manual_file_dry_run_writes_nothing(tmp_path):
+    vault = _make_vault(tmp_path)
+    fetched = tmp_path / "hand-fetched.md"
+    fetched.write_text("BODY", encoding="utf-8")
+
+    result = capture(
+        url="https://example.com/x",
+        origin="example",
+        mode="manual",
+        title="Dry",
+        thesis=None,
+        vault_root=vault,
+        dry_run=True,
+        gated=False,
+        gated_why="",
+        manual_file=fetched,
+    )
+
+    assert result["state"] == "approved_for_capture"
+    raw_dir = vault / "knowledge-base" / "raw" / "example"
+    if raw_dir.exists():
+        assert list(raw_dir.glob("*.md")) == []
+
+
+def test_cli_manual_file_exits_zero(tmp_path):
+    vault = _make_vault(tmp_path)
+    fetched = tmp_path / "filing.md"
+    fetched.write_text("FILING", encoding="utf-8")
+
+    exit_code = main([
+        "--url", "https://www.sec.gov/exhibit",
+        "--origin", "sec",
+        "--mode", "manual",
+        "--manual-file", str(fetched),
+        "--vault-root", str(vault),
+    ])
+
+    assert exit_code == 0
+    raw_dir = vault / "knowledge-base" / "raw" / "sec"
+    assert len(list(raw_dir.glob("*.md"))) == 1
