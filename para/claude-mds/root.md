@@ -39,6 +39,8 @@ Fits an existing file → append. Index files (`{dir-name}.md`) are NEVER conten
 
 **Parallel sessions — write collisions.** On an Edit rejection for "file modified since read" (another session wrote the file), re-read the file and re-apply ONLY your delta to the fresh state — never restore frontmatter or body content from your earlier read. This retry is the canonical discipline; do not add lock or marker machinery.
 
+**Parallel sessions — commit collisions.** Staging a file commits ALL its uncommitted hunks, including other sessions'. Before committing a vault file, diff it against your own session's delta — either confirm the foreign hunks ride along (disclose them in the commit message) or stop and re-scope. NEVER `git commit --amend` in the vault: HEAD may have moved to another session's commit between your read and the rewrite — fix history forward with a new commit, or not at all.
+
 Users extend these defaults by adding their own routing rules below the marker block — anything outside the markers wins over the marker-block defaults (agents read top-to-bottom).
 
 ---
