@@ -485,3 +485,16 @@ canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/investimentos/av
 dry_run: not-applicable
 last_validated: 2026-06-03
 ```
+
+```yaml
+tool: market_price (python investimentos/market_price.py TICKER [TICKER ...] [--as-of YYYY-MM-DD] [--market us|br|crypto])
+purpose: Quote live or historical market prices for arbitrary tickers (US equities, B3 stocks, crypto) to resolve disputed market figures per thesis.md's Market-figure range rule — the tools-only invariant for all numeric evidence.
+owner_script: investimentos/market_price.py
+class: read
+use: audit-diagnostic
+expected_inputs: one or more TICKER symbols (e.g. TEAM PETR4 BTC); optional --as-of YYYY-MM-DD for historical end-of-day price; optional --market us|br|crypto to override per-ticker market inference (B3 pattern → br, known CoinGecko symbol → crypto, all others → us); reads live market APIs via price_fetcher (yfinance for US/B3, brapi.dev fallback for B3, CoinGecko for crypto)
+outputs: Human-readable table — one row per ticker with columns ticker, market, currency, price, price_date, source, 1d/30d/90d/180d/365d/ytd change percentages (absent windows render as n/a), status (OK|MISSING); summary footer "{N} ticker(s) queried — {ok} OK, {miss} MISSING"; MISSING tickers listed by name. Writes nothing.
+canonical_reader_writer: reads live market APIs (yfinance / brapi.dev / CoinGecko) via price_fetcher — no local store read, no write
+dry_run: not-applicable
+last_validated: 2026-06-04
+```
