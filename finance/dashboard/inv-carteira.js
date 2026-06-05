@@ -19,6 +19,24 @@ const INV_IRR_CLASS_LABELS = {
 };
 const _INV_IRR_CLASS_ORDER = ['rv_br', 'rv_eua', 'rf_balcao', 'fundos', 'crypto'];
 
+// Denomination/composition disclosure per chip (native title tooltip).
+// Mirrors _compute_portfolio_irr() mechanics: equities/crypto buckets are
+// lifetime XIRR including closed positions; balcão buckets (RF/fundos) cover
+// active positions only; rv_eua flows are USD→BRL at funding FX, terminal at
+// today's FX — so the chip is NOT the average of the per-asset TIR column.
+const _INV_IRR_CLASS_TOOLTIPS = {
+  rv_br: 'TIR money-weighted (XIRR) em BRL de todo o capital já alocado na classe, '
+    + 'incluindo posições encerradas — não é a média das TIRs por ativo da Bolsa.',
+  rv_eua: 'TIR money-weighted (XIRR) em BRL de todo o capital já alocado na classe, '
+    + 'incluindo posições encerradas. Fluxos USD convertidos ao câmbio médio de funding; '
+    + 'valor atual ao câmbio de hoje — difere da coluna TIR da Bolsa (USD nativo, só posições abertas).',
+  rf_balcao: 'TIR money-weighted (XIRR) em BRL das posições ativas do Balcão — '
+    + 'posições vencidas/encerradas ficam fora.',
+  fundos: 'TIR money-weighted (XIRR) em BRL dos fundos ativos — posições encerradas ficam fora.',
+  crypto: 'TIR money-weighted (XIRR) em BRL de todos os fluxos de cripto (swaps marcados em BRL), '
+    + 'incluindo moedas já encerradas.',
+};
+
 // Investment broker label lookup — canonical map lives in shared.js (BROKER_LABELS).
 function invBrokerLabel(id) { return invBrokerLabelShared(id); }
 function invClassLabel(id) { return INV_CLASS_LABELS[id] || id; }
@@ -192,8 +210,9 @@ function invCarteiraIrrBreakdown(summary) {
     const color = rate == null ? 'var(--text-muted)' : (rate >= 0 ? 'var(--green)' : 'var(--red)');
     const rateTxt = invFormatPctValue(rate);
     const value = b.terminal_value ? formatBRL(b.terminal_value) : '—';
+    const tip = _INV_IRR_CLASS_TOOLTIPS[b.key] || '';
     return `
-      <div style="flex:1;min-width:120px;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);">
+      <div title="${tip}" style="flex:1;min-width:120px;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);${tip ? 'cursor:help;' : ''}">
         <div style="font-size:0.78rem;color:var(--text-muted);">${label}</div>
         <div class="privacy-hide" style="font-size:1.05rem;font-weight:600;color:${color};margin-top:2px;">${rateTxt}</div>
         <div class="privacy-hide" style="font-size:0.72rem;color:var(--text-muted);margin-top:2px;">${value}</div>
