@@ -135,6 +135,34 @@ def classify_rate_type(indexer, rate, indexer_pct) -> str:
     )
 
 
+# Materiality threshold for the per-class IRR 'other' bucket warning.
+# Flows routed to 'other' are silently dropped from per-class IRR; tickers
+# whose absolute flow total stays under this BRL value (e.g. a R$ 1,08
+# provento) are noise, not a leak worth a stderr line.
+_IRR_OTHER_WARN_MIN_ABS_BRL = 50.0
+
+
+def _warn_other_bucket_flows(other_flows: dict[str, list[float]]) -> None:
+    """Warn on stderr for flows routed to the discarded 'other' IRR bucket.
+
+    `other_flows` maps ticker/product_id → list of BRL flow amounts that
+    `_irr_class_bucket` could not map to one of the 5 class buckets —
+    almost always a ticker missing from assets.csv. The per-class IRR
+    silently drops the 'other' bucket, so without this warning such flows
+    vanish from the breakdown with no signal (the AZZA3 leak, 2026-06-05).
+    Same stderr pattern as the [irr_calculator] sanity warnings.
+    """
+    for ticker in sorted(other_flows):
+        amounts = other_flows[ticker]
+        total_abs = sum(abs(a) for a in amounts)
+        if total_abs < _IRR_OTHER_WARN_MIN_ABS_BRL:
+            continue
+        print(f"[irr_calculator] class:other: {ticker} — {len(amounts)} flow(s) "
+              f"totalling R$ {total_abs:,.2f} routed to the discarded 'other' "
+              f"bucket (missing from assets.csv?) — excluded from per-class IRR",
+              file=sys.stderr)
+
+
 def _irr_class_bucket(asset_id: str, assets: dict[str, dict]) -> str:
     """Map an asset id to one of the 5 IRR class buckets.
 
@@ -688,10 +716,15 @@ def _compute_portfolio_irr(positions, proventos, total_value, cut_date,
 
     all_flows = []
     flows_by_class: dict[str, list[tuple[str, float]]] = {}
+    # Ticker/product_id → flows that fell into the discarded 'other' bucket.
+    # Surfaced via _warn_other_bucket_flows before per-class IRR is computed.
+    other_flows: dict[str, list[float]] = {}
 
-    def _add(bucket: str, date_str: str, amount: float):
+    def _add(bucket: str, date_str: str, amount: float, ref: str = ''):
         all_flows.append((date_str, amount))
         flows_by_class.setdefault(bucket, []).append((date_str, amount))
+        if bucket == 'other' and ref:
+            other_flows.setdefault(ref, []).append(amount)
 
     def _to_brl(ticker: str, currency: str, native_amount: float) -> float:
         if currency != 'USD':
@@ -709,7 +742,7 @@ def _compute_portfolio_irr(positions, proventos, total_value, cut_date,
         currency = (meta.get('currency') or 'BRL').upper()
         signed_brl = _to_brl(ticker, currency, signed)
         bucket = _irr_class_bucket(ticker, assets)
-        _add(bucket, row['date'], signed_brl)
+        _add(bucket, row['date'], signed_brl, ref=ticker)
 
     for row in proventos:
         ticker = row.get('ticker', '')
@@ -724,7 +757,7 @@ def _compute_portfolio_irr(positions, proventos, total_value, cut_date,
         else:
             net_brl = abs(net)
         bucket = _irr_class_bucket(ticker, assets)
-        _add(bucket, row['date'], net_brl)
+        _add(bucket, row['date'], net_brl, ref=ticker)
 
     for row in _filter_balcao_for_irr(balcao, migrations):
         pid = row.get('product_id', '')
@@ -733,7 +766,7 @@ def _compute_portfolio_irr(positions, proventos, total_value, cut_date,
             continue
         amount = float(row.get('amount', 0) or 0)
         bucket = _irr_class_bucket(pid, assets)
-        _add(bucket, row.get('date', ''), amount)
+        _add(bucket, row.get('date', ''), amount, ref=pid)
 
     # Inject synthetic seeds for code migrations into the corresponding bucket.
     for pid, mlist in migrations.items():
@@ -744,7 +777,7 @@ def _compute_portfolio_irr(positions, proventos, total_value, cut_date,
             seed_amount = -float(m['from_total'])
             if seed_amount == 0:
                 continue
-            _add(bucket, m['seed_date'], seed_amount)
+            _add(bucket, m['seed_date'], seed_amount, ref=pid)
 
     for row in crypto:
         # Crypto flows are already BRL-marked via crypto.csv:price_brl.
@@ -776,6 +809,10 @@ def _compute_portfolio_irr(positions, proventos, total_value, cut_date,
         if v is None:
             v = entry.get('current_value') or 0
         terminal_by_class[bucket] = terminal_by_class.get(bucket, 0.0) + (v or 0)
+
+    # The 'other' bucket is dropped from per-class IRR below — surface what
+    # is being discarded so a ticker missing from assets.csv stays visible.
+    _warn_other_bucket_flows(other_flows)
 
     per_class: dict[str, dict] = {}
     for bucket, flows in flows_by_class.items():

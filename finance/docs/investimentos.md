@@ -231,6 +231,13 @@ Snapshot-valued (balcão) positions anchor the per-asset XIRR terminal at the sn
 
 **Scope.** Listed and crypto positions keep the cut-date anchor — their prices are fetched fresh at the cut, so terminal date = cut date is exact. Portfolio-level and per-class IRR (`summary.irr`) also keep cut-date anchoring: they mix positions with different snapshot dates and need one common terminal anchor; per-class terminals sum `current_value_brl` at the cut.
 
+
+### Per-Class IRR Buckets and the `'other'` Discard
+
+`_irr_class_bucket` (`calculate.py`) maps every ticker/product_id to one of the 5 class buckets — `rv_br`, `rv_eua`, `rf_balcao`, `fundos`, `crypto` — from its assets.csv metadata (`asset_class`, `type`, `currency`). An id that resolves to none of the five (almost always a ticker missing from assets.csv) falls into `'other'`, and `_compute_portfolio_irr` DROPS the `'other'` bucket from `summary.irr.per_class` — those flows still count in the portfolio-level IRR, but vanish from the class breakdown.
+
+Because that discard is silent by construction, `calculate.py` emits a stderr warning per offending ticker when building `flows_by_class`, in the `[irr_calculator]` pattern: `class:other: {ticker} — N flow(s) totalling R$ X` — with a small materiality threshold (`_IRR_OTHER_WARN_MIN_ABS_BRL`, R$ 50 absolute total per ticker) so cent-sized residues don't add noise. Motivating case: the AZZA3 leak — 8 tickers absent from assets.csv kept R$ 5k+ of flows out of `rv_br` for months with no signal (2026-06-05). Fix path for a warned ticker: add it to assets.csv via `upsert_assets.py` and regenerate.
+
 ### Yield on Cost (YoC)
 
 `portfolio.json` emits two YoC fields per variable-income position, both computed against `cost_basis` so they work without live prices:
