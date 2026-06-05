@@ -239,6 +239,14 @@ function invBalcaoTable(rows, columns) {
   return html;
 }
 
+// Amber dot + native tooltip for positions whose IRR quality is degraded.
+// Returns '' for 'complete' (clean number) and for unflagged positions.
+function invBalcaoIrrQualityDot(p) {
+  if (!p.irr_quality || p.irr_quality === 'complete') return '';
+  const tip = _INV_BALCAO_IRR_QUALITY_TOOLTIPS[p.irr_quality] || p.irr_quality;
+  return `<span title="${tip}" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--amber, #F59E0B);margin-right:6px;vertical-align:middle;cursor:help;"></span>`;
+}
+
 function invBalcaoFormatCell(p, col) {
   if (col.key === 'name') {
     return `<strong style="display:block;">${p.name || p.id}</strong><span style="font-size:0.75rem;color:var(--text-muted);">${p.id}</span>`;
@@ -248,16 +256,13 @@ function invBalcaoFormatCell(p, col) {
     return d ? invFormatBrDate(d) : '—';
   }
   const v = p[col.key];
-  if (v == null || v === '') return '—';
+  // Quality dot renders even when the IRR itself is null — the flag matters
+  // most when TIR can't be computed at all.
+  const dot = col.key === 'irr' ? invBalcaoIrrQualityDot(p) : '';
+  if (v == null || v === '') return `${dot}—`;
   if (col.format === 'money') return formatBRL(v);
   if (col.format === 'pct') {
-    const txt = invFormatPctValue(v);
-    if (col.key === 'irr' && p.irr_quality && p.irr_quality !== 'complete') {
-      const tip = _INV_BALCAO_IRR_QUALITY_TOOLTIPS[p.irr_quality] || p.irr_quality;
-      const dot = `<span title="${tip}" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--amber, #F59E0B);margin-right:6px;vertical-align:middle;cursor:help;"></span>`;
-      return `${dot}${txt}`;
-    }
-    return txt;
+    return `${dot}${invFormatPctValue(v)}`;
   }
   if (col.format === 'pnl') {
     const color = v >= 0 ? 'var(--green)' : 'var(--red)';

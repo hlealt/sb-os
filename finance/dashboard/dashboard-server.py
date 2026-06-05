@@ -31,6 +31,13 @@ CALCULATE_SCRIPT = VAULT_ROOT / "3-resources" / "tools" / "sb-os" / "finance" / 
 
 
 class DashboardHandler(SimpleHTTPRequestHandler):
+    def end_headers(self):
+        # Static assets (JS/CSS/JSON) must never be cached — the dashboard has
+        # no build step or asset versioning, so a cached inv-*.js silently
+        # serves stale rendering logic after a source edit.
+        self.send_header("Cache-Control", "no-store")
+        super().end_headers()
+
     def do_POST(self):
         if self.path.rstrip("/") == "/api/refresh-prices":
             self._handle_refresh_prices()
@@ -68,7 +75,6 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(payload)))
-        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(payload)
 
