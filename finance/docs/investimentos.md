@@ -120,6 +120,7 @@ Broker/exchange configuration. Each source has: `name`, `type` (corretora/banco/
 | D7 | Crypto buy/sell asset pair | Handles fiat↔crypto and crypto↔crypto |
 | D8 | Crypto per-asset IRR in BRL | Flows from `crypto.csv:price_brl`; terminal = `quantity × current_price_brl` (exchanges quote BRL natively). Each leg of a crypto↔crypto swap registers as a synthetic BRL flow at its implied BRL value. Resulting IRR reflects BRL-equivalent timing of swaps, not pure native-asset return — read with care for swap-heavy positions. |
 | D9 | Per-asset IRR terminal anchored at snapshot date (balcão) | Balcão positions anchor the XIRR terminal at the snapshot's own `price_date`, not the cut date — cut-date anchoring implies 0% return across the staleness window and understates IRR (a 38-day-stale snapshot cost -36bp in the motivating case). Listed/crypto keep cut-date anchoring (prices fetched fresh at cut); portfolio + per-class IRR keep cut-date anchoring (mixed positions need one common anchor). |
+| D10 | Per-asset IRR flows bridged across corporate renames | `_bridge_rename_flows` in `calculate.py` remaps per-ticker flows along the `conversao`/`incorporacao`/`fusao`/`cisao` chain so the surviving ticker carries the original cost history. Cisão splits flows dated on/before the action by `ratio_to / (ratio_from + ratio_to)` — the same fraction `_apply_corporate_action` applies to cost basis, so flows and cost stay consistent to the cent. Without bridging, renamed positions have no outflow under their own ticker and render `irr: null` (motivating cases: EMBJ3, AMOB3). Per-class IRR deliberately unbridged: it builds its own flows keyed by raw ticker, and old/new tickers bucket identically via assets.csv. |
 
 ## Source Data Reference
 
@@ -164,6 +165,20 @@ Guide Investimentos was acquired by Safra. All Guide positions migrated to Safra
 Position calculator interleaves orders + corporate_actions chronologically (orders first on same date, actions with tiebreak=1).
 
 After every corporate action, positions with `type ∈ {acao, opcao, direito_subscricao, bdr, fii}` are **floored** to integer shares. B3 does not issue fractional shares — any fractional residue produced by a ratio (e.g. cisão 1.151363666, grupamento 50:1) is auctioned and the proceeds credited as cash via a `Fração em Ativos` or `Leilão de Fração` proventos row. Both route to proventos with `type=fracao`; neither affects qty. Example: VAMO3→AMOB3 cisão 1500×1.151363666=1727.045, B3 credits 1727 + auctions 0.045 (cash); later grupamento 50:1 gives 1727/50=34.54, B3 credits 34 + auctions 0.54 (cash) — final AMOB3 qty = 34, fraction proceeds visible as two `fracao` rows on the proventos ledger.
+
+### Per-Asset IRR Flow Bridging Across Renames (D10)
+
+Orders and proventos record flows under the ticker of the day. After a rename, the surviving position's flow list lacks the original cost chain (EMBJ3 sees only post-rename flows; the buys live under EMBR3), so `compute_xirr` returns `None` for want of an outflow. `_bridge_rename_flows` (`calculate.py`, called at the end of `_build_position_flows`) remaps flows so per-asset XIRR sees the full chain:
+
+| Action | Flow treatment |
+|--------|----------------|
+| `conversao` / `incorporacao` / `fusao` (with `new_ticker`) | The old ticker's ENTIRE flow history moves to the new ticker — the old position ceases to exist, so every flow recorded under it belongs to the same economic position. |
+| `cisao` (with `new_ticker`) | Flows dated **on/before** the action date split between parent and spin-off: `ratio_to / (ratio_from + ratio_to)` to the spin-off, complement stays — the SAME fraction `_apply_corporate_action` applies to cost basis, so flows and cost basis tell one story (AMOB3's bridged buys sum exactly to its split cost basis). Flows after the action date stay with whichever ticker recorded them. |
+| `grupamento` / `desdobramento` / `bonificacao` / `expiracao` / `ajuste` | No `new_ticker`, no flow impact — skipped. |
+
+Actions apply chronologically, so multi-hop chains (A→B→C) land on the final ticker. A cisão row with unfilled ratios (`ratio_from`/`ratio_to` ≤ 0, flagged for research) is skipped, mirroring the position calculator's guard.
+
+**Scope.** Per-asset IRR only. Per-class IRR (`_compute_portfolio_irr`) is deliberately unbridged: it builds its own flows keyed by raw ticker, and old/new tickers resolve to the same bucket via assets.csv — bridging there would be a no-op. Closed renamed positions (e.g. ARZZ3→AZZA3, fully sold) get bridged flow lists too, but produce no position entry, so nothing renders.
 
 ### Currency Model (Variable Income & Crypto)
 

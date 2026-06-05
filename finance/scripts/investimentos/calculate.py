@@ -201,9 +201,66 @@ def _filter_balcao_for_irr(balcao: list[dict], migrations: dict) -> list[dict]:
     return out
 
 
+def _bridge_rename_flows(flows: dict[str, list[tuple[str, float]]],
+                         corp_actions: list[dict]) -> dict[str, list[tuple[str, float]]]:
+    """Remap per-ticker flows across corporate renames (in place).
+
+    Orders/proventos record flows under the ticker of the day, so after a
+    rename the surviving position's flow list lacks the original cost chain
+    (EMBJ3 sees only post-rename flows; the buys live under EMBR3) and
+    `compute_xirr` returns None for want of an outflow.
+
+    Conventions (mirror `position_calculator._apply_corporate_action`):
+      - conversao / incorporacao / fusao with `new_ticker`: the old ticker's
+        ENTIRE flow history moves to the new ticker — the old position
+        ceases to exist, so every flow recorded under it belongs to the
+        same economic position.
+      - cisao with `new_ticker`: flows dated on/before the action date are
+        split between parent and spin-off by the SAME cost fraction the
+        position calculator uses — `ratio_to / (ratio_from + ratio_to)` to
+        the spin-off, the complement stays — so per-asset flows and cost
+        basis tell one story. Flows after the action date stay with
+        whichever ticker recorded them.
+      - grupamento / desdobramento / bonificacao / expiracao / ajuste have
+        no `new_ticker` and no flow impact — skipped.
+
+    Actions apply chronologically so multi-hop chains (A→B→C) land on the
+    final ticker. Per-class IRR is untouched: `_compute_portfolio_irr`
+    builds its own flows keyed by raw ticker, and old/new tickers bucket
+    identically via assets.csv.
+    """
+    for action in sorted(corp_actions, key=lambda r: r.get('date', '')):
+        action_type = (action.get('action_type') or '').strip().lower()
+        old = (action.get('ticker') or '').strip()
+        new = (action.get('new_ticker') or '').strip()
+        if not new or old not in flows:
+            continue
+        if action_type in ('conversao', 'incorporacao', 'fusao'):
+            flows.setdefault(new, []).extend(flows.pop(old))
+        elif action_type == 'cisao':
+            ratio_from = float(action.get('ratio_from', 0) or 0)
+            ratio_to = float(action.get('ratio_to', 0) or 0)
+            if ratio_from <= 0 or ratio_to <= 0:
+                continue  # ratio not yet filled (flagged for research)
+            frac = ratio_to / (ratio_from + ratio_to)
+            action_date = action.get('date', '')
+            kept, moved = [], []
+            for date_s, amount in flows[old]:
+                if date_s <= action_date:
+                    moved.append((date_s, amount * frac))
+                    kept.append((date_s, amount * (1 - frac)))
+                else:
+                    kept.append((date_s, amount))
+            flows[old] = kept
+            flows.setdefault(new, []).extend(moved)
+    return flows
+
+
 def _build_position_flows(orders: list[dict], proventos: list[dict],
                           balcao: list[dict],
-                          crypto: list[dict]) -> dict[str, list[tuple[str, float]]]:
+                          crypto: list[dict],
+                          corp_actions: list[dict] = None
+                          ) -> dict[str, list[tuple[str, float]]]:
     """Per-position cash flows for XIRR computation.
 
     Sign convention matches XIRR expectations:
@@ -275,6 +332,11 @@ def _build_position_flows(orders: list[dict], proventos: list[dict],
         if sell_asset and sell_asset != 'BRL':
             flows.setdefault(sell_asset, []).append((date_s, price))
 
+    # Bridge flows across corporate renames so renamed positions keep their
+    # original cost chain (D10) — must run after all flow sources are loaded.
+    if corp_actions:
+        _bridge_rename_flows(flows, corp_actions)
+
     return flows
 
 
@@ -327,6 +389,7 @@ def build_portfolio(cut_date: str = None, skip_prices: bool = False) -> dict:
         proventos,
         load_balcao(cut_date),
         load_csv(LEDGER_DIR / 'crypto.csv', cut_date),
+        load_csv(LEDGER_DIR / 'corporate_actions.csv', cut_date),
     )
 
     # 6. Build position entries
