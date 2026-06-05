@@ -84,8 +84,9 @@ Tasks live under `####` headings in `{name}-tasks.md`.
 |-------|--------|
 | Creation | No date = backlog (appears in "No Date" on Home) |
 | Recurrence | `🔁` on the line — always appears in "Today" |
+| Execution | Agent starting work on a task MUST append `#wip` to the end of the task line, and MUST remove `#wip` when execution ends (completed or stopped). Marks work-in-progress; dashboards render it as a WIP pill |
 | Completion | `[x]` + `✅ YYYY-MM-DD` at end |
-| Cleanup | Weekly review deletes completed tasks. Git preserves history |
+| Cleanup | Weekly review deletes completed tasks. Git preserves history. Stale `#wip` on tasks with no active execution is removed |
 
 ## Progressive Enrichment
 
