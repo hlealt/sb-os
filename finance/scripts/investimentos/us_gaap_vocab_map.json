@@ -1,0 +1,10 @@
+{
+  "_comment": "us-gaap concept -> metric-vocab.md identifier map for investment_financials_extract lane 1 (XBRL companyfacts). All mapped concepts are USD duration facts scaled USD -> USD_mn (/1e6). v1 — consolidated GAAP stems only; segment/KPI metrics stay lane 2.",
+  "Revenues": "revenue",
+  "RevenueFromContractWithCustomerExcludingAssessedTax": "revenue",
+  "GrossProfit": "gross_profit",
+  "OperatingIncomeLoss": "operating_income",
+  "NetIncomeLoss": "net_income",
+  "NetCashProvidedByUsedInOperatingActivities": "operating_cash_flow",
+  "PaymentsToAcquirePropertyPlantAndEquipment": "capex"
+}

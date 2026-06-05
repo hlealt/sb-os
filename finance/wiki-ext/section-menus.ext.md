@@ -42,7 +42,19 @@ The table has exactly these 7 columns, in this order:
 | `source` | `[[raw-file]]` wikilink — same citation discipline as the wiki |
 | `method` | `xbrl` \| `structured` \| `llm` \| `manual` — how the figure was obtained (enables targeted verification) |
 
-Rendered as a standard Markdown table (Obsidian-native, editable). The `metric` and `unit` column values are drawn from the controlled vocabulary in `./metric-vocab.md` — agents NEVER invent identifiers or units.
+Rendered as a standard Markdown table (Obsidian-native, editable). The `metric` and `unit` column values are drawn from the controlled vocabulary in `./metric-vocab.md` (base identifiers + suffix families; `method` semantics defined there) — agents NEVER invent identifiers or units.
+
+**Write path (BINDING).** The registered write tool `investment_financials_extract` is the SOLE agent-side writer of this section — investor-orchestrated (`research.md` Step 7b or the standalone extract route). Ingest and scan agents NEVER add, modify, or delete a `## Financials` row: an ingest agent that finds extractable fundamentals reports them as extraction candidates in its summary; a scan agent returns extraction TARGETS (anchors) for the tool to verify and write. The USER may hand-edit rows (`method: manual`); the lint Fundamentals rules backstop vocabulary conformance on hand edits.
+
+**Row conventions (tool-enforced):**
+
+| Convention | Rule |
+|------------|------|
+| Canonical sort | `metric` asc, then `period_end` asc, then `period_type` in enum order (`annual` < `quarterly` < `monthly` < `ttm` < `point`) |
+| Upsert key | (`metric`, `period_type`, `period_end`, `source`) — identical row = no-op; same key + same value + stronger method = method upgrade in place (`xbrl` > `structured` > `llm` > `manual`); same key + different value = CONFLICT, surfaced and NOT written |
+| Corroboration | Differing sources for the same (`metric`, `period_type`, `period_end`) COEXIST as rows — value conflicts across sources are surfaced by lint Fundamentals #6, never auto-resolved |
+| Guidance | `_guidance` suffix rows are year-free; `period_end` = the guided period's close; re-guides across quarters are expected multi-rows, not conflicts |
+| Section position | When absent, the tool creates `## Financials` after the last content section, before `## Related`/`## Sources` |
 
 **Adding a metric = adding ROWS, never columns.** The column set is fixed at exactly these 7. Heterogeneous tables ("different tables with different data" per entity) and CSV sidecars are FORBIDDEN — they destroy the cross-entity / cross-time comparability that is the entire reason this layer is structured. One uniform table per entity.
 
@@ -58,4 +70,4 @@ Example (`entities/organizations/petrobras.md`, `## Financials`):
 | ev_ebitda | point | 2025-05-20 | 3.1 | x | [[2025-05-20-screen]] | manual |
 ```
 
-Until the extraction parser exists, rows are entered manually (`method: manual`). The investment lint rules (`./lint-rules.ext.md`) check `metric`, `unit`, `period_type`, and `method` values against the controlled vocabulary exactly.
+The investment lint rules (`./lint-rules.ext.md`) check `metric`, `unit`, `period_type`, and `method` values against the controlled vocabulary exactly.

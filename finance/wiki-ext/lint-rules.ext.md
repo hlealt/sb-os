@@ -14,6 +14,7 @@ Mirrors the base lint presentation: each rule is one scannable row (condition �
 | Entity kinds | `company`, `asset`, `country`, `sector` (the investment kinds from `./page-types.ext.md`) |
 | Section | the `## Financials` body section on those entity kinds (schema in `./section-menus.ext.md`) |
 | Source queue | `{wiki_root}/source-queue.md` — exists ONLY via the finance capture tool, so the file itself is the scope guard |
+| Data artifacts | raw files matching `*-xbrl-companyfacts.json` under `{wiki_root}/raw/{origin}/` — captured only by the finance capture tool, so the filename class is the scope guard |
 
 A rule below NEVER evaluates a page outside its stated scope. The base structural lint still applies to every page; these rows ADD investment checks on top.
 
@@ -49,6 +50,27 @@ Scope: the `## Financials` table on investment entity kinds (`company`, `asset`,
 | 5 | A `unit` cell empty, OR a `unit` value outside the allowed set in `./metric-vocab.md` | `unit` missing / outside allowed set |
 | 6 | Two or more rows giving conflicting `value`s for the same `metric` + `period_end` + entity from different sources | SURFACE the conflict — NEVER auto-resolve |
 | 7 | A `## Financials` table grown unwieldy on a single page | PROPOSE splitting it to a companion page (mirrors the entity-folder subdivision pattern; split on evidence, never upfront) |
+
+Rules #1–#6 are IMPLEMENTED — every finance-extension lint run MUST evaluate them against the merged rule set and report findings (a silent run over violating rows is a lint defect). Rule #7 is propose-only. The `metric` check (#4) resolves a valid name as a base identifier OR base + one suffix family per `./metric-vocab.md` § Suffix Families.
+
+**Rule #2 spot-check queue.** The queue is THIS report block — re-derived from state on every run (an `llm` row cited by an active thesis keeps surfacing until verified or upgraded), mirroring the stubs/orphans pattern; no queue file exists. The prescribed verification is a lane-2 re-derivation through the `investment_financials_extract` standalone route (anchor-verify against the row's own cited source → `method` upgrades on match). Append to the LINT REPORT after the base findings; omit the block when zero findings:
+
+```
+FUNDAMENTALS — ## Financials findings:
+Spot-check queue — llm rows feeding an active thesis (N): [[entity.md]] metric @ period_end → thesis [[slug.md]]
+Uncontrolled metric (N): [[entity.md]] `identifier` (not in metric-vocab)
+Unit missing/invalid (N) · Source missing (N) · Stale financials (N) · Value conflicts (N): <one row each>
+```
+
+## Data-Artifact Raw Class (`*-xbrl-companyfacts.json`)
+
+Captured XBRL companyfacts JSONs (`YYYY-MM-DD-{entity}-xbrl-companyfacts.json`, fetched by the capture tool's `--ext json` path) are **extraction inputs, never ingested** — lane-1 feedstock for `investment_financials_extract`. They are raw files (immutable, indexed) with one class-wide deviation:
+
+| Rule | Behavior |
+|------|----------|
+| Raw index `Wiki` cell | Carries `N/A (data artifact)` — never `Yes`/`Partial`/`No`. A helper-created `No` cell on a data-artifact row is corrected to `N/A (data artifact)` during the lint run (an index-sync write, auto-applied) |
+| Base raw-without-ingest | EXEMPT — the class never fires it, and the file is never surfaced as an ingest candidate |
+| Source page | None exists, by design — `source-without-raw`/orphan logic never expects one |
 
 ## Source-Lifecycle Rules (`source-queue.md`)
 

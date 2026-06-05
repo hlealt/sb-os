@@ -835,3 +835,156 @@ def test_gated_never_invokes_curl(tmp_path):
         mock_run.assert_not_called()
 
     assert result["state"] == "gated_pending_access"
+
+
+# ---------------------------------------------------------------------------
+# (i) --ext: file-extension override for JSON data artifacts (XBRL companyfacts)
+#     Added 2026-06-04 (§10 capture→Financials build).
+#     Overrides the saved-file extension for markdown mode and manual/browser
+#     saves; default behavior is byte-identical to today when the flag is absent;
+#     html-archive/both are unaffected by design.
+# ---------------------------------------------------------------------------
+
+def test_ext_json_saves_dot_json_markdown_mode(tmp_path):
+    vault = _make_vault(tmp_path)
+    # companyfacts-like JSON body fetched over the wire
+    body = '{"cik": 1650372, "facts": {}}'
+    mock_resp = _mock_response(body, title_tag="companyfacts")
+
+    with patch("httpx.get", return_value=mock_resp):
+        result = capture(
+            url="https://data.sec.gov/api/xbrl/companyfacts/CIK0001650372.json",
+            origin="sec",
+            mode="markdown",
+            title="atlassian-xbrl-companyfacts",
+            thesis=None,
+            vault_root=vault,
+            dry_run=False,
+            gated=False,
+            gated_why="",
+            ext="json",
+        )
+
+    assert result["state"] == "captured_to_raw"
+    saved = Path(result["saved_paths"][0])
+    assert saved.exists()
+    assert saved.suffix == ".json", f"expected .json, got {saved.suffix}"
+    assert "sec" in saved.parts
+
+
+def test_ext_json_saves_dot_json_manual_mode(tmp_path):
+    vault = _make_vault(tmp_path)
+    fetched = tmp_path / "companyfacts.json"
+    fetched.write_text('{"cik": 1650372, "facts": {}}', encoding="utf-8")
+
+    with patch("httpx.get") as mock_get:
+        result = capture(
+            url="https://data.sec.gov/api/xbrl/companyfacts/CIK0001650372.json",
+            origin="sec",
+            mode="manual",
+            title="atlassian-xbrl-companyfacts",
+            thesis=None,
+            vault_root=vault,
+            dry_run=False,
+            gated=False,
+            gated_why="",
+            manual_file=fetched,
+            ext="json",
+        )
+        mock_get.assert_not_called()
+
+    saved = Path(result["saved_paths"][0])
+    assert saved.exists()
+    assert saved.suffix == ".json"
+
+
+def test_ext_default_unchanged_is_md(tmp_path):
+    # Absent --ext → behavior byte-identical to today: markdown mode saves .md.
+    vault = _make_vault(tmp_path)
+    mock_resp = _mock_response("Body", title_tag="Default Ext")
+
+    with patch("httpx.get", return_value=mock_resp):
+        result = capture(
+            url="https://example.com/default-ext",
+            origin="example",
+            mode="markdown",
+            title="",
+            thesis=None,
+            vault_root=vault,
+            dry_run=False,
+            gated=False,
+            gated_why="",
+        )
+
+    saved = Path(result["saved_paths"][0])
+    assert saved.suffix == ".md"
+
+
+def test_ext_dry_run_unaffected(tmp_path):
+    vault = _make_vault(tmp_path)
+    raw_dir = vault / "knowledge-base" / "raw" / "sec"
+    mock_resp = _mock_response('{"cik": 1}', title_tag="Dry Ext")
+
+    with patch("httpx.get", return_value=mock_resp):
+        result = capture(
+            url="https://data.sec.gov/api/xbrl/companyfacts/CIK0001650372.json",
+            origin="sec",
+            mode="markdown",
+            title="xbrl",
+            thesis=None,
+            vault_root=vault,
+            dry_run=True,
+            gated=False,
+            gated_why="",
+            ext="json",
+        )
+
+    assert result["state"] == "approved_for_capture"
+    # dry-run writes nothing, regardless of ext
+    if raw_dir.exists():
+        assert list(raw_dir.glob("*.json")) == []
+        assert list(raw_dir.glob("*.md")) == []
+
+
+def test_ext_html_archive_unaffected(tmp_path):
+    # html-archive saves .html regardless of --ext (by design — ext only
+    # overrides the markdown-mode / manual save extension).
+    vault = _make_vault(tmp_path)
+    mock_resp = _mock_response("<p>archive</p>", title_tag="Archive")
+
+    with patch("httpx.get", return_value=mock_resp):
+        result = capture(
+            url="https://example.com/archive",
+            origin="example",
+            mode="html-archive",
+            title="",
+            thesis=None,
+            vault_root=vault,
+            dry_run=False,
+            gated=False,
+            gated_why="",
+            ext="json",
+        )
+
+    saved = Path(result["saved_paths"][0])
+    assert saved.suffix == ".html"
+
+
+def test_cli_ext_json_flag(tmp_path):
+    vault = _make_vault(tmp_path)
+    fetched = tmp_path / "cf.json"
+    fetched.write_text('{"cik": 1}', encoding="utf-8")
+
+    exit_code = main([
+        "--url", "https://data.sec.gov/api/xbrl/companyfacts/CIK0001650372.json",
+        "--origin", "sec",
+        "--mode", "manual",
+        "--manual-file", str(fetched),
+        "--ext", "json",
+        "--vault-root", str(vault),
+    ])
+
+    assert exit_code == 0
+    raw_dir = vault / "knowledge-base" / "raw" / "sec"
+    assert len(list(raw_dir.glob("*.json"))) == 1
+    assert list(raw_dir.glob("*.md")) == []

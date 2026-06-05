@@ -31,7 +31,7 @@ For each file's definitions, read that file directly. This module doc never rest
 
 ### Financial extraction boundary
 
-`sb-wiki-ingest` produces source pages, entities, concepts, and candidate-topics — and, with the extension loaded, recognizes the investment entity kinds. It does NOT write the `## Financials` table. The `## Financials` write path is run by the `sb-investor` agent's ingest/research path (deferred), keeping numeric extraction out of general ingest. Until the extraction parser exists, `## Financials` rows are entered manually (`method: manual`).
+`sb-wiki-ingest` produces source pages, entities, concepts, and candidate-topics — and, with the extension loaded, recognizes the investment entity kinds. It does NOT write the `## Financials` table — that invariant is permanent. The write path is the registered `investment_financials_extract` tool (`scripts/tools-index.md`), the SOLE agent-side writer of that section, orchestrated by `sb-investor` (`workflows/sb-investor/research.md` Step 7b, or the standalone `extract` route in the capability manifest) — keeping numeric extraction out of general ingest. The prohibition and row conventions are stated inside `./wiki-ext/section-menus.ext.md` § `## Financials` (the file writing agents load). The user may hand-enter rows (`method: manual`); the lint Fundamentals rules are the backstop.
 
 ---
 

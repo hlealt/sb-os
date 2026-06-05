@@ -9,7 +9,13 @@ CLI:
         [--user-agent UA]
         [--manual-file PATH]
         [--no-curl-fallback]
+        [--ext md|html|json]
         [--dry-run]
+
+--ext overrides the saved-file extension for markdown mode and manual/browser
+saves (default md). Use --ext json to capture XBRL companyfacts JSON data
+artifacts (consumed by investment_financials_extract). html-archive/both .html
+output is unaffected by --ext.
 
 Returns a metadata summary only — never dumps fetched text into stdout.
 Honors the 6-state source lifecycle:
@@ -279,8 +285,14 @@ def capture(
     user_agent: str = DEFAULT_USER_AGENT,
     manual_file: Optional[Path] = None,
     curl_fallback: bool = True,
+    ext: str = "md",
 ) -> dict:
-    """Capture a source and return a metadata summary dict."""
+    """Capture a source and return a metadata summary dict.
+
+    ``ext`` overrides the saved-file extension for the markdown-mode save and the
+    manual/browser save (default "md" — byte-identical to legacy behavior).
+    Used to capture XBRL companyfacts JSON data artifacts as ``.json``.
+    The html-archive ``.html`` save is unaffected by ``ext`` (by design)."""
     wiki = _wiki_root(vault_root)
     raw_dir = wiki / "raw" / origin
     queue_path = wiki / QUEUE_FILENAME
@@ -359,7 +371,7 @@ def capture(
         total_bytes = 0
 
         if mode in ("markdown", "both"):
-            fname = _filename(resolved_title, url, "md")
+            fname = _filename(resolved_title, url, ext)
             dest = raw_dir / fname
             n = _save(dest, body, dry_run)
             saved.append(str(dest))
@@ -407,7 +419,7 @@ def capture(
             }
         body = src.read_text(encoding="utf-8")
         resolved_title = title or _extract_title(body) or url
-        fname = _filename(resolved_title, url, "md")
+        fname = _filename(resolved_title, url, ext)
         dest = raw_dir / fname
         n = _save(dest, body, dry_run)
         return {
@@ -464,6 +476,14 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Disable the subprocess-curl retry on transport-level fetch failure (fallback is ON by default)",
     )
     p.add_argument("--dry-run", action="store_true", help="Report what would be saved; write nothing")
+    p.add_argument(
+        "--ext",
+        default="md",
+        choices=["md", "html", "json"],
+        help="Saved-file extension override for markdown/manual/browser saves "
+             "(default md; use json for XBRL companyfacts data artifacts). "
+             "Does not affect html-archive/both .html output.",
+    )
     p.add_argument("--gated", action="store_true", help="Declare source gated (no fetch; register only)")
     p.add_argument("--gated-why", default="(not specified)", help="Why this source matters (for source-queue.md)")
     return p
@@ -494,6 +514,7 @@ def main(argv: list[str] | None = None) -> int:
         user_agent=args.user_agent,
         manual_file=Path(args.manual_file) if args.manual_file else None,
         curl_fallback=not args.no_curl_fallback,
+        ext=args.ext,
     )
 
     # Print metadata summary only — never the fetched content

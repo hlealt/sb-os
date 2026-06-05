@@ -9,7 +9,7 @@ The `/sb-investor` reasoning mode that discovers, proposes, captures, and auto-f
 
 **Loaded by:** `./investor.md` reads-and-follows this file when `./capability-manifest.md` routes the `research` (B2) intent. The invariants, policy read-rules wiring, present-and-confirm pattern, issue-surfacing, Rule A, and the per-step Investor Checkpoint in `./investor-loop.md` are already in force when this file runs — this file does NOT restate them. Read `./investor-loop.md` before acting on any step below.
 
-**Access mechanisms (this mode):** discovery = web-search sub-agent (plugin-agnostic) · capture = `investment_source_capture` registered tool (`../../scripts/tools-index.md`) · auto-ingest = `/sb-wiki-ingest silent <slug>` run via one sub-agent per source. All three are declared in `./capability-manifest.md` § `research`.
+**Access mechanisms (this mode):** discovery = web-search sub-agent (plugin-agnostic) · capture = `investment_source_capture` registered tool (`../../scripts/tools-index.md`) · auto-ingest = `/sb-wiki-ingest silent <slug>` run via one sub-agent per source · extract = scan sub-agent + `investment_financials_extract` registered tool (Step 7b). All are declared in `./capability-manifest.md` § `research`.
 
 **Source lifecycle states (this mode drives them):** `rejected` → `approved_for_capture` → `captured_to_raw` → `ingested_to_wiki`; gated sources take the `gated_pending_access` branch; an unreachable/failed fetch is `blocked`. Each step below names the state it sets.
 
@@ -130,10 +130,10 @@ Fires on EVERY run that captured at least one source — even when every capture
 1. **Present the consolidated capture state** — every capture this run, auto and user-approved alike, plus failures:
 
    ```
-   | source (slug) | origin | approved_by (user/policy) | state | saved path |
+   | source (slug) | origin | approved_by (user/policy) | state | saved path | extract? |
    ```
 
-   A `blocked` row names its error; the Step 5 manual path is its recovery.
+   A `blocked` row names its error; the Step 5 manual path is its recovery. `extract?` defaults ON for fundamentals-bearing primary sources (filings, IR documents, macro releases) and OFF otherwise; the user may toggle any row at this gate. `[S]` authorizes the ingest dispatch AND Step 7b extraction for the `extract? = yes` rows, including the lane-1 companion companyfacts capture (Step 7b.1).
 
 2. **Growth prompt (batched, non-blocking).** If this run captured sources whose origins are NOT in `source-policy.md` § Auto-Capture Pre-Approved Origins and NOT on its declined line, offer ONCE — every such origin in one prompt, each with a proposed host pattern derived from the captured URL host. Approval → append the row(s) to that table; decline → record the origin on the table's declined line and never re-offer it. Both are user-approved policy edits inside the own-workspace boundary (this exchange IS their present-and-confirm). The answers never block ingest. Skip silently when `source-policy.md` has no such table.
 
@@ -158,6 +158,7 @@ Each sub-agent prompt MUST direct it to:
 1. **Run `/sb-wiki-ingest silent <slug>`** — the non-interactive form (`<slug>` = the raw filename returned by Step 5). The `silent` keyword makes the run emit no checkpoints and return a structured per-file summary, per `sb-wiki-ingest`'s Silent Mode.
 2. **Invoke the `sb-wiki-ingest` skill and follow it exactly**, and **invoke the `sb-vault-ops` skill before the file operations it performs and follow it exactly** (per the sub-agents rule — stated explicitly and imperatively because a sub-agent does not inherit these requirements).
 3. **Return only the structured summary** (per-file status `committed` / `partial (<reason>)` / `failed (<reason>)`, plus pages created/updated and any candidate-topic or lint flags). The full source text MUST NOT be returned to the parent.
+4. **NEVER add, modify, or delete `## Financials` rows on any entity page** — the sole writer of that section is the `investment_financials_extract` tool (Step 7b), per `section-menus.ext.md` § `## Financials`. Extractable fundamentals found during ingest are reported as extraction candidates in the summary, never written.
 
 On a returned summary → state `ingested_to_wiki` for that source. A `failed` / `partial` status is surfaced per `./investor-loop.md` § Issue-surfacing — never silently treated as ingested.
 
@@ -170,6 +171,18 @@ After all sub-agents return, present a consolidated report so a misfire is catch
 ```
 
 Summarize the pages created/updated and any scope-overlaps or lint flags the sub-agents surfaced. A flag is an issue → route it per `./investor-loop.md` § Issue-surfacing (blocking vs deferrable). The report is informational-by-default; it does NOT re-prompt for the already-committed ingests (the Ingest gate authorized the dispatch).
+
+## Step 7b — Extract fundamentals (per-source, sequential, after its Step 7 ingest returns)
+
+Runs for each source whose Ingest-gate row was marked `extract? = yes`, AFTER that source's ingest sub-agent returns (ingest precedes extraction — the entity page must exist). The registered `investment_financials_extract` tool (`../../scripts/tools-index.md`) is the SOLE writer of entity `## Financials` (conventions in `section-menus.ext.md`); this mode NEVER hand-writes a row.
+
+1. **Lane-1 artifact (SEC-registrant entities):** ensure a current companyfacts artifact exists — when absent, or older than the filing being extracted, capture `https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json` via `investment_source_capture` with `--ext json`, `--origin sec`, `--title "{entity} xbrl companyfacts"`, and the `source-policy.md` § Capture User-Agent. The gate's `extract?` approval authorizes this companion capture; it appears in the post-extraction report — no silent writes. `{cik}` = the entity page's `cik:` frontmatter zero-padded to 10 digits; on a company's first SEC extraction, PROPOSE adding `cik:` (user-approved edit per `frontmatter-schemas.ext.md`).
+2. **Scan dispatch (one sub-agent per source+entity):** model **Sonnet** — NEVER Haiku for numeric work; **Opus opt-in** when the source feeds an active thesis. Pass the captured raw path(s), the entity + kind, that kind's vocabulary from `metric-vocab.md` (incl. § Suffix Families), and any active-thesis focus. The sub-agent returns ONLY extraction-target rows — `| metric (vocab id or PROPOSAL:<name·kind·unit>) | period_type | period_end | value-as-printed | unit-as-printed | anchor (verbatim) | unverifiable? + reason |` — **stated figures only** (no derived values; derivations happen at read time, never at write time); anchors MUST be contiguous printed phrases (never a figure straddling HTML-tag boundaries — the tool's normalized re-match fails on markup-split text); the full source text stays inside the sub-agent (anti-context-rot). Write the returned targets to a JSON file under `.user/finance/investor/` (path transport — never inline in a prompt).
+3. **Vocab proposals:** surface any `PROPOSAL:` rows at the checkpoint. Approved → the parent applies the addition to `metric-vocab.md` (an sb-os edit: investor proposes, user approves, parent applies + commits), then the row extracts; rejected → dropped. Nothing off-vocabulary is ever written.
+4. **Run the tool:** lane 1 `--xbrl <artifact>` (corroborate-only by default; pass `--since <filing period start>` to extract the new filing's periods), then lanes 2/3 `--targets <json>`. The gate's `extract?` approval authorizes the write — auto-write, no per-figure gate (spec §4.4).
+5. **Post-extraction report (MANDATORY** — mirrors the post-ingest report): `| entity | source | rows written (xbrl/structured/llm) | upgraded | rejected (reason) | conflicts | vocab proposals |`. Conflicts and rejects route per `./investor-loop.md` § Issue-surfacing.
+
+The **standalone extract route** (`./capability-manifest.md` § `extract`) runs these same steps 1–5 against already-captured raw — the backfill/reconciliation path. Its authorization is the user's ask itself, gated once: run the tool `--dry-run` first, present the step-5 report, and apply only on confirm (present-and-confirm; no Ingest gate exists on a non-capturing run).
 
 ## Step 7a — Disconfirm (adversarial discovery wave)
 
@@ -209,7 +222,7 @@ State the chain options to the user; do NOT auto-chain without the routing the u
 ## Boundaries (this mode)
 
 - Read-only on portfolio/ledger data; position data ONLY through registered read tools (`./investor-loop.md` § Tools-only data access). This mode reads no position data directly.
-- Writes ONLY to `raw/` via the `investment_source_capture` tool (which also registers gated/blocked entries in `{wiki_root}/source-queue.md`), to `.user/finance/investor/log.md` (deferred-issue records per § Issue-surfacing), to `source-policy.md` § Auto-Capture Pre-Approved Origins ONLY via the Ingest-gate growth prompt (a user-approved policy edit), and to the wiki via `sb-wiki-ingest` run through sub-agents — the agent NEVER hand-writes a raw source file or a wiki page (`./investor-loop.md` § Own-workspace-writes boundary).
+- Writes ONLY to `raw/` via the `investment_source_capture` tool (which also registers gated/blocked entries in `{wiki_root}/source-queue.md`), to `.user/finance/investor/` own-workspace files (deferred-issue records per § Issue-surfacing; Step 7b extraction-target JSONs), to entity `## Financials` ONLY via the registered `investment_financials_extract` tool (Step 7b — the sole writer of that section), to `metric-vocab.md` ONLY as a user-approved vocab-proposal application (Step 7b.3), to `source-policy.md` § Auto-Capture Pre-Approved Origins ONLY via the Ingest-gate growth prompt (a user-approved policy edit), and to the wiki via `sb-wiki-ingest` run through sub-agents — the agent NEVER hand-writes a raw source file or a wiki page (`./investor-loop.md` § Own-workspace-writes boundary).
 - NEVER bypasses a paywall and NEVER uses bank/brokerage credentials — gated sources register `gated_pending_access` only (permanent source boundary in `./investor-loop.md`).
 - Never mutates ledgers, `portfolio.json`, or the dashboard. A request to do so, to bypass a paywall, or to hand-write a raw/wiki file is out-of-structure → Rule A in `./investor-loop.md`.
 - Every user-facing turn ends at an Investor Checkpoint (`./investor-loop.md` § Per-Step Checkpoint).

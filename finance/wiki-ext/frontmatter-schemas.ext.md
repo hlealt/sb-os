@@ -48,3 +48,13 @@ type: source-queue
 ## Entity `## Financials` note
 
 Investment entity kinds (`company`, `asset`, `country`, `sector`) carry a `## Financials` section of structured fundamentals on the entity's own page. Its structure is defined in `./section-menus.ext.md`. The `person`, `tool`, and `model` kinds never carry one. This is a body section, not frontmatter — no `financials:` frontmatter field is added.
+
+## Entity `cik:` field (company kind, optional)
+
+A `company` entity MAY carry a `cik:` frontmatter field — the SEC EDGAR Central Index Key, used by `investment_financials_extract` to cross-check captured XBRL companyfacts artifacts (the `--cik` flag overrides it).
+
+```yaml
+cik: 1650372
+```
+
+The agent PROPOSES adding `cik:` on a company's first SEC extraction — a user-approved edit, never silent. Non-SEC-registrant companies simply omit the field.
