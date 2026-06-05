@@ -345,7 +345,7 @@ last_validated: 2026-05-27
 
 ```yaml
 tool: gate_coverage (python shared/gate_coverage.py [--transactions PATH] [--loop-count N] [--config-dir PATH])
-purpose: Gates #1/#2/#3 (ANDed, P2, S7) — R$-coverage >= 90%, row-coverage >= 90%, no untagged despesa > R$100 before commit; auto-loops up to 3 times then surfaces Portuguese user prompt.
+purpose: Gates #1/#2/#3 (ANDed, P2, S7) — R$-coverage >= 90%, row-coverage >= 90%, no untagged despesa > R$100 before commit; auto-loops up to 3 times then surfaces the "Proceed anyway? [S/N]" user prompt.
 owner_script: shared/gate_coverage.py
 class: read
 use: validation-gate
@@ -353,7 +353,7 @@ expected_inputs: optional --transactions PATH to transactions.csv (default: late
 outputs: R$ coverage % + row coverage % + large-untagged list; PASS (exit 0) all three gates pass; FAIL (exit 1) any gate fails; exit 2 on missing file; emits coverage_progress (x2) + gate_pass/gate_fail events. Max-loop guard at 3 iterations.
 canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/fechamento/{YYYY-MM}/transactions.csv (no write)
 dry_run: not-applicable
-last_validated: 2026-05-27
+last_validated: 2026-06-04
 ```
 
 ```yaml
@@ -402,10 +402,10 @@ owner_script: shared/me_gate.py
 class: read
 use: validation-gate
 expected_inputs: --concept "plain description of the data" (required unless --manifest); optional --target PATH (store/config/script being edited; only basename used as a signal), --keys comma-separated config keys/columns, --store-name NAME; OR --manifest PATH to a JSON list of {concept,target,keys,store_name} for pre-commit/quarterly sweep; reads shared/lib/source_of_truth_registry.py (the 23 p2-7 domains); composes optional shared/audit_data_duplication.py (deferred, plan p5-12) as a tertiary net when present
-outputs: PASS (exit 0) when the concept is genuinely new (no overlap); REFUSE (exit 1) with the matching canonical store(s) + p2-7 section number(s) + the three pt-BR options (Reusar/Justificar nova/Consolidar); exit 2 on bad args or unreadable manifest; emits gate_pass/gate_fail event (gate.name me_non_overlap). Never blocks on the missing tertiary net.
+outputs: PASS (exit 0) when the concept is genuinely new (no overlap); REFUSE (exit 1) with the matching canonical store(s) + p2-7 section number(s) + the three options (Reuse/Justify new/Consolidate); exit 2 on bad args or unreadable manifest; emits gate_pass/gate_fail event (gate.name me_non_overlap). Never blocks on the missing tertiary net.
 canonical_reader_writer: reads shared/lib/source_of_truth_registry.py (the p2-7 inventory transcription); no store write
 dry_run: not-applicable
-last_validated: 2026-05-27
+last_validated: 2026-06-04
 ```
 
 ```yaml

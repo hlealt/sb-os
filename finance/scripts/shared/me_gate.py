@@ -9,12 +9,12 @@ canonical store somewhere in the finance system?" — NOT the filesystem questio
 The reference is the p2-7 sources-of-truth inventory (23 data domains),
 transcribed into `lib/source_of_truth_registry.py`. When an edit's declared
 concept overlaps an existing registered concept, the gate REFUSES and surfaces
-three named options (Portuguese, matching the gatekeeper-loop's voice):
+three named options (matching the gatekeeper-loop's voice):
 
-  [R] Reusar a store existente.
-  [J] Justificar uma store nova (concept genuinamente novo) — exige registrar
-      a nova store no registry/p2-7 na mesma mudança.
-  [C] Consolidar — unir a store nova na existente.
+  [R] Reuse the existing store.
+  [J] Justify a new store (genuinely new concept) — requires registering
+      the new store in the registry/p2-7 in the same change.
+  [C] Consolidate — merge the new store into the existing one.
 
 A genuinely new concept (no overlap with any of the 23 domains) PASSES.
 
@@ -143,23 +143,23 @@ def _run_tertiary_net(concept: str, target: str | None) -> tuple[bool, list[str]
 
 
 def _options_block(result: GateResult) -> str:
-    """Portuguese refusal block matching the gatekeeper-loop's voice (Rule A)."""
+    """Refusal block matching the gatekeeper-loop's voice (Rule A)."""
     lines = [
-        f"Isto está fora da estrutura atual: o conceito \"{result.concept}\" já "
-        "tem uma store canônica.",
+        f"This is outside the current structure: the concept \"{result.concept}\" "
+        "already has a canonical store.",
         "",
-        "Stores existentes que cobrem este conceito:",
+        "Existing stores covering this concept:",
     ]
     for entry in result.overlaps:
         lines.append(f"  - {entry.canonical}  (p2-7 §{entry.section})")
     lines += [
         "",
-        "Como proceder?",
-        "  [R] Reusar a store existente — leio/escrevo o dado por ela; nada novo "
-        "é criado.",
-        "  [J] Justificar uma store nova — só se o conceito for genuinamente "
-        "novo; exige registrar a nova store no registry (p2-7) na mesma mudança.",
-        "  [C] Consolidar — unir a store nova na existente.",
+        "How do you want to proceed?",
+        "  [R] Reuse the existing store — I read/write the data through it; "
+        "nothing new is created.",
+        "  [J] Justify a new store — only if the concept is genuinely new; "
+        "requires registering the new store in the registry (p2-7) in the same change.",
+        "  [C] Consolidate — merge the new store into the existing one.",
     ]
     return "\n".join(lines)
 
@@ -167,27 +167,27 @@ def _options_block(result: GateResult) -> str:
 def _print_result(result: GateResult) -> None:
     if result.passed:
         print(
-            f"me_gate PASS — \"{result.concept}\" é um conceito novo "
-            "(sem sobreposição com as 23 stores canônicas do p2-7)."
+            f"me_gate PASS — \"{result.concept}\" is a new concept "
+            "(no overlap with the 23 p2-7 canonical stores)."
         )
     else:
         print(_options_block(result), file=sys.stderr)
         print(
-            f"me_gate REFUSE — \"{result.concept}\" sobrepõe "
-            f"{len(result.overlaps)} store(s) canônica(s) existente(s).",
+            f"me_gate REFUSE — \"{result.concept}\" overlaps "
+            f"{len(result.overlaps)} existing canonical store(s).",
             file=sys.stderr,
         )
     if not result.tertiary_net_available:
         print(
-            "[me_gate] rede terciária cross-config (audit-data-duplication.py) "
-            "ainda não disponível — checagem primária (registry p2-7) é "
-            "autoritativa; pendência registrada (plan p5-12).",
+            "[me_gate] tertiary cross-config net (audit-data-duplication.py) "
+            "not yet available — primary check (registry p2-7) is "
+            "authoritative; pending item recorded (plan p5-12).",
             file=sys.stderr,
         )
     elif result.tertiary_net_hits:
         print(
-            f"[me_gate] rede terciária confirmou {len(result.tertiary_net_hits)} "
-            "duplicata(s) cross-config:",
+            f"[me_gate] tertiary net confirmed {len(result.tertiary_net_hits)} "
+            "cross-config duplicate(s):",
             file=sys.stderr,
         )
         for h in result.tertiary_net_hits:

@@ -11,7 +11,7 @@ schema-validation test calls. These tests prove the two flag-worthy behaviors:
      only emits an audit event + returns text. A gap is never silently
      flattened (it is named in both surfaces) and never unilaterally migrated
      (no store is mutated).
-  2. Schema-gap surfacing path — a gap dual-surfaces (a pt-BR user prompt AND a
+  2. Schema-gap surfacing path — a gap dual-surfaces (a user-facing prompt AND a
      `schema_gap_finding` audit event), not a silent flatten/mutate.
 
 Plus a doc-contract check on the workflow file (the binding authority-boundary

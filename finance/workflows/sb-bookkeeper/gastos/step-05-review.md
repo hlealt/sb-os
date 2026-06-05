@@ -147,7 +147,7 @@ Save the CSV.
 
    - **Exit 0** → all three gates passed. Record the pass and proceed to step 3.
    - **Exit 1 (FAIL) with `{LOOP_COUNT} < 3`** → this gate **auto-loops** (it is not an inline halt). Return to the tag batch (Section 1 § Batch — tags) and tag the expenses lacking coverage, increment `{LOOP_COUNT}` by 1, rewrite the CSV, and run the gate again. This repeats until exit 0 or until `{LOOP_COUNT}` reaches 3.
-   - **Exit 1 (FAIL) with `{LOOP_COUNT} == 3`** → the gate's max-loop guard prints the prompt "Prosseguir mesmo assim? [S/N]". Treat as Rule C **blocking**: surface the prompt to the user; `[S]` → record the exception and proceed; `[N]` → keep correcting or stop the close.
+   - **Exit 1 (FAIL) with `{LOOP_COUNT} == 3`** → the gate's max-loop guard prints the prompt "Proceed anyway? [S/N]". Treat as Rule C **blocking**: surface the prompt to the user; `[S]` → record the exception and proceed; `[N]` → keep correcting or stop the close.
    - **Exit 2** → CSV missing/malformed; report and ask how to proceed.
 
 3. Confirm to the user: `Review complete. {N_pass1} resolutions (Pass 1) + {N_cash} cash expenses + {N_pass2_moved} competências moved (Pass 2). Tag coverage approved. CSV saved.`

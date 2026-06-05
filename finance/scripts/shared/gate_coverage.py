@@ -16,7 +16,7 @@ Exclusions (per p2-15 gate #1 scope):
   - venda         (investment sales)
 
 Auto-loop: if any gate fails, auto-loops back to Step 4b (max 3 iterations).
-Max-loop guard: after 3 iterations, surfaces Portuguese user prompt instead.
+Max-loop guard: after 3 iterations, surfaces a user prompt instead.
 
 Config sources:
   gates.step_5_5_coverage.threshold (0.90) — R$ and row coverage threshold.
@@ -320,16 +320,16 @@ def main() -> int:
     )
 
     print(
-        f"Cobertura R$:  {coverage_brl:.1%} "
-        f"(R${tagged_brl:.2f} tagados / R${total_brl:.2f} total despesas)"
+        f"R$ coverage:  {coverage_brl:.1%} "
+        f"(R${tagged_brl:.2f} tagged / R${total_brl:.2f} total expenses)"
     )
     print(
-        f"Cobertura rows: {coverage_rows:.1%} "
-        f"({tagged_rows} tagadas / {total_rows} total despesas)"
+        f"Row coverage: {coverage_rows:.1%} "
+        f"({tagged_rows} tagged / {total_rows} total expenses)"
     )
     if large_untagged:
         print(
-            f"Despesas sem tag > R${floor_brl:.0f}: {len(large_untagged)} item(s)",
+            f"Untagged expenses > R${floor_brl:.0f}: {len(large_untagged)} item(s)",
             file=sys.stderr,
         )
         for r in large_untagged:
@@ -343,7 +343,7 @@ def main() -> int:
         print(
             f"gate_1/2/3 PASS — R$ {coverage_brl:.1%} >= {threshold:.0%}, "
             f"rows {coverage_rows:.1%} >= {threshold:.0%}, "
-            f"sem untagged > R${floor_brl:.0f}"
+            f"no untagged > R${floor_brl:.0f}"
         )
         return 0
 
@@ -353,27 +353,27 @@ def main() -> int:
     if loop_count >= _MAX_LOOP:
         # Max-loop guard: surface user prompt instead of auto-looping.
         print(
-            f"\nCobertura insuficiente após {_MAX_LOOP} iterações de Step 4b.",
+            f"\nInsufficient coverage after {_MAX_LOOP} Step 4b iterations.",
             file=sys.stderr,
         )
         if not gate1_pass:
             print(
-                f"R$ tagados: {coverage_brl:.1%} (meta: {threshold:.0%}). "
-                f"Total despesas sem tag: R${total_brl - tagged_brl:.2f}",
+                f"R$ tagged: {coverage_brl:.1%} (target: {threshold:.0%}). "
+                f"Total untagged expenses: R${total_brl - tagged_brl:.2f}",
                 file=sys.stderr,
             )
         if not gate2_pass:
             print(
-                f"Rows tagadas: {coverage_rows:.1%} (meta: {threshold:.0%}). "
-                f"Despesas sem tag: {total_rows - tagged_rows}",
+                f"Rows tagged: {coverage_rows:.1%} (target: {threshold:.0%}). "
+                f"Untagged expenses: {total_rows - tagged_rows}",
                 file=sys.stderr,
             )
         if not gate3_pass:
             print(
-                f"Despesas sem tag acima de R${floor_brl:.0f}: {len(large_untagged)} item(s)",
+                f"Untagged expenses above R${floor_brl:.0f}: {len(large_untagged)} item(s)",
                 file=sys.stderr,
             )
-        print("Prosseguir mesmo assim? [S/N]", file=sys.stderr)
+        print("Proceed anyway? [S/N]", file=sys.stderr)
         print(
             f"gate_1/2/3 FAIL — max_loop={_MAX_LOOP} reached; surfacing user prompt",
             file=sys.stderr,
@@ -389,7 +389,7 @@ def main() -> int:
             reasons.append(f"{len(large_untagged)} untagged > R${floor_brl:.0f}")
         print(
             f"gate_1/2/3 FAIL — {'; '.join(reasons)} "
-            f"(iteração {next_loop}/{_MAX_LOOP}); retornar ao Step 4b",
+            f"(iteration {next_loop}/{_MAX_LOOP}); return to Step 4b",
             file=sys.stderr,
         )
 

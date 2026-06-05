@@ -347,7 +347,7 @@ def test_main_missing_file_exit_2(tmp_path, monkeypatch):
 
 
 def test_main_max_loop_guard_surfaces_prompt(tmp_path, monkeypatch, capsys):
-    """After 3 loops, gate surfaces Portuguese user prompt instead of auto-looping."""
+    """After 3 loops, gate surfaces a user prompt instead of auto-looping."""
     tx_path = tmp_path / "transactions.csv"
     # Single untagged row — fails gate #1, #2, and #3 (if > 100). Use R$50 so only #1/#2 fail.
     _write_csv(tx_path, [
@@ -362,8 +362,10 @@ def test_main_max_loop_guard_surfaces_prompt(tmp_path, monkeypatch, capsys):
     result = main()
     assert result == 1
     captured = capsys.readouterr()
-    # The max-loop guard message must appear in stderr.
-    assert "iterações" in captured.err or "iteracoes" in captured.err or "Prosseguir" in captured.err
+    # The max-loop guard message must appear in stderr — including the exact
+    # prompt step-05-review.md § completion gate quotes ([S/N] keys are contract).
+    assert "Proceed anyway? [S/N]" in captured.err
+    assert "Insufficient coverage" in captured.err
 
 
 def test_gate_events_emitted_on_fail(tmp_path, monkeypatch):

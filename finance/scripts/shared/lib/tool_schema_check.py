@@ -18,7 +18,7 @@ test calls, and the single place the schema-gap dual-surfacing fires:
     assert_conforms(out, dst)      Raise SchemaGapError on a non-empty gap
                                    (used by the generated tool's pytest test).
     surface_schema_gap(...)        Dual-surface a gap: emit a `schema_gap_finding`
-                                   audit event AND return the pt-BR user prompt.
+                                   audit event AND return the user-facing prompt.
                                    Writes NOTHING to the destination.
 
 Authority-boundary invariant (load-bearing): NOTHING in this module writes to a
@@ -170,22 +170,22 @@ def assert_conforms(
 
 
 def gap_prompt(gap_fields: Iterable[str], destination: str | Path) -> str:
-    """The pt-BR user-facing prompt for a schema gap (one of the two surfaces).
+    """The user-facing prompt for a schema gap (one of the two surfaces).
 
-    Names the gap field(s) and the three options: estender (extend the schema),
-    achatar (flatten — drop the field, data lost), justificar e adiar (defer).
+    Names the gap field(s) and the three options: extend the schema,
+    flatten (drop the field, data lost), justify and defer.
     """
     fields = ", ".join(f"`{f}`" for f in sorted(gap_fields))
     return (
-        f"O tool gera o(s) campo(s) {fields}, que não existe(m) no schema atual "
-        f"de `{destination}`.\n\n"
-        f"Como proceder?\n"
-        f"  [E] Estender o schema de `{destination}` para incluir o(s) campo(s) "
-        f"— você aprova a mudança de schema; o tool passa a escrever o campo novo.\n"
-        f"  [F] Achatar (flatten) — o tool descarta o(s) campo(s) e escreve só os "
-        f"campos existentes. (o dado novo é perdido)\n"
-        f"  [J] Justificar e adiar — registramos o gap e seguimos sem o(s) campo(s) "
-        f"por ora."
+        f"The tool produces field(s) {fields} that do not exist in the current "
+        f"schema of `{destination}`.\n\n"
+        f"How do you want to proceed?\n"
+        f"  [E] Extend the schema of `{destination}` to include the field(s) "
+        f"— you approve the schema change; the tool starts writing the new field.\n"
+        f"  [F] Flatten — the tool drops the field(s) and writes only the "
+        f"existing fields. (the new data is lost)\n"
+        f"  [J] Justify and defer — we record the gap and proceed without the "
+        f"field(s) for now."
     )
 
 
@@ -203,7 +203,7 @@ def surface_schema_gap(
     boundary requires:
       1. emits a `schema_gap_finding` audit event (best-effort; never raises),
          carrying the destination, the gap fields, and the tool name;
-      2. returns the pt-BR user-facing prompt (`gap_prompt`) for the caller to
+      2. returns the user-facing prompt (`gap_prompt`) for the caller to
          surface to the user.
 
     Writes NOTHING to `destination`. A gap is thus never silently flattened

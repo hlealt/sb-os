@@ -84,7 +84,7 @@ python {ME_GATE} --concept "{plain description of the data the new store holds}"
 ```
 
 - **Exit 0 (no overlap)** → the store/schema is genuinely new; proceed to Step 3.
-- **Exit 1 (overlap)** → the gate prints the existing canonical store + the three pt-BR options (Reuse / Justify new / Consolidate). STOP and return the gate's output to the caller — the caller surfaces it to the user. Do NOT create the overlapping store on any branch without the user's choice routed back through a re-dispatch.
+- **Exit 1 (overlap)** → the gate prints the existing canonical store + the three options (Reuse / Justify new / Consolidate). STOP and return the gate's output to the caller — the caller surfaces it to the user. Do NOT create the overlapping store on any branch without the user's choice routed back through a re-dispatch.
 
 A tool that reads/writes an EXISTING store (the common case — a parser feeding `balcao.csv`, a reader over `portfolio.json`) skips this step; its `destination_artifact` already has a canonical home.
 
