@@ -890,26 +890,25 @@ class TestUserActorUpsert:
 
 
 # ---------------------------------------------------------------------------
-# Real assets.csv SHA-256 guard (non-mutating sanity check)
+# Real assets.csv mutation guard (non-mutating sanity check)
 # ---------------------------------------------------------------------------
 
 
-EXPECTED_REAL_SHA256 = "523c7264e379f2b0db6635892c2f92e00d9ac39a9a9f0271bc75d62f10c0c26a"
-
-
-def test_real_assets_csv_not_mutated():
+def test_real_assets_csv_not_mutated(real_assets_sha_before_suite):
     """Guard: the REAL assets.csv must NOT have been touched by any test above.
 
-    This test runs last (alphabetically after the class-based tests) and
-    verifies that the known-good SHA-256 of the real file is unchanged.
-    Fails if any test accidentally wrote to the real destination.
+    Compares the file's current SHA-256 against the hash captured by the
+    session-scoped `real_assets_sha_before_suite` fixture (conftest.py)
+    BEFORE the first test of the session ran — fails only if this very run
+    mutated the file, never on legitimate out-of-band edits. The fixture's
+    teardown re-check is the backstop for tests that run after this module.
     """
-    if _REAL_ASSETS is None or not _REAL_ASSETS.exists():
+    if real_assets_sha_before_suite is None:
         pytest.skip("Real assets.csv not present (running outside vault).")
-    actual = hashlib.sha256(_REAL_ASSETS.read_bytes()).hexdigest()
-    assert actual == EXPECTED_REAL_SHA256, (
-        f"REAL assets.csv SHA-256 changed!\n"
-        f"  expected: {EXPECTED_REAL_SHA256}\n"
-        f"  actual:   {actual}\n"
+    actual = _sha256(_REAL_ASSETS)
+    assert actual == real_assets_sha_before_suite, (
+        f"REAL assets.csv SHA-256 changed during this test run!\n"
+        f"  before suite: {real_assets_sha_before_suite}\n"
+        f"  now:          {actual}\n"
         f"A test wrote to the real file — investigate immediately."
     )
