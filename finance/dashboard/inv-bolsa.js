@@ -370,7 +370,13 @@ function invBolsaFormatCell(p, col) {
     const v = p[col.key];
     const color = v >= 0 ? 'var(--green)' : 'var(--red)';
     if (col.format === 'pnl_usd') return `<span style="color:${color}">${invBolsaFormatMoney(v, 'USD')}</span>`;
-    if (col.format === 'pnl_brl') return `<span style="color:${color}">${formatBRL(v)}</span>`;
+    if (col.format === 'pnl_brl') {
+      // FX column: native-title tooltip decomposing the FX result (same
+      // pattern as the balcão IRR quality dot).
+      const tip = col.key === 'return_fx_brl' ? invBolsaFxTooltip(p) : '';
+      if (tip) return `<span title="${tip}" style="color:${color};cursor:help">${formatBRL(v)}</span>`;
+      return `<span style="color:${color}">${formatBRL(v)}</span>`;
+    }
   }
   // Resolve value + display currency based on currency-view toggle.
   const v = (col.format === 'money' || col.format === 'pnl') ? invBolsaDisplayValue(p, col.key) : p[col.key];
@@ -391,6 +397,21 @@ function invBolsaFormatCell(p, col) {
     return `<span style="color:${color}">${invBolsaFormatMoney(v, displayCcy)}</span>`;
   }
   return v;
+}
+
+// FX-column tooltip: explains return_fx_brl as the FX move applied to the USD cost.
+// Uses the cost-implied average FX (cost_basis_brl / cost_basis) — the rate that makes
+// return_fx_brl = cost_basis × (FX atual − FX médio) hold exactly — NOT funding_fx,
+// which is quantity-weighted and drifts from that identity when lots differ in USD price.
+// Rates at 4 decimals, mirroring the USD_BRL market indicator in inv-carteira.
+// Current FX comes from the loaded portfolio's meta (snapshot-consistent); legacy
+// snapshots without meta.fx_rate_usd_brl render the value without a tooltip.
+function invBolsaFxTooltip(p) {
+  const currentFx = invGetPortfolio()?.meta?.fx_rate_usd_brl;
+  if (!currentFx || !(p.cost_basis > 0) || !(p.cost_basis_brl > 0)) return '';
+  const avgFx = p.cost_basis_brl / p.cost_basis;
+  const fmtRate = r => 'R$ ' + r.toLocaleString('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+  return `FX médio da posição: ${fmtRate(avgFx)} → FX atual: ${fmtRate(currentFx)} — efeito sobre o custo USD investido (${invBolsaFormatMoney(p.cost_basis, 'USD')})`;
 }
 
 function invBolsaFormatMoney(v, currency) {
