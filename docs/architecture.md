@@ -166,7 +166,7 @@ Editing the installed file directly is forbidden — the source is the repo. Re-
 
 | Command | Purpose |
 |---------|---------|
-| `/sb-archivist` | Knowledge-base ingestion and routing |
+| `/sb-archivist` | Rolling per-day session work-log (decisions, refinements, discoveries, files touched); on fresh-session runs, sweeps done tasks from task files into date-correct work logs |
 | `/sb-tutor` | Tutor persona for guided learning sessions |
 | `/sb-inject-context` | Manual context injection helper |
 | `/sb-onboarder` | Post-install interactive onboarding — orient the user, populate PARA, optionally build Home, optionally point at RBTV |

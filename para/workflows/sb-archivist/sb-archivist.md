@@ -1,6 +1,6 @@
 ---
 name: Archivist
-description: Document all session work into the rolling work-log file — completed actions, decisions, rejected alternatives, collaborative refinements, discoveries, files read.
+description: Document all session work into the rolling work-log file — completed actions, decisions, rejected alternatives, collaborative refinements, discoveries, files read. On runs with no session work to document, sweep done tasks from vault task files into date-correct work logs.
 ---
 
 Document all work done in this conversation into the work-log file. Capture the substance, not just the actions.
@@ -22,6 +22,8 @@ Document all work done in this conversation into the work-log file. Capture the 
    - Discoveries — corrections, structural changes, surprises, things you learned
    - Tasks completed, created, or rescheduled
 
+   If the scan finds NO documentable work (fresh session — no files touched, no decisions, no tasks), skip steps 4–6 and run the Done-Task Sweep below instead.
+
 4. **Write to the work-log.** Populate the appropriate section per the template:
 
    | Section | What goes here | Format |
@@ -42,8 +44,30 @@ Document all work done in this conversation into the work-log file. Capture the 
 
 6. **When appending to an existing work-log**, add new items under the appropriate sections. Do not duplicate items already logged. If a section does not yet exist in the file, create it.
 
+## Done-Task Sweep (fresh-session runs only)
+
+Runs ONLY when step 3 found no documentable session work. Never run both this sweep and steps 4–6 in the same invocation. Day-rollover handling (step 2) MUST already have run.
+
+1. **Find done tasks.** Content-search `1-projects/` and `2-areas/` for `- [x]` lines in files matching `*-tasks.md`. NEVER conclude task files are absent from a single empty glob result — verify with a content search or directory listing.
+
+2. **Extract verbatim blocks.** A swept block = the top-level `- [x]` line plus ALL its indented continuation lines (sub-bullets, `_Goal_`/`_Context_`/`_Review_` annotations). Preserve blocks exactly — never reformat, summarize, or trim. A checked item nested under an open (`- [ ]`) parent belongs to that open task — do NOT sweep it.
+
+3. **Route by completion date.** Read the `✅ YYYY-MM-DD` marker on the task line:
+   - Earlier than today → `.user/runtime/state/work-log-archive/{YYYY-MM-DD}-work-log.md`
+   - Today, missing, or malformed → today's `.user/runtime/state/work-log.md`
+
+4. **Create missing archive files.** If a target archive file does not exist, create it with frontmatter (`date: {YYYY-MM-DD}`, `last_updated`), the `# Work Log — {YYYY-MM-DD}` heading, and a `## Completed` section.
+
+5. **Append grouped and deduplicated.** Inside the target's `## Completed` section, group blocks under `### Swept from [[{file-name}]] ({vault-relative-path})`. If the task line is already logged in the target, skip the append — but still remove it from the source.
+
+6. **Remove from source.** Delete each swept block from its task file. Touch nothing else — open tasks, headings, and section structure stay untouched.
+
+7. **Update state and report.** Update `last_updated` in every touched work-log's frontmatter. Report in chat in one line: tasks swept, source files cleaned, work-logs written.
+
 ## What NOT to do
 
 - Do NOT summarize in chat — write to the file and confirm what was logged.
 - Do NOT skip reading the template — the format is authoritative.
 - Do NOT collapse rich content into Updates. If a session had decisions or refinements, populate those tables; do not hide them in narrative bullets.
+- Do NOT sweep open (`- [ ]`) tasks or checked sub-items of open tasks.
+- Do NOT run the sweep when the session produced documentable work — document the session; done tasks wait for the next fresh run.
