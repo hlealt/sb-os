@@ -288,9 +288,12 @@ Future broker statements add their own parsers and register under `PARSERS` in `
 
 `calculate.py` passes RF fields through to `portfolio.json` for any position with at least one populated RF metadata field.
 
-The importer's `upsert_assets()` merges new metadata into `assets.csv` by `id`, preserving manual edits — only fields explicitly set in the parser output overwrite existing values.
+**Write paths for `assets.csv`.** Two write paths feed `assets.csv`:
 
-`name` is **insert-only**: parsers populate it on first registration (using whatever raw label the broker statement provides), but subsequent re-imports never overwrite it. Display names are user-curated in `assets.csv` directly — edit the row, never touch parsers. Suggested RF naming convention: `{Tipo} {Emissor}` where Tipo ∈ {`Deb. Inc.` (incentivada), `Deb.` (comum), `CRA`, `CRI`, `LCA`, `LCI`}, Emissor capitalized without `S/A` / `S.A.` / `Ltda` suffixes. For CRAs issued through securitizadoras (Eco, Vert, Virgo), use the underlying devedor — not the securitizadora.
+1. **Parser-side (automated, during import):** parsers that output asset metadata (e.g., `safra_fundos_movimentacoes.py`, `safra_rf_movimentacoes.py`) call the internal `upsert_assets()` helper in `import_balance_snapshots.py`, which merges new metadata by `id` and preserves existing values.
+2. **Agent-side (standalone, registered tool):** `upsert_assets.py` (`scripts/investimentos/upsert_assets.py`) is the canonical agent-side write path for asset-metadata rows. It accepts an input CSV in the destination schema, defaults to `--dry-run`, and requires explicit `--apply` to write. It enforces field-ownership via `_field_ownership.yaml` + `lib/field_ownership.py`: `curated` fields (e.g., `name`, `active`, `sector`) are insert-only (never overwritten on update); `source_bound` fields are parser-owned; `derived` fields are overwritable. Unknown input columns trigger a `field_ownership_unknown` audit event and abort. On `--apply`, emits `track_write` + `docs_potentially_stale` audit events and writes atomically with rows sorted alphabetically by `id`.
+
+`name` is **insert-only** (enforced by the `curated` field class in `_field_ownership.yaml`): parsers populate it on first registration (using whatever raw label the broker statement provides), but subsequent re-imports never overwrite it. Display names are user-curated in `assets.csv` directly — edit the row, never touch parsers. Suggested RF naming convention: `{Tipo} {Emissor}` where Tipo ∈ {`Deb. Inc.` (incentivada), `Deb.` (comum), `CRA`, `CRI`, `LCA`, `LCI`}, Emissor capitalized without `S/A` / `S.A.` / `Ltda` suffixes. For CRAs issued through securitizadoras (Eco, Vert, Virgo), use the underlying devedor — not the securitizadora.
 
 ### Options and Subscription Rights
 

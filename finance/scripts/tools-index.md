@@ -511,3 +511,16 @@ canonical_reader_writer: writes the ## Financials section of {wiki_root}/wiki/en
 dry_run: available
 last_validated: 2026-06-04
 ```
+
+```yaml
+tool: upsert_assets (python investimentos/upsert_assets.py <input_csv> [--apply] [--actor ACTOR_ID])
+purpose: Upsert rows into assets.csv via the field-ownership manifest — inserts new asset rows and updates existing ones, respecting curated/source_bound/derived field classes so that user-curated fields (name, issuer, active, sector) are never overwritten on update by actors without ownership.
+owner_script: investimentos/upsert_assets.py
+class: write
+use: upsert
+expected_inputs: positional input_csv (must match assets.csv schema: id,asset_class,name,type,sector,currency,current_broker,active,issuer,indexer,rate,indexer_pct,application_date,maturity_date,cnpj,manager); optional --apply flag (dry-run is the DEFAULT); optional --actor ACTOR_ID (default: agent_manual; use a parser's source_id such as safra_titulos to write source_bound fields); reads .user/finance/bookkeeper/data/assets.csv and .user/finance/bookkeeper/config/_field_ownership.yaml
+outputs: Per-row diff on stdout (INSERT/UPDATE/NOOP + ownership-blocked fields); summary line (X inserts, Y updates, Z noops, W ownership-blocked fields). Under --apply writes .user/finance/bookkeeper/data/assets.csv (existing rows preserved in their original order; new rows inserted at byte/ASCII sort position by id — uppercase sorts before lowercase, e.g. XRP before aplicacoes_renda_fixa), emits one ledger_write audit event via audit.track_write, and emits docs_potentially_stale. Dry-run writes NOTHING. Unknown input columns trigger a field_ownership_unknown audit event and exit 1 (no write). Schema gaps (input column absent from destination schema) are dual-surfaced (schema_gap_finding event + user prompt) and exit 1.
+canonical_reader_writer: reads and writes .user/finance/bookkeeper/data/assets.csv; reads .user/finance/bookkeeper/config/_field_ownership.yaml
+dry_run: default
+last_validated: 2026-06-05
+```

@@ -30,7 +30,7 @@
 #             hook gates at file granularity, the signal reports the sections).
 
 version: "1.0"
-last_updated: "2026-06-04"
+last_updated: "2026-06-05"
 
 couplings:
   # enforcement: hard-block (default) | signal-only
@@ -139,6 +139,7 @@ couplings:
       - "scripts/investimentos/investment_financials_extract.py"
       - "scripts/investimentos/market_price.py"
       - "scripts/investimentos/us_gaap_vocab_map.json"
+      - "scripts/investimentos/upsert_assets.py"
     docs:
       - path: "scripts/tools-index.md"
         sections:
@@ -152,3 +153,16 @@ couplings:
       - path: "docs/bookkeeper.md"
         sections:
           - "standing-rules"
+
+  - node_id: assets_write_path
+    # The agent-side upsert tool for assets.csv. Its behavior (field-ownership
+    # enforcement, dry-run default, --apply, audit events) is the write contract
+    # documented in docs/investimentos.md § "RF and Fund Metadata in assets.csv".
+    code:
+      - "scripts/investimentos/upsert_assets.py"
+      - "scripts/shared/lib/field_ownership.py"
+      - ".user/finance/bookkeeper/config/_field_ownership.yaml"
+    docs:
+      - path: "docs/investimentos.md"
+        sections:
+          - "RF and Fund Metadata in assets.csv"
