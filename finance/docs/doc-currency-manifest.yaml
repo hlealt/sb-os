@@ -30,7 +30,7 @@
 #             hook gates at file granularity, the signal reports the sections).
 
 version: "1.0"
-last_updated: "2026-06-05"  # doc-maintainer reconcile: gate_5 side-aware fee formula + corrections-join behavior — step-02-parse.md item 6 brought current
+last_updated: "2026-06-05"  # doc-maintainer reconcile: gate_coverage recalibration (threshold 0.75, gate2 informational, R$300 floor + ack side-ledger) — step-05-review.md Section 4 + data-flow-map-target.md D18 + tag_review_acks node added
 
 couplings:
   # enforcement: hard-block (default) | signal-only
@@ -156,6 +156,22 @@ couplings:
       - path: "docs/bookkeeper.md"
         sections:
           - "standing-rules"
+
+  - node_id: tag_review_acks
+    # New store created 2026-06-05. enforcement: hard-block would require docs outside
+    # this repo (data-flow-map-target.md lives in 1-projects/); use signal-only so the
+    # companion reconciles rather than the pre-commit hook blocks.
+    enforcement: signal-only
+    code:
+      - ".user/finance/bookkeeper/config/corrections/tag-review-acks.csv"
+      - "scripts/shared/gate_coverage.py"
+    docs:
+      - path: "1-projects/finance-system/finance-system-v2-foundation/phase-2/data-flow-map-target.md"
+        sections:
+          - "Tag-coverage ack side-ledger — TARGET (NEW, D18)"
+      - path: "scripts/tools-index.md"
+        sections:
+          - "Registered Tools"
 
   - node_id: assets_write_path
     # The agent-side upsert tool for assets.csv. Its behavior (field-ownership

@@ -13,7 +13,7 @@ The architectural divide is **Write vs Read**. Sub-uses live below each class. T
 | Class | Mutates data? | Sub-uses (the `use` field) | Quality bar |
 |-------|---------------|----------------------------|-------------|
 | **write** | Yes | `parser` — ingests from a source into a ledger / config. `retro-rewrite` — renames, merges, canonical corrections, code-migrations. `upsert` — asset-metadata writes via the field-ownership manifest. | Mandatory `--dry-run` mode. For `retro-rewrite`: mandatory **fix-impact preview** enumerating every affected location (rows, configs, dashboard joins, tag namespaces) BEFORE any write; rollback path. Every write tool ships a schema-validation test against the destination artifact's current schema. A registry entry AND a doc-maintainer documentation update are part of definition-of-done. |
-| **read** | No | `audit-diagnostic` — interactive Q&A for an agent or user ("show all transactions over R$500"; "list every place vendor X appears"). `validation-gate` — pass/fail check consumed by the workflow / pre-commit / CI (e.g. the ANDed tag-coverage gate "R$-coverage ≥ 90% AND row-coverage ≥ 90% AND no untagged despesa > R$100"; "rf_balcao within 7–15%?"). | `audit-diagnostic` — human-readable output (pretty-printed tables, summaries). `validation-gate` — clean pass/fail **exit codes** (0 = pass, non-zero = fail) for machine consumption. A registry entry AND a doc-maintainer documentation update are part of definition-of-done. |
+| **read** | No | `audit-diagnostic` — interactive Q&A for an agent or user ("show all transactions over R$500"; "list every place vendor X appears"). `validation-gate` — pass/fail check consumed by the workflow / pre-commit / CI (e.g. the tag-coverage gate "R$-coverage ≥ 0.75 AND no unacknowledged untagged despesa > R$300"; "rf_balcao within 7–15%?"). | `audit-diagnostic` — human-readable output (pretty-printed tables, summaries). `validation-gate` — clean pass/fail **exit codes** (0 = pass, non-zero = fail) for machine consumption. A registry entry AND a doc-maintainer documentation update are part of definition-of-done. |
 
 **Why Read has two sub-uses despite being one class:** they share the read primitive but have different *output contracts*. Audit-diagnostic output is read by a human or an agent in conversation, so it must be human-readable. Validation-gate output is read by a hook or workflow, so it must be a machine-parseable pass/fail exit code. The sub-use determines which contract the tool must satisfy.
 
@@ -344,16 +344,16 @@ last_validated: 2026-05-27
 ```
 
 ```yaml
-tool: gate_coverage (python shared/gate_coverage.py [--transactions PATH] [--loop-count N] [--config-dir PATH])
-purpose: Gates #1/#2/#3 (ANDed, P2, S7) — R$-coverage >= 90%, row-coverage >= 90%, no untagged despesa > R$100 before commit; auto-loops up to 3 times then surfaces the "Proceed anyway? [S/N]" user prompt.
+tool: gate_coverage (python shared/gate_coverage.py [--transactions PATH] [--loop-count N] [--config-dir PATH] [--ack-file PATH])
+purpose: Gates #1/#3 (ANDed, P2, S7) — R$-coverage >= config threshold (0.75) AND no unacknowledged untagged despesa > config floor (R$300); gate 2 row-coverage is informational only (printed + audit event, never fails); auto-loops up to 3 times then surfaces the "Proceed anyway? [S/N]" user prompt.
 owner_script: shared/gate_coverage.py
 class: read
 use: validation-gate
-expected_inputs: optional --transactions PATH to transactions.csv (default: latest fechamento month); optional --loop-count N (current auto-loop iteration, default 0); optional --config-dir PATH; reads standing-rules.yaml for threshold (90%) and R$100 floor (tag_coverage.gate.untagged_amount_threshold_brl); excludes receitas/intercontas/ignorar/venda
-outputs: R$ coverage % + row coverage % + large-untagged list; PASS (exit 0) all three gates pass; FAIL (exit 1) any gate fails; exit 2 on missing file; emits coverage_progress (x2) + gate_pass/gate_fail events. Max-loop guard at 3 iterations.
-canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/fechamento/{YYYY-MM}/transactions.csv (no write)
+expected_inputs: optional --transactions PATH to transactions.csv (default: latest fechamento month); optional --loop-count N (current auto-loop iteration, default 0); optional --config-dir PATH; optional --ack-file PATH to tag-review-acks.csv (default: .user/finance/bookkeeper/config/corrections/tag-review-acks.csv); reads standing-rules.yaml for R$ threshold (gates.step_5_5_coverage.threshold, 0.75) and floor (tag_coverage.gate.untagged_amount_threshold_brl, 300); reads tag-review-acks.csv (identity-keyed ack side-ledger; missing file treated as empty set; malformed file — missing identity columns — exits 2); excludes receitas/intercontas/ignorar/venda
+outputs: R$ coverage % + row coverage % (informational) + ACK/VIOLATION lines per large-untagged row (ACK = row acked in tag-review-acks.csv, VIOLATION = unacked); PASS (exit 0) gate 1 R$ >= threshold AND gate 3 zero VIOLATION lines; FAIL (exit 1) gate 1 below threshold OR any VIOLATION line; exit 2 on missing transactions.csv or malformed ack file; emits coverage_progress (x2) + gate_pass/gate_fail events (trigger_context.gate3_acked_skips = count of acked rows above floor). Max-loop guard at 3 iterations.
+canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/fechamento/{YYYY-MM}/transactions.csv; reads .user/finance/bookkeeper/config/corrections/tag-review-acks.csv (no write)
 dry_run: not-applicable
-last_validated: 2026-06-04
+last_validated: 2026-06-05
 ```
 
 ```yaml

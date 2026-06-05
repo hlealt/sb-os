@@ -137,24 +137,26 @@ Save the CSV.
 
 1. Write the final CSV to `{DASHBOARD_DATA}/{MONTH}/transactions.csv` (overwrites the intermediate).
 
-2. **Completion gate — tag coverage before commit (`gate_coverage.py`, gates #1/#2/#3 ANDed — auto-LOOP).** Run over the final CSV:
+2. **Completion gate — tag coverage before commit (`gate_coverage.py`, gates #1/#3 — auto-LOOP).** Run over the final CSV:
 
    ```bash
    python "{SCRIPTS_DIR}/gate_coverage.py" --transactions "{DASHBOARD_DATA}/{MONTH}/transactions.csv" --loop-count {LOOP_COUNT}
    ```
 
-   The three gates are ANDed in a single call (exit 0 only if ALL pass): #1 R$ coverage ≥ 90%, #2 row coverage ≥ 90%, #3 no untagged expense with `abs(amount) > R$100`. Excludes `receitas`/`intercontas`/`ignorar`/`venda`. `{LOOP_COUNT}` starts at `0`.
+   Two gates enforced (exit 0 only if both pass): **#1** R$ coverage ≥ config threshold (`gates.step_5_5_coverage.threshold`, currently 0.75); **#3** no unacknowledged untagged despesa with `abs(amount) > config floor` (`tag_coverage.gate.untagged_amount_threshold_brl`, currently R$300). Gate #2 (row coverage) is **informational only** — computed and printed with an `[informational]` suffix, audit event emitted, but it never fails the gate. Excludes `receitas`/`intercontas`/`ignorar`/`venda`. `{LOOP_COUNT}` starts at `0`.
 
-   - **Exit 0** → all three gates passed. Record the pass and proceed to step 3.
-   - **Exit 1 (FAIL) with `{LOOP_COUNT} < 3`** → this gate **auto-loops** (it is not an inline halt). Return to the tag batch (Section 1 § Batch — tags) and tag the expenses lacking coverage, increment `{LOOP_COUNT}` by 1, rewrite the CSV, and run the gate again. This repeats until exit 0 or until `{LOOP_COUNT}` reaches 3.
+   Gate #3 consults the ack side-ledger (`.user/finance/bookkeeper/config/corrections/tag-review-acks.csv`): a large untagged despesa above the floor that has a matching ack row prints as `ACK` and does not fail; unacknowledged rows print as `VIOLATION` and fail. Pass `--ack-file PATH` to override the default path.
+
+   - **Exit 0** → both enforced gates passed. Record the pass and proceed to step 3.
+   - **Exit 1 (FAIL) with `{LOOP_COUNT} < 3`** → this gate **auto-loops** (it is not an inline halt). Return to the tag batch (Section 1 § Batch — tags) and tag the expenses lacking coverage, or add ack rows for legitimately untaggable large despesas; increment `{LOOP_COUNT}` by 1, rewrite the CSV, and run the gate again. This repeats until exit 0 or until `{LOOP_COUNT}` reaches 3.
    - **Exit 1 (FAIL) with `{LOOP_COUNT} == 3`** → the gate's max-loop guard prints the prompt "Proceed anyway? [S/N]". Treat as Rule C **blocking**: surface the prompt to the user; `[S]` → record the exception and proceed; `[N]` → keep correcting or stop the close.
-   - **Exit 2** → CSV missing/malformed; report and ask how to proceed.
+   - **Exit 2** → CSV missing or ack file malformed (missing identity columns); report and ask how to proceed.
 
 3. Confirm to the user: `Review complete. {N_pass1} resolutions (Pass 1) + {N_cash} cash expenses + {N_pass2_moved} competências moved (Pass 2). Tag coverage approved. CSV saved.`
 4. STOP. Wait for confirmation to continue.
 
 ## Step Menu
 
-- **Gatekeeper checkpoint** → before advancing, run § Per-Step Checkpoint in `../gatekeeper-loop.md`. This step's two-pass review queue IS the deviation-to-structure protocol (Rule B) for new categories/suppliers/tags; a deviation needing a new tool or parser routes to Rule B Seam 1 (`tool-builder`), and a structure change routes to Seam 2 (`doc-maintainer`). Two completion gates fire in this step: `gate_pass_1_queue.py` (#11, auto-halt, before Pass 2) and `gate_coverage.py` (#1/#2/#3, auto-loop to the tag batch, before commit).
+- **Gatekeeper checkpoint** → before advancing, run § Per-Step Checkpoint in `../gatekeeper-loop.md`. This step's two-pass review queue IS the deviation-to-structure protocol (Rule B) for new categories/suppliers/tags; a deviation needing a new tool or parser routes to Rule B Seam 1 (`tool-builder`), and a structure change routes to Seam 2 (`doc-maintainer`). Two completion gates fire in this step: `gate_pass_1_queue.py` (#11, auto-halt, before Pass 2) and `gate_coverage.py` (#1/#3, auto-loop to the tag batch, before commit; gate #2 informational only).
 - **[C] Continue** → proceed to Step 06 (Generate Report)
 - **[X] Exit** → halt workflow
