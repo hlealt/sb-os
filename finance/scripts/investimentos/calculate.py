@@ -532,12 +532,20 @@ def _build_position_entry(pos, price_data, fx_state, usd_brl_rate, assets,
 
         entry['total_dividends'] = round(pos.total_dividends, 2)
 
-        # IRR per-asset — flows from balcão (already signed correctly)
+        # IRR per-asset — flows from balcão (already signed correctly).
+        # Terminal anchors at the snapshot's own date (price_date), not the
+        # cut date: cut-date anchoring implies 0% return across the staleness
+        # window and understates IRR — the staler the snapshot, the bigger
+        # the drag (D9 in docs/investimentos.md). Listed/crypto positions
+        # keep the cut-date anchor (prices are fetched fresh at cut), and
+        # portfolio/per-class IRR keep cut-date anchoring (mixed positions
+        # need one common terminal anchor).
         flows = position_flows.get(pos.id, [])
         if flows:
             terminal = entry['current_value'] if entry['current_value'] is not None else 0
+            snapshot_terminal_date = entry.get('price_date') or terminal_date
             entry['irr'] = compute_xirr(flows, terminal_value=terminal,
-                                        terminal_date=terminal_date,
+                                        terminal_date=snapshot_terminal_date,
                                         label=pos.id,
                                         expect_positive=pos.type in _RF_TRADICIONAL_TYPES)
         else:

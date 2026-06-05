@@ -119,6 +119,7 @@ Broker/exchange configuration. Each source has: `name`, `type` (corretora/banco/
 | D6 | Phase 1 import, Phase 2 parsers | Spreadsheet data already structured |
 | D7 | Crypto buy/sell asset pair | Handles fiat↔crypto and crypto↔crypto |
 | D8 | Crypto per-asset IRR in BRL | Flows from `crypto.csv:price_brl`; terminal = `quantity × current_price_brl` (exchanges quote BRL natively). Each leg of a crypto↔crypto swap registers as a synthetic BRL flow at its implied BRL value. Resulting IRR reflects BRL-equivalent timing of swaps, not pure native-asset return — read with care for swap-heavy positions. |
+| D9 | Per-asset IRR terminal anchored at snapshot date (balcão) | Balcão positions anchor the XIRR terminal at the snapshot's own `price_date`, not the cut date — cut-date anchoring implies 0% return across the staleness window and understates IRR (a 38-day-stale snapshot cost -36bp in the motivating case). Listed/crypto keep cut-date anchoring (prices fetched fresh at cut); portfolio + per-class IRR keep cut-date anchoring (mixed positions need one common anchor). |
 
 ## Source Data Reference
 
@@ -204,6 +205,16 @@ A heavy swap history (e.g. BTC→ETH→USDT→BTC) produces a per-asset IRR that
 **Why not native-asset IRR.** A native-asset XIRR would require capturing every leg in the asset's own units, with terminal in the same units. Inter-asset swaps would need to register as zero-sum events (out in coin A, in in coin B at swap parity), which destroys the relationship between flows and BRL. The result would only be meaningful for positions that are never swapped — a tiny subset of activity. Out of scope.
 
 **Aggregate (per-class) crypto IRR.** Mirrors per-asset: BRL flows, BRL terminal. The `crypto` bucket in `summary.irr.per_class` is therefore a true BRL return on crypto exposure as a whole.
+
+### Per-Asset IRR Terminal Anchoring (Balcão)
+
+Snapshot-valued (balcão) positions anchor the per-asset XIRR terminal at the snapshot's own `price_date`, not at the cut date (D9).
+
+**Why.** The terminal value IS the snapshot value — dated information. Anchoring it at the cut date stretches the same value across the staleness window, implying 0% return over `snapshot_age_days` and understating IRR; the staler the snapshot, the bigger the drag. Motivating case: a CRA at cut with a 38-day-stale snapshot reported 4.41% under cut-date anchoring vs 4.77% at the snapshot date.
+
+**Semantics.** A balcão position's `irr` reads as "XIRR through its latest mark" and does not change with the cut date while the underlying data is unchanged. A flow dated after the snapshot (e.g. a coupon between snapshot and cut) still enters the flow list — XIRR handles unordered dated flows; the terminal stays at the snapshot date.
+
+**Scope.** Listed and crypto positions keep the cut-date anchor — their prices are fetched fresh at the cut, so terminal date = cut date is exact. Portfolio-level and per-class IRR (`summary.irr`) also keep cut-date anchoring: they mix positions with different snapshot dates and need one common terminal anchor; per-class terminals sum `current_value_brl` at the cut.
 
 ### Yield on Cost (YoC)
 
