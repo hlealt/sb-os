@@ -399,6 +399,28 @@ def _build_position_flows(orders: list[dict], proventos: list[dict],
     return flows
 
 
+def _spot_usd_brl_rate(fx_state) -> float:
+    """Resolve the spot USD/BRL rate for portfolio valuation.
+
+    Fallback chain (D13, same family as D11): live account weighted
+    average → last non-zero average persisted across a full repatriation
+    (`FXState.last_nonzero_avg_rate`) → constant 5.0. The constant is
+    reached ONLY when no avenue_fx history exists at all and is always
+    announced on stderr — never silent: it feeds `fetch_prices`,
+    `current_value_brl` of USD positions and `meta.fx_rate_usd_brl`, and
+    is only overridden when the USD_BRL market indicator fetch succeeds
+    (not on --skip-prices runs or indicator failures).
+    """
+    rate = fx_state.weighted_avg_rate or fx_state.last_nonzero_avg_rate
+    if rate:
+        return rate
+    print("[irr_calculator] spot FX: no FX history available "
+          "(no avenue_fx rows) — USD/BRL falls back to constant 5.0 "
+          "(degenerate); USD position values are unreliable unless the "
+          "USD_BRL market indicator overrides it", file=sys.stderr)
+    return 5.0
+
+
 def build_portfolio(cut_date: str = None, skip_prices: bool = False) -> dict:
     """Build the complete portfolio.json structure."""
     now = datetime.now()
@@ -409,7 +431,7 @@ def build_portfolio(cut_date: str = None, skip_prices: bool = False) -> dict:
 
     # 2. Build FX state for USD conversions
     fx_state = build_fx_state(cut_date)
-    usd_brl_rate = fx_state.weighted_avg_rate or 5.0  # Fallback
+    usd_brl_rate = _spot_usd_brl_rate(fx_state)  # D13 fallback chain
 
     # 3. Fetch prices (unless skipped)
     # Dedupe by id: crypto positions are split per exchange, so the same

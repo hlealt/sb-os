@@ -23,6 +23,20 @@ Contracts tested:
   FX-F  calculate._to_brl with NO FX history anywhere converts at 1.0
         but warns LOUD on stderr (never silent), once per ticker.
   FX-G  calculate._to_brl passes BRL flows through untouched.
+
+Sibling bug (D13): `build_portfolio` initialized the spot rate as
+`weighted_avg_rate or 5.0` — after a full repatriation the live average
+zeroes and the constant 5.0 silently valued USD positions
+(current_value_brl, meta.fx_rate_usd_brl). Masked when the USD_BRL
+market indicator overrides it; exposed on --skip-prices runs or
+indicator-fetch failures.
+
+  FX-H  calculate._spot_usd_brl_rate returns the live weighted average
+        when non-zero — no warning.
+  FX-I  After a full repatriation (live average zero), the spot rate
+        falls back to last_nonzero_avg_rate — never 5.0, no warning.
+  FX-J  With NO FX history anywhere, the spot rate falls back to the
+        5.0 constant and warns LOUD on stderr (never silent).
 """
 
 from __future__ import annotations
@@ -36,7 +50,7 @@ if str(_INVESTIMENTOS) not in sys.path:
     sys.path.insert(0, str(_INVESTIMENTOS))
 
 from fx_engine import FXState
-from calculate import _to_brl
+from calculate import _spot_usd_brl_rate, _to_brl
 
 
 def _repatriated_state() -> FXState:
@@ -141,3 +155,42 @@ def test_to_brl_brl_passthrough(capsys):
     brl = _to_brl(state, 'VALE3', 'BRL', -123.45, set())
     assert abs(brl - (-123.45)) < 1e-9
     assert capsys.readouterr().err == ''
+
+
+# ---------------------------------------------------------------------------
+# FX-H: spot rate uses the live weighted average while non-zero
+# ---------------------------------------------------------------------------
+
+def test_spot_rate_uses_live_average(capsys):
+    state = FXState()
+    state.process_transfer_in(1000.0, 5.00)
+    state.process_transfer_in(1000.0, 6.00)
+    rate = _spot_usd_brl_rate(state)
+    assert abs(rate - 5.50) < 1e-9, \
+        f"spot rate should be the live average 5.50, got {rate}"
+    assert capsys.readouterr().err == ''
+
+
+# ---------------------------------------------------------------------------
+# FX-I: after full repatriation, spot rate falls back to persisted average
+# ---------------------------------------------------------------------------
+
+def test_spot_rate_falls_back_after_repatriation(capsys):
+    state = _repatriated_state()
+    rate = _spot_usd_brl_rate(state)
+    assert abs(rate - 5.50) < 1e-9, \
+        f"spot rate should fall back to persisted 5.50 — never 5.0, got {rate}"
+    assert capsys.readouterr().err == ''
+
+
+# ---------------------------------------------------------------------------
+# FX-J: no FX history anywhere → constant 5.0 but LOUD on stderr
+# ---------------------------------------------------------------------------
+
+def test_spot_rate_degenerate_constant_warns_loud(capsys):
+    state = FXState()  # no FX history anywhere
+    rate = _spot_usd_brl_rate(state)
+    assert abs(rate - 5.0) < 1e-9
+    err = capsys.readouterr().err
+    assert '5.0' in err and '[irr_calculator]' in err, \
+        f"constant 5.0 fallback must warn on stderr, got: {err!r}"
