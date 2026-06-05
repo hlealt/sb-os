@@ -9,6 +9,8 @@ Given a product_id, prints:
       find_phantom_application  — aplicado=0 and juros_amort>0
       audit_active_vs_maturity  — active=true but maturity_date < today
       audit_balcao_dups         — (date, op, |amount|) cross-source duplicates
+                                  (groups covered by the read-time dedup are
+                                  reported as INFO, not anomalies)
 
 This tool is READ-ONLY. It NEVER writes to any ledger.
 
@@ -126,6 +128,21 @@ def detect_balcao_dups(rows: list[dict]) -> list[dict]:
         key = (r.get("date", ""), (r.get("operation") or "").lower(), amt)
         groups[key].append(r)
     return [g for g in groups.values() if len({r.get("source", "") for r in g}) > 1]
+
+
+def group_covered_by_read_time_dedup(group: list[dict]) -> bool:
+    """True if `_dedup_cross_source_balcao` collapses this group to one row.
+
+    The read-time filter (position_calculator.py, applied via `load_balcao`)
+    drops b3 / b3_manual rows whose key matches a safra_movimentacoes row.
+    A group is fully neutralized when it has exactly one safra_movimentacoes
+    row and every other row is b3 / b3_manual. Ledger rows are NEVER deleted
+    (append-only + consumer-side filter convention).
+    """
+    sources = [(r.get("source") or "").strip() for r in group]
+    others = [s for s in sources if s != "safra_movimentacoes"]
+    return (sources.count("safra_movimentacoes") == 1 and bool(others)
+            and all(s in ("b3", "b3_manual") for s in others))
 
 
 # ---------------------------------------------------------------------------
@@ -256,14 +273,26 @@ def build_report(
     # ---- Sub-detector: balcão duplicates ----
     dup_groups = detect_balcao_dups(balcao_rows)
     if dup_groups:
-        anomalies.append("BALCAO_CROSS_SOURCE_DUPLICATES")
-        print(f"\n=== [ANOMALY] BALCÃO CROSS-SOURCE DUPLICATES ({len(dup_groups)} group(s)) ===")
-        for grp in dup_groups:
-            print(f"  date={grp[0].get('date')}  op={grp[0].get('operation')}  "
-                  f"amount={grp[0].get('amount')}")
-            for r in grp:
-                print(f"    source={r.get('source')}")
-        print("  Resolution: safra_movimentacoes > b3 > b3_manual")
+        def _print_groups(groups: list[list[dict]]) -> None:
+            for grp in groups:
+                print(f"  date={grp[0].get('date')}  op={grp[0].get('operation')}  "
+                      f"amount={grp[0].get('amount')}")
+                for r in grp:
+                    print(f"    source={r.get('source')}")
+
+        uncovered = [g for g in dup_groups if not group_covered_by_read_time_dedup(g)]
+        covered = [g for g in dup_groups if group_covered_by_read_time_dedup(g)]
+        if uncovered:
+            anomalies.append("BALCAO_CROSS_SOURCE_DUPLICATES")
+            print(f"\n=== [ANOMALY] BALCÃO CROSS-SOURCE DUPLICATES ({len(uncovered)} group(s)) ===")
+            _print_groups(uncovered)
+            print("  NOT covered by the read-time dedup (`_dedup_cross_source_balcao`).")
+            print("  Resolve via a corrections entry (config/corrections/) — NEVER delete ledger rows.")
+        if covered:
+            print(f"\n=== [INFO] CROSS-SOURCE DUPLICATES HANDLED AT READ TIME ({len(covered)} group(s)) ===")
+            _print_groups(covered)
+            print("  Neutralized by `_dedup_cross_source_balcao` (position_calculator.py);")
+            print("  rows stay in the ledger — append-only + consumer-side filter convention.")
 
     # ---- Summary ----
     print(f"\n{'=' * 60}")

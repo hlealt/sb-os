@@ -155,10 +155,10 @@ owner_script: investimentos/position_summary.py
 class: read
 use: audit-diagnostic
 expected_inputs: product_id string; optional --ledger-dir PATH, --assets-path PATH; reads balcao.csv, assets.csv, balance-snapshots.csv; env overrides BOOKKEEPER_INVESTIMENTOS_DIR, BOOKKEEPER_ASSETS_PATH
-outputs: Structured plain-text report with sections for metadata, balcao summary, snapshot trajectory, and per-anomaly blocks headed by === [ANOMALY TYPE] ===. Exit 0 = clean; exit 1 = anomaly found.
+outputs: Structured plain-text report with sections for metadata, balcao summary, snapshot trajectory, and per-anomaly blocks headed by === [ANOMALY TYPE] === (cross-source dup groups covered by the read-time dedup render as === [INFO] === and do not count as anomalies). Exit 0 = clean; exit 1 = anomaly found.
 canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/investimentos/balcao.csv + assets.csv + balance-snapshots.csv (no write)
 dry_run: not-applicable
-last_validated: 2026-05-27
+last_validated: 2026-06-05
 ```
 
 ```yaml
@@ -233,10 +233,10 @@ owner_script: investimentos/audit_balcao_dups.py
 class: read
 use: audit-diagnostic
 expected_inputs: optional --product-id to narrow to one asset; optional --ledger-dir PATH; env override BOOKKEEPER_INVESTIMENTOS_DIR; reads balcao.csv
-outputs: Per-asset duplicate groups (date, operation, amount, source list) with resolution recommendation (safra_movimentacoes > b3 > b3_manual). Exit 0 = clean; exit 1 = duplicates found or balcao.csv missing.
+outputs: Per-asset duplicate groups (date, operation, amount, source list), each annotated covered / NOT-covered by the read-time dedup (`_dedup_cross_source_balcao`, precedence safra_movimentacoes > b3 > b3_manual); convention-compliant action text (corrections entry — never delete ledger rows). Exit 0 = clean or all groups covered; exit 1 = uncovered duplicates or balcao.csv missing.
 canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/investimentos/balcao.csv (no write)
 dry_run: not-applicable
-last_validated: 2026-05-27
+last_validated: 2026-06-05
 ```
 
 ```yaml
