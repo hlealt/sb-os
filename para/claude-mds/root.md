@@ -41,6 +41,8 @@ Fits an existing file → append. Index files (`{dir-name}.md`) are NEVER conten
 
 **Parallel sessions — commit collisions.** Staging a file commits ALL its uncommitted hunks, including other sessions'. Before committing a vault file, diff it against your own session's delta — either confirm the foreign hunks ride along (disclose them in the commit message) or stop and re-scope. NEVER `git commit --amend` in the vault: HEAD may have moved to another session's commit between your read and the rewrite — fix history forward with a new commit, or not at all.
 
+**Parallel sessions — working-tree reverts.** Edit rejection is not the only collision: a parallel session may `git restore` files in a shared repo and silently wipe your applied-but-uncommitted edits (observed 2026-06-05, sb-os). Immediately before staging, `git diff` each file you intend to stage and confirm your delta is still present; if wiped, re-read and re-apply only your delta, then commit without delay — the edit→commit window is the exposure.
+
 Users extend these defaults by adding their own routing rules below the marker block — anything outside the markers wins over the marker-block defaults (agents read top-to-bottom).
 
 ---
