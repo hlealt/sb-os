@@ -17,13 +17,13 @@ Directory dashboard for a project, area, or resource folder. The main `{dir-name
 | Opening paragraph | Scope, purpose, or context of the directory (1-3 sentences, current state) |
 | Structured context | Optional domain-specific sections agents need to understand the area |
 | `## Linked Projects` / `## Active Projects` | Areas with linked projects — table with project and scope |
-| `## Tasks` | Link to `[[{name}-tasks]]` |
+| `## Tasks` | Link to `[[{name}-tasks]]` — only when the tasks file exists; never link a tasks file that was not created |
 | `## Files` | File inventory — table with `File` and `Description` (~280-char summaries) |
 | Dataview query | Recently modified files in the directory |
 
 > Section-name examples above are illustrative; actual section names are defined per-vault in the vault's CLAUDE.md or templates.
 
-**Frontmatter:** `type: index`, `tags`. Projects add `status` and `deadline`.
+**Frontmatter:** `type: index`, `tags` (FIRST tag = the directory's own name — the identity tag). Projects add `area` (parent area directory name under `2-areas/`), `status`, and optional `due`.
 
 **Never in an index:**
 
@@ -36,7 +36,9 @@ Directory dashboard for a project, area, or resource folder. The main `{dir-name
 
 ### tasks
 
-MoSCoW-prioritized tasks for a directory. One `{name}-tasks.md` per area or project folder.
+MoSCoW-prioritized tasks for a directory. At most one `{name}-tasks.md` per area or project folder — the file is OPTIONAL: create it when the first task lands, never preemptively (dashboards discover task files; empty ones only add noise).
+
+**Frontmatter:** `type: tasks`, `tags` (FIRST tag = the directory's own name — the identity tag). Project task files add `area` (parent area), mirroring the index.
 
 Full format, routing, and lifecycle: read `./tasks.md`.
 

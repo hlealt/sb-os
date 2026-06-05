@@ -115,6 +115,7 @@ Every task exists in exactly ONE `{name}-tasks.md` file.
 ### Routing Rules
 
 - **Source of truth.** Each area's `CLAUDE.md` carries the project-specific routing rules for that area. Read it before creating a task.
+- **No tasks file yet?** Create `{name}-tasks.md` on the first task (frontmatter: `type: tasks`, identity tag first; projects add `area`). Task files are optional until then — never create empty ones preemptively.
 - **Zero duplication.** Each task exists in ONE file only.
 - **When in doubt**, area wins over project. Move to project when scope becomes clear.
 - **Weekly review** checks for duplicates between area and linked projects.

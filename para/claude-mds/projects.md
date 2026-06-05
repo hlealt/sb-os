@@ -32,7 +32,7 @@ When the outcome is reached or the work stops, move the folder to `4-archives/`.
 | One folder per project | `1-projects/{project-name}/` (lowercase kebab-case). The folder is already inside `1-projects/` — do NOT prefix names with `project-` |
 | Index file | `{project-name}.md` inside the folder — describes goal, status, optional due date, links |
 | Index frontmatter | YAML frontmatter on the index SHOULD declare `area:` (the parent area this project rolls up to) and MAY declare `due:` (an optional due date) — see Frontmatter Convention below |
-| Task file | `{project-name}-tasks.md` inside the folder — single source of tasks for the project (tasks carry their own dates) |
+| Task file | `{project-name}-tasks.md` inside the folder — single source of tasks for the project (tasks carry their own dates). OPTIONAL: create it when the project's first task lands — a project with no tasks has no tasks file (dashboards discover task files; empty ones only add noise) |
 | Per-project `CLAUDE.md` | User-owned (sb-os does not manage it). Use it for project-specific agent rules |
 | Sub-folders | Free-form per project — phases, deliverables, references — agents follow the project's own `CLAUDE.md` if present |
 | Sub-files | Loose `.md` files at the `1-projects/` root (siblings of project folders) are user-owned and freeform — sb-os does not manage their structure or naming |
@@ -43,21 +43,26 @@ Use evocative folder names that describe the work itself: `marketing-launch-2027
 
 ## Frontmatter Convention
 
-Each project's index file SHOULD carry YAML frontmatter linking it to its parent area:
+Each project's index file SHOULD carry YAML frontmatter identifying it and linking it to its parent area:
 
 ```yaml
 ---
-area: tech         # parent area this project rolls up to (single string)
-due: 2027-03-15    # OPTIONAL — projects MAY have due dates
+type: index
+tags:
+  - marketing-launch-2027   # identity tag — the project's own folder name
+area: tech                  # parent area this project rolls up to (single string)
+status: active
+due: 2027-03-15             # OPTIONAL — projects MAY have due dates
 ---
 ```
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
+| `tags` | list | recommended | FIRST entry = the project's identity tag (defaults to the folder name). Further entries are free topic tags |
 | `area` | string | recommended | Single parent area (the directory name under `2-areas/`) |
 | `due` | date | optional | Use it if a deadline helps you; omit it freely |
 
-The `area:` field lets dashboards and agents group projects by domain without a manual index. Adding `due:` is purely optional — projects without a due date are still projects, as long as they have a defined endpoint.
+The `{project-name}-tasks.md` file carries the same `tags` + `area` pair — dashboards read task files directly. The `area:` field lets dashboards and agents group projects by domain without a manual index. Adding `due:` is purely optional — projects without a due date are still projects, as long as they have a defined endpoint.
 
 ---
 
@@ -65,7 +70,7 @@ The `area:` field lets dashboards and agents group projects by domain without a 
 
 | Situation | Action |
 |-----------|--------|
-| New bounded work with a defined "done" | Create `1-projects/{project-name}/` with index (frontmatter + body) + tasks file |
+| New bounded work with a defined "done" | Create `1-projects/{project-name}/` with index (frontmatter + body); add `{project-name}-tasks.md` when the first task lands |
 | Project complete or abandoned | Move folder to `4-archives/` (preserves history; deletion is a later step) |
 | Work has no defined endpoint / is ongoing | Belongs in `2-areas/`, not here |
 | A single dated to-do (not a project) | Add it to the relevant project or area's tasks file — do NOT create a project folder for it |

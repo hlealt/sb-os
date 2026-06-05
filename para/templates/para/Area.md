@@ -1,6 +1,6 @@
 ---
 type: index
-tags: []  # %%area tag — typically the directory name%%
+tags: []  # %%identity tag — the area folder name (first entry)%%
 ---
 
 %%One sentence describing this area of responsibility%%
@@ -8,13 +8,9 @@ tags: []  # %%area tag — typically the directory name%%
 ## Active projects
 %%Links to related projects%%
 
-## Pending
+## Tasks
 
-#### Must
-
-#### Should
-
-#### Could
+%%Create {area-name}-tasks.md when the first task lands (same tags frontmatter), then link it: [[{area-name}-tasks]]%%
 
 ## Files
 %%Links to sub-files of this area%%

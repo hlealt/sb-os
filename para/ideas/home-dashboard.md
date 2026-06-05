@@ -48,7 +48,7 @@ These are surfaces a home dashboard *could* expose. Pick the ones that match how
 | Tasks without dates | A separate bucket for the work that has no when — surfaced explicitly so it doesn't disappear |
 | Per-bucket counters | A small badge on each bucket's header showing the count of visible tasks |
 | Priority filters | Clickable pills for whatever priority scheme you use (MoSCoW, p0/p1/p2, ABC, none) |
-| Area / project / context filters | Clickable pills that solo or unsolo a slice. Filter state is the dashboard's primary interaction surface |
+| Area / project / context filters | Clickable pills that solo or unsolo a slice. Filter state is the dashboard's primary interaction surface. Discover pills from `{name}-tasks.md` files' frontmatter (identity tag = first tag, defaulting to the folder name; parent via `area:`; optional `color:` on the sibling index) rather than a hardcoded list — folders without a tasks file get no pill, and a project's tasks stay filterable by its own pill or its parent area's pill |
 | Aggregate stats | "X open, Y completed" rolled up across the visible scope, recomputed when filters change |
 | Inline task actions | Check / uncheck with undo, link out to source file, see the task's tags |
 | Active projects list | Projects in `1-projects/` you are pushing on, optionally with last-touched timestamp |

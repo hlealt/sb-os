@@ -56,7 +56,7 @@ Users extend these defaults by adding their own routing rules below the marker b
 
 ## Tags
 
-Every file gets its parent area tag (the directory name under `2-areas/`). Cross-cutting tags combine with the area tag (examples: `decision`, `meeting`, `idea`). Resources may add topic tags (example: `ai-tools`). Periodic note status tags: `reviewed`, `routed`.
+Index (`{dir-name}.md`) and task (`{name}-tasks.md`) files carry their own directory name as the FIRST tag — the identity tag dashboards and agents key on. Projects declare their parent area via `area:` frontmatter on those two files, not via an area tag. Every other file gets its parent area tag (the directory name under `2-areas/`). Cross-cutting tags combine with these (examples: `decision`, `meeting`, `idea`). Resources may add topic tags (example: `ai-tools`). Periodic note status tags: `reviewed`, `routed`.
 
 ---
 

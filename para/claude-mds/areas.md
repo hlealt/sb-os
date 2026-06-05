@@ -33,7 +33,7 @@ If a thread of work has a deadline and a defined outcome, it belongs in `1-proje
 |------|------|
 | One folder per area | `2-areas/{area-name}/` (lowercase kebab-case) |
 | Index file | `{area-name}.md` inside the folder — describes the area's scope, current state, and standing notes |
-| Task file | `{area-name}-tasks.md` inside the folder — single source of recurring or open tasks for the area |
+| Task file | `{area-name}-tasks.md` inside the folder — single source of recurring or open tasks for the area. OPTIONAL: create it when the area's first task lands — an area with no tasks has no tasks file (dashboards discover task files; empty ones only add noise) |
 | Per-area `CLAUDE.md` | User-owned (sb-os does not manage it). Use it for area-specific agent rules and routing |
 | Sub-folders | Free-form per area — agents follow the area's own `CLAUDE.md` if present |
 | Sub-files | Loose `.md` files at the `2-areas/` root (siblings of area folders) are user-owned and freeform — sb-os does not manage their structure or naming |
@@ -44,7 +44,7 @@ Use evocative folder names that describe the responsibility itself: `health/`, `
 
 ## Tag Convention
 
-Every file inside `2-areas/{area-name}/` gets `{area-name}` as a tag (the directory name). Cross-cutting tags (examples: `decision`, `meeting`, `idea`) combine with the area tag — never replace it.
+Every file inside `2-areas/{area-name}/` gets `{area-name}` as a tag (the directory name). The area's index and tasks files carry it as the FIRST tag — the identity tag dashboards key on. Cross-cutting tags (examples: `decision`, `meeting`, `idea`) combine with the area tag — never replace it.
 
 ---
 
@@ -52,7 +52,7 @@ Every file inside `2-areas/{area-name}/` gets `{area-name}` as a tag (the direct
 
 | Situation | Action |
 |-----------|--------|
-| New ongoing responsibility | Create `2-areas/{area-name}/` with index + tasks file |
+| New ongoing responsibility | Create `2-areas/{area-name}/` with index; add `{area-name}-tasks.md` when the first task lands |
 | Area gains a deadline + defined outcome | Spin up `1-projects/{project-name}/` for the time-bound work; the area folder remains for the ongoing thread |
 | Area no longer maintained | Move folder to `4-archives/` (preserves history; deletion is a later step) |
 | Reference material with no active stewardship | Belongs in `3-resources/`, not here |
