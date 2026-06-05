@@ -149,7 +149,7 @@ def test_main_missing_dir_exit_2(tmp_path, monkeypatch):
 
 def test_gate_event_emitted(tmp_path, monkeypatch):
     """gate_pass/gate_fail event is emitted."""
-    import shared.lib.audit as audit_mod
+    import lib.audit as audit_mod
     audit_mod._reset_cache_for_tests()
 
     audit_dir = tmp_path / "audit"

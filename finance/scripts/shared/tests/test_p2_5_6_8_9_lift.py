@@ -279,17 +279,43 @@ def test_p2_8_months_json_skips_non_matching_dirs():
         assert data == ["2026-01"]
 
 
-def test_p2_8_months_json_skips_on_unexpected_layout():
-    """_update_months_json silently skips when the directory layout is unexpected."""
-    from pathlib import Path
-    import tempfile
+def test_p2_8_months_json_warns_and_skips_on_unexpected_layout(tmp_path, capsys):
+    """_update_months_json fail-louds on unexpected layout (J2 contract).
 
-    with tempfile.TemporaryDirectory() as td:
-        # Place transactions.csv directly under a flat tmp dir (no fechamento/ parent)
-        flat = Path(td) / "transactions.csv"
-        flat.write_text("date\n", encoding="utf-8")
-        # Should not raise — just skip
-        _update_months_json(flat)
+    When transactions.csv is not under a fechamento/{YYYY-MM}/ layout, the
+    function must: (1) not raise, (2) emit a stderr warning naming the skipped
+    manifest update, and (3) write NO months.json anywhere — in particular not
+    a misdirected write into the grandparent directory.
+    """
+    # transactions.csv directly under a flat tmp dir (parent is not YYYY-MM)
+    flat = tmp_path / "transactions.csv"
+    flat.write_text("date\n", encoding="utf-8")
+
+    _update_months_json(flat)  # must not raise
+
+    err = capsys.readouterr().err
+    assert "[categorize]" in err and "months.json" in err, (
+        f"expected fail-loud stderr warning, got: {err!r}"
+    )
+    assert not (tmp_path / "months.json").exists(), "misdirected write into parent"
+    assert not (tmp_path.parent / "months.json").exists(), (
+        "misdirected write into grandparent"
+    )
+
+
+def test_p2_8_months_json_no_warning_on_expected_layout(tmp_path, capsys):
+    """No stderr warning on the canonical fechamento/{YYYY-MM}/ layout."""
+    fechamento = tmp_path / "fechamento"
+    m = fechamento / "2026-01"
+    m.mkdir(parents=True)
+    (m / "transactions.csv").write_text("date,amount\n", encoding="utf-8")
+
+    _update_months_json(m / "transactions.csv")
+
+    assert capsys.readouterr().err == ""
+    assert json.loads((fechamento / "months.json").read_text(encoding="utf-8")) == [
+        "2026-01"
+    ]
 
 
 def test_p2_8_live_fechamento_months_json_consistent():

@@ -370,7 +370,7 @@ def test_main_max_loop_guard_surfaces_prompt(tmp_path, monkeypatch, capsys):
 
 def test_gate_events_emitted_on_fail(tmp_path, monkeypatch):
     """coverage_progress + gate_fail events are emitted when gate #1 fails."""
-    import shared.lib.audit as audit_mod
+    import lib.audit as audit_mod
     import json
     audit_mod._reset_cache_for_tests()
 
@@ -409,7 +409,7 @@ def test_gate_events_emitted_on_fail(tmp_path, monkeypatch):
 
 def test_gate_pass_event_emitted_on_all_pass(tmp_path, monkeypatch):
     """gate_pass event emitted when all three gates pass."""
-    import shared.lib.audit as audit_mod
+    import lib.audit as audit_mod
     import json
     audit_mod._reset_cache_for_tests()
 

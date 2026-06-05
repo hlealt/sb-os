@@ -766,6 +766,7 @@ The folder convention is the documented default until parsers add `extract_payme
 | 2 | For every input row with `source_type == "fatura"`, look up `payment_date` by the row's `bank` field. |
 | 3 | If payment_date missing → raise (categorize.py refuses to compute `data_caixa` for a CC row without an invoice payment date — this is a data-integrity error per spec invariant 3). |
 | 4 | Pass payment_date as `invoice_payment_date` to `lib.accrual.compute_data_caixa`. |
+| 5 | After writing `transactions.csv`, `_update_months_json` updates the `fechamento/months.json` manifest. **Fail-loud guard (J2, 2026-06-05):** the function writes only when the `transactions.csv` output path sits under a `fechamento/{YYYY-MM}/` layout. Off-layout (e.g., a custom `output_folder`), the manifest update is **skipped with a stderr warning** (`[categorize] months.json not updated: …`) and nothing is written — never a silent skip, never a misdirected write into an arbitrary grandparent directory. Canonical `fechamento/` layout behavior is unchanged. |
 
 ### 9.4 Rationale (smallest blast radius)
 

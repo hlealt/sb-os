@@ -634,18 +634,27 @@ def _update_months_json(transactions_csv: Path) -> None:
     this writes to
         .../fechamento/months.json
 
-    Skips silently if the directory layout does not match the expected
-    fechamento/ structure (e.g., custom output_folder paths in tests).
+    Fail-loud skip (J2): if the directory layout does not match the expected
+    fechamento/{YYYY-MM}/ structure (e.g., custom output_folder paths), emits
+    a stderr warning and writes NOTHING — never a misdirected months.json into
+    an arbitrary grandparent directory, and never a crash after the CSV write
+    already succeeded.
     Raises RuntimeError if the JSON write fails (fail-loud for data integrity).
     """
     import re
+    month_pattern = re.compile(r"^\d{4}-\d{2}$")
     month_dir = transactions_csv.parent          # e.g. .../fechamento/2026-03
     fechamento_dir = month_dir.parent            # e.g. .../fechamento
 
-    if not fechamento_dir.is_dir():
-        return  # unexpected layout — skip
-
-    month_pattern = re.compile(r"^\d{4}-\d{2}$")
+    if not month_pattern.match(month_dir.name) or not fechamento_dir.is_dir():
+        print(
+            f"[categorize] months.json not updated: '{transactions_csv}' is not "
+            "under a fechamento/{YYYY-MM}/ layout — manifest write skipped; "
+            "the dashboard will not list this output until months.json is "
+            "updated by a fechamento/-layout run",
+            file=sys.stderr,
+        )
+        return
     closed_months: list[str] = sorted(
         d.name
         for d in fechamento_dir.iterdir()

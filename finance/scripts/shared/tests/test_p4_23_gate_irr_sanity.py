@@ -350,7 +350,7 @@ def test_main_error_exit_2_missing_file(tmp_path, monkeypatch):
 
 def test_main_gate_event_emitted(tmp_path, monkeypatch):
     """gate_fail event emitted on violation."""
-    import shared.lib.audit as audit_mod
+    import lib.audit as audit_mod
     audit_mod._reset_cache_for_tests()
 
     audit_dir = tmp_path / "audit"

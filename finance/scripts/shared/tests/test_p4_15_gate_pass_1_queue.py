@@ -129,7 +129,7 @@ def test_gate_event_emitted_on_fail(tmp_path, monkeypatch):
 
     # Import lib.audit and reset caches so the log dir override takes effect.
     import importlib
-    import shared.lib.audit as audit_mod
+    import lib.audit as audit_mod
     audit_mod._reset_cache_for_tests()
 
     result = main()

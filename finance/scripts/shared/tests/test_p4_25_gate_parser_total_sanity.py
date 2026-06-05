@@ -197,7 +197,7 @@ def test_main_error_exit_2_missing_file(tmp_path, monkeypatch):
 
 def test_main_gate_event_emitted_on_fail(tmp_path, monkeypatch):
     """gate_fail event emitted when violation found."""
-    import shared.lib.audit as audit_mod
+    import lib.audit as audit_mod
     audit_mod._reset_cache_for_tests()
 
     audit_dir = tmp_path / "audit"
@@ -231,7 +231,7 @@ def test_main_gate_event_emitted_on_fail(tmp_path, monkeypatch):
 
 def test_main_gate_pass_event_emitted(tmp_path, monkeypatch):
     """gate_pass event emitted when all rows clean."""
-    import shared.lib.audit as audit_mod
+    import lib.audit as audit_mod
     audit_mod._reset_cache_for_tests()
 
     audit_dir = tmp_path / "audit"

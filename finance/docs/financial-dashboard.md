@@ -123,6 +123,8 @@ A sessão "Fundos" dentro do Balcão é separada da sessão "Renda Fixa" via `_I
 
 Array JSON simples: `["2026-02", "2026-03"]`. O dashboard cria uma aba "Evolucao" (primeira, ativa por padrão) + uma aba por mês. O workflow de fechamento financeiro (Passo 8) atualiza este arquivo automaticamente ao fechar cada mês.
 
+O writer (`categorize.py::_update_months_json`) só escreve quando o `transactions.csv` de saída está sob o layout `fechamento/{YYYY-MM}/`. Fora desse layout (ex.: `output_folder` custom), o update do manifesto é **pulado com warning no stderr** (`[categorize] months.json not updated: …`) — nunca um skip silencioso nem uma escrita desviada para um diretório arbitrário (J2, fail-loud 2026-06-05).
+
 ### Caminhos vault-root-absolute
 
 Todos os paths do dashboard são vault-root-absolute — o server serve a vault root como docroot e a localização do entry HTML é configurável (`finance_dashboard_html_path`), então nada resolve relativo à página:
