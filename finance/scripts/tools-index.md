@@ -193,11 +193,11 @@ purpose: For each IRR class bucket, compare the simple average of per-asset IRRs
 owner_script: investimentos/bucket_sanity_check.py
 class: read
 use: audit-diagnostic
-expected_inputs: optional --bucket (rv_br|rv_eua|rf_balcao|fundos|crypto), --threshold float (default 0.05 = 5%), --portfolio-path; env override BOOKKEEPER_PORTFOLIO_PATH; reads portfolio.json
-outputs: Per-bucket section with per-asset IRR table, simple-avg vs stored-bucket delta, and >>> DIVERGENCE <<< flag when threshold exceeded. Exit 0 always (informational — time-weighting divergence is expected).
+expected_inputs: optional --bucket (rv_br|rv_eua|rf_balcao|fundos|crypto), --threshold float (default 0.05 = 5%), --portfolio-path; env override BOOKKEEPER_PORTFOLIO_PATH; reads portfolio.json. Programmatic callers may pass informational_buckets (frozenset) to check_buckets() — buckets in this set print their section but are never counted in the return value (gate_bucket_divergence passes {'crypto'} here; standalone CLI default counts every bucket).
+outputs: Per-bucket section with per-asset IRR table, simple-avg vs stored-bucket delta, and >>> DIVERGENCE <<< flag when threshold exceeded; informational-bucket divergences additionally marked "informational — not counted". Exit 0 always from CLI (informational — time-weighting divergence is expected); check_buckets() returns divergence count for programmatic callers.
 canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/investimentos/portfolio.json (no write)
 dry_run: not-applicable
-last_validated: 2026-05-27
+last_validated: 2026-06-05
 ```
 
 ```yaml
@@ -358,28 +358,28 @@ last_validated: 2026-06-04
 
 ```yaml
 tool: gate_irr_sanity (python shared/gate_irr_sanity.py [--portfolio-path PATH] [--config-dir PATH])
-purpose: Gate #9 (P3, S7-2) — IRR strict sanity: |irr|>200% → fail; irr_quality missing on valued balcão → fail; rf_balcao annualized return outside [7%,15%] band (config-driven) → fail. Fail-loud; auto-halt before snapshot.
+purpose: Gate #9 (P3, S7-2) — IRR strict sanity: |irr|>200% → fail; irr_quality missing on valued balcão → fail; rf_balcao annualized return outside [7%,15%] band (config-driven) → fail unless position is band-exempt. Fail-loud; auto-halt before snapshot.
 owner_script: shared/gate_irr_sanity.py
 class: read
 use: validation-gate
-expected_inputs: optional --portfolio-path PATH (default portfolio.json); optional --config-dir PATH; reads portfolio.json + standing-rules.yaml (investment_rules.sanity_bands.rf_balcao.expected_return_pct_min/max for the 7–15% band); env override BOOKKEEPER_PORTFOLIO_PATH
-outputs: Violation list on stderr; PASS (exit 0) no violations; FAIL (exit 1) one or more violations; exit 2 if portfolio.json missing; emits gate_pass/gate_fail event.
+expected_inputs: optional --portfolio-path PATH (default portfolio.json); optional --config-dir PATH; reads portfolio.json + standing-rules.yaml (investment_rules.sanity_bands.rf_balcao.expected_return_pct_min/max for the 7–15% band AND investment_rules.sanity_bands.rf_balcao.band_exempt_ids for positions that skip the band check); env override BOOKKEEPER_PORTFOLIO_PATH
+outputs: Violation list on stderr; visible EXEMPT notes (stdout) for band-exempt positions outside the band — never silent skips; PASS (exit 0) no violations; FAIL (exit 1) one or more violations; exit 2 if portfolio.json missing; emits gate_pass/gate_fail event (trigger_context.band_exempt_skips records exempt-position count). Strict checks (|irr|>200%, irr_quality) apply to exempt positions regardless.
 canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/investimentos/portfolio.json (no write)
 dry_run: not-applicable
-last_validated: 2026-05-27
+last_validated: 2026-06-05
 ```
 
 ```yaml
 tool: gate_bucket_divergence (python shared/gate_bucket_divergence.py [--portfolio-path PATH] [--bucket BUCKET] [--threshold FLOAT])
-purpose: Gate #10 (P3) — per-class IRR vs weighted avg of per-asset IRRs; |delta|>5% across any bucket → fail-loud and auto-halt; surfaces per-asset breakdown. User decides next action.
+purpose: Gate #10 (P3) — per-class IRR vs simple avg of per-asset IRRs; |delta|>5% across any non-informational bucket → fail-loud and auto-halt; surfaces per-asset breakdown. The crypto bucket is informational (module constant _INFORMATIONAL_BUCKETS): its section and divergence always print but never trigger gate failure. User decides next action on real failures.
 owner_script: shared/gate_bucket_divergence.py
 class: read
 use: validation-gate
 expected_inputs: optional --portfolio-path PATH (default portfolio.json); optional --bucket (rv_br|rv_eua|rf_balcao|fundos|crypto) to narrow check; optional --threshold float (default 0.05 = 5%); env override BOOKKEEPER_PORTFOLIO_PATH; reads portfolio.json
-outputs: Per-bucket section with per-asset IRR table, simple-avg vs stored-bucket delta, DIVERGENCE flag; PASS (exit 0) all within threshold; FAIL (exit 1) any bucket diverges; exit 2 if portfolio.json missing; emits gate_pass/gate_fail event.
+outputs: Per-bucket section with per-asset IRR table, simple-avg vs stored-bucket delta, DIVERGENCE flag; informational-bucket divergence marked "informational — not counted"; PASS (exit 0) all non-informational buckets within threshold; FAIL (exit 1) any non-informational bucket diverges; exit 2 if portfolio.json missing; emits gate_pass/gate_fail event (trigger_context.informational_buckets lists exempt buckets).
 canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/investimentos/portfolio.json (no write)
 dry_run: not-applicable
-last_validated: 2026-05-27
+last_validated: 2026-06-05
 ```
 
 ```yaml
@@ -522,5 +522,18 @@ expected_inputs: positional input_csv (must match assets.csv schema: id,asset_cl
 outputs: Per-row diff on stdout (INSERT/UPDATE/NOOP + ownership-blocked fields); summary line (X inserts, Y updates, Z noops, W ownership-blocked fields). Under --apply writes .user/finance/bookkeeper/data/assets.csv (existing rows preserved in their original order; new rows inserted at byte/ASCII sort position by id — uppercase sorts before lowercase, e.g. XRP before aplicacoes_renda_fixa), emits one ledger_write audit event via audit.track_write, and emits docs_potentially_stale. Dry-run writes NOTHING. Unknown input columns trigger a field_ownership_unknown audit event and exit 1 (no write). Schema gaps (input column absent from destination schema) are dual-surfaced (schema_gap_finding event + user prompt) and exit 1.
 canonical_reader_writer: reads and writes .user/finance/bookkeeper/data/assets.csv; reads .user/finance/bookkeeper/config/_field_ownership.yaml
 dry_run: default
+last_validated: 2026-06-05
+```
+
+```yaml
+tool: irr_flows (python investimentos/irr_flows.py ID [ID ...] [--portfolio-path PATH] [--ledger-dir PATH])
+purpose: Per-asset IRR flow decomposition reader — prints the synthetic XIRR cash-flow ladder that calculate.py builds, the terminal anchoring, and the recomputed XIRR vs the stored portfolio.json value for each requested asset id, closing the tools-only gap that previously forced direct ledger reads during IRR-divergence diagnosis.
+owner_script: investimentos/irr_flows.py
+class: read
+use: audit-diagnostic
+expected_inputs: one or more asset ids (product_id / ticker); optional --portfolio-path PATH (default portfolio.json); optional --ledger-dir PATH (default investimentos ledger dir); env overrides BOOKKEEPER_PORTFOLIO_PATH, BOOKKEEPER_INVESTIMENTOS_DIR; reads portfolio.json + orders.csv + proventos.csv + balcao.csv + crypto.csv + corporate_actions.csv via _build_position_flows (mirrors calculate.py exactly)
+outputs: Human-readable report per asset: FLOW LADDER section (per-row date/amount/cumulative table per flow key), TERMINAL ANCHORING AND XIRR section (recomputed_xirr, stored_irr, drift columns), optional [COMBINED] row for split-id crypto positions (per-exchange flow partitions merged + combined terminal), POSITION METADATA section. Header shows cut_date and portfolio filename. Footer shows total ids requested vs not-found count. Exit 0 always; exit 1 if portfolio.json is missing. Writes nothing.
+canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/investimentos/portfolio.json + orders.csv + proventos.csv + balcao.csv + crypto.csv + corporate_actions.csv (no write)
+dry_run: not-applicable
 last_validated: 2026-06-05
 ```

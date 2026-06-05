@@ -85,8 +85,18 @@ def _fmt_brl(v) -> str:
 # Core
 # ---------------------------------------------------------------------------
 
-def check_buckets(portfolio: dict, target_bucket: str | None, threshold: float) -> int:
-    """Print per-bucket divergence report. Returns count of divergences found."""
+def check_buckets(portfolio: dict, target_bucket: str | None, threshold: float,
+                  informational_buckets: frozenset[str] | set[str] | None = None) -> int:
+    """Print per-bucket divergence report. Returns count of divergences found.
+
+    Buckets named in `informational_buckets` print their full section and a
+    divergence marker, but are NEVER counted in the returned total — used by
+    gate_bucket_divergence for buckets whose bucket-vs-simple-average gap is
+    expected by construction (the stored bucket IRR is a lifetime XIRR that
+    includes closed/swapped positions; the simple average covers only open
+    positions). Default: none — standalone runs count every bucket.
+    """
+    informational_buckets = informational_buckets or frozenset()
     irr_summary = portfolio.get("summary", {}).get("irr", {})
     per_class = irr_summary.get("per_class") or {}
     positions = portfolio.get("positions", [])
@@ -154,9 +164,19 @@ def check_buckets(portfolio: dict, target_bucket: str | None, threshold: float) 
             delta = abs(simple_avg - stored_irr)
             print(f"    delta              : {delta * 100:.2f}pp")
             if delta > threshold:
-                divergences += 1
-                print(f"\n    >>> DIVERGENCE <<< |delta| ({delta * 100:.2f}pp) > threshold "
-                      f"({threshold * 100:.1f}pp)")
+                if bucket in informational_buckets:
+                    print(f"\n    >>> DIVERGENCE (informational — not counted) <<< "
+                          f"|delta| ({delta * 100:.2f}pp) > threshold ({threshold * 100:.1f}pp)")
+                    print("        Expected by construction for this bucket: the stored bucket "
+                          "IRR is a lifetime XIRR")
+                    print("        including closed/swapped positions, while the simple average "
+                          "covers only open")
+                    print("        positions. Not a gate failure — see docs/investimentos.md "
+                          "§ Crypto Per-Asset IRR.")
+                else:
+                    divergences += 1
+                    print(f"\n    >>> DIVERGENCE <<< |delta| ({delta * 100:.2f}pp) > threshold "
+                          f"({threshold * 100:.1f}pp)")
             else:
                 print(f"    → within threshold (ok)")
         else:

@@ -11,6 +11,14 @@ The rf_balcao expected-return band is config-driven from:
   investment_rules.sanity_bands.rf_balcao.expected_return_pct_min
   investment_rules.sanity_bands.rf_balcao.expected_return_pct_max
 
+Band exemptions (2026-06-05): positions listed in
+  investment_rules.sanity_bands.rf_balcao.band_exempt_ids
+are skipped by the BAND check only — documented mark-to-market cases whose
+low XIRR is verified legitimate (e.g. long IPCA papers bought at cycle-low
+real rates, repriced by the later rate opening). An exempt position outside
+the band is reported as a visible EXEMPT note, never silently dropped. The
+strict checks (|irr| > 200%, irr_quality) still apply to exempt positions.
+
 Usage:
     python gate_irr_sanity.py [--portfolio-path PATH] [--config-dir PATH]
 
@@ -88,6 +96,33 @@ def _load_rf_balcao_band(config_dir: Path) -> tuple[float, float]:
     return _RF_BALCAO_MIN_FALLBACK, _RF_BALCAO_MAX_FALLBACK
 
 
+def _load_band_exemptions(config_dir: Path) -> dict[str, str]:
+    """Return {position_id: reason} for rf_balcao band-exempt positions.
+
+    Config source: investment_rules.sanity_bands.rf_balcao.band_exempt_ids
+    in standing-rules.yaml — a list of {id, reason} mappings (a bare-string
+    entry is accepted and carries an empty reason). Returns {} when config
+    is unavailable or the key is absent.
+    """
+    try:
+        rules = sr.load_standing_rules(config_dir)
+        inv_rules = rules.get("investment_rules", {})
+        if not isinstance(inv_rules, dict):
+            return {}
+        bands = inv_rules.get("sanity_bands", {})
+        rf = bands.get("rf_balcao", {}) if isinstance(bands, dict) else {}
+        entries = rf.get("band_exempt_ids") if isinstance(rf, dict) else None
+        out: dict[str, str] = {}
+        for e in entries or []:
+            if isinstance(e, dict) and e.get("id"):
+                out[str(e["id"])] = str(e.get("reason") or "").strip()
+            elif isinstance(e, str) and e.strip():
+                out[e.strip()] = ""
+        return out
+    except sr.StandingRulesError:
+        return {}
+
+
 # Bucket classification matching bucket_sanity_check.py
 _RF_TYPES = {"cra", "deb", "lca", "lci", "cdb", "cdb_mp", "tesouro", "lc", "cri", "rf"}
 _FUND_TYPES = {"fia_br", "fia_usa", "fim_br", "firf_br", "fidc", "coe", "di"}
@@ -104,14 +139,23 @@ def _is_rf_balcao(pos: dict) -> bool:
 
 
 def check_rf_balcao_band(
-    portfolio: dict, min_pct: float, max_pct: float
-) -> list[str]:
-    """Return violation strings for rf_balcao positions outside [min_pct, max_pct]%.
+    portfolio: dict, min_pct: float, max_pct: float,
+    exemptions: dict[str, str] | None = None,
+) -> tuple[list[str], list[str]]:
+    """Return (violations, exempt_notes) for rf_balcao positions vs the band.
 
     Compares each position's `irr` (annualized, stored as decimal) against the
     band converted to decimal. A position with irr=None is skipped (no data).
+
+    A position whose id is in `exemptions` ({id: reason}) is NEVER a band
+    violation: when it falls outside the band it produces a visible exempt
+    note instead (the skip is loud, not silent). An exempt position INSIDE
+    the band produces no note — no noise. Exemptions never touch the strict
+    checks; they scope to this band check only.
     """
+    exemptions = exemptions or {}
     violations: list[str] = []
+    exempt_notes: list[str] = []
     for pos in portfolio.get("positions", []):
         if not _is_rf_balcao(pos):
             continue
@@ -120,27 +164,40 @@ def check_rf_balcao_band(
             continue
         irr_pct = irr * 100
         if irr_pct < min_pct or irr_pct > max_pct:
+            pid = pos.get("id", "?")
+            if pid in exemptions:
+                reason = exemptions[pid] or (
+                    "no reason recorded — add one in standing-rules.yaml"
+                )
+                exempt_notes.append(
+                    f"Position '{pid}' (rf_balcao): IRR {irr_pct:+.2f}% is outside the band "
+                    f"[{min_pct:.0f}%, {max_pct:.0f}%] but is band-exempt by documented user "
+                    f"decision (standing-rules.yaml: investment_rules.sanity_bands.rf_balcao"
+                    f".band_exempt_ids). Reason: {reason}"
+                )
+                continue
             violations.append(
-                f"Position '{pos.get('id', '?')}' (rf_balcao): "
+                f"Position '{pid}' (rf_balcao): "
                 f"IRR {irr_pct:+.2f}% is outside expected band [{min_pct:.0f}%, {max_pct:.0f}%]"
             )
-    return violations
+    return violations, exempt_notes
 
 
-def run_gate(portfolio_path: Path, config_dir: Path) -> tuple[bool, list[str]]:
-    """Run all gate #9 checks. Return (passed, violations)."""
+def run_gate(portfolio_path: Path, config_dir: Path) -> tuple[bool, list[str], list[str]]:
+    """Run all gate #9 checks. Return (passed, violations, exempt_notes)."""
     portfolio = vc.load_portfolio(portfolio_path)
 
     # validate_calculate.py strict checks.
     irr_v = vc._irr_violations(portfolio)
     qual_v = vc._quality_violations(portfolio)
 
-    # rf_balcao band (S7-2).
+    # rf_balcao band (S7-2) with documented band exemptions.
     min_pct, max_pct = _load_rf_balcao_band(config_dir)
-    band_v = check_rf_balcao_band(portfolio, min_pct, max_pct)
+    exemptions = _load_band_exemptions(config_dir)
+    band_v, exempt_notes = check_rf_balcao_band(portfolio, min_pct, max_pct, exemptions)
 
     all_violations = irr_v + qual_v + band_v
-    return (len(all_violations) == 0), all_violations
+    return (len(all_violations) == 0), all_violations, exempt_notes
 
 
 def main() -> int:
@@ -160,7 +217,7 @@ def main() -> int:
         return 2
 
     try:
-        passed, violations = run_gate(portfolio_path, config_dir)
+        passed, violations, exempt_notes = run_gate(portfolio_path, config_dir)
     except (json.JSONDecodeError, OSError) as exc:
         print(f"ERROR: could not read portfolio.json: {exc}", file=sys.stderr)
         return 2
@@ -174,8 +231,19 @@ def main() -> int:
         threshold=0.0,
         passed=passed,
         source_function="gate_irr_sanity.main",
-        trigger_context={"portfolio_path": str(portfolio_path)},
+        trigger_context={
+            "portfolio_path": str(portfolio_path),
+            "band_exempt_skips": len(exempt_notes),
+        },
     )
+
+    if exempt_notes:
+        print(
+            f"Band-exempt positions ({len(exempt_notes)}) — outside the rf_balcao band, "
+            f"skipped by documented user decision (NOT violations):"
+        )
+        for msg in exempt_notes:
+            print(f"  EXEMPT  {msg}")
 
     if violations:
         print(f"IRR sanity violations ({violation_count}):", file=sys.stderr)

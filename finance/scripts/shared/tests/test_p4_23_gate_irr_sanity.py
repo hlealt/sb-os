@@ -54,20 +54,21 @@ def _equity_pos(pid: str, irr: float | None) -> dict:
 
 def test_rf_balcao_band_pass_within_range():
     portfolio = _make_portfolio([_rf_pos("cdb_a", irr=0.10)])  # 10% — within [7,15]
-    violations = gis.check_rf_balcao_band(portfolio, 7.0, 15.0)
+    violations, exempt_notes = gis.check_rf_balcao_band(portfolio, 7.0, 15.0)
     assert violations == []
+    assert exempt_notes == []
 
 
 def test_rf_balcao_band_fail_below_min():
     portfolio = _make_portfolio([_rf_pos("cdb_a", irr=0.05)])  # 5% — below 7%
-    violations = gis.check_rf_balcao_band(portfolio, 7.0, 15.0)
+    violations, _ = gis.check_rf_balcao_band(portfolio, 7.0, 15.0)
     assert len(violations) == 1
     assert "cdb_a" in violations[0]
 
 
 def test_rf_balcao_band_fail_above_max():
     portfolio = _make_portfolio([_rf_pos("cdb_a", irr=0.20)])  # 20% — above 15%
-    violations = gis.check_rf_balcao_band(portfolio, 7.0, 15.0)
+    violations, _ = gis.check_rf_balcao_band(portfolio, 7.0, 15.0)
     assert len(violations) == 1
     assert "cdb_a" in violations[0]
 
@@ -75,14 +76,14 @@ def test_rf_balcao_band_fail_above_max():
 def test_rf_balcao_band_none_irr_skipped():
     """Positions with irr=None are skipped (no data, not a violation)."""
     portfolio = _make_portfolio([_rf_pos("cdb_a", irr=None)])
-    violations = gis.check_rf_balcao_band(portfolio, 7.0, 15.0)
+    violations, _ = gis.check_rf_balcao_band(portfolio, 7.0, 15.0)
     assert violations == []
 
 
 def test_rf_balcao_band_equity_not_checked():
     """Equity positions are not rf_balcao — not checked by band."""
     portfolio = _make_portfolio([_equity_pos("ITSA3", irr=0.02)])  # 2% — would fail band
-    violations = gis.check_rf_balcao_band(portfolio, 7.0, 15.0)
+    violations, _ = gis.check_rf_balcao_band(portfolio, 7.0, 15.0)
     assert violations == []
 
 
@@ -92,11 +93,94 @@ def test_rf_balcao_band_multiple_violations():
         _rf_pos("cdb_b", irr=0.10),   # 10% within band
         _rf_pos("lca_c", irr=0.25),   # 25% above band
     ])
-    violations = gis.check_rf_balcao_band(portfolio, 7.0, 15.0)
+    violations, _ = gis.check_rf_balcao_band(portfolio, 7.0, 15.0)
     assert len(violations) == 2
     ids = " ".join(violations)
     assert "cdb_a" in ids
     assert "lca_c" in ids
+
+
+# ---------------------------------------------------------------------------
+# Band exemptions (band_exempt_ids)
+# ---------------------------------------------------------------------------
+
+def test_band_exempt_out_of_band_is_note_not_violation():
+    """An exempt position outside the band → no violation, one visible note."""
+    portfolio = _make_portfolio([_rf_pos("cra_marked", irr=0.05)])  # below 7%
+    violations, exempt_notes = gis.check_rf_balcao_band(
+        portfolio, 7.0, 15.0, exemptions={"cra_marked": "marked-to-market IPCA paper"}
+    )
+    assert violations == []
+    assert len(exempt_notes) == 1
+    assert "cra_marked" in exempt_notes[0]
+    assert "band-exempt" in exempt_notes[0]
+    assert "marked-to-market IPCA paper" in exempt_notes[0]
+
+
+def test_band_exempt_in_band_produces_no_note():
+    """An exempt position INSIDE the band → no violation AND no note (no noise)."""
+    portfolio = _make_portfolio([_rf_pos("cra_marked", irr=0.10)])  # within band
+    violations, exempt_notes = gis.check_rf_balcao_band(
+        portfolio, 7.0, 15.0, exemptions={"cra_marked": "reason"}
+    )
+    assert violations == []
+    assert exempt_notes == []
+
+
+def test_band_exempt_missing_reason_flagged_in_note():
+    """An exemption without a reason still notes, asking for the reason."""
+    portfolio = _make_portfolio([_rf_pos("cra_marked", irr=0.05)])
+    violations, exempt_notes = gis.check_rf_balcao_band(
+        portfolio, 7.0, 15.0, exemptions={"cra_marked": ""}
+    )
+    assert violations == []
+    assert "no reason recorded" in exempt_notes[0]
+
+
+def test_band_exempt_does_not_cover_other_positions():
+    """Exempting one id leaves other out-of-band positions as violations."""
+    portfolio = _make_portfolio([
+        _rf_pos("cra_marked", irr=0.05),
+        _rf_pos("cdb_low", irr=0.04),
+    ])
+    violations, exempt_notes = gis.check_rf_balcao_band(
+        portfolio, 7.0, 15.0, exemptions={"cra_marked": "reason"}
+    )
+    assert len(violations) == 1
+    assert "cdb_low" in violations[0]
+    assert len(exempt_notes) == 1
+
+
+def test_load_band_exemptions_parses_mappings_and_strings(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "standing-rules.yaml").write_text(
+        "_meta:\n  schema_version: 1\n  rule_set_version: '1.0'\n"
+        "supplier_rules:\n  matching_order: []\n"
+        "investment_rules:\n  status: pending_consumer\n"
+        "  sanity_bands:\n    rf_balcao:\n"
+        "      expected_return_pct_min: 7\n      expected_return_pct_max: 15\n"
+        "      band_exempt_ids:\n"
+        "        - id: cra_a\n          reason: 'marked paper'\n"
+        "        - cdb_bare\n",
+        encoding="utf-8",
+    )
+    exemptions = gis._load_band_exemptions(config_dir)
+    assert exemptions == {"cra_a": "marked paper", "cdb_bare": ""}
+
+
+def test_load_band_exemptions_absent_key_returns_empty(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "standing-rules.yaml").write_text(
+        "_meta:\n  schema_version: 1\n  rule_set_version: '1.0'\n"
+        "supplier_rules:\n  matching_order: []\n"
+        "investment_rules:\n  status: pending_consumer\n"
+        "  sanity_bands:\n    rf_balcao:\n"
+        "      expected_return_pct_min: 7\n      expected_return_pct_max: 15\n",
+        encoding="utf-8",
+    )
+    assert gis._load_band_exemptions(config_dir) == {}
 
 
 # ---------------------------------------------------------------------------
@@ -122,9 +206,10 @@ def test_run_gate_pass_clean_portfolio(tmp_path):
         encoding="utf-8",
     )
 
-    passed, violations = gis.run_gate(portfolio_path, config_dir)
+    passed, violations, exempt_notes = gis.run_gate(portfolio_path, config_dir)
     assert passed
     assert violations == []
+    assert exempt_notes == []
 
 
 def test_run_gate_fail_rf_balcao_out_of_band(tmp_path):
@@ -145,7 +230,7 @@ def test_run_gate_fail_rf_balcao_out_of_band(tmp_path):
         encoding="utf-8",
     )
 
-    passed, violations = gis.run_gate(portfolio_path, config_dir)
+    passed, violations, _ = gis.run_gate(portfolio_path, config_dir)
     assert not passed
     assert any("cdb_low" in v for v in violations)
 
@@ -175,9 +260,53 @@ def test_run_gate_fail_irr_out_of_band(tmp_path):
         encoding="utf-8",
     )
 
-    passed, violations = gis.run_gate(portfolio_path, config_dir)
+    passed, violations, _ = gis.run_gate(portfolio_path, config_dir)
     assert not passed
     assert any("crazy_pos" in v for v in violations)
+
+
+_EXEMPT_CONFIG_YAML = (
+    "_meta:\n  schema_version: 1\n  rule_set_version: '1.0'\n"
+    "supplier_rules:\n  matching_order: []\n"
+    "investment_rules:\n  status: pending_consumer\n"
+    "  sanity_bands:\n    rf_balcao:\n"
+    "      expected_return_pct_min: 7\n      expected_return_pct_max: 15\n"
+    "      band_exempt_ids:\n"
+    "        - id: cra_marked\n"
+    "          reason: 'IPCA paper bought at cycle-low real rates; MTM legitimate'\n"
+)
+
+
+def test_run_gate_pass_with_band_exempt_position(tmp_path):
+    """Out-of-band but exempt → gate passes, exempt note surfaced."""
+    portfolio = _make_portfolio([_rf_pos("cra_marked", irr=0.05)])  # 5% < 7%
+    portfolio_path = tmp_path / "portfolio.json"
+    portfolio_path.write_text(json.dumps(portfolio), encoding="utf-8")
+
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "standing-rules.yaml").write_text(_EXEMPT_CONFIG_YAML, encoding="utf-8")
+
+    passed, violations, exempt_notes = gis.run_gate(portfolio_path, config_dir)
+    assert passed
+    assert violations == []
+    assert len(exempt_notes) == 1
+    assert "cra_marked" in exempt_notes[0]
+
+
+def test_run_gate_exemption_does_not_bypass_strict_checks(tmp_path):
+    """A band-exempt id with |irr| > 200% still fails the strict check."""
+    portfolio = _make_portfolio([_rf_pos("cra_marked", irr=3.5)])  # 350%
+    portfolio_path = tmp_path / "portfolio.json"
+    portfolio_path.write_text(json.dumps(portfolio), encoding="utf-8")
+
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "standing-rules.yaml").write_text(_EXEMPT_CONFIG_YAML, encoding="utf-8")
+
+    passed, violations, _ = gis.run_gate(portfolio_path, config_dir)
+    assert not passed
+    assert any("cra_marked" in v for v in violations)
 
 
 # ---------------------------------------------------------------------------

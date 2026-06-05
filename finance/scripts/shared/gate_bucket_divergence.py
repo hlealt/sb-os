@@ -11,6 +11,13 @@ The 5% threshold is an evidence-based value (p2-15 gate #10), not an S7
 threshold — no config source; hardcoded as default but overridable via
 --threshold CLI arg.
 
+Informational buckets (2026-06-05): the crypto bucket is reported but NEVER
+counted as a gate failure — its divergence is expected by construction. The
+stored crypto bucket IRR is a lifetime BRL XIRR including realized flows of
+closed/swapped coins, while the simple average covers only open positions'
+per-asset IRRs (BRL swap-timing convention); the gap is unbounded under swap
+activity. See docs/investimentos.md § Crypto Per-Asset IRR.
+
 Auto-halt: exits non-zero on divergence; surfaces per-asset breakdown.
 User decides whether to investigate further — no auto-loop.
 
@@ -43,6 +50,15 @@ import bucket_sanity_check as bsc
 _GATE_NAME = "gate_10_bucket_divergence"
 _DEFAULT_THRESHOLD = 0.05
 
+# Buckets whose bucket-vs-simple-average divergence is EXPECTED by construction
+# and therefore reported as informational, never counted toward gate failure.
+# crypto: stored bucket IRR = lifetime BRL XIRR including closed/swapped coins;
+# simple average = open positions only (BRL swap-timing convention). The two
+# measure different things and their gap is unbounded under swap activity.
+# Decision 2026-06-05 (investments-mgmt: IRR-gates deferred-items
+# investigation); convention in docs/investimentos.md § Crypto Per-Asset IRR.
+_INFORMATIONAL_BUCKETS = frozenset({"crypto"})
+
 
 def _find_vault_root() -> Path:
     for parent in Path(__file__).resolve().parents:
@@ -65,8 +81,10 @@ def check_divergences(portfolio: dict, target_bucket: str | None, threshold: flo
     """Return count of buckets exceeding threshold. Prints the full report.
 
     Reuses bucket_sanity_check.check_buckets for the actual computation.
+    Buckets in _INFORMATIONAL_BUCKETS are reported but never counted.
     """
-    return bsc.check_buckets(portfolio, target_bucket, threshold)
+    return bsc.check_buckets(portfolio, target_bucket, threshold,
+                             informational_buckets=_INFORMATIONAL_BUCKETS)
 
 
 def main() -> int:
@@ -113,6 +131,7 @@ def main() -> int:
             "portfolio_path": str(portfolio_path),
             "threshold": args.threshold,
             "bucket": args.bucket or "all",
+            "informational_buckets": sorted(_INFORMATIONAL_BUCKETS),
         },
     )
 

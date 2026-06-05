@@ -58,7 +58,7 @@ Review {MONTH}:
       python "{SCRIPTS_DIR}/gate_irr_sanity.py"
       ```
 
-      Fails (exit 1) if `|irr| > 200%` on any position/class, if `irr_quality` is missing on a balcão position with value, or if an `rf_balcao` position has an annualized return outside the band `[7%, 15%]` (read from `investment_rules.sanity_bands.rf_balcao` in `standing-rules.yaml`). Exit 0 = no violations; exit 2 = `portfolio.json` missing.
+      Fails (exit 1) if `|irr| > 200%` on any position/class, if `irr_quality` is missing on a balcão position with value, or if an `rf_balcao` position has an annualized return outside the band `[7%, 15%]` (read from `investment_rules.sanity_bands.rf_balcao` in `standing-rules.yaml`) and is NOT band-exempt. Band-exempt positions (listed in `investment_rules.sanity_bands.rf_balcao.band_exempt_ids`) skip the band check and print a visible `EXEMPT` note instead; strict checks (`|irr|>200%`, `irr_quality`) still apply. Exit 0 = no violations; exit 2 = `portfolio.json` missing.
 
    c. **IRR bucket divergence (`gate_bucket_divergence.py`, gate #10):**
 
@@ -66,7 +66,7 @@ Review {MONTH}:
       python "{SCRIPTS_DIR}/gate_bucket_divergence.py"
       ```
 
-      Fails (exit 1) if, in any bucket (rv_br/rv_eua/rf_balcao/fundos/crypto), `|per-asset-simple-mean − stored-bucket-IRR| > 5%`. Exit 0 = all within tolerance; exit 2 = `portfolio.json` missing.
+      Fails (exit 1) if, in any **non-informational** bucket (rv_br/rv_eua/rf_balcao/fundos), `|per-asset-simple-mean − stored-bucket-IRR| > 5%`. The `crypto` bucket is informational — its section and divergence always print (marked "informational — not counted") but NEVER cause exit 1; its structural divergence is expected by construction (lifetime XIRR vs open-positions average). Exit 0 = all non-informational buckets within tolerance; exit 2 = `portfolio.json` missing.
 
    For EACH gate with exit 1: Rule C **blocking** (`../gatekeeper-loop.md`). Surface the violations inline, propose the fix (investigate a data/parser bug → correct and re-run Step 02-05; or explicitly accept the anomaly — for #8, re-run with the `id` added to `--flagged-ids`), and offer `[S]`/`[N]`. Exit 2 on any gate → `portfolio.json` was not generated; go back to Step 05.
 

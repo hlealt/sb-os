@@ -79,6 +79,63 @@ def test_positions_without_irr_skipped():
 
 
 # ---------------------------------------------------------------------------
+# Informational buckets (crypto) — reported, never counted
+# ---------------------------------------------------------------------------
+
+def _crypto_divergent_portfolio() -> dict:
+    """Crypto: stored +27.6% vs per-asset avg -14.2% → 41.8pp gap (real case 2026-06-05)."""
+    positions = [
+        {"id": "BTC", "type": "crypto", "asset_class": "crypto",
+         "currency": "BRL", "irr": -0.2287},
+        {"id": "BTC", "type": "crypto", "asset_class": "crypto",
+         "currency": "BRL", "irr": -0.0548},
+    ]
+    per_class = {"crypto": {"irr": 0.2760, "terminal_value": 117787.54, "flow_count": 88}}
+    return _make_portfolio(positions, per_class)
+
+
+def test_crypto_divergence_is_informational_not_counted():
+    """Crypto divergence above threshold → reported but NOT counted (expected by construction)."""
+    divergences = gbd.check_divergences(_crypto_divergent_portfolio(), "crypto", 0.05)
+    assert divergences == 0
+
+
+def test_crypto_informational_marker_printed(capsys):
+    """The crypto section still surfaces the divergence, marked informational."""
+    gbd.check_divergences(_crypto_divergent_portfolio(), "crypto", 0.05)
+    out = capsys.readouterr().out
+    assert "DIVERGENCE (informational — not counted)" in out
+    assert "Expected by construction" in out
+
+
+def test_crypto_informational_does_not_mask_other_buckets():
+    """A real rv_eua divergence still counts even when crypto also diverges."""
+    portfolio = _crypto_divergent_portfolio()
+    portfolio["positions"].append(
+        {"id": "BRK.B", "type": "acao", "asset_class": "variable_income",
+         "currency": "USD", "irr": 0.5264}
+    )
+    portfolio["summary"]["irr"]["per_class"]["rv_eua"] = {
+        "irr": 0.0599, "terminal_value": 5000.0, "flow_count": 10
+    }
+    divergences = gbd.check_divergences(portfolio, None, 0.05)
+    assert divergences == 1  # rv_eua only; crypto stays informational
+
+
+def test_main_pass_exit_0_with_crypto_divergence(tmp_path, monkeypatch):
+    """Gate passes (exit 0) when the only divergent bucket is crypto."""
+    portfolio_path = tmp_path / "portfolio.json"
+    portfolio_path.write_text(json.dumps(_crypto_divergent_portfolio()), encoding="utf-8")
+
+    monkeypatch.setenv("BOOKKEEPER_AUDIT_DISABLED", "1")
+    monkeypatch.setattr(sys, "argv", [
+        "gate_bucket_divergence.py",
+        "--portfolio-path", str(portfolio_path),
+    ])
+    assert gbd.main() == 0
+
+
+# ---------------------------------------------------------------------------
 # main() exit codes + event emission
 # ---------------------------------------------------------------------------
 

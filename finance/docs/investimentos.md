@@ -231,12 +231,26 @@ A heavy swap history (e.g. BTC→ETH→USDT→BTC) produces a per-asset IRR that
 
 **Aggregate (per-class) crypto IRR.** Mirrors per-asset: BRL flows, BRL terminal. The `crypto` bucket in both `summary.irr.per_class` (all-time) and `summary.irr.current.per_class` (open positions only) is therefore a true BRL return on crypto exposure. Crypto tickers from `crypto.csv` are forced into the `crypto` bucket regardless of `assets.csv` coverage, preserving the prior behavior where crypto legs never fall into `other`.
 
-**Per-bucket vs per-asset residual (gate_10).** The crypto bucket's all-time IRR (+27.40% cut 2026-06-05) diverges materially from the simple average of per-asset per-exchange IRRs (+9.93%), a 17.46pp delta that triggers `gate_bucket_divergence` (gate #10). This residual is **structural and expected** — same survivorship-composition pattern as `rv_br`:
+**Per-bucket vs per-asset residual (gate_10).** The crypto bucket's all-time IRR (+27.40% cut 2026-06-05) diverges materially from the simple average of per-asset per-exchange IRRs (+9.93%), a 17.46pp delta. This residual is **structural and expected** — same survivorship-composition pattern as `rv_br`:
 
 - The `crypto` per-class bucket is a lifetime money-weighted XIRR over the whole crypto class, including the fully liquidated alt-coin cohort (ETH/XRP/BNB/USDT/NMR/STX/ADA/DOT/LINK swaps and sales, realized gains, zero terminal at the cut).
 - The per-asset simple average covers only the two surviving BTC per-exchange positions (BTC@mercado_bitcoin, BTC@bipa), equal-weighted.
 
-The `current` variant eliminates this gap: `summary.irr.current.per_class.crypto` equals the XIRR over merged BTC flows with total BTC terminal (+9.52% verified cut 2026-06-05), matching the simple average of the two surviving positions. The 17.46pp divergence is not a data defect — accept it as expected in gate_10 review.
+The `current` variant eliminates this gap: `summary.irr.current.per_class.crypto` equals the XIRR over merged BTC flows with total BTC terminal (+9.52% verified cut 2026-06-05), matching the simple average of the two surviving positions. The 17.46pp divergence is not a data defect — `gate_bucket_divergence` (gate #10) handles it automatically: `crypto` is an **informational bucket** in that gate (module constant `_INFORMATIONAL_BUCKETS`). Its section and divergence still print (marked "informational — not counted") but NEVER trigger a gate failure. No manual acceptance step is required.
+
+### rf_balcao IRR Band and Band Exemptions (gate_9)
+
+`gate_irr_sanity.py` (gate #9) applies a **strict band check** on every rf_balcao position: an annualized IRR outside the configured band `[expected_return_pct_min, expected_return_pct_max]` (default 7–15%, read from `investment_rules.sanity_bands.rf_balcao` in `standing-rules.yaml`) is a gate failure — exit 1, auto-halt before snapshot.
+
+**Band exemptions.** Legitimate mark-to-market cases whose current IRR falls outside the band for a documented structural reason are registered in `investment_rules.sanity_bands.rf_balcao.band_exempt_ids` (a list of `{id, reason}` entries in `standing-rules.yaml`). Exempt positions:
+
+- **Skip the band check only** — they are never counted as a band violation.
+- Print a visible `EXEMPT` note when their IRR is outside the band (the skip is loud, never silent).
+- **Still subject to the strict checks** — `|irr| > 200%` and `irr_quality` missing on a valued balcão position still fail for exempt positions.
+
+Current exempt ids (2026-06-05): `cra_ipca_klabin_350`, `deb_neoenergia_370`, and the Marfrig CRA — all Oct/2019-vintage papers bought at the real-rate cycle low and marked today on a ~7.8% real curve, producing IRRs verifiably below 7% by construction.
+
+The audit event `trigger_context.band_exempt_skips` records how many exemptions fired on each gate run.
 
 ### Per-Asset IRR Terminal Anchoring (Balcão)
 

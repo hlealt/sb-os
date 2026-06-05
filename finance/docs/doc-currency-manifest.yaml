@@ -30,7 +30,7 @@
 #             hook gates at file granularity, the signal reports the sections).
 
 version: "1.0"
-last_updated: "2026-06-05"  # D8 fix: added "Crypto Per-Asset IRR" section reference to investimentos_schema node (per-exchange flow partitioning)
+last_updated: "2026-06-05"  # D8 fix: added "Crypto Per-Asset IRR" section reference to investimentos_schema node (per-exchange flow partitioning); doc-maintainer reconcile: gate_9 band-exemptions + gate_10 informational-crypto + bucket_sanity_check informational_buckets param
 
 couplings:
   # enforcement: hard-block (default) | signal-only
@@ -142,6 +142,7 @@ couplings:
       - "scripts/investimentos/market_price.py"
       - "scripts/investimentos/us_gaap_vocab_map.json"
       - "scripts/investimentos/upsert_assets.py"
+      - "scripts/investimentos/irr_flows.py"
     docs:
       - path: "scripts/tools-index.md"
         sections:

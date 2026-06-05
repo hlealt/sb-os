@@ -156,3 +156,22 @@ def test_all_buckets_checked_when_no_target(capsys):
     # Should not raise; returns divergence count
     result = check_buckets(portfolio, target_bucket=None, threshold=0.05)
     assert isinstance(result, int)
+
+
+def test_informational_bucket_reported_but_not_counted(capsys):
+    """A bucket in informational_buckets prints its divergence but returns 0."""
+    positions = [_make_position("BAD1", "acao", "BRL", 1.00)]  # 100% vs stored 10%
+    portfolio = _make_portfolio({"rv_br": 0.10}, positions)
+    divergences = check_buckets(portfolio, target_bucket="rv_br", threshold=0.05,
+                                informational_buckets={"rv_br"})
+    assert divergences == 0
+    out = capsys.readouterr().out
+    assert "DIVERGENCE (informational — not counted)" in out
+
+
+def test_informational_default_is_none_and_counts(capsys):
+    """Without informational_buckets the same divergence counts (default unchanged)."""
+    positions = [_make_position("BAD1", "acao", "BRL", 1.00)]
+    portfolio = _make_portfolio({"rv_br": 0.10}, positions)
+    divergences = check_buckets(portfolio, target_bucket="rv_br", threshold=0.05)
+    assert divergences == 1
