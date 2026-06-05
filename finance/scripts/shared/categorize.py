@@ -255,7 +255,7 @@ def load_competencia_overrides(
 def _category_only(value) -> str:
     """Extract the category from a reimbursement_mappings or value_based_mappings value.
 
-    Both layers historically supported dict-form `{"category": ..., "subcategory": ...}`.
+    Both layers support dict-form `{"category": ..., "tag": ...}`.
     Pure string entries are returned as-is.
     """
     if isinstance(value, dict):
@@ -266,11 +266,12 @@ def _category_only(value) -> str:
 def _value_subcategory(value) -> str:
     """Return the tag if present (dict-form), else empty string.
 
-    Config key is `tag` (renamed from the legacy `subcategory` fossil).
-    The value populates the `tags` column in the output — never a subcategory column.
+    Config key is `tag`. The legacy `subcategory` key is no longer read —
+    its migration shim was removed when the expenses-backfill workflow retired.
+    The value populates the `tags` column in the output.
     """
     if isinstance(value, dict):
-        return value.get("tag", "") or value.get("subcategory", "") or ""
+        return value.get("tag", "") or ""
     return ""
 
 
@@ -305,7 +306,7 @@ def categorize_transaction(
          matches a known reimburser (PIX from CARE PLUS etc. is a
          reimbursement, not a transfer).
       2. Reimbursement mappings — explicit refund handlers; dict-form value
-         `{category, subcategory}` surfaces the subcategory as a tag.
+         `{category, tag}` surfaces the tag in the `tags` column.
       3. Value-based mapping — disambiguates ambiguous descriptions by amount.
       4. Supplier resolution (suppliers.json) — owns identity, default_category,
          and default_tags. Single source of category attribution for the
@@ -328,7 +329,7 @@ def categorize_transaction(
                     rule_counter.record("self_transfer")
                 return "ignorar", "exact", "", []
 
-    # 2. Reimbursements (subcategory → tag)
+    # 2. Reimbursements (dict-form `tag` → tags column)
     for pattern, value in reimbursement_mappings.items():
         if pattern.upper() in desc_upper:
             cat = _category_only(value)

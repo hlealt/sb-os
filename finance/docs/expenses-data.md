@@ -69,7 +69,7 @@ The categorized CSV (`.user/finance/bookkeeper/ledgers/fechamento/{YYYY-MM}/tran
 | `value_based_mappings` | array of object | Disambiguates generic vendors by amount (preserved as-is) |
 | `recurrence_rules` | object | `default_by_category`, `installments_override`, `vendor_overrides` (preserved as-is) |
 | `self_transfer_patterns` | array of string | Self-transfer detection (preserved as-is) |
-| `reimbursement_mappings` | object | Reimbursement vendor → category map (preserved as-is). Subcategories on dict-form entries (e.g., `{"category": "saude", "subcategory": "reembolso"}`) surface as a tag in the output `tags` column. |
+| `reimbursement_mappings` | object | Reimbursement vendor → category map (preserved as-is). The `tag` key on dict-form entries (e.g., `{"category": "saude", "tag": "reembolso"}`) surfaces in the output `tags` column. The legacy `subcategory` key is no longer read (migration shim removed at expenses-backfill retirement). |
 
 > **Removed in Phase 6 merge:** `vendor_mappings` was the legacy two-layer category-attribution dictionary. It has been folded into `suppliers.json` — supplier identity, default category, and default tags now live in a single source. See §3.4.
 
@@ -196,13 +196,13 @@ Each category in `categories` gains a `movable_hint` field with one of three val
 |-------|------|
 | `suppliers.json` | Supplier identity, `movable`, `default_category`, `default_tags` |
 | `categories.json.value_based_mappings` | Amount-disambiguated category attribution (e.g., the same generic "PAGAMENTO DE CONTA ITAÚ UNIBANCO" maps to different categories by amount) — orthogonal to supplier identity |
-| `categories.json.reimbursement_mappings` | Reimbursement vendors → category, with optional subcategory surfaced as a tag |
+| `categories.json.reimbursement_mappings` | Reimbursement vendors → category, with optional `tag` surfaced in the `tags` column |
 | `categories.json.self_transfer_patterns` | Self-transfer (intercontas/ignorar) detection |
 
 **Lookup order in `categorize.py`:**
 
 1. Self-transfer detection (`self_transfer_patterns`) — short-circuit to `ignorar` (skipped when description also matches a known reimburser).
-2. Reimbursement detection (`reimbursement_mappings`) — short-circuit; subcategory becomes a tag.
+2. Reimbursement detection (`reimbursement_mappings`) — short-circuit; the dict-form `tag` key populates the `tags` column.
 3. Value-based mappings (`value_based_mappings`) — sets `category` if amount is within ±5%; supplier still resolved separately for display.
 4. **Supplier alias detection (`suppliers.py`)** — sets `supplier_canonical`, `category` (from `default_category`), `tags` (from `default_tags`), `movable` flag.
 5. No supplier hit → `category: a_identificar`, bookkeeper Pass 1 surfaces it.

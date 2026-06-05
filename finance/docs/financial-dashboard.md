@@ -260,7 +260,7 @@ Tags **substituem** `subcategory` em todo o dashboard exceto na coluna da tabela
 | Render na tabela | Cada tag é um `.cat-badge` independente (cor pela `catColor` da tag); coluna em branco quando a transação não tem tags |
 | Cor | `catColor(tag)` reusa o mapa de cores compartilhado (paleta de 30 cores ordenada alfabeticamente sobre o conjunto unificado de categorias + tags) |
 
-A coluna `subcategory` foi REMOVIDA do schema (data-model §1.2). O backfill da Phase 5 re-mapeia subcategorias históricas para tags.
+A coluna `subcategory` foi REMOVIDA do schema (data-model §1.2). O backfill da Phase 5 re-mapeou subcategorias históricas para tags (workflow one-shot aposentado em 2026-06; o shim de leitura do key legado `subcategory` em `categorize.py` foi removido junto).
 
 ---
 

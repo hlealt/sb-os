@@ -3,7 +3,8 @@
 Verifies:
   1. SECR. DA RECEITA FEDERAL classifies as category="receitas" with tag="impostos"
   2. The config key "tag" is read correctly by _value_subcategory()
-  3. The legacy "subcategory" key still resolves (migration shim) when present
+  3. The legacy "subcategory" key is IGNORED (migration shim removed at
+     expenses-backfill retirement, 2026-06)
   4. No reimbursement_mappings entry emits the invalid "seguro" category
 """
 from __future__ import annotations
@@ -23,14 +24,14 @@ def test_value_subcategory_reads_tag_key():
     assert _value_subcategory(value) == "impostos"
 
 
-def test_value_subcategory_fallback_to_legacy_subcategory():
-    """Migration shim: old 'subcategory' key still resolves if 'tag' absent."""
+def test_value_subcategory_legacy_key_ignored():
+    """Shim removed: the legacy 'subcategory' key no longer resolves."""
     value = {"category": "saude", "subcategory": "reembolso"}
-    assert _value_subcategory(value) == "reembolso"
+    assert _value_subcategory(value) == ""
 
 
-def test_value_subcategory_tag_wins_over_subcategory():
-    """If both keys present, 'tag' wins (new key takes precedence)."""
+def test_value_subcategory_tag_read_with_legacy_key_present():
+    """'tag' is read; a stray legacy 'subcategory' key is ignored."""
     value = {"category": "saude", "tag": "reembolso", "subcategory": "old-value"}
     assert _value_subcategory(value) == "reembolso"
 
