@@ -18,7 +18,8 @@ from pathlib import Path
 import pytest
 
 _TESTS_DIR = Path(__file__).resolve().parent
-_SCRIPTS_DIR = _TESTS_DIR.parent
+# parents: tests/ → shared/ → scripts/ — investimentos/ is a sibling of shared/.
+_SCRIPTS_DIR = _TESTS_DIR.parent.parent
 _INVESTIMENTOS_DIR = _SCRIPTS_DIR / "investimentos"
 for _p in (_SCRIPTS_DIR, _INVESTIMENTOS_DIR):
     if str(_p) not in sys.path:
@@ -141,13 +142,32 @@ def test_audit_clean_exits_0(tmp_path):
     assert exit_code == 0
 
 
-def test_audit_with_dups_exits_1(tmp_path, capsys):
-    """audit() returns 1 when duplicates are found."""
+def test_audit_with_covered_dups_exits_0(tmp_path, capsys):
+    """audit() returns 0 when every dup group is neutralized at read time.
+
+    Convention-aware semantics (105ea68): one safra_movimentacoes row plus
+    b3/b3_manual rows is covered by `_dedup_cross_source_balcao` — reported,
+    but not a failure.
+    """
     _write_balcao(tmp_path / "balcao.csv", [
         _row("cra_test", "2024-01-15", "juros", "500.00", "b3"),
         _row("cra_test", "2024-01-15", "juros", "500.00", "safra_movimentacoes"),
     ])
     exit_code = audit(tmp_path, product_id=None)
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "cra_test" in out
+    assert "handled at read time" in out
+
+
+def test_audit_with_uncovered_dups_exits_1(tmp_path, capsys):
+    """audit() returns 1 when a dup group is NOT covered by read-time dedup."""
+    _write_balcao(tmp_path / "balcao.csv", [
+        _row("cra_test", "2024-01-15", "juros", "500.00", "b3"),
+        _row("cra_test", "2024-01-15", "juros", "500.00", "b3_manual"),
+    ])
+    exit_code = audit(tmp_path, product_id=None)
     assert exit_code == 1
     out = capsys.readouterr().out
     assert "cra_test" in out
+    assert "NOT covered" in out
