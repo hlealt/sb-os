@@ -20,21 +20,27 @@ const INV_IRR_CLASS_LABELS = {
 const _INV_IRR_CLASS_ORDER = ['rv_br', 'rv_eua', 'rf_balcao', 'fundos', 'crypto'];
 
 // Denomination/composition disclosure per chip (native title tooltip).
-// Mirrors _compute_portfolio_irr() mechanics: equities/crypto buckets are
-// lifetime XIRR including closed positions; balcão buckets (RF/fundos) cover
-// active positions only; rv_eua flows are USD→BRL at funding FX, terminal at
-// today's FX — so the chip is NOT the average of the per-asset TIR column.
+// Mirrors _compute_portfolio_irr() mechanics (D12): the main line is the
+// all-time XIRR (every flow ever recorded, closed positions included); the
+// "Atual" line is the current variant (open positions' flows only). rv_eua
+// flows are USD→BRL at funding FX, terminal at today's FX — so neither rate
+// is the average of the per-asset TIR column.
 const _INV_IRR_CLASS_TOOLTIPS = {
-  rv_br: 'TIR money-weighted (XIRR) em BRL de todo o capital já alocado na classe, '
-    + 'incluindo posições encerradas — não é a média das TIRs por ativo da Bolsa.',
-  rv_eua: 'TIR money-weighted (XIRR) em BRL de todo o capital já alocado na classe, '
-    + 'incluindo posições encerradas. Fluxos USD convertidos ao câmbio médio de funding; '
-    + 'valor atual ao câmbio de hoje — difere da coluna TIR da Bolsa (USD nativo, só posições abertas).',
-  rf_balcao: 'TIR money-weighted (XIRR) em BRL das posições ativas do Balcão — '
-    + 'posições vencidas/encerradas ficam fora.',
-  fundos: 'TIR money-weighted (XIRR) em BRL dos fundos ativos — posições encerradas ficam fora.',
-  crypto: 'TIR money-weighted (XIRR) em BRL de todos os fluxos de cripto (swaps marcados em BRL), '
-    + 'incluindo moedas já encerradas.',
+  rv_br: 'TIR money-weighted (XIRR) em BRL. Linha principal: all-time — todo o capital '
+    + 'já alocado na classe, incluindo posições encerradas. "Atual": somente os fluxos '
+    + 'das posições abertas hoje. Nenhuma das duas é a média das TIRs por ativo da Bolsa.',
+  rv_eua: 'TIR money-weighted (XIRR) em BRL. Linha principal: all-time — inclui posições '
+    + 'encerradas. "Atual": somente posições abertas. Fluxos USD convertidos ao câmbio '
+    + 'médio de funding; valor atual ao câmbio de hoje — difere da coluna TIR da Bolsa '
+    + '(USD nativo).',
+  rf_balcao: 'TIR money-weighted (XIRR) em BRL. Linha principal: all-time — inclui '
+    + 'produtos vencidos/resgatados (resgate como fluxo final). "Atual": somente as '
+    + 'posições ativas do Balcão.',
+  fundos: 'TIR money-weighted (XIRR) em BRL. Linha principal: all-time — inclui fundos '
+    + 'encerrados. "Atual": somente fundos ativos.',
+  crypto: 'TIR money-weighted (XIRR) em BRL dos fluxos de cripto (swaps marcados em BRL). '
+    + 'Linha principal: all-time — inclui moedas já encerradas. "Atual": somente moedas '
+    + 'em carteira.',
 };
 
 // Investment broker label lookup — canonical map lives in shared.js (BROKER_LABELS).
@@ -164,6 +170,10 @@ function invCarteiraSummaryCards(summary, positions) {
   const pnl = summary.total_pnl ?? 0;
   const pnlPct = cost > 0 ? pnl / cost : 0;
   const irr = summary.irr?.total;
+  // Current (open-positions-only) IRR variant — absent on legacy snapshots,
+  // in which case only the all-time rate renders (fallback, D12).
+  const hasCurrentIrr = !!summary.irr?.current;
+  const irrCur = summary.irr?.current?.total;
   // Count all positions emitted by calculate.py — RF/funds always carry quantity=0
   // (they're net_flow + snapshot driven), so filtering by quantity!=0 hides them.
   const count = positions.length;
@@ -186,6 +196,7 @@ function invCarteiraSummaryCards(summary, positions) {
       <div class="card">
         <div class="card-label">TIR anualizada</div>
         <div class="card-value" style="color:${(irr ?? 0) >= 0 ? 'var(--green)' : 'var(--red)'}">${invFormatPctValue(irr)}</div>
+        ${hasCurrentIrr ? `<div style="font-size:0.8rem;color:var(--text-muted);">Atual: <span style="color:${irrCur == null ? 'var(--text-muted)' : (irrCur >= 0 ? 'var(--green)' : 'var(--red)')};font-weight:600;">${invFormatPctValue(irrCur)}</span></div>` : ''}
       </div>
       <div class="card">
         <div class="card-label">Posições</div>
@@ -199,6 +210,9 @@ function invCarteiraSummaryCards(summary, positions) {
 
 function invCarteiraIrrBreakdown(summary) {
   const perClass = summary.irr?.per_class || {};
+  // Current-variant block (D12) — undefined on legacy snapshots, in which
+  // case chips render the all-time rate only (fallback).
+  const curPerClass = summary.irr?.current?.per_class;
   const buckets = _INV_IRR_CLASS_ORDER
     .map(k => ({ key: k, ...(perClass[k] || {}) }))
     .filter(b => b.irr != null || (b.terminal_value || 0) > 0);
@@ -211,10 +225,17 @@ function invCarteiraIrrBreakdown(summary) {
     const rateTxt = invFormatPctValue(rate);
     const value = b.terminal_value ? formatBRL(b.terminal_value) : '—';
     const tip = _INV_IRR_CLASS_TOOLTIPS[b.key] || '';
+    let curHtml = '';
+    if (curPerClass) {
+      const curRate = (curPerClass[b.key] || {}).irr;
+      const curColor = curRate == null ? 'var(--text-muted)' : (curRate >= 0 ? 'var(--green)' : 'var(--red)');
+      curHtml = `<div class="privacy-hide" style="font-size:0.74rem;color:var(--text-muted);margin-top:2px;">Atual: <span style="color:${curColor};font-weight:600;">${invFormatPctValue(curRate)}</span></div>`;
+    }
     return `
       <div title="${tip}" style="flex:1;min-width:120px;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);${tip ? 'cursor:help;' : ''}">
         <div style="font-size:0.78rem;color:var(--text-muted);">${label}</div>
         <div class="privacy-hide" style="font-size:1.05rem;font-weight:600;color:${color};margin-top:2px;">${rateTxt}</div>
+        ${curHtml}
         <div class="privacy-hide" style="font-size:0.72rem;color:var(--text-muted);margin-top:2px;">${value}</div>
       </div>
     `;

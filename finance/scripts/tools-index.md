@@ -168,10 +168,10 @@ owner_script: investimentos/validate_calculate.py
 class: read
 use: audit-diagnostic
 expected_inputs: optional --portfolio-path PATH (default portfolio.json); optional --strict flag; env override BOOKKEEPER_PORTFOLIO_PATH; reads .user/finance/bookkeeper/ledgers/investimentos/portfolio.json
-outputs: Human-readable report: total IRR + value, per-class IRR table, irr_quality histogram, violation list. Exit 0 always in verbose mode; exit 0/1 in --strict mode (0=clean, 1=violation).
+outputs: Human-readable report: total IRR + value, per-class IRR table (columns IRR all, F all, IRR cur, F cur — cur columns render n/a for legacy portfolios without summary.irr.current), irr_quality histogram, violation list (checks both all-time and current total/per_class against ±200% band), Current IRR summary line. Exit 0 always in verbose mode; exit 0/1 in --strict mode (0=clean, 1=violation).
 canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/investimentos/portfolio.json (no write)
 dry_run: not-applicable
-last_validated: 2026-05-27
+last_validated: 2026-06-05
 ```
 
 ```yaml

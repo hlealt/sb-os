@@ -40,6 +40,12 @@ class FXState:
     """Running state of the FX engine."""
     usd_balance: float = 0.0
     weighted_avg_rate: float = 0.0
+    # Last non-zero account-level average. process_transfer_out zeroes
+    # weighted_avg_rate when the tranches are exhausted and the balance
+    # reaches 0 (full repatriation); this field survives that reset so
+    # closed-ticker USD flows keep a stable historical rate instead of
+    # degenerating to FX 1.0 (see get_ticker_fx_rate).
+    last_nonzero_avg_rate: float = 0.0
     lots: list[Lot] = field(default_factory=list)  # FIFO lots per ticker
     # BRL-equivalent records for USD proventos, computed at the ticker's
     # weighted FX rate at dividend time (PRD §"Dividendos USD").
@@ -107,6 +113,10 @@ class FXState:
                 / total_usd
             )
         elif self.usd_balance <= 0:
+            # Full repatriation: persist the dying average before zeroing
+            # so rate lookups for closed tickers never degenerate to 0.
+            if self.weighted_avg_rate > 0:
+                self.last_nonzero_avg_rate = self.weighted_avg_rate
             self.weighted_avg_rate = 0.0
 
     def process_provento(self, ticker: str, date: str, usd_amount: float) -> float:
@@ -209,7 +219,11 @@ class FXState:
                 weighted_sum += lot.quantity * lot.fx_rate
         if total_qty > 0:
             return weighted_sum / total_qty
-        return self.weighted_avg_rate  # Fallback to account-level avg
+        # Fallback to account-level avg; after a full repatriation that
+        # average is 0.0, so fall through to the last non-zero average
+        # persisted by process_transfer_out — closed tickers keep a stable
+        # historical rate (returns 0.0 only when no FX history exists).
+        return self.weighted_avg_rate or self.last_nonzero_avg_rate
 
     def get_ticker_cost_brl(self, ticker: str) -> float:
         """Total BRL cost basis for a ticker from active lots."""

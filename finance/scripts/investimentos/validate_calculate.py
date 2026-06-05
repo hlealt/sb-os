@@ -79,6 +79,17 @@ def _irr_violations(portfolio: dict) -> list[str]:
         cls_irr = v.get("irr")
         if cls_irr is not None and abs(cls_irr) > 2.0:
             violations.append(f"Class bucket '{cls}': IRR {_fmt_pct(cls_irr)} exceeds ±200% band")
+    # Current (open-positions-only) variant — same ±200% band (D12).
+    current = irr_data.get("current") or {}
+    cur_total = current.get("total")
+    if cur_total is not None and abs(cur_total) > 2.0:
+        violations.append(f"Portfolio current IRR {_fmt_pct(cur_total)} exceeds ±200% band")
+    for cls, v in (current.get("per_class") or {}).items():
+        cls_irr = v.get("irr")
+        if cls_irr is not None and abs(cls_irr) > 2.0:
+            violations.append(
+                f"Class bucket '{cls}' (current): IRR {_fmt_pct(cls_irr)} exceeds ±200% band"
+            )
     for pos in portfolio.get("positions", []):
         pid = pos.get("id", "?")
         irr = pos.get("irr")
@@ -131,20 +142,28 @@ def print_report(portfolio: dict) -> None:
     total_irr = irr_data.get("total")
     total_value = summary.get("total_value")
     total_pnl = summary.get("total_pnl")
+    current = irr_data.get("current") or {}
     print(f"\n  Total value  : {_fmt_brl(total_value)}")
     print(f"  Total P&L    : {_fmt_brl(total_pnl)}")
     print(f"  Portfolio IRR: {_fmt_pct(total_irr)}")
+    if current.get("total") is not None:
+        print(f"  Current IRR  : {_fmt_pct(current.get('total'))} (open positions only)")
 
-    # Per-class IRR table
+    # Per-class IRR table — all-time + current variant columns (D12).
+    # Legacy portfolios without the `current` block print n/a in those columns.
     per_class = irr_data.get("per_class") or {}
+    cur_per_class = current.get("per_class") or {}
     if per_class:
-        print(f"\n  {'Bucket':<12}  {'IRR':>8}  {'Terminal Value':>16}  {'Flows':>6}")
-        print(f"  {'-'*12}  {'-'*8}  {'-'*16}  {'-'*6}")
+        print(f"\n  {'Bucket':<12}  {'IRR':>8}  {'IRR cur':>8}  {'Terminal Value':>16}  {'Flows':>6}  {'F cur':>6}")
+        print(f"  {'-'*12}  {'-'*8}  {'-'*8}  {'-'*16}  {'-'*6}  {'-'*6}")
         for cls, v in per_class.items():
+            cur_v = cur_per_class.get(cls) or {}
             irr_s = _fmt_pct(v.get("irr"))
+            cur_irr_s = _fmt_pct(cur_v.get("irr"))
             tv_s = _fmt_brl(v.get("terminal_value"))
             fc = v.get("flow_count", 0)
-            print(f"  {cls:<12}  {irr_s:>8}  {tv_s:>16}  {fc:>6}")
+            fc_cur = cur_v.get("flow_count", "n/a")
+            print(f"  {cls:<12}  {irr_s:>8}  {cur_irr_s:>8}  {tv_s:>16}  {fc:>6}  {fc_cur:>6}")
 
     # irr_quality histogram
     hist = _quality_histogram(portfolio)

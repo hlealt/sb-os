@@ -118,9 +118,11 @@ Broker/exchange configuration. Each source has: `name`, `type` (corretora/banco/
 | D5 | Fixed income uses snapshots | Accrual not computable from transactions |
 | D6 | Phase 1 import, Phase 2 parsers | Spreadsheet data already structured |
 | D7 | Crypto buy/sell asset pair | Handles fiat↔crypto and crypto↔crypto |
-| D8 | Crypto per-asset IRR in BRL | Flows from `crypto.csv:price_brl`; terminal = `quantity × current_price_brl` (exchanges quote BRL natively). Each leg of a crypto↔crypto swap registers as a synthetic BRL flow at its implied BRL value. Resulting IRR reflects BRL-equivalent timing of swaps, not pure native-asset return — read with care for swap-heavy positions. |
+| D8 | Crypto per-asset IRR in BRL, partitioned per (asset, exchange) | Flows from `crypto.csv:price_brl`; terminal = `quantity × current_price_brl` (exchanges quote BRL natively). `_build_position_flows` keys each crypto leg by the composite `"{asset}@{exchange}"` (exchange normalized: `bipa` → `bipa`; everything else → `mercado_bitcoin`) — matching the per-exchange position split in `position_calculator`. Keying by bare currency would hand every exchange-split position the currency's full flow history but only its partial terminal, producing double-counted flows and a strongly negative IRR bias (the BTC ×2 defect, 2026-06-05). `_build_position_entry` looks up a crypto position's flows by `f"{pos.id}@{pos.broker}"` (pos.broker carries the normalized exchange). XIRR label also uses the composite key. Each leg of a crypto↔crypto swap registers as a synthetic BRL flow at its implied BRL value. Resulting IRR reflects BRL-equivalent timing of swaps, not pure native-asset return — read with care for swap-heavy positions. |
 | D9 | Per-asset IRR terminal anchored at snapshot date (balcão) | Balcão positions anchor the XIRR terminal at the snapshot's own `price_date`, not the cut date — cut-date anchoring implies 0% return across the staleness window and understates IRR (a 38-day-stale snapshot cost -36bp in the motivating case). Listed/crypto keep cut-date anchoring (prices fetched fresh at cut); portfolio + per-class IRR keep cut-date anchoring (mixed positions need one common anchor). |
-| D10 | Per-asset IRR flows bridged across corporate renames | `_bridge_rename_flows` in `calculate.py` remaps per-ticker flows along the `conversao`/`incorporacao`/`fusao`/`cisao` chain so the surviving ticker carries the original cost history. Cisão splits flows dated on/before the action by `ratio_to / (ratio_from + ratio_to)` — the same fraction `_apply_corporate_action` applies to cost basis, so flows and cost stay consistent to the cent. Without bridging, renamed positions have no outflow under their own ticker and render `irr: null` (motivating cases: EMBJ3, AMOB3). Per-class IRR deliberately unbridged: it builds its own flows keyed by raw ticker, and old/new tickers bucket identically via assets.csv. |
+| D10 | Per-asset IRR flows bridged across corporate renames | `_bridge_rename_flows` in `calculate.py` remaps per-ticker flows along the `conversao`/`incorporacao`/`fusao`/`cisao` chain so the surviving ticker carries the original cost history. Cisão splits flows dated on/before the action by `ratio_to / (ratio_from + ratio_to)` — the same fraction `_apply_corporate_action` applies to cost basis, so flows and cost stay consistent to the cent. Without bridging, renamed positions have no outflow under their own ticker and render `irr: null` (motivating cases: EMBJ3, AMOB3). **FM-3 reconciliation (D12):** the original D10 statement "Per-class IRR deliberately unbridged" is superseded by D12. Class-level flows ARE now bridged via the same `_bridge_rename_flows` call (bucketing is unaffected — old/new tickers bucket identically via assets.csv — but the D12 `current` variant's membership test requires pre-rename flows to appear under the surviving ticker). See "Per-Asset IRR Flow Bridging Across Renames (D10)" section for full details. |
+| D11 | Stable FX fallback for closed-ticker USD flows | `get_ticker_fx_rate` falls back per-ticker lots → account `weighted_avg_rate` → `last_nonzero_avg_rate` (persisted by `process_transfer_out` at the moment a full repatriation zeroes the live average). Per-class IRR flow conversion (`_to_brl`, `calculate.py`) reaches FX 1.0 only when no `avenue_fx.csv` history exists at all, and then warns on stderr once per ticker — never silently. Pre-fix, a full liquidation+repatriation of the Avenue account would have silently converted every closed-ticker USD flow at FX 1.0 against a real BRL terminal (rv_eua chip +4,03% → +6,70% in the regression sim). |
+| D12 | `summary.irr` carries two variants: all-time and current (approved 2026-06-05) | Eliminates survivors-vs-lifetime ambiguity found in the rv-eua TIR investigation — user sees both "how has my capital performed since inception" (all-time) and "how is what I hold today performing" (current). Extending the existing `summary.irr` store (ME gate [R] reuse — no new store). All-time semantics: money-weighted XIRR over every flow ever recorded, with three semantic changes vs the pre-D12 single variant: (a) balcão buckets include closed/matured/redeemed products (full flows, redemption is the natural terminal, no cut-date anchor needed); (b) balcão code-migration synthetic seeds are injected for EVERY migrated product, not only active ones; (c) class-level flows are bridged across corporate renames via `_bridge_rename_flows` (D10) before bucketing. Current variant: only flows belonging to open positions at the cut (position-scoped, not lot-scoped); `flow_count` differs; buckets with zero current flows emit `irr: null, flow_count: 0`. Bridging now matters at class level for the current-variant membership test (EMBR3 buys must count as flows of the open EMBJ3). **Supersedes the D10 statement "Per-class IRR deliberately unbridged"** — that statement is now false; see D10 FM-3 reconciliation note in the Design Decisions table and in "Per-Asset IRR Flow Bridging" section. |
 
 ## Source Data Reference
 
@@ -178,7 +180,7 @@ Orders and proventos record flows under the ticker of the day. After a rename, t
 
 Actions apply chronologically, so multi-hop chains (A→B→C) land on the final ticker. A cisão row with unfilled ratios (`ratio_from`/`ratio_to` ≤ 0, flagged for research) is skipped, mirroring the position calculator's guard.
 
-**Scope.** Per-asset IRR only. Per-class IRR (`_compute_portfolio_irr`) is deliberately unbridged: it builds its own flows keyed by raw ticker, and old/new tickers resolve to the same bucket via assets.csv — bridging there would be a no-op. Closed renamed positions (e.g. ARZZ3→AZZA3, fully sold) get bridged flow lists too, but produce no position entry, so nothing renders.
+**Scope.** Per-asset IRR and per-class IRR. `_bridge_rename_flows` is called before `_compute_portfolio_irr` bucketing (D12). Bucketing is unaffected — old/new tickers resolve to the same bucket via assets.csv — but the D12 `current` variant's membership test must see pre-rename flows under the surviving ticker (EMBR3 buys count as flows of the open EMBJ3). The original D10 statement "Per-class IRR deliberately unbridged" is superseded by D12; bridging at class level is not a no-op once a `current`-only filter is applied. Closed renamed positions (e.g. ARZZ3→AZZA3, fully sold) get bridged flow lists too, but produce no position entry, so nothing renders in the `current` variant.
 
 ### Currency Model (Variable Income & Crypto)
 
@@ -201,11 +203,19 @@ Consumers aggregating across currencies (dashboards, reports) MUST read the `*_b
 
 **FX engine event ordering.** `fx_engine.build_fx_state` replays `avenue_fx.csv` + USD orders + USD proventos sorted by `(date, intra-day tier)`. Tiers process inflows before outflows within a date — `transfer_in` (0), provento (1), sell (2), buy (3), `transfer_out` (4) — because same-day settlement at the broker is atomic. Without tiers, CSV row order could process a buy before same-day sells and produce a false-negative USD balance dip (observed 2022-07-15).
 
+**Closed-ticker FX fallback (per-class IRR, D11).** Flows of tickers with no active lots (the closed 2021-22 Avenue cohort) convert via `get_ticker_fx_rate`'s fallback chain: per-ticker weighted lots → account-level `weighted_avg_rate` → `FXState.last_nonzero_avg_rate`. The last is persisted by `process_transfer_out` at the moment a full repatriation exhausts the transfer tranches and zeroes the live average (a transfer_out backed by sale proceeds can exceed the outstanding tranche total), so closed-ticker flows keep a stable historical rate after the USD account closes. If no rate exists anywhere (empty `avenue_fx.csv` while USD flows exist), `_to_brl` (`calculate.py`) converts at 1.0 and warns on stderr (`[irr_calculator] class-flow FX: …`), once per ticker per run — a degenerate conversion is never silent. Trailing USD proventos received after a full repatriation convert at the same persisted rate.
+
 ### Crypto Per-Asset IRR
 
-Per-asset XIRR for crypto positions is computed in **BRL**, not in the native asset (BTC, ETH, USDT etc.).
+Per-asset XIRR for crypto positions is computed in **BRL**, per **(asset, exchange)** pair — matching the per-exchange position split in `position_calculator`.
 
-**Convention.** Each crypto trade leg in `crypto.csv` carries a `price_brl` field captured at the moment of the trade. `_build_position_flows` in `calculate.py` registers each leg as a synthetic BRL cash flow at that implied BRL value. Terminal value is `quantity × current_price`, where current price is fetched in BRL from CoinGecko (crypto exchanges in Brazil quote natively in BRL). Both flows and terminal are BRL → XIRR is currency-consistent.
+**Flow partitioning by composite key.** `_build_position_flows` keys each crypto leg by `"{asset}@{exchange}"` (exchange normalized via `_normalize_crypto_exchange`: `bipa` stays `bipa`; `binance`, `mb`, and any other value map to `mercado_bitcoin`). `_build_position_entry` looks up flows by `f"{pos.id}@{pos.broker}"` — `pos.broker` carries the normalized exchange for crypto positions. Keying by bare currency (`BTC`) would hand every exchange-split position the currency's full flow history but only its partial terminal, producing double-counted flows and a strongly negative IRR bias. The composite key partitions flows correctly to their exchange-split position.
+
+**Convention.** Each crypto trade leg in `crypto.csv` carries a `price_brl` field captured at the moment of the trade. `_build_position_flows` registers each leg as a synthetic BRL cash flow at that implied BRL value. Terminal value is `quantity × current_price`, where current price is fetched in BRL from CoinGecko (crypto exchanges in Brazil quote natively in BRL). Both flows and terminal are BRL → XIRR is currency-consistent.
+
+**Inter-exchange transfer convention (envio/recebimento).** A transfer row (`operation ∈ {envio, recebimento}`) with `price_brl` set registers as a synthetic sale at the sender position and a synthetic purchase at the receiver position, both at the transfer-date BRL mark. The two legs cancel at currency/bucket level — a transfer is never a BRL entry/exit of the asset as a whole. No such rows exist in the ledger today; this is the convention for when they appear.
+
+**Unpriced-row warning.** A non-`ajuste` crypto row with `price_brl <= 0` carries no flow. For each affected `(asset, exchange)` pair, `calculate.py` emits one warning per run to stderr (format: `[irr_calculator] crypto unpriced: BTC@bipa — N non-ajuste row(s) with price_brl<=0 carry no flow; per-exchange IRR may be skewed`). `ajuste` rows are intentional quantity-only adjustments and remain silent. Current ledger state: BTC@bipa has 4 early-2024 rows (~0.000332 BTC total) with `price_brl<=0`; these are immaterial and the warning is expected.
 
 **What this measures and what it doesn't.**
 
@@ -219,7 +229,14 @@ A heavy swap history (e.g. BTC→ETH→USDT→BTC) produces a per-asset IRR that
 
 **Why not native-asset IRR.** A native-asset XIRR would require capturing every leg in the asset's own units, with terminal in the same units. Inter-asset swaps would need to register as zero-sum events (out in coin A, in in coin B at swap parity), which destroys the relationship between flows and BRL. The result would only be meaningful for positions that are never swapped — a tiny subset of activity. Out of scope.
 
-**Aggregate (per-class) crypto IRR.** Mirrors per-asset: BRL flows, BRL terminal. The `crypto` bucket in `summary.irr.per_class` is therefore a true BRL return on crypto exposure as a whole.
+**Aggregate (per-class) crypto IRR.** Mirrors per-asset: BRL flows, BRL terminal. The `crypto` bucket in both `summary.irr.per_class` (all-time) and `summary.irr.current.per_class` (open positions only) is therefore a true BRL return on crypto exposure. Crypto tickers from `crypto.csv` are forced into the `crypto` bucket regardless of `assets.csv` coverage, preserving the prior behavior where crypto legs never fall into `other`.
+
+**Per-bucket vs per-asset residual (gate_10).** The crypto bucket's all-time IRR (+27.40% cut 2026-06-05) diverges materially from the simple average of per-asset per-exchange IRRs (+9.93%), a 17.46pp delta that triggers `gate_bucket_divergence` (gate #10). This residual is **structural and expected** — same survivorship-composition pattern as `rv_br`:
+
+- The `crypto` per-class bucket is a lifetime money-weighted XIRR over the whole crypto class, including the fully liquidated alt-coin cohort (ETH/XRP/BNB/USDT/NMR/STX/ADA/DOT/LINK swaps and sales, realized gains, zero terminal at the cut).
+- The per-asset simple average covers only the two surviving BTC per-exchange positions (BTC@mercado_bitcoin, BTC@bipa), equal-weighted.
+
+The `current` variant eliminates this gap: `summary.irr.current.per_class.crypto` equals the XIRR over merged BTC flows with total BTC terminal (+9.52% verified cut 2026-06-05), matching the simple average of the two surviving positions. The 17.46pp divergence is not a data defect — accept it as expected in gate_10 review.
 
 ### Per-Asset IRR Terminal Anchoring (Balcão)
 
@@ -229,14 +246,84 @@ Snapshot-valued (balcão) positions anchor the per-asset XIRR terminal at the sn
 
 **Semantics.** A balcão position's `irr` reads as "XIRR through its latest mark" and does not change with the cut date while the underlying data is unchanged. A flow dated after the snapshot (e.g. a coupon between snapshot and cut) still enters the flow list — XIRR handles unordered dated flows; the terminal stays at the snapshot date.
 
-**Scope.** Listed and crypto positions keep the cut-date anchor — their prices are fetched fresh at the cut, so terminal date = cut date is exact. Portfolio-level and per-class IRR (`summary.irr`) also keep cut-date anchoring: they mix positions with different snapshot dates and need one common terminal anchor; per-class terminals sum `current_value_brl` at the cut.
-
+**Scope.** Listed and crypto positions keep the cut-date anchor — their prices are fetched fresh at the cut, so terminal date = cut date is exact. Portfolio-level and per-class IRR (`summary.irr.total`, `summary.irr.per_class`, and the D12 `summary.irr.current` variants) also keep cut-date anchoring: they mix positions with different snapshot dates and need one common terminal anchor; per-class terminals sum `current_value_brl` at the cut. For the `current` variant, `terminal_value` per bucket is shared with the all-time variant (only open positions carry value at the cut).
 
 ### Per-Class IRR Buckets and the `'other'` Discard
 
 `_irr_class_bucket` (`calculate.py`) maps every ticker/product_id to one of the 5 class buckets — `rv_br`, `rv_eua`, `rf_balcao`, `fundos`, `crypto` — from its assets.csv metadata (`asset_class`, `type`, `currency`). An id that resolves to none of the five (almost always a ticker missing from assets.csv) falls into `'other'`, and `_compute_portfolio_irr` DROPS the `'other'` bucket from `summary.irr.per_class` — those flows still count in the portfolio-level IRR, but vanish from the class breakdown.
 
 Because that discard is silent by construction, `calculate.py` emits a stderr warning per offending ticker when building `flows_by_class`, in the `[irr_calculator]` pattern: `class:other: {ticker} — N flow(s) totalling R$ X` — with a small materiality threshold (`_IRR_OTHER_WARN_MIN_ABS_BRL`, R$ 50 absolute total per ticker) so cent-sized residues don't add noise. Motivating case: the AZZA3 leak — 8 tickers absent from assets.csv kept R$ 5k+ of flows out of `rv_br` for months with no signal (2026-06-05). Fix path for a warned ticker: add it to assets.csv via `upsert_assets.py` and regenerate.
+
+### Summary IRR — Two Variants (D12)
+
+`portfolio.json` `summary.irr` carries two variants sharing the same bucket structure (`rv_br`, `rv_eua`, `rf_balcao`, `fundos`, `crypto`):
+
+#### Schema
+
+```json
+{
+  "summary": {
+    "irr": {
+      "total": 0.1081,
+      "per_class": {
+        "rv_br":     { "irr": 0.0543, "terminal_value": ..., "flow_count": 1306 },
+        "rv_eua":    { "irr": 0.0398, "terminal_value": ..., "flow_count": 86 },
+        "rf_balcao": { "irr": 0.1189, "terminal_value": ..., "flow_count": 90 },
+        "fundos":    { "irr": 0.1416, "terminal_value": ..., "flow_count": 24 },
+        "crypto":    { "irr": 0.2742, "terminal_value": ..., "flow_count": 88 }
+      },
+      "current": {
+        "total": 0.1173,
+        "per_class": {
+          "rv_br":     { "irr": 0.2944, "terminal_value": ..., "flow_count": 156 },
+          "rv_eua":    { "irr": 0.0750, "terminal_value": ..., "flow_count": 14 },
+          "rf_balcao": { "irr": 0.0838, "terminal_value": ..., "flow_count": 47 },
+          "fundos":    { "irr": 0.1416, "terminal_value": ..., "flow_count": 24 },
+          "crypto":    { "irr": 0.0955, "terminal_value": ..., "flow_count": 32 }
+        }
+      }
+    }
+  }
+}
+```
+
+`total` and `per_class` are the legacy (all-time) keys — shape unchanged. `current` is the new block added by D12, mirroring the legacy shape exactly. Snapshots without `summary.irr.current` are legacy portfolios; consumers check for key presence.
+
+#### All-time variant (`summary.irr.total` + `summary.irr.per_class`)
+
+Money-weighted XIRR over every flow ever recorded. Three semantic changes landed with D12:
+
+| Semantic change | Detail |
+|----------------|--------|
+| Balcão buckets include closed products | Closed/matured/redeemed products' full flows are included. Redemption is the natural terminal — closed positions' flows balance themselves; no cut-date terminal anchor is needed. |
+| Balcão code-migration seeds for all migrated products | Synthetic seeds injected for every migrated product (same convention as per-asset path), not only active ones. |
+| Class-level flows bridged across corporate renames | `_bridge_rename_flows` (D10) applies before bucketing. Bucketing is unaffected (old/new tickers resolve to the same bucket via assets.csv), but the current-variant membership test requires pre-rename flows under the surviving ticker. |
+
+#### Current variant (`summary.irr.current`)
+
+XIRR over flows whose rename-bridged ticker/product_id belongs to an open position in the cut's position entries. Eliminates survivors-vs-lifetime ambiguity.
+
+| Rule | Detail |
+|------|--------|
+| Position-scoped, not lot-scoped | A partial sell of an open position keeps that position's flows in scope. |
+| `terminal_value` per bucket | Shared with the all-time variant — only open positions carry value at the cut. |
+| `flow_count` | Differs from all-time (only open-position flows counted). |
+| Zero-flow bucket | Emits `irr: null, flow_count: 0`. |
+| Crypto forced to `crypto` bucket | Crypto tickers from `crypto.csv` land in `crypto` regardless of `assets.csv` coverage. |
+| Legacy fallback | Portfolios without `summary.irr.current` render without "current" display — no `irr: null` injection needed. |
+
+#### Verified reference values (cut 2026-06-05)
+
+| Bucket | All-time | Current | All-time flows | Current flows |
+|--------|----------|---------|----------------|---------------|
+| total | +10.81% | +11.73% | — | — |
+| rv_br | +5.43% | +29.44% | 1306 | 156 |
+| rv_eua | +3.98% | +7.50% | 86 | 14 |
+| fundos | +14.16% | +14.16% | 24 | 24 |
+| rf_balcao | +11.89% | +8.38% | 90 | 47 |
+| crypto | +27.42% | +9.55% | 88 | 32 |
+
+`rf_balcao` current (47 flows / +8.38%) reproduces the previous active-only chip exactly, confirming semantic continuity for that bucket.
 
 ### Yield on Cost (YoC)
 

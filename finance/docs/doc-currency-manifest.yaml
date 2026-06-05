@@ -30,7 +30,7 @@
 #             hook gates at file granularity, the signal reports the sections).
 
 version: "1.0"
-last_updated: "2026-06-05"
+last_updated: "2026-06-05"  # D8 fix: added "Crypto Per-Asset IRR" section reference to investimentos_schema node (per-exchange flow partitioning)
 
 couplings:
   # enforcement: hard-block (default) | signal-only
@@ -85,6 +85,8 @@ couplings:
         sections:
           - "Ledger schemas"
           - "portfolio.json"
+          - "Summary IRR — Two Variants (D12)"
+          - "Crypto Per-Asset IRR"
 
   - node_id: dashboard_views
     code:

@@ -30,7 +30,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1] / "shared"))
 from position_calculator import (calculate_positions, load_csv, LEDGER_DIR,
                                  load_assets, _resolve_valuation_method,
                                  load_code_migrations, is_migration_phantom,
-                                 load_balcao)
+                                 load_balcao, _normalize_crypto_exchange)
 from fx_engine import build_fx_state
 from price_fetcher import fetch_prices, fetch_market_indicators
 from irr_calculator import compute_xirr
@@ -306,6 +306,22 @@ def _build_position_flows(orders: list[dict], proventos: list[dict],
         quote natively in BRL). Heavy crypto-to-crypto swap activity
         produces an IRR that reflects BRL-equivalent timing of swaps, not
         pure native-asset return — see investimentos.md for the convention.
+
+    Key conventions:
+      - orders/proventos: bare ticker. balcao: product_id.
+      - crypto: composite "{asset}@{exchange}" (exchange normalized via
+        _normalize_crypto_exchange), matching the per-exchange position
+        split in position_calculator. Keying by bare currency would hand
+        every exchange-split position the currency's FULL flow history
+        paired with only its partial terminal — double-counted flows and
+        strongly negative IRR bias (the BTC ×2 defect, 2026-06-05).
+        An inter-exchange transfer row (envio/recebimento) with price_brl
+        set registers as a synthetic sale at the sender and purchase at
+        the receiver — legs cancel at currency level, so the transfer is
+        never a BRL entry/exit of the asset as a whole. Unpriced
+        (price_brl<=0) non-ajuste rows produce no flow and are warned on
+        stderr — quantity moved without a BRL mark skews the per-exchange
+        IRRs it touches.
     """
     flows: dict[str, list[tuple[str, float]]] = {}
 
@@ -346,19 +362,34 @@ def _build_position_flows(orders: list[dict], proventos: list[dict],
                 continue
             flows.setdefault(pid, []).append((m['seed_date'], seed_amount))
 
+    unpriced_crypto: dict[str, int] = {}
     for row in crypto:
-        price = float(row.get('price_brl', 0) or 0)
-        if price <= 0:
-            continue
         date_s = row.get('date', '')
         buy_asset = row.get('buy_asset', '')
         sell_asset = row.get('sell_asset', '')
+        exchange = _normalize_crypto_exchange(row.get('exchange', ''))
+        price = float(row.get('price_brl', 0) or 0)
+        if price <= 0:
+            # 'ajuste' is an intentional quantity-only adjustment (no BRL
+            # flow). Anything else moving a non-BRL asset without a BRL
+            # mark skews the per-exchange IRRs it touches — warn, never
+            # silently absorb (fail-loud).
+            if row.get('operation', '') != 'ajuste':
+                for asset in (buy_asset, sell_asset):
+                    if asset and asset != 'BRL':
+                        key = f"{asset}@{exchange}"
+                        unpriced_crypto[key] = unpriced_crypto.get(key, 0) + 1
+            continue
         # Buy leg: position gained quantity → BRL outflow (negative).
         if buy_asset and buy_asset != 'BRL':
-            flows.setdefault(buy_asset, []).append((date_s, -price))
+            flows.setdefault(f"{buy_asset}@{exchange}", []).append((date_s, -price))
         # Sell leg: position lost quantity → BRL inflow (positive).
         if sell_asset and sell_asset != 'BRL':
-            flows.setdefault(sell_asset, []).append((date_s, price))
+            flows.setdefault(f"{sell_asset}@{exchange}", []).append((date_s, price))
+    for key, count in sorted(unpriced_crypto.items()):
+        print(f"[irr_calculator] crypto unpriced: {key} — {count} non-ajuste "
+              f"row(s) with price_brl<=0 carry no flow; per-exchange IRR may "
+              f"be skewed", file=sys.stderr)
 
     # Bridge flows across corporate renames so renamed positions keep their
     # original cost chain (D10) — must run after all flow sources are loaded.
@@ -569,12 +600,19 @@ def _build_position_entry(pos, price_data, fx_state, usd_brl_rate, assets,
                 entry['funding_fx'] = round(funding_fx, 4)
 
         # IRR per-asset (native currency) — flows from orders + proventos.
-        flows = position_flows.get(pos.id, [])
+        # Crypto flows are keyed per (asset, exchange) to match the
+        # per-exchange position split — pos.broker carries the normalized
+        # exchange for crypto positions (see _build_position_flows).
+        if valuation_method == 'crypto':
+            flow_key = f"{pos.id}@{pos.broker}"
+        else:
+            flow_key = pos.id
+        flows = position_flows.get(flow_key, [])
         if flows:
             terminal = native_value if native_value > 0 else 0
             entry['irr'] = compute_xirr(flows, terminal_value=terminal,
                                         terminal_date=terminal_date,
-                                        label=pos.id)
+                                        label=flow_key)
         else:
             entry['irr'] = None
 
@@ -679,11 +717,53 @@ def _compute_pct(alloc: dict, total: float):
         alloc[key]['pct'] = round(alloc[key]['value'] / total, 4) if total else 0
 
 
+def _to_brl(fx_state, ticker: str, currency: str, native_amount: float,
+            warned_tickers: set = None) -> float:
+    """Convert one per-class IRR flow to BRL.
+
+    USD flows convert at the ticker's weighted FX rate; for tickers with
+    no active lots (closed positions) `get_ticker_fx_rate` falls back to
+    the account-level average and then to the engine's persisted last
+    non-zero average (`FXState.last_nonzero_avg_rate`), which survives a
+    full repatriation of the USD balance. A 1.0 conversion is reached
+    ONLY when no FX rate exists anywhere (empty avenue_fx history) and is
+    always announced on stderr — never silent: at FX 1.0 the USD flows
+    would enter the bucket ~5× undervalued against a real BRL terminal.
+    """
+    if currency != 'USD':
+        return native_amount
+    rate = fx_state.get_ticker_fx_rate(ticker) if fx_state else 0.0
+    if not rate:
+        if warned_tickers is None or ticker not in warned_tickers:
+            print(f"[irr_calculator] class-flow FX: no FX rate available "
+                  f"for {ticker} (no avenue_fx history) — USD flow "
+                  f"converts at 1.0 (degenerate)", file=sys.stderr)
+            if warned_tickers is not None:
+                warned_tickers.add(ticker)
+        rate = 1.0
+    return native_amount * rate
+
+
 def _compute_portfolio_irr(positions, proventos, total_value, cut_date,
                            assets, position_entries, fx_state) -> dict:
-    """Compute XIRR for total portfolio and per asset class.
+    """Compute XIRR for total portfolio and per asset class — two variants.
 
     Per-class buckets: rv_br, rv_eua, rf_balcao, fundos, crypto.
+
+    Variants (D12) — every summary-level rate is emitted twice, for the
+    total and per bucket:
+      - all-time (legacy keys `total` / `per_class`): money-weighted
+        lifetime XIRR over every flow ever recorded — closed equities,
+        liquidated crypto, matured/redeemed balcão products included. A
+        closed position's flows balance themselves (cost matched by sale /
+        redemption proceeds), so they need no terminal anchor.
+      - current (`current.total` / `current.per_class`): only flows whose
+        rename-bridged ticker/product_id belongs to an open position in
+        `position_entries`. Position-scoped, not lot-scoped — a partial
+        sell of an open position remains a flow of that position. Answers
+        "how is what I hold today performing"; all-time answers "how has my
+        capital performed since inception" (rv-eua investigation,
+        2026-06-05).
 
     Currency normalisation: all bucket and total flows are computed in BRL
     so they're consistent with the BRL terminal (current_value_brl). USD
@@ -692,47 +772,48 @@ def _compute_portfolio_irr(positions, proventos, total_value, cut_date,
     ticker's cost_basis_brl. This avoids the prior USD-flows × BRL-terminal
     mismatch that inflated rv_eua IRR by ~the USD/BRL trajectory.
 
-    Active-position filter (balcão only): only balcão flows belonging to
-    a position in `position_entries` contribute. Matured RFs (active=false
-    in assets.csv) are filtered out by `position_calculator` and so don't
-    appear in entries — their net-positive balcão flows (juros + vencimento
-    > aplicacao) would otherwise leak into rf_balcao without a matching
-    terminal anchor. Equities/crypto are NOT filtered: closed positions
-    there represent realized buy→sell gains/losses that legitimately belong
-    in the bucket's lifetime IRR, and their flows already balance (cost
-    matched by sale proceeds), so no anchor problem exists.
+    Rename bridging: flows are keyed by ticker/product_id and bridged
+    across corporate renames (`_bridge_rename_flows`, D10) BEFORE bucketing
+    and variant filtering, so a renamed position's pre-rename cost chain
+    follows it into the `current` variant (EMBR3 buys count as flows of the
+    open EMBJ3). Bucketing itself is unaffected — old and new tickers
+    resolve to the same bucket via assets.csv.
+
+    Balcão code-migration seeds are injected for every migrated product —
+    same convention as the per-asset path — and filtered per variant by
+    active membership like any other flow.
+
+    Terminal values are shared by both variants: only open positions carry
+    value at the cut (`total_value` IS the open portfolio's value), so the
+    variants differ in flows only.
     """
     # Collect all cash flows from orders + proventos
     orders = load_csv(LEDGER_DIR / 'orders.csv', cut_date)
     balcao = load_balcao(cut_date)
     crypto = load_csv(LEDGER_DIR / 'crypto.csv', cut_date)
+    corp_actions = load_csv(LEDGER_DIR / 'corporate_actions.csv', cut_date)
     migrations = load_code_migrations()
 
-    # Active position ids — drives the per-class flow gate. Includes every
-    # entry built by `_build_position_entry` (which has already filtered
-    # inactive assets in `position_calculator.calculate_positions`).
+    # Open-position ids — drives the `current` variant's flow filter.
+    # Includes every entry built by `_build_position_entry` (which has
+    # already filtered inactive assets in
+    # `position_calculator.calculate_positions`).
     active_ids = {entry.get('id', '') for entry in position_entries
                   if entry.get('id')}
 
-    all_flows = []
-    flows_by_class: dict[str, list[tuple[str, float]]] = {}
-    # Ticker/product_id → flows that fell into the discarded 'other' bucket.
-    # Surfaced via _warn_other_bucket_flows before per-class IRR is computed.
-    other_flows: dict[str, list[float]] = {}
+    # Flows keyed by ticker/product_id (BRL), bridged across renames below,
+    # then grouped into per-variant, per-bucket sets.
+    flows_by_ref: dict[str, list[tuple[str, float]]] = {}
+    # Refs seen in crypto.csv — forced into the crypto bucket regardless of
+    # assets.csv coverage (coins are not required to be registered there).
+    crypto_refs: set[str] = set()
 
-    def _add(bucket: str, date_str: str, amount: float, ref: str = ''):
-        all_flows.append((date_str, amount))
-        flows_by_class.setdefault(bucket, []).append((date_str, amount))
-        if bucket == 'other' and ref:
-            other_flows.setdefault(ref, []).append(amount)
+    def _add(ref: str, date_str: str, amount: float):
+        flows_by_ref.setdefault(ref, []).append((date_str, amount))
 
-    def _to_brl(ticker: str, currency: str, native_amount: float) -> float:
-        if currency != 'USD':
-            return native_amount
-        rate = fx_state.get_ticker_fx_rate(ticker) if fx_state else 0
-        if not rate:
-            rate = (fx_state.weighted_avg_rate if fx_state else 0) or 1.0
-        return native_amount * rate
+    # Tickers already warned about a degenerate FX 1.0 conversion — one
+    # stderr line per ticker per run (see _to_brl).
+    fx_warned: set = set()
 
     for row in orders:
         ticker = row.get('ticker', '')
@@ -740,9 +821,8 @@ def _compute_portfolio_irr(positions, proventos, total_value, cut_date,
         signed = -abs(total) if row['side'] == 'C' else abs(total)
         meta = assets.get(ticker, {})
         currency = (meta.get('currency') or 'BRL').upper()
-        signed_brl = _to_brl(ticker, currency, signed)
-        bucket = _irr_class_bucket(ticker, assets)
-        _add(bucket, row['date'], signed_brl, ref=ticker)
+        _add(ticker, row['date'],
+             _to_brl(fx_state, ticker, currency, signed, fx_warned))
 
     for row in proventos:
         ticker = row.get('ticker', '')
@@ -753,37 +833,31 @@ def _compute_portfolio_irr(positions, proventos, total_value, cut_date,
         if currency == 'USD' and fx_state is not None:
             net_brl = fx_state.get_provento_brl(row.get('date', ''), ticker, abs(net))
             if net_brl is None:
-                net_brl = _to_brl(ticker, currency, abs(net))
+                net_brl = _to_brl(fx_state, ticker, currency, abs(net), fx_warned)
         else:
             net_brl = abs(net)
-        bucket = _irr_class_bucket(ticker, assets)
-        _add(bucket, row['date'], net_brl, ref=ticker)
+        _add(ticker, row['date'], net_brl)
 
     for row in _filter_balcao_for_irr(balcao, migrations):
         pid = row.get('product_id', '')
-        # Filter to active balcao positions only — see docstring.
-        if pid not in active_ids:
-            continue
         amount = float(row.get('amount', 0) or 0)
-        bucket = _irr_class_bucket(pid, assets)
-        _add(bucket, row.get('date', ''), amount, ref=pid)
+        _add(pid, row.get('date', ''), amount)
 
-    # Inject synthetic seeds for code migrations into the corresponding bucket.
+    # Inject synthetic seeds for code migrations (every migrated product —
+    # the `current` variant filters them by active membership like any
+    # other flow).
     for pid, mlist in migrations.items():
-        if pid not in active_ids:
-            continue
-        bucket = _irr_class_bucket(pid, assets)
         for m in mlist:
             seed_amount = -float(m['from_total'])
             if seed_amount == 0:
                 continue
-            _add(bucket, m['seed_date'], seed_amount, ref=pid)
+            _add(pid, m['seed_date'], seed_amount)
 
     for row in crypto:
         # Crypto flows are already BRL-marked via crypto.csv:price_brl.
-        # Both legs of a swap belong in the bucket regardless of whether
-        # the coin is currently held — closed crypto positions represent
-        # realized BRL gains/losses, same convention as equities.
+        # Both legs of a swap belong to their coin's flow list; the
+        # all-time variant keeps legs of liquidated coins — realized BRL
+        # gains/losses, same convention as equities.
         price = float(row.get('price_brl', 0) or 0)
         if price <= 0:
             continue
@@ -791,17 +865,46 @@ def _compute_portfolio_irr(positions, proventos, total_value, cut_date,
         buy_asset = row.get('buy_asset', '')
         sell_asset = row.get('sell_asset', '')
         if buy_asset and buy_asset != 'BRL':
-            all_flows.append((date_s, -price))
-            flows_by_class.setdefault('crypto', []).append((date_s, -price))
+            crypto_refs.add(buy_asset)
+            _add(buy_asset, date_s, -price)
         if sell_asset and sell_asset != 'BRL':
-            all_flows.append((date_s, price))
-            flows_by_class.setdefault('crypto', []).append((date_s, price))
+            crypto_refs.add(sell_asset)
+            _add(sell_asset, date_s, price)
+
+    # Bridge flows across corporate renames so the `current` membership
+    # test sees pre-rename flows under the surviving ticker (D10/D12).
+    if corp_actions:
+        _bridge_rename_flows(flows_by_ref, corp_actions)
+
+    # Group per variant and per bucket.
+    all_flows: list[tuple[str, float]] = []
+    cur_flows: list[tuple[str, float]] = []
+    flows_by_class: dict[str, list[tuple[str, float]]] = {}
+    flows_by_class_cur: dict[str, list[tuple[str, float]]] = {}
+    # Ticker/product_id → flows that fell into the discarded 'other' bucket.
+    # Surfaced via _warn_other_bucket_flows before per-class IRR is computed.
+    other_flows: dict[str, list[float]] = {}
+
+    for ref, flows in flows_by_ref.items():
+        bucket = 'crypto' if ref in crypto_refs \
+            else _irr_class_bucket(ref, assets)
+        all_flows.extend(flows)
+        flows_by_class.setdefault(bucket, []).extend(flows)
+        if bucket == 'other' and ref:
+            other_flows.setdefault(ref, []).extend(a for _, a in flows)
+        if ref in active_ids:
+            cur_flows.extend(flows)
+            flows_by_class_cur.setdefault(bucket, []).extend(flows)
 
     total_irr = compute_xirr(all_flows, terminal_value=total_value,
                              terminal_date=cut_date, label='portfolio')
+    total_irr_cur = compute_xirr(cur_flows, terminal_value=total_value,
+                                 terminal_date=cut_date,
+                                 label='portfolio:current')
 
     # Terminal value per bucket — sum BRL-normalized current values from the
-    # already-built position entries.
+    # already-built position entries. Shared by both variants (only open
+    # positions have value at the cut).
     terminal_by_class: dict[str, float] = {}
     for entry in position_entries:
         bucket = _irr_class_bucket(entry.get('id', ''), assets)
@@ -815,6 +918,7 @@ def _compute_portfolio_irr(positions, proventos, total_value, cut_date,
     _warn_other_bucket_flows(other_flows)
 
     per_class: dict[str, dict] = {}
+    per_class_cur: dict[str, dict] = {}
     for bucket, flows in flows_by_class.items():
         if bucket == 'other':
             continue
@@ -826,10 +930,23 @@ def _compute_portfolio_irr(positions, proventos, total_value, cut_date,
             'terminal_value': round(terminal, 2),
             'flow_count': len(flows),
         }
+        cur_bucket_flows = flows_by_class_cur.get(bucket, [])
+        cur_rate = compute_xirr(cur_bucket_flows, terminal_value=terminal,
+                                terminal_date=cut_date,
+                                label=f'class:{bucket}:current')
+        per_class_cur[bucket] = {
+            'irr': cur_rate,
+            'terminal_value': round(terminal, 2),
+            'flow_count': len(cur_bucket_flows),
+        }
 
     return {
         'total': total_irr,
         'per_class': per_class,
+        'current': {
+            'total': total_irr_cur,
+            'per_class': per_class_cur,
+        },
     }
 
 
@@ -994,6 +1111,9 @@ def main():
     print(f'Total P&L:   {s["total_pnl"]:,.2f}')
     if s['irr']['total'] is not None:
         print(f'IRR (XIRR):  {s["irr"]["total"]*100:.2f}%')
+    irr_cur = (s['irr'].get('current') or {}).get('total')
+    if irr_cur is not None:
+        print(f'IRR current: {irr_cur*100:.2f}% (open positions only)')
 
     write_portfolio(portfolio, args.cut_date, force=args.force)
 
