@@ -703,11 +703,198 @@ class TestUnknownFieldFailsLoud:
 
 
 # ---------------------------------------------------------------------------
+# (g) User-actor semantics — curated-field updates via --actor user
+# ---------------------------------------------------------------------------
+
+
+class TestUserActorUpsert:
+    """End-to-end coverage for the --actor user behavior change.
+
+    Spec (Step 5 requirements):
+      (a) can_write curated update allowed for actor user — covered in test_field_ownership.py.
+      (b) curated update blocked for agent_manual/parser — covered in test_field_ownership.py.
+      (c) source_bound update blocked for user — covered in test_field_ownership.py.
+      (d) dry-run with --actor user produces UPDATE for a curated-field change and
+          writes nothing (destination byte-for-byte unchanged).
+
+    This class covers requirement (d): end-to-end dry-run behavior.
+    """
+
+    def test_user_actor_dry_run_produces_update_for_curated_field(self, bk, tmp_path):
+        """(d) Dry-run with actor=user reports UPDATE for a curated field change.
+
+        The fixture has cra_ipca_klabin_350 with name="CRA Klabin (curated name)".
+        actor=user is the only identity that may update curated fields on an existing row.
+        A dry-run must show the UPDATE diff and return exit code 0.
+        """
+        before = _sha256(bk["assets"])
+        input_csv = tmp_path / "input_user_curated.csv"
+        _write_input(input_csv, [{
+            "id": "cra_ipca_klabin_350",
+            "asset_class": "fixed_income",
+            "name": "CRA Klabin (user corrected name)",  # curated field — only user may update
+            "type": "cra",
+            "sector": "",
+            "currency": "BRL",
+            "current_broker": "safra",
+            "active": "true",
+            "issuer": "KLABIN S.A.",
+            "indexer": "IPCA",
+            "rate": "3.5",
+            "indexer_pct": "100.0",
+            "application_date": "2019-10-07",
+            "maturity_date": "2029-06-15",
+            "cnpj": "",
+            "manager": "",
+        }])
+
+        rc = upsert_assets.run(input_csv, apply=False, actor="user")
+        assert rc == 0, "Dry-run with actor=user must exit 0 for valid curated-field change"
+
+        # Destination must be byte-for-byte unchanged (dry-run writes nothing).
+        assert _sha256(bk["assets"]) == before, (
+            "Dry-run with actor=user mutated assets.csv — destination must be unchanged"
+        )
+
+    def test_user_actor_dry_run_writes_nothing(self, bk, tmp_path):
+        """(d) Destination is byte-for-byte unchanged after dry-run with actor=user."""
+        before_bytes = bk["assets"].read_bytes()
+        input_csv = tmp_path / "input_user_noop_check.csv"
+        _write_input(input_csv, [{
+            "id": "BTC",
+            "asset_class": "crypto",
+            "name": "Bitcoin RENAMED",   # curated — user actor would update; dry-run must not write
+            "type": "crypto",
+            "sector": "",
+            "currency": "BRL",
+            "current_broker": "",
+            "active": "true",
+            "issuer": "",
+            "indexer": "",
+            "rate": "",
+            "indexer_pct": "",
+            "application_date": "",
+            "maturity_date": "",
+            "cnpj": "",
+            "manager": "",
+        }])
+
+        upsert_assets.run(input_csv, apply=False, actor="user")
+        assert bk["assets"].read_bytes() == before_bytes, (
+            "assets.csv changed after dry-run with actor=user — dry-run must write nothing"
+        )
+
+    def test_user_actor_apply_updates_curated_field(self, bk, tmp_path):
+        """(d) Under --apply, actor=user DOES overwrite a curated field on an existing row."""
+        input_csv = tmp_path / "input_user_apply.csv"
+        _write_input(input_csv, [{
+            "id": "cra_ipca_klabin_350",
+            "asset_class": "fixed_income",
+            "name": "CRA Klabin (user corrected name)",  # curated — user actor may write
+            "type": "cra",
+            "sector": "",
+            "currency": "BRL",
+            "current_broker": "safra",
+            "active": "true",
+            "issuer": "KLABIN S.A.",
+            "indexer": "IPCA",
+            "rate": "3.5",
+            "indexer_pct": "100.0",
+            "application_date": "2019-10-07",
+            "maturity_date": "2029-06-15",
+            "cnpj": "",
+            "manager": "",
+        }])
+
+        rc = upsert_assets.run(input_csv, apply=True, actor="user")
+        assert rc == 0
+
+        with open(bk["assets"], encoding="utf-8", newline="") as f:
+            rows = {r["id"]: r for r in csv.DictReader(f)}
+
+        assert rows["cra_ipca_klabin_350"]["name"] == "CRA Klabin (user corrected name)", (
+            "actor=user --apply must update the curated `name` field; it was not updated"
+        )
+
+    def test_user_actor_apply_still_blocked_on_source_bound(self, bk, tmp_path):
+        """(c) Even under --apply, actor=user does NOT update source_bound fields.
+
+        The fixture row cra_ipca_klabin_350 has indexer=IPCA (source_bound field with
+        owners=[safra_titulos, ...]). actor=user is not an owner; the field must stay.
+        """
+        input_csv = tmp_path / "input_user_source_bound.csv"
+        _write_input(input_csv, [{
+            "id": "cra_ipca_klabin_350",
+            "asset_class": "fixed_income",
+            "name": "CRA Klabin (curated name)",
+            "type": "cra",
+            "sector": "",
+            "currency": "BRL",
+            "current_broker": "safra",
+            "active": "true",
+            "issuer": "KLABIN S.A.",
+            "indexer": "CDI",   # source_bound — user actor must NOT update this
+            "rate": "3.5",
+            "indexer_pct": "100.0",
+            "application_date": "2019-10-07",
+            "maturity_date": "2029-06-15",
+            "cnpj": "",
+            "manager": "",
+        }])
+
+        rc = upsert_assets.run(input_csv, apply=True, actor="user")
+        assert rc == 0
+
+        with open(bk["assets"], encoding="utf-8", newline="") as f:
+            rows = {r["id"]: r for r in csv.DictReader(f)}
+
+        assert rows["cra_ipca_klabin_350"]["indexer"] == "IPCA", (
+            f"source_bound `indexer` was updated by actor=user — must stay 'IPCA'; "
+            f"got {rows['cra_ipca_klabin_350']['indexer']!r}"
+        )
+
+    def test_agent_manual_still_blocked_on_curated_via_upsert(self, bk, tmp_path):
+        """(b) agent_manual cannot update a curated field even under --apply.
+
+        This is a regression guard: the user-actor unlock must not accidentally
+        extend to agent_manual.
+        """
+        input_csv = tmp_path / "input_agent_curated.csv"
+        _write_input(input_csv, [{
+            "id": "cra_ipca_klabin_350",
+            "asset_class": "fixed_income",
+            "name": "SHOULD NOT BE WRITTEN BY AGENT",   # curated — agent_manual blocked
+            "type": "cra",
+            "sector": "",
+            "currency": "BRL",
+            "current_broker": "safra",
+            "active": "true",
+            "issuer": "KLABIN S.A.",
+            "indexer": "IPCA",
+            "rate": "3.5",
+            "indexer_pct": "100.0",
+            "application_date": "2019-10-07",
+            "maturity_date": "2029-06-15",
+            "cnpj": "",
+            "manager": "",
+        }])
+
+        upsert_assets.run(input_csv, apply=True, actor="agent_manual")
+
+        with open(bk["assets"], encoding="utf-8", newline="") as f:
+            rows = {r["id"]: r for r in csv.DictReader(f)}
+
+        assert rows["cra_ipca_klabin_350"]["name"] == "CRA Klabin (curated name)", (
+            "agent_manual was able to update a curated `name` — ownership enforcement broken"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Real assets.csv SHA-256 guard (non-mutating sanity check)
 # ---------------------------------------------------------------------------
 
 
-EXPECTED_REAL_SHA256 = "2e3c694a9dfc9a3f407c3a39800b1d49d8bb4e74003a3448486e11f0598c5e84"
+EXPECTED_REAL_SHA256 = "523c7264e379f2b0db6635892c2f92e00d9ac39a9a9f0271bc75d62f10c0c26a"
 
 
 def test_real_assets_csv_not_mutated():

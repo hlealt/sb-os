@@ -38,6 +38,12 @@ SUPPORTED_SCHEMA_VERSION = 1
 REQUIRED_TOP_LEVEL_SECTIONS = {"_meta", "fields"}
 REQUIRED_META_FIELDS = {"schema_version", "manifest_version"}
 
+# Reserved actor id for user-authorized writes.  The `user` actor MAY update
+# curated fields — curated fields are "implicitly owned by the user" per the
+# manifest header.  Source-bound fields remain parser-owned; the user actor
+# does NOT unlock them.
+USER_ACTOR = "user"
+
 
 class FieldClass(str, Enum):
     CURATED = "curated"
@@ -173,7 +179,8 @@ def can_write(
     if cls == FieldClass.DERIVED.value:
         return True
     if cls == FieldClass.CURATED.value:
-        return is_insert
+        # The `user` actor may update curated fields (implicitly user-owned).
+        return is_insert or source_id == USER_ACTOR
     if cls == FieldClass.SOURCE_BOUND.value:
         return source_id in spec.get("owners", [])
     return False  # pragma: no cover — load_field_ownership guards class set

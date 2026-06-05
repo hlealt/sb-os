@@ -239,3 +239,73 @@ def test_klabin_regression_blocked(tmp_path):
     m = _manifest(tmp_path)
     assert can_write(m, "name", source_id="b3", is_insert=False) is False
     assert can_write(m, "name", source_id="safra_titulos", is_insert=False) is False
+
+
+# ---- User-actor semantics --------------------------------------------------
+
+
+def test_user_actor_can_update_curated(tmp_path):
+    """(a) actor=user MAY update a curated field on an existing row.
+
+    USER_ACTOR = "user" is the reserved identity for direct user-authorized
+    writes. curated fields are "implicitly owned by the user" per the manifest
+    header, so can_write must return True on update when source_id == "user".
+    """
+    m = _manifest(tmp_path)
+    assert can_write(m, "name", source_id="user", is_insert=False) is True
+
+
+def test_user_actor_can_update_curated_insert_also_allowed(tmp_path):
+    """(a) user actor on insert is allowed — is_insert=True is the baseline."""
+    m = _manifest(tmp_path)
+    assert can_write(m, "name", source_id="user", is_insert=True) is True
+
+
+def test_agent_manual_still_blocked_on_curated_update(tmp_path):
+    """(b) actor=agent_manual must NOT update a curated field on an existing row.
+
+    The user-actor unlock is exclusive to source_id="user"; agent_manual and
+    all other non-owner actors remain blocked.
+    """
+    m = _manifest(tmp_path)
+    assert can_write(m, "name", source_id="agent_manual", is_insert=False) is False
+
+
+def test_parser_actor_still_blocked_on_curated_update(tmp_path):
+    """(b) A named parser actor (e.g. safra_titulos) is also blocked on curated update.
+
+    Even a parser that owns source_bound fields cannot update curated fields —
+    curated protection is unconditional for non-user actors on update.
+    """
+    m = _manifest(tmp_path)
+    # safra_titulos DOES own the source_bound field `indexer`, but `name` is curated.
+    assert can_write(m, "name", source_id="safra_titulos", is_insert=False) is False
+    assert can_write(m, "name", source_id="b3", is_insert=False) is False
+
+
+def test_user_actor_does_not_unlock_source_bound(tmp_path):
+    """(c) actor=user must NOT unlock source_bound fields.
+
+    source_bound semantics: only parsers listed in owners[] may write.
+    The user actor is NOT an owner of any source_bound field; the user-actor
+    unlock applies exclusively to curated fields.
+    """
+    m = _manifest(tmp_path)
+    # `indexer` is source_bound with owners=[safra_titulos]; user is NOT an owner.
+    assert can_write(m, "indexer", source_id="user", is_insert=False) is False
+    # `application_date` is source_bound with owners=[safra_titulos, safra_rf_movimentacoes].
+    assert can_write(m, "application_date", source_id="user", is_insert=False) is False
+
+
+def test_user_actor_source_bound_still_blocked_on_insert(tmp_path):
+    """(c) user actor on INSERT is also blocked for source_bound — owner-gate applies.
+
+    source_bound uses `return source_id in spec.get("owners", [])` regardless
+    of is_insert, so the user actor (not listed as an owner) is blocked even on
+    insert for source_bound fields.
+    """
+    m = _manifest(tmp_path)
+    # user is NOT in owners=[safra_titulos] for `indexer`.
+    assert can_write(m, "indexer", source_id="user", is_insert=True) is False
+    # user is NOT in owners=[safra_titulos, safra_rf_movimentacoes] for `application_date`.
+    assert can_write(m, "application_date", source_id="user", is_insert=True) is False

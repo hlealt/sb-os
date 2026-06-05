@@ -23,10 +23,17 @@ Dry-run output per row:
 Summary line: X inserts, Y updates, Z noops, W ownership-blocked.
 
 Field-ownership semantics (loaded from .user/finance/bookkeeper/config/_field_ownership.yaml):
-    curated      — populated on insert; NEVER overwritten on update.
+    curated      — populated on insert; NEVER overwritten on update, EXCEPT
+                   when --actor user is passed.  The reserved actor id `user`
+                   represents a direct user-authorized write; curated fields
+                   are "implicitly owned by the user" per the manifest header.
+                   Use --actor user to fix curated metadata (e.g. correct an
+                   asset name).
     source_bound — only parsers listed in owners[] may write; this tool
                    runs as --actor agent_manual (default) and will skip
                    source_bound fields unless --actor matches an owner.
+                   NOTE: --actor user does NOT unlock source_bound fields —
+                   those remain parser-owned regardless of actor.
     derived      — freely overwritable.
 
     id is the primary key; never overwritten.
@@ -510,9 +517,11 @@ def main() -> None:
         "--actor",
         default="agent_manual",
         help=(
-            "Actor identity for field-ownership source_bound gate. "
+            "Actor identity for field-ownership gate. "
             "Default: agent_manual. Use a parser's source_id (e.g. safra_titulos) "
-            "when ingesting from a named source that owns source_bound fields."
+            "when ingesting from a named source that owns source_bound fields. "
+            "Use 'user' to authorize curated-field updates (e.g. correcting an "
+            "asset name); source_bound fields remain parser-owned regardless."
         ),
     )
     args = parser.parse_args()
