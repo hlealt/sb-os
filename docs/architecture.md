@@ -220,7 +220,7 @@ Renaming or removing a component in `module-manifest.json` leaves the previously
 
 The onboarder is resumable. State persists in `sb-os.json` under the `onboarder_state` key (started_at, last_step, completed_steps, domains_proposed, areas_created, projects_created, resources_surfaced, home_built, rbtv_marketed, completed_at). The installer's manifest module preserves unknown keys verbatim across upgrades, so onboarder state survives `--upgrade` runs without any installer code path dedicated to it.
 
-The onboarder NEVER writes inside `.user/` — `.user/` is user-owned per §2 boundaries. State lives in `sb-os.json` (sb-os-owned, vault root). All vault writes (folders, indexes, tasks files, optional `Home.md`, optional CLAUDE.md routing-rule appends) go through the `sb-vault-ops` skill and are followed by a `sb-vault-integrity` post-op sweep.
+The onboarder NEVER writes inside `.user/` — `.user/` is user-owned per §2 boundaries. State lives in `sb-os.json` (sb-os-owned, vault root). All vault writes (folders, indexes, tasks files — created only for areas/projects with tasks elicited during onboarding, per the tasks-file-optional convention — optional `Home.md`, optional CLAUDE.md routing-rule appends) go through the `sb-vault-ops` skill and are followed by a `sb-vault-integrity` post-op sweep.
 
 ### Finance dashboard entry HTML
 

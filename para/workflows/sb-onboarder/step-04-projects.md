@@ -1,12 +1,12 @@
 ---
 name: Projects
-description: Elicit current bounded efforts and create project folders, indexes, and tasks files.
+description: Elicit current bounded efforts and create project folders and indexes; tasks files only for projects with elicited tasks.
 nextStepFile: step-05-resources.md
 ---
 
 # Step 04 — Projects
 
-**Goal:** Identify the user's current bounded efforts (with a "done"), then create project scaffolds under `1-projects/`: folder, index, tasks file.
+**Goal:** Identify the user's current bounded efforts (with a "done"), then create project scaffolds under `1-projects/`: folder and index. A tasks file is created ONLY for projects where the user names at least one next action — never preemptively (dashboards discover task files; empty ones only add noise).
 
 ---
 
@@ -31,6 +31,7 @@ For each project named, capture:
 - A kebab-case name (verb-led or noun-phrase that implies completion — e.g., `move-apartment`, `q2-launch`, `write-novel-draft-1`)
 - One-line description
 - Optional: target finish date
+- Pending next actions: "Any concrete next steps already on your plate for this? Name them — or say 'none'."
 
 ### 2. Reality-check the list
 
@@ -38,10 +39,31 @@ If the user lists more than 5 projects, gently ask: "These are all *active* — 
 
 ### 3. Build the proposal table
 
-| Project | Folder | Index | Tasks |
-|---------|--------|-------|-------|
-| move-apartment | `1-projects/move-apartment/` | `1-projects/move-apartment/move-apartment.md` | `1-projects/move-apartment/move-apartment-tasks.md` |
-| ... | ... | ... | ... |
+| Project | Folder | Index |
+|---------|--------|-------|
+| move-apartment | `1-projects/move-apartment/` | `1-projects/move-apartment/move-apartment.md` |
+| ... | ... | ... |
+
+Tasks files (`{project}-tasks.md`) are NOT part of the default scaffold. For each project with elicited next actions, add `1-projects/{project}/{project}-tasks.md` to the proposal with this template (tasks without a stated deadline go under `Should`; tasks with one get `📅 YYYY-MM-DD` after the checkbox):
+
+```markdown
+---
+type: tasks
+tags:
+  - {project-name}
+area: {parent-area if any}
+---
+
+#### Must
+
+#### Should
+
+- [ ] {elicited next action}
+
+#### Could
+```
+
+Projects with no named next actions get NO tasks file — it's created automatically when the first task lands.
 
 Project index template:
 
@@ -65,7 +87,7 @@ tags:
 
 ### 4. Batch-confirm
 
-Show all folders + files about to be created. Ask: "Approve all, or edit?"
+Show all folders + files about to be created — tasks files appear ONLY for projects with elicited next actions. Ask: "Approve all, or edit?"
 
 ### 5. Write — invoke sb-vault-ops
 
