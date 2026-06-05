@@ -50,10 +50,16 @@ The parsers are independent — they can run in any order. If a parser fails wit
    python "{SCRIPTS_DIR}/gate_parser_total_sanity.py" --orders-dir "{INV_PROCESSED}"
    ```
 
-   The gate verifies `total ≈ quantity × price + fees` (0.5% tolerance) on each row; `fees = fees_exchange + fees_brokerage + fees_irrf`. Exit 0 = all within tolerance; exit 1 = one or more violate (listed in stderr); exit 2 = no `*orders*.csv` file in `{INV_PROCESSED}` (the normal case when the month has no orders — treat as pass: there are no orders to validate).
+   The gate applies a **side-aware total check** with 0.5% tolerance on each row:
+   - **Sell rows (`side=V`):** `total ≈ quantity × price − fees` (broker deducts fees from sell proceeds)
+   - **Buy rows (`side=C`) or missing/unknown side:** `total ≈ quantity × price + fees`
+   - `fees = fees_exchange + fees_brokerage + fees_irrf`
 
-   - **Exit 0** → record the pass and proceed.
+   Before flagging a failing row, the gate applies a **corrections-join (fail-soft):** it reads `manual_adjust` corrections with `field == quantity` from the six per-asset-type files under `.user/finance/bookkeeper/config/corrections/` (`intl.csv`, `stocks.csv`, `fii.csv`, `rf.csv`, `crypto.csv`, `funds.csv`). Join key: `(target_key == ticker, correction_date == date)` with a `from_value == stored quantity` guard. A row that fails the total check but passes after substituting the corrected quantity counts as a pass. Missing corrections files are silently skipped (fail-soft). Exit 0 = all within tolerance; exit 1 = one or more violate after corrections (listed in stderr); exit 2 = no `*orders*.csv` file in `{INV_PROCESSED}` (the normal case when the month has no orders — treat as pass: there are no orders to validate).
+
+   - **Exit 0** → record the pass (output includes "N row(s) passed via quantity correction" when corrections were applied) and proceed.
    - **Exit 1 (FAIL)** → Rule C **blocking** (`../gatekeeper-loop.md`). Surface the violating rows inline, propose the fix (parser bug or wrong source data → correct and re-parse the affected file), and offer `[S]`/`[N]`. Do NOT proceed to Step 03 while a violation remains unresolved; the gate does not auto-loop (the root cause is in the source file or the parser).
+     - **Rule C guidance — confirmed parser fractional-qty truncation:** when the root cause is a confirmed parser truncation of a fractional quantity (e.g., parser stored 10 but the broker recorded 10.5), the durable fix is to append a `manual_adjust` quantity correction (per `corrections/CONVENTION.md`) to the relevant per-asset-type corrections file. The gate consumes this correction on the next run, rescuing the row without re-parsing.
    - **Exit 2 with no order files** → there are no orders this month; continue (vacuous pass). If you EXPECTED orders and they are missing, treat as the expected-source gate (step-01).
 
 7. STOP. Present a summary:
@@ -72,7 +78,7 @@ Pending items: none | OR list of pending items (ratios, MP missing, etc.)
 
 ## Step Menu
 
-- **Gatekeeper checkpoint** → before advancing, run § Per-Step Checkpoint in `../gatekeeper-loop.md`. Unmapped `name_map` values, missing corporate-action ratios, and flagged operations here are deviations — surface them via Rule A and route the resolution to durable structure (Rule B; a new parser case routes to Seam 1 `tool-builder`). A parser sanity-check failure (total ≈ qty×price+fees) is a Rule C issue.
+- **Gatekeeper checkpoint** → before advancing, run § Per-Step Checkpoint in `../gatekeeper-loop.md`. Unmapped `name_map` values, missing corporate-action ratios, and flagged operations here are deviations — surface them via Rule A and route the resolution to durable structure (Rule B; a new parser case routes to Seam 1 `tool-builder`). A parser sanity-check failure (side-aware total check: sell = qty×price−fees, buy = qty×price+fees) is a Rule C issue.
 - **[C] Continue** → proceed to Step 03 (Update Ledgers)
 - **[R] Re-run** → re-run a specific parser
 - **[X] Exit** → halt workflow

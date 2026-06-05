@@ -30,7 +30,7 @@
 #             hook gates at file granularity, the signal reports the sections).
 
 version: "1.0"
-last_updated: "2026-06-05"  # D8 fix: added "Crypto Per-Asset IRR" section reference to investimentos_schema node (per-exchange flow partitioning); doc-maintainer reconcile: gate_9 band-exemptions + gate_10 informational-crypto + bucket_sanity_check informational_buckets param
+last_updated: "2026-06-05"  # doc-maintainer reconcile: gate_5 side-aware fee formula + corrections-join behavior — step-02-parse.md item 6 brought current
 
 couplings:
   # enforcement: hard-block (default) | signal-only

@@ -384,15 +384,15 @@ last_validated: 2026-06-05
 
 ```yaml
 tool: gate_parser_total_sanity (python shared/gate_parser_total_sanity.py [--orders-path PATH | --orders-dir PATH])
-purpose: Gate #5 (P4) — parser total sanity for *_orders.csv rows; total ≈ quantity×price+fees with 0.5% tolerance; fail-loud listing all violating rows; user decides halt vs accept; no auto-loop.
+purpose: Gate #5 (P4) — parser total sanity for *_orders.csv rows; side-aware total check (V: qty×price−fees; C/unknown: qty×price+fees) with 0.5% tolerance; corrections-join applies manual_adjust/quantity rows from per-asset-type corrections files before flagging; fail-loud listing all violating rows; user decides halt vs accept; no auto-loop.
 owner_script: shared/gate_parser_total_sanity.py
 class: read
 use: validation-gate
-expected_inputs: optional --orders-path PATH to one orders.csv, OR --orders-dir PATH to scan *orders*.csv; default: .user/finance/bookkeeper/ledgers/investimentos/orders.csv; env override BOOKKEEPER_ORDERS_PATH; reads CSV columns quantity/price/total/fees_exchange/fees_brokerage/fees_irrf
-outputs: Violation table (row_num, date, ticker, stored vs expected total, deviation%); PASS (exit 0) all within 0.5%; FAIL (exit 1) any row exceeds tolerance; exit 2 on missing file; emits gate_pass/gate_fail event.
-canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/investimentos/orders.csv (no write)
+expected_inputs: optional --orders-path PATH to one orders.csv, OR --orders-dir PATH to scan *orders*.csv; default: .user/finance/bookkeeper/ledgers/investimentos/orders.csv; env override BOOKKEEPER_ORDERS_PATH; reads CSV columns quantity/price/total/fees_exchange/fees_brokerage/fees_irrf/side; also reads .user/finance/bookkeeper/config/corrections/{intl,stocks,fii,rf,crypto,funds}.csv for manual_adjust/quantity rows (fail-soft if absent); env override BOOKKEEPER_CORRECTIONS_DIR
+outputs: Violation table (row_num, date, ticker, side, stored vs expected total, deviation%); PASS (exit 0) all within 0.5% with message noting corrections_applied count; FAIL (exit 1) any row exceeds tolerance after corrections; exit 2 on missing file; emits gate_pass/gate_fail event (trigger_context.corrections_applied reports rows rescued by corrections-join).
+canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/investimentos/orders.csv and .user/finance/bookkeeper/config/corrections/*.csv (no write)
 dry_run: not-applicable
-last_validated: 2026-05-27
+last_validated: 2026-06-05
 ```
 
 ```yaml
