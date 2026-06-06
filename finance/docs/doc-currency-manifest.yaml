@@ -30,7 +30,7 @@
 #             hook gates at file granularity, the signal reports the sections).
 
 version: "1.0"
-last_updated: "2026-06-05"  # doc-maintainer reconcile: gate_coverage recalibration (threshold 0.75, gate2 informational, R$300 floor + ack side-ledger) — step-05-review.md Section 4 + data-flow-map-target.md D18 + tag_review_acks node added
+last_updated: "2026-06-06"  # doc-maintainer reconcile: 2026-05 gastos close drift — step-03 column count (10→12), step-04 categorize.py stdout sections (3→2, tags retired), step-07 santander_fatura split (bloqueado/infinite)
 
 couplings:
   # enforcement: hard-block (default) | signal-only

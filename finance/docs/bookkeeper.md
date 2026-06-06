@@ -449,7 +449,7 @@ O workflow usa arquitetura micro-file BMAD. Entry point em `3-resources/tools/sb
 
 **Passo 3 — Validação:** Lê CSVs normalizados, valida 12 colunas, datas no range (±5 dias), amounts numéricos, row count razoável.
 
-**Passo 4 — Categorizar:** Executa `categorize.py` (que importa de `lib/`). O script emite o CSV no novo schema (com `data_caixa`, `data_competencia`, `supplier_canonical`, `tags`) e imprime três blocos estruturados em stdout — `UNKNOWN CATEGORIES`, `UNKNOWN SUPPLIERS`, `UNKNOWN TAGS`. O agente reporta os três counts em PT-BR e prima a fila Pass 1 do step-05.
+**Passo 4 — Categorizar:** Executa `categorize.py` (que importa de `lib/`). O script emite o CSV no novo schema (com `data_caixa`, `data_competencia`, `supplier_canonical`, `tags`) e imprime dois blocos estruturados em stdout — `UNKNOWN CATEGORIES`, `UNKNOWN SUPPLIERS`. O agente reporta os dois counts em PT-BR e prima a fila Pass 1 do step-05. Tag unknowns são construídos pelo `lib.queue.build_pass_1_queue` a partir da coluna `tags` (não emitidos pelo `categorize.py`).
 
 **Passo 5 — Two-pass review queue:** Workflow de duas passadas (spec T5):
 - **Pass 1 — Resolução de desconhecidos.** Carrega `suppliers.json`, `tags.json` e `categories.json`; chama `lib.queue.build_pass_1_queue` que agrupa itens por `item_type` na ordem `category` → `supplier` → `tag`. O agente processa cada batch (5–7 itens), persistindo decisões nas três config dictionaries via `lib.queue.apply_pass_1_resolution`. Pass 1 fecha quando as três filas zeram.

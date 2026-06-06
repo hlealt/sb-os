@@ -43,7 +43,8 @@ Update pagamentos-recorrentes.md? (Y/N)
 
 | bank_id | Name in pagamentos-recorrentes.md |
 |---|---|
-| `santander_fatura` | Cartão Santander (ativo) |
+| `santander_fatura` | Cartão Santander (bloqueado) — Visa final 4011, old card, residual subscriptions only |
+| `santander_fatura_infinite` | Cartão Santander (ativo) — Unique Cashback Visa Infinite final 8667 |
 | `mp_fatura` | Cartão Mercado Pago |
 | `nubank_fatura` | Cartão Nubank |
 

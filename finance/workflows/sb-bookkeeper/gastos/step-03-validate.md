@@ -12,7 +12,7 @@ nextStepFile: step-04-categorize.md
 
 1. Read each CSV in `{PROCESSED_DIR}/`.
 2. For each file, verify:
-   - Header is correct (10 expected columns)
+   - Header matches `NORMALIZED_COLUMNS` (12 columns: date, description, amount, balance, bank, source_type, currency, original_ref, installment_current, installment_total, original_amount, exchange_rate)
    - Dates are within the expected month (±5 day tolerance for boundary transactions)
    - `amount` values are numeric (no NaN, no text)
    - Transaction count is reasonable (not zero for banks with a file present)
