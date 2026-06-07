@@ -23,6 +23,7 @@ nextStepFile: null
      [ ] bradesco_extrato — Bradesco — Checking Account Statement (csv)
      [ ] santander_extrato — Santander — Checking Account Statement (pdf)
      [ ] santander_fatura — Santander — Visa Card Invoice (pdf)
+     [ ] santander_fatura_infinite — Santander — Visa Infinite Card Invoice (pdf)
      [ ] mp_extrato — Mercado Pago — Account Statement (csv)
      [ ] mp_fatura — Mercado Pago — Card Invoice (pdf)
      [ ] wise_extrato — Wise — Multi-Currency Statement (csv)

@@ -1,6 +1,6 @@
 ---
 version: "1.0"
-last_updated: "2026-05-27"
+last_updated: "2026-06-06"
 ---
 
 # Sources Manifest
@@ -81,6 +81,22 @@ Each source entry carries these fields:
 | parser_entry_point | `{SHARED_DIR}/parsers/santander_fatura.py` |
 | dry_run | true |
 | last_validated | 2026-05-27 |
+
+---
+
+### santander_fatura_infinite
+
+| Field | Value |
+|-------|-------|
+| id | `santander_fatura_infinite` |
+| name | Santander — Fatura Cartão Unique Cashback Visa Infinite |
+| scope | expenses |
+| input_format | pdf |
+| download_instructions | Email ou app Santander → Fatura (Infinite) → Baixar PDF → salvar como `fatura-santander-infinite.pdf` |
+| extraction_instructions | Senha do PDF: CPF completo (só dígitos, sem pontos ou traço) |
+| parser_entry_point | `{SHARED_DIR}/parsers/santander_fatura.py` (reuses the `santander_fatura` parser; distinguished by `standard_filename: fatura-santander-infinite.pdf`) |
+| dry_run | true |
+| last_validated | 2026-06-06 |
 
 ---
 
