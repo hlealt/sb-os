@@ -81,6 +81,14 @@ The `sb-investor` agent — the runtime consumer of the read-rules above — is 
 
 ---
 
+## Data Access (always-on rule)
+
+The module ships `./rules/sb-finance-data-access.md`, installed to `.claude/rules/sb-finance-data-access.md` on every install run. It binds EVERY agent session in the vault — not only bookkeeper runs — to the tools-only data-access protocol for `.user/finance/bookkeeper/` data: reads and writes route through registered tools in `./scripts/tools-index.md`, mutations are dry-run-first with user confirmation, corrections are append-only, and a missing capability is a deviation routed to the companions. The canonical runtime statement of the protocol remains `./workflows/sb-bookkeeper/gatekeeper-loop.md` § Tools-only data access; the rule carries its binding statements into sessions that never load that workflow (incident 2026-06-06: four ad-hoc mutation scripts written in a review-mode session).
+
+The companions have user-invocable front doors: the `sb-tool-builder` and `sb-doc-maintainer` skills (`./skills/`) load the companion workflows directly and the invoking agent becomes the caller-broker — an entry-point addition, not a runtime-model change (each workflow's "Skill front door (binding)" clause; p2-17 addendum 2026-06-06). Sibling agents keep dispatching the companions via the Agent tool (gatekeeper-loop Seams 1/2).
+
+---
+
 ## Documentation Currency
 
 The finance module's living docs describe what its code and config actually do. When code or config changes and the matching doc does not, the doc becomes a lie — and because verification of this module happens THROUGH its docs, a stale doc is a correctness defect, not a cosmetic one. This section is the **canonical declaration of the doc↔code/config coupling**: which living doc is bound to which code/config surface. The three enforcement layers below (and the `doc-maintainer` companion) act on THIS declaration — it is the single statement they all read the coupling from. Mechanism rationale and the failure modes it closes: `1-projects/finance-system/finance-system-v2-foundation/phase-2/decision-prep/p2-19-documentation-currency.md` (Option D Hybrid).

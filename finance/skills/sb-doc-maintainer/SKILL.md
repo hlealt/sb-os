@@ -1,0 +1,6 @@
+---
+name: sb-doc-maintainer
+description: Reconcile the finance module's living documentation after an approved durable-structure change — a new/changed/retired tool, a renamed tag, a new config contract, a new parser, a store/schema change — when the user reports finance docs stale, a docs_potentially_stale signal is pending, or the pre-commit doc-currency block fires. Loads the doc-maintainer companion workflow; the invoking agent becomes the caller-broker of its reconcile loop. Binding constraints (carried by the workflow, not waivable by casual invocation): authority boundary — output is documentation only, NEVER config data, ledgers, portfolio.json, or tool code; a change spec is required — reconciling without knowing what changed is refused; surgical scope — only the sections the change implicates, never blanket rewrites. Sibling workflows (sb-bookkeeper) keep dispatching the companion via the Agent tool per gatekeeper-loop Seam 2 — this skill is the user-facing front door, not a replacement for that seam.
+---
+
+Read and execute `{sb_os_path}/finance/workflows/doc-maintainer/doc-maintainer.md`. Loaded via this skill, you are the caller-broker — follow that file's "Skill front door (binding)" clause.

@@ -15,7 +15,7 @@ Source repository for **sb-os** — an opinionated, PARA-based personal knowledg
 
 ## Repo Layout
 
-Shippable components live under per-module folders at the repo root: `para/` (PARA-aligned components) and `wiki/` (knowledge-base layer). Each module folder mirrors the same internal layout (`commands/`, `rules/`, `skills/`, `workflows/`, `claude-mds/`, optional `docs/`, plus `para/templates/`).
+Shippable components live under per-module folders at the repo root: `para/` (PARA-aligned components), `wiki/` (knowledge-base layer), and `finance/` (personal-finance system). Each module folder mirrors the same internal layout (`commands/`, `rules/`, `skills/`, `workflows/`, plus module-specific folders such as `claude-mds/`, `docs/`, `templates/`, `scripts/`).
 
 | Path | Contents |
 |------|----------|
@@ -23,6 +23,7 @@ Shippable components live under per-module folders at the repo root: `para/` (PA
 | `install/` | Installer internals (CLI, manifest, marker handling, mode handlers). `module-manifest.json` declares each component's owning module via the `module` field |
 | `para/` | PARA module sources: `commands/`, `rules/`, `skills/`, `workflows/`, `claude-mds/` (PARA-structure CLAUDE.mds), `templates/`, `ideas/`, `docs/` (PARA-scoped reference, e.g. `obsidian-markdown/`) |
 | `wiki/` | Wiki module sources: `commands/`, `skills/`, `workflows/` (with `shared/` for cross-workflow conventions), `claude-mds/wiki.md`, `docs/wiki-schema.md` |
+| `finance/` | Finance module sources: `commands/`, `rules/`, `skills/`, `workflows/` (bookkeeper, investor, companions), `scripts/` (tool layer + registry `scripts/tools-index.md`), `dashboard/`, `templates/`, `wiki-ext/`, `docs/` |
 | `docs/` | Repo-level architecture, conventions, hooks reference. Module-scoped docs live under each module's own `docs/` folder |
 
 ## Editing Conventions

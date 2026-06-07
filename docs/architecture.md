@@ -129,11 +129,11 @@ sb-os/
 
 Skills and commands installed into `.claude/` are **thin loaders** that point back to `sb-os` source files. Editing installed loaders is forbidden — the source is the repo. Re-running the installer regenerates loaders.
 
-Rules are **copied verbatim** from a module's `rules/` folder (`sb-os/{module}/rules/`, where `{module}` is `para` or `wiki`) to `.claude/rules/` because Claude Code auto-loads rules from that path natively.
+Rules are **copied** from a module's `rules/` folder (`sb-os/{module}/rules/` — shipped today by `para` and `finance`) to `.claude/rules/`, with install-time `{sb_os_path}` placeholder substitution, because Claude Code auto-loads rules from that path natively.
 
 ### Module Layout
 
-Shippable components live under one of two module folders at the repo root: `para/` (PARA-aligned components — vault structure, periodic-notes templates, life planner, tutor) and `wiki/` (knowledge-base layer). Each module folder follows the same internal layout: `commands/`, `rules/`, `skills/`, `workflows/`, `claude-mds/`, optional `docs/`, and (for `para/`) `templates/`. The manifest's `module` field on each component encodes which folder owns its source.
+Shippable components live under module folders at the repo root: `para/` (PARA-aligned components — vault structure, periodic-notes templates, life planner, tutor), `wiki/` (knowledge-base layer), and `finance/` (personal-finance system — bookkeeper/investor agents, companion workflows, tool scripts, dashboard). Each module folder follows the same internal layout (`commands/`, `rules/`, `skills/`, `workflows/`, plus module-specific folders such as `claude-mds/`, `docs/`, `templates/`, `scripts/`). The manifest's `module` field on each component encodes which folder owns its source.
 
 ### Managed CLAUDE.md sources
 
@@ -379,6 +379,7 @@ No Obsidian plugins are required by sb-os. Users who build their own `Home.md` p
 | v0.2.0 | `core` | `module-manifest.json` gains a `"stale"` component flag (+ optional `"stale_reason"`), enforced at `loaders._flatten`. Stale components are never installed or surfaced and are removed on upgrade; sources are preserved. Rules `sb-source-of-truth` and `sb-user-preferences` retired as stale — source-of-truth's principle lives in the managed CLAUDE.md + README; preference loading moves to host CLAUDE.md (cross-cutting) and per-workflow context-injection (workflow-scoped). |
 | v0.2.0 | `finance` | Installer renders the finance dashboard entry HTML (p1-3/p1-13): `finance/dashboard/dashboard.html.template` → `finance_dashboard_html_path` (prompted on fresh, default `.user/finance/dashboard.html`, persisted in `sb-os.json`, install-if-missing on upgrade). Asset URLs substituted vault-root-absolute from `sb_os_path` via `{{DASHBOARD_ASSET_BASE}}`; data fetches fixed vault-root-absolute at `/.user/finance/bookkeeper/...` via `shared.js` `FIN_DATA_BASE`. See §6 Finance dashboard entry HTML. |
 | v0.2.0 | `finance` | Investor policy bootstrap: the finance module ships user-agnostic policy skeletons `finance/templates/{source-policy,research-policy}.md`, installed via the standard manifest-template mechanism to `.user/finance/investor/{source-policy,research-policy}.md` (install-if-missing — fresh installs bootstrap the §3-carve-out structure with `_Fill in_` slots; upgrade never overwrites; personal rows never ship). `research.md` Step 3 item 4's seed-rubric fallback remains the unfilled-policy degradation. |
+| v0.2.0 | `finance` | Finance data-access packaging: always-on rule `finance/rules/sb-finance-data-access.md` → `.claude/rules/` (first non-`para` rule; binds every session to tools-only reads/writes for `.user/finance/bookkeeper/` data via the `scripts/tools-index.md` registry — dry-run-first mutations, corrections append-only, missing capability = deviation). Companion workflows gain user-invocable skill front doors `sb-tool-builder` / `sb-doc-maintainer` (`finance/skills/`): the Skill tool loads the companion workflow in-session and the invoking agent becomes the caller-broker — an entry-point addition, not a runtime-model change; sibling Agent-tool dispatch (bookkeeper gatekeeper Seams 1/2) unchanged. |
 
 ---
 

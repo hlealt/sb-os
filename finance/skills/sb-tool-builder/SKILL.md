@@ -1,0 +1,6 @@
+---
+name: sb-tool-builder
+description: Build and register a finance tool (parser, importer, reader, validator, retro-rewrite) when a needed capability has no registered tool in the finance tool registry — the user asks to build a finance tool, a finance data read/mutation has no registered tool in tools-index.md, or a new bank/broker/exchange source has no parser. Loads the tool-builder companion workflow; the invoking agent becomes the caller-broker of its batched iteration loop. Binding constraints (carried by the workflow, not waivable by casual invocation): authority boundary — output is tool code only, NEVER ledgers, portfolio.json, or dashboard writes; real-sample requirement — no build without the user's actual source file; ME gate before any new store/config schema; dry-run-first quality bar; registration in tools-index.md as definition-of-done. Sibling workflows (sb-bookkeeper) keep dispatching the companion via the Agent tool per gatekeeper-loop Seam 1 — this skill is the user-facing front door, not a replacement for that seam.
+---
+
+Read and execute `{sb_os_path}/finance/workflows/tool-builder/tool-builder.md`. Loaded via this skill, you are the caller-broker — follow that file's "Skill front door (binding)" clause.
