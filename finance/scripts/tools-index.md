@@ -537,3 +537,16 @@ canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/investimentos/po
 dry_run: not-applicable
 last_validated: 2026-06-05
 ```
+
+```yaml
+tool: ack_tag_review (python shared/ack_tag_review.py --month YYYY-MM --source LABEL [--date D --description TEXT --amount AMT [--note TEXT] | --input FILE.json] [--apply] [--ack-file PATH] [--fechamento-dir PATH])
+purpose: Append tag-review acknowledgement rows to the append-only side-ledger tag-review-acks.csv — marks a large untagged despesa as reviewed-and-intentionally-untagged so gate_coverage.py renders it ACK instead of VIOLATION; replaces the improvised hand-edits used across the April/May/June review-and-close sessions with one validated, deduped, audited writer.
+owner_script: shared/ack_tag_review.py
+class: write
+use: upsert
+expected_inputs: --month YYYY-MM (required; its fechamento transactions.csv validates every row) and --source LABEL (required provenance, e.g. review-mode-2026-03); single row via --date YYYY-MM-DD --description TEXT --amount AMT [--note TEXT], OR batch via --input FILE.json (a list of {tx_date,tx_description,tx_amount,note}); --apply to write (DRY-RUN is the DEFAULT); --ack-file PATH and --fechamento-dir PATH isolation overrides (test/non-default tree); reads ledgers/fechamento/{month}/transactions.csv (identity validation) and the ack side-ledger (dedup); identity helpers (_ack_identity/_tx_identity/_tx_amount_key) are IMPORTED from gate_coverage.py — no second implementation, so the ack key is exactly the key the gate joins on.
+outputs: Per-request preview (would-append / SKIP duplicate / REFUSED with near-miss candidates; multi-match surfaced as "matches N transactions") + a summary line (requests / would-append / skip-duplicate / refusals). All three identity fields (tx_date+tx_description+tx_amount) MUST JOINTLY match a transactions.csv row — a partial match is a named refusal that writes NOTHING; batch runs validate every row first and ANY refusal refuses the entire run (atomic), exit 1. tx_date may lie OUTSIDE {month} (cc-invoice rows) — membership check only, never a date-range check. Duplicates (by identity triple, vs the existing ack set) are visible SKIP duplicate, exit 0 even when all rows are duplicates (no-op apply is success). Under --apply appends rows to tag-review-acks.csv preserving its CRLF/UTF-8/QUOTE_MINIMAL convention byte-compatibly (existing bytes never modified) and emits one config_write audit event for the run via audit.track_write (fail-soft; respects BOOKKEEPER_AUDIT_DISABLED/BOOKKEEPER_AUDIT_LOG_DIR). Dry-run writes NOTHING. Exit 0 success/no-op; exit 1 validation refusal; exit 2 usage error / missing transactions.csv or --input / malformed ack header.
+canonical_reader_writer: appends .user/finance/bookkeeper/config/corrections/tag-review-acks.csv; reads .user/finance/bookkeeper/ledgers/fechamento/{YYYY-MM}/transactions.csv (validation only)
+dry_run: default
+last_validated: 2026-06-06
+```

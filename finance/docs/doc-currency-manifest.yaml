@@ -30,7 +30,7 @@
 #             hook gates at file granularity, the signal reports the sections).
 
 version: "1.0"
-last_updated: "2026-06-06"  # doc-maintainer reconcile: 2026-05 gastos close drift — step-03 column count (10→12), step-04 categorize.py stdout sections (3→2, tags retired), step-07 santander_fatura split (bloqueado/infinite)
+last_updated: "2026-06-06"  # doc-maintainer reconcile: ack_tag_review.py added to tag_review_acks node (canonical writer of tag-review-acks.csv); prior: 2026-05 gastos close drift — step-03 column count (10→12), step-04 categorize.py stdout sections (3→2, tags retired), step-07 santander_fatura split (bloqueado/infinite)
 
 couplings:
   # enforcement: hard-block (default) | signal-only
@@ -161,10 +161,12 @@ couplings:
     # New store created 2026-06-05. enforcement: hard-block would require docs outside
     # this repo (data-flow-map-target.md lives in 1-projects/); use signal-only so the
     # companion reconciles rather than the pre-commit hook blocks.
+    # ack_tag_review.py (the canonical write/upsert writer of the store) added 2026-06-06.
     enforcement: signal-only
     code:
       - ".user/finance/bookkeeper/config/corrections/tag-review-acks.csv"
       - "scripts/shared/gate_coverage.py"
+      - "scripts/shared/ack_tag_review.py"
     docs:
       - path: "1-projects/finance-system/finance-system-v2-foundation/phase-2/data-flow-map-target.md"
         sections:
