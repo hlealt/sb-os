@@ -1,4 +1,4 @@
-# Wiki Schema (v6 — retrieval-tiers)
+# Wiki Schema (v7 — retrieval-first)
 
 > **Status:** Locked design. Operational spec for the Karpathy-style wiki layer shipped by **sb-os v2** (per `sb-os-build/second-brain-os-architecture.md` §12 and Decisions Log #12). sb-os v1 ships only the `wiki_root` config slot in `sb-os.json` (default `3-resources/knowledge-base/`), the empty default folder, and a placeholder managed `CLAUDE.md` at `{wiki_root}/CLAUDE.md`. The schema, the four `sb-wiki-*` components, and any populated wiki content described below are out of v1 scope — they ship in **sb-os v2**. Agents and CLAUDE.md files reference this document only after v2 lands.
 
@@ -469,16 +469,19 @@ Topic pages are plural-framed and accrete substance over time as new sources lan
 
 Firm-tier detection is mechanical — exact wikilink comparison or exact slug match. Semantic-only matches do NOT fire firm.
 
+**Firm-tier read-shortlist (I/O rule — detection semantics unchanged).** Coverage MUST stay total, but the agent MUST NOT read every topic page to achieve it. Detect candidates deterministically without page reads: (a) topic-slug matches from a directory listing of `wiki/topics/` filenames; (b) wikilink-overlap candidates from ONE `grep`/`ripgrep` alternation pass over `wiki/topics/` for the source's substance-wikilinked page filenames — both wikilink match types (`Key concepts`/`Key entities` sections AND `related:` frontmatter) manifest as that filename text inside the topic file. Then READ ONLY the union of matched pages to confirm which mechanical condition holds, dropping grep false-positives (a wikilink hit outside the qualifying locations). The semantic tier is FORBIDDEN as a firm-tier shortlist: a top-k cutoff can silently exclude a topic with a genuine mechanical match, and silent mode auto-applies firm fires — that safety argument rests on total mechanical coverage (see "Mechanical-fire invariant", § "Retrieval tiers — hybrid search").
+
 **Speculative tier (new-stub conceptual fit).** Fires when ALL of these hold:
 
 | Condition | Definition |
 |-----------|------------|
 | New stub | Candidate is a `stub-candidates` entry created in THIS ingest run — never an existing page |
-| Token overlap | The stub's preamble (1–2 sentence factual sentence written at step 5) shares ≥2 substantive tokens with the topic's `Scope` section text. Tokenization: lowercase, strip stopwords (`the/a/an/of/for/in/on/and/or/to/is/are/with/by/that/this/it/as`), preserve kebab-case as a single token (`marginal-returns-to-intelligence` matches `marginal returns` if both tokens appear in scope) |
-| Cap | Maximum 2 speculative fires per ingest. If >2 candidates qualify, rank by token-overlap count (descending), keep top 2, drop the rest silently — re-detected on future ingests of related sources (no log entry) |
-| Dedupe | If a topic already fires firm for this source, suppress its speculative fire (firm wins) |
+| Token overlap | The stub's preamble (1–2 sentence factual sentence written at step 5) shares ≥2 substantive tokens with the topic's `Scope` text. Tokenization: lowercase, strip stopwords (`the/a/an/of/for/in/on/and/or/to/is/are/with/by/that/this/it/as`), preserve kebab-case as a single token (`marginal-returns-to-intelligence` matches `marginal returns` if both tokens appear in scope). Scope text comes from the topics leaf index `Scope` cells (`wiki/topics/topics.md`) — ONE read covers every topic; a topic missing its index row is read directly (its `Scope` section) |
+| Semantic fire (additive, tier-gated) | When the semantic tier is available (§ "Retrieval tiers — hybrid search"), a (stub, topic) pair ALSO qualifies when the stub's probe call (one per stub-candidate, shared with the near-duplicate probe — see Stub policy § "Near-duplicate probe") returns that topic page among its results. Tier unavailable → token-overlap fires only (the floor) |
+| Cap | Maximum 2 speculative fires per ingest. If >2 candidates qualify, rank token fires above semantic-only fires; among token fires by overlap count (descending); among semantic-only fires by helper score (descending). Keep top 2, drop the rest silently — re-detected on future ingests of related sources (no log entry) |
+| Dedupe | If a topic already fires firm for this source, suppress its speculative fire (firm wins) — applies to token AND semantic fires |
 
-Speculative tier is mechanical (token overlap is computed, not LLM-judged) but heuristic in confidence. It is rendered in a SEPARATE block at Stage 1 (`SPECULATIVE TOPIC UPDATES (low-confidence, default reject)`) and defaults to reject — same default as firm, but the separation signals confidence to the user.
+Speculative-tier token fires are computed (not LLM-judged); semantic fires are tier-gated helper results. Both are heuristic in confidence. The tier is rendered in a SEPARATE block at Stage 1 (`SPECULATIVE TOPIC UPDATES (low-confidence, default reject)`) and defaults to reject — same default as firm, but the separation signals confidence to the user. Each row's overlap cell names its signal: `tokens: <t1>, <t2>` or `semantic: <score>`.
 
 **Update behavior on user accept (append-only).** The agent updates the topic page following the same append-only protection used for entity/concept pages:
 
@@ -529,6 +532,17 @@ The agent auto-creates a stub Concept or Entity page when the cluster representa
 3. **An extracted Notable Quote** — DISCRETIONARY (see "Notable Quote stub creation" below).
 
 If none of the three branches fire, log a `candidate-mention` in `log.md` for periodic review by lint. Do NOT create a page.
+
+#### Near-duplicate probe (semantic tier)
+
+Exact-slug existence is checked mechanically before any stub is created (unchanged — a slug that exists routes to the update path). When the semantic tier is available (§ "Retrieval tiers — hybrid search"), the agent ADDITIONALLY probes each stub-candidate for an existing page covering the SAME referent under a DIFFERENT slug: ONE helper call per stub-candidate — `search "<candidate name> — <planned preamble>" --type concept,entity,topic --k 8`. The call's topic hits feed the speculative tier (§ "Existing topic updates") — one call serves both probes. Concept/entity hits trigger the same-referent test:
+
+| Test outcome | Action |
+|--------------|--------|
+| The hit denotes the SAME thing — synonym, alias, spelling/formatting variant (e.g. `llm-as-judge` vs `llm-as-a-judge`) | Do NOT create the stub. Reroute the candidate to the `existing-pages` set — the source's perspective lands on the existing page via the step-4 append-only update path |
+| The hit is merely RELATED (parent, sibling, instance, neighbor) OR same-referent is UNCERTAIN | Create the stub (baseline behavior). When in doubt, create — a duplicate stub is lint-recoverable; a wrong merge misroutes content onto the wrong page |
+
+Tier unavailable → exact-slug check only (the floor, identical to pre-v7 behavior).
 
 #### Title-branch rule
 
@@ -765,10 +779,10 @@ The scan matches open questions in **both** homes against new and existing wiki 
 
 | Where | Behavior |
 |-------|----------|
-| **Ingest** (`/sb-wiki-ingest`, active) | Load `questions.md` (skip if absent). Match the new source against open questions in both homes, then surface a **`PROPOSED ANSWERS`** block at the Stage-1 checkpoint alongside the existing proposal blocks. **Default reject.** On accept: topic-home → strike the line + fold the answer into the topic body (append-only + cite); `questions.md` → append an inline `answer:` bullet (cited). Silent mode auto-**rejects** all proposed answers (same posture as topic updates). |
+| **Ingest** (`/sb-wiki-ingest`, active) | Load `questions.md` (skip if absent). Match the new source against open questions in both homes — token overlap is the floor signal; when the semantic tier is available, a candidate ALSO fires when the helper, queried with the open question text (`search "<question>" --k 5`), returns THIS ingest's source page among its results (the source page is on disk from step 2; the first helper call of the run self-syncs it into the index, later calls pass `--no-sync`). Then surface a **`PROPOSED ANSWERS`** block at the Stage-1 checkpoint alongside the existing proposal blocks. **Default reject.** On accept: topic-home → strike the line + fold the answer into the topic body (append-only + cite); `questions.md` → append an inline `answer:` bullet (cited). Silent mode auto-**rejects** all proposed answers (same posture as topic updates). |
 | **Lint** (`/sb-wiki-lint`, periodic) | A `questions.md` step (skip if absent): **sweep** every open question (both homes) against the existing wiki for now-available answers (off the ingest hot-path → may be more thorough than ingest's mechanical match; when the semantic tier is available, the sweep uses `sb-wiki-search.py` per § "Retrieval tiers — hybrid search" to match questions against wiki content); **GRADUATION PROPOSAL** — surface mature `answered` entries → on accept invoke `sb-wiki-create-topic` (user-gated, same model as `SUBDIVISION` / `RENAME`); **prune** — remove `questions.md` entries that are promoted (page exists) or retired; verify `relates:` / `seeded-by:` wikilinks resolve via the existing wikilink check; **regenerate `open-gaps.md`**. |
 
-> **Validation window — ON.** Three heuristics are run ON for an initial validation window (≈ first 10 graduations / scans) before their wording is frozen here, exactly as the `purpose.md` design did: (1) the **graduation maturity** heuristic (when an accreted answer is "ripe" for a page); (2) the **scan match thresholds** (how much wikilink/token overlap fires a `PROPOSED ANSWER` — starting point: mirror the speculative-topic tier, ≥2 shared substantive tokens); (3) the **lint sweep thoroughness** (how much more than ingest's mechanical match the sweep does). Tune in the window, then freeze.
+> **Validation window — ON.** Three heuristics are run ON for an initial validation window (≈ first 10 graduations / scans) before their wording is frozen here, exactly as the `purpose.md` design did: (1) the **graduation maturity** heuristic (when an accreted answer is "ripe" for a page); (2) the **scan match thresholds** (how much wikilink/token overlap fires a `PROPOSED ANSWER` — starting point: mirror the speculative-topic tier, ≥2 shared substantive tokens — AND the semantic membership check's `--k 5` cutoff); (3) the **lint sweep thoroughness** (how much more than ingest's mechanical match the sweep does). Tune in the window, then freeze.
 
 ### `open-gaps.md` — lint-generated aggregate
 
@@ -798,15 +812,26 @@ Wiki retrieval is **availability-gated**: a zero-dependency deterministic floor 
 | **Keyword (FTS5-only)** | Same script, vector arm off — ranked BM25 keyword search, zero API calls | Key absent but the script runs |
 | **Deterministic floor** | Leaf indexes + wikilink graph + `grep`/`ripgrep` substring search | Always — the contract minimum |
 
+Two consumption patterns, one invariant:
+
+| Pattern | What the tier does | Examples |
+|---------|--------------------|----------|
+| **Retrieval** | Finds pages relevant to a natural-language question | `/sb-wiki-query` candidate picking; lint answer-sweep |
+| **Read-narrowing** | Shortlists which pages an operation READS, replacing exhaustive page walks | Ingest near-duplicate stub probe; speculative topic-update fires |
+
+**Mechanical-fire invariant.** The semantic tier NEVER decides a MECHANICAL fire (firm topic updates, `Substance`-bullet stubs, Step 6 trigger detection). Mechanical rules keep TOTAL coverage through deterministic means — directory listings, leaf indexes, `grep` alternation passes — and the semantic tier only narrows reads ABOVE that floor or adds DISCRETIONARY/SPECULATIVE candidates (which are user-gated or default-reject). A semantic top-k cutoff is never allowed to silently exclude a page from a mechanical rule's scope.
+
 ### The helper script
 
 `{sb_os_path}/wiki/scripts/sb-wiki-search.py` — invoked from the vault root with the active Python interpreter:
 
 ```bash
-python {sb_os_path}/wiki/scripts/sb-wiki-search.py search "<natural-language query>" --k 8 [--type concept,entity,topic,source,thesis,decision] [--json]
+python {sb_os_path}/wiki/scripts/sb-wiki-search.py search "<natural-language query>" --k 8 [--type concept,entity,topic,source,thesis,decision] [--json] [--no-sync]
 python {sb_os_path}/wiki/scripts/sb-wiki-search.py index          # build / refresh the index
 python {sb_os_path}/wiki/scripts/sb-wiki-search.py status         # freshness + mode as JSON
 ```
+
+Multi-call operations (e.g. an ingest probing several stub-candidates): the FIRST helper call of the run syncs the index (picking up pages the run already wrote); subsequent calls in the same run SHOULD pass `--no-sync` — the tree has not changed since.
 
 | Property | Rule |
 |----------|------|
@@ -822,7 +847,8 @@ python {sb_os_path}/wiki/scripts/sb-wiki-search.py status         # freshness + 
 
 | Operation | Where the tier plugs in |
 |-----------|------------------------|
-| `/sb-wiki-query` | Step 3 retrieval fallback — semantic tier first, grep floor when unavailable |
+| `/sb-wiki-query` | Steps 2–3 — ALWAYS-ON when the tier is available: deterministic picks (direct hits + filename matching, no leaf-index reads) UNIONED with semantic results on every query; leaf-index scoring + grep are the floor when unavailable |
+| `/sb-wiki-ingest` | Step 3 near-duplicate stub probe (Stub policy § "Near-duplicate probe"); Step 3·7b speculative-tier semantic fires; Step 3·7c answer-scan semantic check. The FIRM tier never consumes the semantic tier — its read-shortlist is deterministic (listing + grep) per § "Existing topic updates" |
 | `/sb-wiki-lint` | Step 7.7a questions answer-sweep — matching open questions against existing wiki content |
 | `sb-wiki-create-topic` | Step 1.5 scope-overlap check — surface overlap candidates beyond the `Scope`-cell comparison |
 | `sb-fin-create-thesis` (finance ext) | Step 1.3 scope-overlap check — same pattern over `wiki/theses/` |
@@ -850,7 +876,7 @@ Two invocations: `/sb-wiki-ingest <slug>` (default, interactive) and `/sb-wiki-i
 | 1 | Read raw file — resolve `<slug>` against `raw/{origin}/*.md` and `raw/{origin}/*.pdf`; read PDFs natively (page-range requests for large files) | Agent |
 | 1.5 | **PDF title-conformance rename** (PDF sources only; markdown skips) — compute `{title-slug}` from the paper's title (Naming convention § "Raw PDF title-conformance"); if the PDF stem differs, rename `raw/{origin}/{stem}.pdf` → `{title-slug}.pdf` BEFORE the source page is created, so the source page and every footnote are born title-named (no referrer propagation needed). Collision → error-halt and ask (silent: `failed (duplicate raw)`). Filename-only — content immutable | Agent |
 | 2 | Write `wiki/sources/{origin}/{date}-{slug}.md` (`.md` extension even for a PDF source) (`Substance` and `Connections` always; `Notable quotes` / `Methodology` / `Counterpoints` per source kind; user-half sections present as empty shells with headings only). **Substance bullets MUST name entities/concepts at page-cluster granularity** per Page granularity § — sub-cluster names go in prose without wikilinks | Agent |
-| 3 | Identify entity/concept mentions; **cluster candidates by page-granularity** (variants, whole+part, siblings, producer+work — see Page granularity §); for each cluster representative, apply the stub-creation rule (Substance bullet = mechanical; title-only = discretion; Notable Quote = discretion). ALSO walk `wiki/topics/*.md` and identify existing topic pages relevant to this source per the relevance-detection rule (see "Existing topic updates" §) — build a `candidate-topic-updates` set | Agent |
+| 3 | Identify entity/concept mentions; **cluster candidates by page-granularity** (variants, whole+part, siblings, producer+work — see Page granularity §); for each cluster representative, apply the stub-creation rule (Substance bullet = mechanical; title-only = discretion; Notable Quote = discretion), then the **near-duplicate probe** when the semantic tier is available (Stub policy § "Near-duplicate probe" — same-referent hit reroutes to the update path). ALSO detect existing topic pages relevant to this source per "Existing topic updates" § — deterministic read-shortlist (slug listing + ONE grep alternation pass), reading ONLY matched topic pages; the semantic tier NEVER shortlists the firm tier — build the `candidate-topic-updates` sets | Agent |
 | 4 | Update existing entity/concept pages with new perspective + citation; populate `Open variants / debates` section if Contradiction fires. **Agent NEVER overwrites a main section that already contains substantive content (>50 words) — only appends new sections, adds bullets to existing lists, or adds footnote definitions to Sources. User-fleshed content is treated as authoritative.** Existing topic pages are NOT updated at this step — they go through the Stage 1 user gate per "Existing topic updates" § | Agent |
 | 5 | Create stubs for new entities/concepts that meet the rule | Agent |
 | 6 | Detect candidate-topic triggers (Contradiction, Evolution, Cross-application); add `> [!warning] Disputed` callouts on Contradiction-`same-scope-opposing` | Agent |
@@ -1091,8 +1117,8 @@ Single command: `/sb-wiki-query <question>`. Returns a synthesized answer; optio
 | Step | Operation | Owner |
 |------|-----------|-------|
 | 1 | Parse question; identify candidate page types (concept / entity / topic) and likely keywords | Agent |
-| 2 | Read leaf indexes (`concepts.md`, `entities.md`, `topics.md`) — sub-agent picks pages by name match + index summary | Agent |
-| 3 | If index lookup is ambiguous, fall back per § "Retrieval tiers — hybrid search": run `sb-wiki-search.py` when available (semantic/keyword tier), degrade to `grep` / `ripgrep` over `wiki/` content when not (deterministic floor) | Agent |
+| 2 | Pick candidates deterministically. Tier available: direct page references + exact/substring filename matches from directory listings of the candidate-type leaf folders — NO leaf-index reads. Tier unavailable (floor): read leaf indexes (`concepts.md`, `entities.md`, `topics.md`) and score rows by name match + index summary | Agent |
+| 3 | Retrieve per § "Retrieval tiers — hybrid search". Tier available: run `sb-wiki-search.py` with the question verbatim on EVERY query (never only on a miss) and UNION results with step-2 picks. Tier unavailable: `grep` / `ripgrep` over `wiki/` content only when step 2 yielded nothing (deterministic floor). Union still empty → expand to `raw/` (grep only) | Agent |
 | 4 | Read picked pages; if depth needed, follow wikilinks to neighbors | Agent |
 | 5 | Synthesize answer with inline citations to wiki pages (`[[page.md]]`) and source pages (footnote definitions) | Agent |
 | 6 | Present answer + offer to file as a wiki page (Concept / Entity / Topic) if "valuable enough" — the user picks file/skip | Agent + User |

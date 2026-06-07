@@ -11,12 +11,24 @@ End-to-end ingest of a single raw source into the Karpathy-style wiki layer. Imp
 
 Read `3-resources/tools/sb-os/wiki/docs/wiki-schema.md` — Operations § "/sb-wiki-ingest" — for canonical step definitions. This workflow body implements that spec verbatim. Schema deviations require updating the schema first.
 
+## Retrieval Tiers
+
+Schema § "Retrieval tiers — hybrid search" governs every semantic-tier touchpoint in this flow (Steps 3·5c, 3·7b, 3·7c). Probe the tier by invoking the helper once; degrade gracefully:
+
+| Tier | Behavior |
+|------|----------|
+| Semantic / keyword (helper runs, exit 0) | `python {sb_os_path}/wiki/scripts/sb-wiki-search.py search "<query>" --k N [--type ...]` — the tier-gated augments below are ACTIVE |
+| Unavailable (helper missing, errors, exit 2) | Every tier-gated augment is OFF — the flow runs the mechanical baseline exactly as pre-v7 |
+
+The FIRST helper call of the run syncs the index (the step-2 source page enters it there); subsequent calls in the same run pass `--no-sync`. A helper failure NEVER aborts the ingest — drop the augment and continue. **The semantic tier NEVER decides a mechanical fire** — firm-tier topic detection, `Substance`-bullet stubs, and Step 6 trigger detection stay fully deterministic per the schema's mechanical-fire invariant. Runs in BOTH modes (default and silent) — silent's auto-reject postures for speculative updates and proposed answers are unchanged.
+
 ## Path Resolution
 
 | Symbol | Resolution |
 |--------|------------|
 | `{wiki_root}` | Read from `sb-os.json` at vault root → `wiki_root` field. Resolve via `install/manifest.py` (`manifest.read(vault_root)`). Never hardcode. |
 | `{user_context_root}` | Read from `sb-os.json` → `user_context_root`. Never hardcode. |
+| `{sb_os_path}` | Read from `sb-os.json` → `sb_os_path` field. Never hardcode. |
 | `{wiki_root}/wiki/` | Wiki page tree (concepts, entities, topics, sources). |
 | `{wiki_root}/raw/` | Raw source tree — Markdown (`.md`) and PDF (`.pdf`) sources. **EXCLUDES `raw/assets/`** (user-maintained binary attachments — per `../shared/folder-structure.md` "Asset Folder"). This workflow NEVER reads or writes `raw/assets/`. |
 | `{wiki_root}/log.md` | Actionable queue — `candidate-topic` + `candidate-mention` entries only. |
@@ -193,13 +205,18 @@ Citations: emit inline `[^N]` markers at every claim derived from the raw, then 
    | **off-purpose** | As peripheral |
 
    The bias only tilts the existing yes/no heuristic — it NEVER fires the mechanical branch differently, NEVER drops a Substance-bullet stub, and NEVER coarsens peripheral clustering below baseline (guarantee #4). A demoted name still lands in `mention-only` (logged `candidate-mention`), so nothing is dropped. Lens OFF → apply the heuristic exactly as clause 5 specifies, no bias.
+5c. **Near-duplicate probe (semantic tier; SKIP when the tier is unavailable).** For EACH candidate that cleared the stub rule in clauses 5–5b, run ONE helper call: `search "<candidate name> — <planned preamble>" --type concept,entity,topic --k 8` (first call of the run syncs; later calls `--no-sync`). Apply the same-referent test per the schema (Stub policy § "Near-duplicate probe") to concept/entity hits: a hit denoting the SAME referent under a different slug (synonym, alias, spelling/formatting variant — NOT merely related) reroutes the candidate to `existing-pages` (the step-4 append-only update path) instead of stub creation; merely-related or UNCERTAIN → keep the stub (when in doubt, create). HOLD each call's topic-page hits for clause 7b's semantic fires — do NOT re-call the helper there.
 6. Build five working sets for downstream steps:
    - `existing-pages` — concept/entity pages that already exist (handled in step 4)
    - `stub-candidates` — new concept/entity pages whose stub-creation rule fires (handled in step 5)
    - `mention-only` — names that did NOT clear the stub rule, including Title-only and Notable-Quote-only mentions that the discretion heuristic demoted (logged as `candidate-mention` in step 9)
    - `candidate-topic-updates` — FIRM tier: existing topic pages whose relevance to this source matches per the mechanical rule below (proposed at Stage 1; applied in step 4.5 only on user accept)
-   - `candidate-topic-updates-speculative` — SPECULATIVE tier: NEW stubs from this ingest paired with existing topic pages by token overlap (proposed at Stage 1 in a separate block; applied in step 4.5 only on user accept; capped at 2)
-7. **Firm tier.** Walk `{wiki_root}/wiki/topics/*.md`. For each topic page, fire a candidate-topic-update if AT LEAST ONE of these mechanical matches holds:
+   - `candidate-topic-updates-speculative` — SPECULATIVE tier: NEW stubs from this ingest paired with existing topic pages by token overlap or tier-gated semantic fire (proposed at Stage 1 in a separate block; applied in step 4.5 only on user accept; capped at 2)
+7. **Firm tier.** Detection semantics per the schema (§ "Existing topic updates") — the read-path is a deterministic shortlist; NEVER read every topic page, and NEVER use the semantic tier to shortlist this tier (mechanical-fire invariant):
+
+   1. List topic page filenames under `{wiki_root}/wiki/topics/` (directory listing; exclude `topics.md`) — evaluate the slug-match condition against names alone.
+   2. Run ONE `ripgrep`/`grep` alternation pass over `{wiki_root}/wiki/topics/` for the source's substance-wikilinked page filenames (files-with-matches) — both wikilink-overlap conditions surface here, since section wikilinks AND `related:` frontmatter both contain the filename text.
+   3. READ ONLY the union (slug-matched ∪ grep-hit pages) in full and confirm which mechanical condition holds, dropping grep false-positives (wikilink hits outside the qualifying locations). Fire a candidate-topic-update for each confirmed page where AT LEAST ONE match holds:
 
 | Match | Detection |
 |-------|-----------|
@@ -209,41 +226,43 @@ Citations: emit inline `[^N]` markers at every claim derived from the raw, then 
 
    For each fire, capture: topic page path, the matching match-type (key-concept overlap / related overlap / slug match), and the matched name(s). Semantic-only "feels relevant" matches do NOT fire. NEVER apply the update at this step — populate `candidate-topic-updates` only.
 
-7b. **Speculative tier (new-stub conceptual fit).** For EACH entry in `stub-candidates` and EACH topic page in `{wiki_root}/wiki/topics/*.md`, fire a speculative candidate when ALL of these hold:
+7b. **Speculative tier (new-stub conceptual fit).** For EACH entry in `stub-candidates`, fire speculative candidates against existing topics via TWO signals (schema § "Existing topic updates" speculative tier):
 
 | Condition | Detection |
 |-----------|-----------|
-| Token overlap | The stub's preamble (the 1–2-sentence factual sentence the agent will write at step 5) shares ≥2 substantive tokens with the topic's `Scope` section text. Tokenize both: lowercase, strip stopwords (`the/a/an/of/for/in/on/and/or/to/is/are/with/by/that/this/it/as`), preserve kebab-case as a single token AND its hyphen-split parts (e.g., `marginal-returns-to-intelligence` contributes `marginal-returns-to-intelligence`, `marginal`, `returns`, `intelligence`). Threshold: ≥2 distinct substantive tokens shared. |
-| Dedupe with firm | The (topic, source) pair must NOT already appear in firm `candidate-topic-updates` — firm wins; suppress speculative for the same topic. |
+| Token overlap (floor — always runs) | The stub's preamble (the 1–2-sentence factual sentence the agent will write at step 5) shares ≥2 substantive tokens with the topic's `Scope` text, sourced from the topics leaf index `Scope` cells (`{wiki_root}/wiki/topics/topics.md` — ONE read covers every topic; a topic missing its index row is read directly for its `Scope` section). Tokenize both: lowercase, strip stopwords (`the/a/an/of/for/in/on/and/or/to/is/are/with/by/that/this/it/as`), preserve kebab-case as a single token AND its hyphen-split parts (e.g., `marginal-returns-to-intelligence` contributes `marginal-returns-to-intelligence`, `marginal`, `returns`, `intelligence`). Threshold: ≥2 distinct substantive tokens shared. |
+| Semantic fire (additive; tier-gated) | When the semantic tier is available: the topic page appears among the stub's HELD probe-call results from clause 5c (`--type concept,entity,topic --k 8` — no new helper call here). Tier unavailable → token-overlap fires only. |
+| Dedupe with firm | The (topic, source) pair must NOT already appear in firm `candidate-topic-updates` — firm wins; suppress speculative for the same topic. Applies to BOTH signals. |
 
-   Rank candidates by token-overlap count (descending). Cap to TOP 2. The remaining candidates are dropped silently (NOT logged — they re-detect on future ingests of related sources). For each kept entry, capture: topic page path, the stub's slug, the matched tokens, and the topic-shape-appropriate proposed body bullet (per the same routing as firm-tier in step 4.5).
+   Rank: token fires above semantic-only fires; among token fires by overlap count (descending); among semantic-only fires by helper score (descending). Cap to TOP 2. The remaining candidates are dropped silently (NOT logged — they re-detect on future ingests of related sources). For each kept entry, capture: topic page path, the stub's slug, the firing signal (matched tokens, or helper score), and the topic-shape-appropriate proposed body bullet (per the same routing as firm-tier in step 4.5).
 
-   **Lens — speculative ranking (discretionary; lens ON only).** When the lens is ON, re-rank the qualifying candidates by **focus overlap** (overlap with the source's classified `Focus area`) WITHIN the existing TOP-2 cap: focus overlap orders the list and breaks ties when token-overlap counts are equal. The firing rule (token overlap ≥2, firm-dedupe), the cap of 2, and the silent-drop of overflow are UNCHANGED — the lens only reorders the kept set, never widens it. Lens OFF → rank by token-overlap count only, exactly as above.
+   **Lens — speculative ranking (discretionary; lens ON only).** When the lens is ON, re-rank the qualifying candidates by **focus overlap** (overlap with the source's classified `Focus area`) WITHIN the existing TOP-2 cap: focus overlap orders the list and breaks ties when signal strengths are equal. The firing rules (token overlap ≥2, tier-gated semantic fire, firm-dedupe), the cap of 2, and the silent-drop of overflow are UNCHANGED — the lens only reorders the kept set, never widens it. Lens OFF → rank exactly as above (token fires first by count, semantic-only fires by score).
 
 ### Step 3·7c — Answer-scan (match new source against open questions, BOTH homes)
 
 SKIP this step entirely if the questions layer is OFF (Step 0.6: `questions.md` absent or malformed). When OFF, hold an EMPTY `candidate-answers` set — the Step 10 `PROPOSED ANSWERS` block is omitted and the run is identical to today.
 
-Match THIS source against every **open** question in **BOTH** homes, using the SAME mechanical signal as the speculative-topic-update tier (Step 3·7b) — do NOT invent a new one:
+Match THIS source against every **open** question in **BOTH** homes, using the SAME signals as the speculative-topic-update tier (Step 3·7b) — do NOT invent a new one:
 
 | Home | Open-question source |
 |------|----------------------|
-| **Topic-home** | Each `Open questions` line on each `{wiki_root}/wiki/topics/*.md` page (walked at Step 3). |
+| **Topic-home** | Each un-struck `Open questions` bullet line on topic pages. Source them WITHOUT walking every topic page: grep `{wiki_root}/wiki/topics/` for the `## Open questions` heading with trailing context lines; extract the bullet lines under each matched heading (stop at the next heading; skip `~~struck~~` lines). Read a topic page itself only when one of its lines fires. |
 | **`questions.md`** | Each open entry held from Step 0.6 (no `answer:` block or zero `answer:` bullets). |
 
-For EACH open question (either home) fire a candidate answer when the **token overlap** condition holds:
+For EACH open question (either home) fire a candidate answer when EITHER signal holds:
 
 | Condition | Detection |
 |-----------|-----------|
-| Token overlap | The question text shares ≥2 substantive tokens with this source's `Substance` section text (use the topic-home question's `Open questions` line text, or the `questions.md` entry's H2 question text). **Tokenize both with the EXACT rule defined at Step 3·7b** (lowercase; strip the stopword list; preserve kebab-case as a single token AND its hyphen-split parts). Threshold: ≥2 distinct substantive tokens shared. |
+| Token overlap (floor — always runs) | The question text shares ≥2 substantive tokens with this source's `Substance` section text (use the topic-home question's `Open questions` line text, or the `questions.md` entry's H2 question text). **Tokenize both with the EXACT rule defined at Step 3·7b** (lowercase; strip the stopword list; preserve kebab-case as a single token AND its hyphen-split parts). Threshold: ≥2 distinct substantive tokens shared. |
+| Semantic membership (additive; tier-gated) | When the semantic tier is available: query the helper with the open question text — `search "<question text>" --k 5` (`--no-sync` after the run's first call) — and fire when THIS ingest's source page (written at step 2, synced into the index by the run's first helper call) appears among the results. Tier unavailable → token overlap only. |
 
-For each fire, capture into `candidate-answers`: the home (`topic` or `questions.md`); the question identity (topic page path + the verbatim `Open questions` line for a topic-home fire; the `questions.md` entry's H2 heading for a `questions.md` fire); the matched tokens; and the proposed `answer:` claim — a 1-sentence claim derived from this source's `Substance` that addresses the question, carrying the source citation `[^N]: [[<raw-filename>]]`.
+For each fire, capture into `candidate-answers`: the home (`topic` or `questions.md`); the question identity (topic page path + the verbatim `Open questions` line for a topic-home fire; the `questions.md` entry's H2 heading for a `questions.md` fire); the firing signal (matched tokens, or `semantic (top-5)`); and the proposed `answer:` claim — a 1-sentence claim derived from this source's `Substance` that addresses the question, carrying the source citation `[^N]: [[<raw-filename>]]`.
 
 **Topic-home routing — reuse the existing append-only path (NO parallel path).** For each topic-home fire, stage the corresponding topic update through `candidate-topic-updates` (the firm tier consumed at Step 4.5): the proposed change is the answer claim folded into the topic body under the topic-shape-appropriate section per the Step 4.5 Update-behavior routing, PLUS a strike of the matched `Open questions` line. The topic-home fire is surfaced to the user ONLY in the `PROPOSED ANSWERS` block (Step 10) — SUPPRESS its row from the `PROPOSED TOPIC UPDATES` block so the same resolution is never presented twice. Accepting the `PROPOSED ANSWERS` row applies the staged topic-update through the Step 4.5 machinery (append-only protection applies); rejecting it discards the staged update. Do NOT create a second write path for topic pages.
 
 This step prepares but does NOT write. Apply happens at Step 10 commit, only for accepted rows.
 
-> **Validation window — ON (§13 fuzzy thresholds).** The token-overlap threshold for firing a `PROPOSED ANSWER` (mirrored from the Step 3·7b speculative tier, ≥2 shared substantive tokens) is run ON for an initial validation window before its wording is frozen, exactly as the `purpose.md` design did. Tune in the window, then freeze. Per `../../docs/wiki-schema.md` § "Questions layer — questions.md" → "The answer-scan" validation-window note.
+> **Validation window — ON (§13 fuzzy thresholds).** The token-overlap threshold for firing a `PROPOSED ANSWER` (mirrored from the Step 3·7b speculative tier, ≥2 shared substantive tokens) AND the semantic membership check's `--k 5` cutoff are run ON for an initial validation window before their wording is frozen, exactly as the `purpose.md` design did. Tune in the window, then freeze. Per `../../docs/wiki-schema.md` § "Questions layer — questions.md" → "The answer-scan" validation-window note.
 
 ### Step 4 — Update existing entity/concept pages
 
@@ -371,12 +390,13 @@ SPECULATIVE TOPIC UPDATES (low-confidence, default reject):
 | # | topic | overlap | proposed change |
 |---|-------|---------|-----------------|
 | 1 | [[<topic-slug>.md]] | tokens: <token1>, <token2> ([[<new-stub-slug>.md]]) | + bullet under "<section-name>" + citation |
+| 2 | [[<topic-slug>.md]] | semantic: <score> ([[<new-stub-slug>.md]]) | + bullet under "<section-name>" + citation |
 
 PROPOSED ANSWERS (default reject):
 | # | question | home | overlap | proposed resolution |
 |---|----------|------|---------|---------------------|
-| 1 | <question text> | [[<topic-slug>.md]] | tokens: <token1>, <token2> | strike "Open questions" line + fold answer into "<section-name>" + citation |
-| 2 | <question text> | questions.md | tokens: <token1>, <token2> | + answer: bullet on the entry + citation |
+| 1 | <question text> | [[<topic-slug>.md]] | tokens: <token1>, <token2> — or: semantic (top-5) | strike "Open questions" line + fold answer into "<section-name>" + citation |
+| 2 | <question text> | questions.md | tokens: <token1>, <token2> — or: semantic (top-5) | + answer: bullet on the entry + citation |
 
 File changes: accept-all | reject N (e.g. "reject 3,4") | abort
 Topic decisions: accept N (creates now) | defer N (logs as candidate) | (default: defer all)
@@ -425,7 +445,7 @@ Only the FIRM tier of genuine topic updates auto-applies. Speculative updates an
 | Record | `Flags` line shape |
 |--------|--------------------|
 | Firm update applied | `topic-update applied: [[<topic-slug>.md]] ← [[<raw-filename>]] (section "<section-name>")` |
-| Speculative update rejected | `speculative-update rejected: [[<topic-slug>.md]] (tokens: <t1>, <t2>)` |
+| Speculative update rejected | `speculative-update rejected: [[<topic-slug>.md]] (tokens: <t1>, <t2>)` — or, for a semantic fire: `speculative-update rejected: [[<topic-slug>.md]] (semantic: <score>)` |
 | Proposed answer rejected | `proposed-answer rejected: <home> — <question brief> ← [[<raw-filename>]]` |
 
 These `Flags` lines are what `/sb-wiki-ingest-all` aggregates into its final-report counts. The applied topic page itself is the durable record of its own updated content (per `../shared/log-entry-shapes.md` — pages record their own updates); `Flags` is the per-run audit trail the caller surfaces.
@@ -503,5 +523,7 @@ End of flow.
 | `sb-wiki-create-topic` skill fails mid-Stage-1 acceptance | Mark the topic row as failed; keep the `candidate-topic` log entry; proceed with the rest of the acceptance. |
 | Raw index file missing at step 7 | Log a warning for lint; do not block the ingest. |
 | Wiki sources index file missing at step 8 | Create it with header row; proceed. |
+| `sb-wiki-search.py` unavailable (missing, non-zero exit, runtime error) at any tier-gated touchpoint (3·5c, 3·7b semantic fires, 3·7c semantic membership) | Drop ALL tier-gated augments silently — the run is the mechanical baseline (exact-slug existence, token-overlap fires only). NEVER abort the ingest. |
+| `{wiki_root}/wiki/topics/topics.md` missing or a topic lacks its index row at step 3·7b | Read the affected topic page(s) directly for `Scope` text; proceed. Never skip a topic for a missing index row. |
 | `{wiki_root}/purpose.md` malformed at step 0.5 (unreadable, invalid frontmatter, or no parseable `## Focus areas`) | WARN and proceed **lens-OFF** — every later step behaves as it does today. NEVER abort the ingest (guarantee #5). (Absent `purpose.md` is NOT a failure — it is the clean no-op lens-OFF path handled at Step 0.5.) |
 | `{wiki_root}/questions.md` malformed at step 0.6 (unreadable, invalid frontmatter, or no parseable H2 entries) | WARN and proceed with an EMPTY question set (questions layer OFF) — the Step 10 `PROPOSED ANSWERS` block is omitted; every other step behaves as it does today. NEVER abort the ingest (guarantee #5). (Absent `questions.md` is NOT a failure — it is the clean no-op layer-OFF path handled at Step 0.6.) |
