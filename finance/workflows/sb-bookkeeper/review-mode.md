@@ -95,14 +95,21 @@ Present items batch-by-batch (5–7 per batch), one item per row, following `bat
   - Type 4: `Current competência: {data_competencia}. Keep = {data_caixa}, or move to which month?`
   - Type 5: `Reason for deferral: {why_deferred}. {original type's specific prompt}`
 
-**Apply resolutions** via the same lib functions used in Step 5 (gastos review):
-- Category changes → `lib.queue.apply_pass_1_resolution(..., {"category": ...})` + update `{CONFIG_DIR}/categories.json` if a new category is created.
-- Supplier changes → update `{CONFIG_DIR}/suppliers.json` and re-apply to affected rows.
-- Tag changes → `lib.tags.accept_tag` / `merge_tag` / `reject_tag` + `lib.tags.save_tags`.
-- Competência changes → `lib.queue.apply_pass_3_resolution(...)` — updates `data_competencia`; `data_caixa` NEVER changes.
-- Corrections that override historical rows → append to the matching `{CONFIG_DIR}/corrections/*.csv` file (never edit `transactions.csv` rows directly for a past close that has been frozen with `--force`).
+**Apply resolutions** through the registered write tools:
 
-After each batch, persist changes to the relevant config files and to a working copy of `transactions.csv`.
+- **Category, supplier_canonical, tags, recurrence, data_competencia, manual_override changes on a closed month** → MUST use the registered `apply_review_resolution` tool (`migrations/apply_review_resolution.py`, class `write`/`retro-rewrite`). Protocol:
+  1. Run dry-run preview (default — no `--apply`): confirms the identity triple matches exactly one row and enumerates every affected location.
+  2. Present the preview to the user and await confirmation.
+  3. Run with `--apply` to re-stamp the matched row and optionally append a canonical correction row to `manual-overrides.csv` or `competencia-overrides.csv`.
+  4. Applying a resolution via an unregistered ad-hoc script is a tools-only-invariant violation — if no write tool exists for the needed mutation, that is a Rule B deviation (missing write capability → `tool-builder`).
+  - The underlying lib functions (`lib.queue.apply_pass_1_resolution`, `lib.queue.apply_pass_3_resolution`) are the mechanism the tool uses internally; they are NOT a direct agent-facing apply path.
+
+- **Supplier config changes (canonical rename, alias edits)** → use `rename_canonical` tool (`migrations/rename_canonical.py`).
+- **Tag changes on the namespace** → use `rename_tags` tool (`migrations/rename_tags.py`) or `lib.tags.accept_tag` / `merge_tag` / `reject_tag` + `lib.tags.save_tags` for within-session tag-state edits that do not require a durable retro-rewrite.
+- **New category creation** → update `{CONFIG_DIR}/categories.json` directly (config file, not a ledger row — direct edit is permitted).
+- `data_caixa` is NEVER mutable — the `apply_review_resolution` tool hard-rejects any attempt to set it.
+
+After each batch, persist changes to the relevant config files and to `transactions.csv` (via the tool's atomic write — never a direct row edit on a frozen close).
 
 ### Section 4 — Save and report
 
@@ -134,4 +141,4 @@ After each batch, persist changes to the relevant config files and to a working 
 
 - **Gatekeeper seam.** Rule C of `gatekeeper-loop.md` (deferrable → review-mode) routes to this file. The gatekeeper loop records items in the deferrable list and surfaces them at close end; this file is where those items are resolved. The gatekeeper does not implement the per-revision-type scoping — this file does.
 - **`batch_ui` binding.** `batch_ui.tags.one_row_one_decision = true` and `batch_ui.sub_items.aggregate_suppliers: false` are enforced here. Every queue item is one row, one prompt, one decision. The sub-items rule is especially load-bearing for Type 2 (suppliers) — do not batch multiple canonical proposals into one prompt.
-- **Corrections convention.** Revisions to a frozen past-close month write to the corrections side-ledger (append-only), not directly to `transactions.csv` rows. The corrected value is re-stamped on next regeneration via the corrections protocol (`categorize.py` loads `manual-overrides.csv` and `competencia-overrides.csv`). This preserves the append-only-ledger constraint for months that have been closed with `--force`.
+- **Corrections convention.** Revisions to a frozen past-close month MUST route through the registered `apply_review_resolution` tool (`migrations/apply_review_resolution.py`) — it re-stamps the matched row in `transactions.csv` (atomic write) and optionally appends a durable correction row to the corrections side-ledger (`manual-overrides.csv` or `competencia-overrides.csv`). The corrected value propagates on next regeneration via the corrections protocol (`categorize.py` loads those files). Applying a resolution through an unregistered ad-hoc script is a tools-only-invariant violation. This preserves the append-only-ledger constraint for months closed with `--force`.

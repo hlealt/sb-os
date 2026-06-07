@@ -550,3 +550,29 @@ canonical_reader_writer: appends .user/finance/bookkeeper/config/corrections/tag
 dry_run: default
 last_validated: 2026-06-06
 ```
+
+```yaml
+tool: apply_review_resolution (python migrations/apply_review_resolution.py --month YYYY-MM --date YYYY-MM-DD --description TEXT --amount FLOAT --set field=value [--corrections-file FILENAME] [--reason TEXT] [--source LABEL] [--note TEXT] [--apply])
+purpose: Apply a row-level review resolution on a closed fechamento month — re-stamps one or more mutable fields (category, tags, recurrence, supplier_canonical, data_competencia, manual_override) on the unique matching row of transactions.csv, and optionally appends the canonical correction row to manual-overrides.csv or competencia-overrides.csv so categorize.py re-applies the override on the next regeneration.
+owner_script: migrations/apply_review_resolution.py
+class: write
+use: retro-rewrite
+expected_inputs: --month YYYY-MM (required); --date YYYY-MM-DD, --description TEXT, --amount FLOAT (required identity triple); --set field=value (repeatable; mutable-field whitelist: category, tags, recurrence, supplier_canonical, data_competencia, manual_override; data_caixa is NEVER mutable — hardcoded reject); --corrections-file FILENAME (optional; manual-overrides.csv or competencia-overrides.csv); --reason, --source, --note (optional provenance); --apply to execute (DRY-RUN is the DEFAULT); env overrides BOOKKEEPER_ROOT / BOOKKEEPER_CONFIG_DIR / BOOKKEEPER_LEDGER_DIR
+outputs: Fix-impact preview enumerating every affected location (transactions.csv row re-stamp + corrections side-ledger append) BEFORE any write; exact-one-match enforcement (0 or >1 matches = hard error, rc=1); under --apply re-stamps the matched row (atomic write via safe_write) + appends the corrections row + emits one ledger_write + one config_write audit event; rollback manifest written to corrections/.rollback/. Dry-run writes NOTHING.
+canonical_reader_writer: overwrites .user/finance/bookkeeper/ledgers/fechamento/{YYYY-MM}/transactions.csv (single-row re-stamp); appends .user/finance/bookkeeper/config/corrections/manual-overrides.csv or competencia-overrides.csv
+dry_run: default
+last_validated: 2026-06-06
+```
+
+```yaml
+tool: supplier_spend_spikes (python shared/supplier_spend_spikes.py [--axis competencia|caixa] [--threshold FLOAT] [--min-base FLOAT] [--month YYYY-MM] [--ledger-dir PATH])
+purpose: List every supplier whose monthly spending total increased by more than a threshold (default >20%) versus the immediately preceding calendar month, across the fechamento transactions.csv ledgers — month-over-month supplier spend-spike diagnostic.
+owner_script: shared/supplier_spend_spikes.py
+class: read
+use: audit-diagnostic
+expected_inputs: optional --axis competencia|caixa (date column defining the spend month, default competencia), --threshold fraction (default 0.20 = 20%), --min-base FLOAT (minimum prior-month total to flag, default 100.0; 0 disables the floor), --month YYYY-MM (restrict to that month vs its calendar prior), --ledger-dir PATH override; env override BOOKKEEPER_LEDGER_DIR; reads .user/finance/bookkeeper/ledgers/fechamento/{YYYY-MM}/transactions.csv. Spend = sum of (-amount) per supplier_canonical (expenses positive, refunds net down); rows in categories receitas/intercontas/ignorar/venda excluded; empty supplier_canonical bucketed as "(unmapped)".
+outputs: Per month-pair section ("{month} vs {prior}") with a pretty-printed table of flagged suppliers (supplier, prior, current, delta, pct) sorted by pct descending, plus an "appeared (no prior month spend)" line listing suppliers with no comparable prior total (surfaced, never counted in the >threshold list). Human-readable; writes nothing. Exit 0 always when data exists; exit 1 when no fechamento transactions.csv data is found.
+canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/fechamento/{YYYY-MM}/transactions.csv (no write)
+dry_run: not-applicable
+last_validated: 2026-06-06
+```

@@ -19,6 +19,8 @@ The runtime protocol that makes `sb-bookkeeper` an active-agency gatekeeper inst
 
 The loop NEVER reads a ledger CSV, `portfolio.json`, or a raw source file directly to inspect transaction or position data. It reads that data ONLY through a registered tool in `../../scripts/tools-index.md` (e.g. `sample_from_ledger`, `query_corrections`, `query_name_map`, `position_summary`, `position_table`). To find a tool, scan `tools-index.md` for `class: read` and the matching `use`. Manifests (`months.json`, `snapshots.json`) and config files (`suppliers.json`, `tags.json`, `categories.json`, `standing-rules.yaml`) are agent-readable directly — they are not transaction data. If the data the loop needs has no tool, that is itself a deviation: run Rule B (the missing capability routes to `tool-builder`).
 
+**The invariant applies equally to WRITES.** The loop NEVER mutates a ledger CSV, a fechamento `transactions.csv`, or a corrections file through an ad-hoc script. All mutations MUST go through a registered `write` tool in `tools-index.md` (e.g. `apply_review_resolution` for row-level review resolutions, `rename_tags` for tag retro-rewrites, `rename_canonical` for supplier renames, `ack_tag_review` for tag-coverage acks). If a needed mutation has no registered `write` tool, that is a Rule B deviation: missing write capability routes to `tool-builder`.
+
 ---
 
 ## Rule A — Refusal-on-out-of-structure
