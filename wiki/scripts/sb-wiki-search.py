@@ -5,7 +5,8 @@ Maintains a local SQLite index (FTS5 keyword table + Voyage embedding
 vectors) over `{wiki_root}/wiki/**/*.md` and answers ranked queries for
 agents. The semantic tier is availability-gated per the wiki schema:
 
-- `VOYAGE_API_KEY` set      -> hybrid mode (FTS5 BM25 + vector cosine, RRF-fused)
+- key available (`VOYAGE_API_KEY` env var, else `{vault_root}/.user/config/env/.env`)
+                            -> hybrid mode (FTS5 BM25 + vector cosine, RRF-fused)
 - key absent                -> FTS5-only mode (no API calls, still ranked)
 - wiki root unresolvable    -> exit 2 (callers fall back to grep)
 
@@ -79,6 +80,22 @@ def sha256_text(text: str) -> str:
 def resolve_wiki_root(vault_root: Path) -> Path:
     manifest = json.loads(read_text(vault_root / "sb-os.json"))
     return vault_root / manifest["wiki_root"]
+
+
+def resolve_api_key(vault_root: Path) -> str | None:
+    """VOYAGE_API_KEY from the environment, else from `.user/config/env/.env`."""
+    key = os.environ.get("VOYAGE_API_KEY")
+    if key:
+        return key
+    env_file = vault_root / ".user" / "config" / "env" / ".env"
+    if env_file.is_file():
+        for line in read_text(env_file).splitlines():
+            line = line.strip()
+            if line.startswith("VOYAGE_API_KEY="):
+                value = line.split("=", 1)[1].strip().strip("'\"")
+                if value:
+                    return value
+    return None
 
 
 # ---------------------------------------------------------------- chunking
@@ -482,7 +499,7 @@ def main() -> int:
         print(f"no wiki tree at {wiki_root / 'wiki'}", file=sys.stderr)
         return 2
 
-    api_key = os.environ.get("VOYAGE_API_KEY")
+    api_key = resolve_api_key(args.vault_root.resolve())
     embedder = make_voyage_embedder(api_key, args.model) if api_key else None
     mode = "hybrid" if embedder else "fts-only"
     db_path = args.db or _default_db(wiki_root)
@@ -502,7 +519,8 @@ def main() -> int:
         print(f"indexed: +{counts['added']} ~{counts['changed']} -{counts['removed']} files "
               f"({total} total), {counts['embedded']} chunks embedded, mode={mode}")
         if mode == "fts-only":
-            print("VOYAGE_API_KEY not set — vector tier off, keyword (FTS5) tier active",
+            print("VOYAGE_API_KEY unavailable (env var or .user/config/env/.env) — "
+                  "vector tier off, keyword (FTS5) tier active",
                   file=sys.stderr)
         return 0
 

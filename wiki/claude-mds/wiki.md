@@ -99,7 +99,7 @@ Before bulk-reading or grepping wiki pages — to answer a question, locate rela
 python 3-resources/tools/sb-os/wiki/scripts/sb-wiki-search.py search "<natural-language query>" --k 8 [--type concept,entity,topic,source,thesis,decision] [--json]
 ```
 
-The helper is read-only and self-syncs before answering (changed pages re-indexed incrementally — never run a manual index step first). Availability ladder: `VOYAGE_API_KEY` set → hybrid semantic+keyword; key absent → keyword-only (FTS5, zero API calls); helper missing or erroring → fall back to leaf indexes + `grep`/`ripgrep` (deterministic floor). A helper failure NEVER blocks the task — degrade and continue. Targeted reads of already-known pages need no search first.
+The helper is read-only and self-syncs before answering (changed pages re-indexed incrementally — never run a manual index step first). Availability ladder: Voyage key available (`VOYAGE_API_KEY` env var, else `.user/config/env/.env` at the vault root) → hybrid semantic+keyword; key absent → keyword-only (FTS5, zero API calls); helper missing or erroring → fall back to leaf indexes + `grep`/`ripgrep` (deterministic floor). A helper failure NEVER blocks the task — degrade and continue. Targeted reads of already-known pages need no search first.
 
 ---
 

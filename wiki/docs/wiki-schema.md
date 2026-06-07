@@ -808,7 +808,7 @@ Wiki retrieval is **availability-gated**: a zero-dependency deterministic floor 
 
 | Tier | Mechanism | Available when |
 |------|-----------|----------------|
-| **Semantic (hybrid)** | `sb-wiki-search.py` — SQLite FTS5 keyword ranking + Voyage embedding cosine, RRF-fused | `VOYAGE_API_KEY` set and the script runs (exit 0) |
+| **Semantic (hybrid)** | `sb-wiki-search.py` — SQLite FTS5 keyword ranking + Voyage embedding cosine, RRF-fused | Voyage key available (see Key resolution below) and the script runs (exit 0) |
 | **Keyword (FTS5-only)** | Same script, vector arm off — ranked BM25 keyword search, zero API calls | Key absent but the script runs |
 | **Deterministic floor** | Leaf indexes + wikilink graph + `grep`/`ripgrep` substring search | Always — the contract minimum |
 
@@ -835,12 +835,13 @@ Multi-call operations (e.g. an ingest probing several stub-candidates): the FIRS
 
 | Property | Rule |
 |----------|------|
+| Key resolution | The Voyage key resolves from the `VOYAGE_API_KEY` environment variable first, else from `{vault_root}/.user/config/env/.env` — the STANDARD location for local API keys in an sb-os vault. One `KEY=value` line per key (`VOYAGE_API_KEY=...`). The file is user-owned and MUST be gitignored (keep a tracked `.env.example` with empty values for new-machine setup). Missing file or empty value → keyword-only mode, never an error. |
 | Index artifact | `{wiki_root}/.sb-wiki-search/index.db` — DERIVED data, machine-local. Never commit it (add the folder to the vault `.gitignore`); deleting it is always safe (rebuilt by the next `index`/`search`). |
 | Scope | `{wiki_root}/wiki/**/*.md` pages only — leaf/origin indexes, `CLAUDE.md`, `raw/`, and root-level queues (`log.md`, `questions.md`, `open-gaps.md`, `purpose.md`) are NEVER indexed. Extension page trees (e.g. `wiki/theses/`, `wiki/decisions/`) are included automatically. |
 | Self-healing | `search` re-syncs before answering: changed/added/removed pages are detected (mtime+size prefilter, sha256 confirm) and re-indexed incrementally. Results never go stale; unchanged files are never re-embedded. |
 | Read-only | The script only READS wiki content. It never writes a wiki page, index cell, or queue entry — judgment-bearing cells stay LLM-owned per the lint contract. |
 | Installer | `install.py` never creates, reads, or writes the index artifact (installer scope guarantee unchanged). Lint never walks it (`.sb-wiki-search/` is a root-level dot-folder sibling of `wiki/` and `raw/`, outside both lint subtrees). |
-| Privacy | With `VOYAGE_API_KEY` set, page text is sent to the Voyage API to be embedded. Key absent → FTS5-only mode and nothing leaves the machine. |
+| Privacy | With a Voyage key available, page text is sent to the Voyage API to be embedded. Key absent → FTS5-only mode and nothing leaves the machine. |
 | Failure | Script missing, Python missing, or exit code 2 (unresolvable `wiki_root`) → consumers drop to the deterministic floor silently. A search error NEVER aborts the consuming operation. |
 
 ### Consumers

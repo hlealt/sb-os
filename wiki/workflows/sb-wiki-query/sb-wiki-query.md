@@ -255,7 +255,7 @@ End of flow.
 | Step 2 leaf index file missing for a `candidate-type` (floor branch only — the tier-available branch never reads leaf indexes) | Skip that leaf for indexed scoring; rely on the grep floor in step 3. Capture in answer if no other leaves contribute matches. |
 | Step 3 returns zero hits across the active retrieval path AND `raw/` | Proceed to step 5 with the empty-evidence answer template ("No wiki pages match this question — answer cannot be synthesized from the current wiki content."). Step 6 still presents the file-back menu; if the user files-back, step 7 writes a stub-shaped page (no inline citations). Step 6m ALSO fires here (genuine miss) — offer to register the question as an open `questions.md` entry. |
 | `sb-wiki-search.py` unavailable (missing, non-zero exit, runtime error) — at probe time OR mid-run | Drop to the deterministic floor silently per Retrieval Tiers: keep whatever deterministic picks step 2 produced; if `picks` is empty, run the step-3 keyword grep. NEVER abort the query. |
-| `VOYAGE_API_KEY` unset | The helper runs in FTS5-only keyword mode — still a valid tier; no behavior change in this workflow. |
+| Voyage key unavailable (no `VOYAGE_API_KEY` env var, no `.user/config/env/.env` entry) | The helper runs in FTS5-only keyword mode — still a valid tier; no behavior change in this workflow. |
 | `ripgrep` (`rg`) not installed | Fall back to `grep -r` for the step 3 floor. Both must be exhausted before declaring zero hits. |
 | Wikilink target in step 4 missing (broken link) | Skip the expansion silently; do NOT halt. The page is consulted only if it exists. |
 | User response at step 6 file-back menu ambiguous | Re-prompt with the same menu. Do NOT default to skip. |
