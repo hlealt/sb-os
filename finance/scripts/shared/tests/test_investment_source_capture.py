@@ -988,3 +988,373 @@ def test_cli_ext_json_flag(tmp_path):
     raw_dir = vault / "knowledge-base" / "raw" / "sec"
     assert len(list(raw_dir.glob("*.json"))) == 1
     assert list(raw_dir.glob("*.md")) == []
+
+
+# ---------------------------------------------------------------------------
+# (j) PDF manual captures — Raw PDF Title-Conformance + optional --pdf-text
+#     Added 2026-06-07. A --manual-file detected as PDF (.pdf extension or
+#     %PDF- magic bytes) is BINARY-COPIED to raw/{origin}/{title-slug}.pdf
+#     (no date prefix, --title required, collision-refused); --pdf-text
+#     writes a {title-slug}.md pypdf companion. Destination is the wiki raw
+#     file store — the "schema" asserted here is the naming convention
+#     (tool_schema_check targets CSV/JSON stores and does not apply).
+# ---------------------------------------------------------------------------
+
+# Binary PDF bytes containing a non-UTF-8 sequence (0xE2 — the byte from the
+# observed UnicodeDecodeError) so the legacy read_text path would crash on it.
+_PDF_BYTES = b"%PDF-1.6\n%\xe2\xe3\xcf\xd3\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n"
+
+
+def _make_pdf(tmp_path: Path, name: str = "report.pdf") -> Path:
+    pdf = tmp_path / name
+    pdf.write_bytes(_PDF_BYTES)
+    return pdf
+
+
+def test_manual_pdf_binary_copy_title_slug(tmp_path):
+    vault = _make_vault(tmp_path)
+    pdf = _make_pdf(tmp_path)
+
+    with patch("httpx.get") as mock_get:
+        result = capture(
+            url="https://www.cms.gov/files/highlights.pdf",
+            origin="cms",
+            mode="manual",
+            title="Personal health care spending by age and sex: 2020 highlights",
+            thesis="health-longevity-spend",
+            vault_root=vault,
+            dry_run=False,
+            gated=False,
+            gated_why="",
+            manual_file=pdf,
+        )
+        mock_get.assert_not_called()
+
+    assert result["state"] == "captured_to_raw"
+    assert result["format"] == "pdf"
+    saved = Path(result["saved_paths"][0])
+    # Title-slug name, no date prefix, inside raw/cms/
+    assert saved.name == "personal-health-care-spending-by-age-and-sex-2020-highlights.pdf"
+    assert "cms" in saved.parts
+    # Binary copy is byte-identical — read_text would have crashed on 0xE2
+    assert saved.read_bytes() == _PDF_BYTES
+    assert result["bytes"] == len(_PDF_BYTES)
+
+
+@pytest.mark.parametrize("mode", ["manual", "browser"])
+def test_manual_pdf_magic_bytes_detection(tmp_path, mode):
+    # A PDF mislabeled .md is detected by %PDF- magic bytes and routed to the
+    # binary path — never through read_text (the UnicodeDecodeError crash).
+    vault = _make_vault(tmp_path)
+    mislabeled = tmp_path / "actually-a-pdf.md"
+    mislabeled.write_bytes(_PDF_BYTES)
+
+    result = capture(
+        url="https://example.com/report",
+        origin="example",
+        mode=mode,
+        title="Mislabeled Report",
+        thesis=None,
+        vault_root=vault,
+        dry_run=False,
+        gated=False,
+        gated_why="",
+        manual_file=mislabeled,
+    )
+
+    assert result["state"] == "captured_to_raw"
+    saved = Path(result["saved_paths"][0])
+    assert saved.name == "mislabeled-report.pdf"
+    assert saved.read_bytes() == _PDF_BYTES
+
+
+def test_manual_pdf_requires_title(tmp_path):
+    vault = _make_vault(tmp_path)
+    pdf = _make_pdf(tmp_path)
+
+    result = capture(
+        url="https://example.com/report.pdf",
+        origin="example",
+        mode="manual",
+        title="",
+        thesis=None,
+        vault_root=vault,
+        dry_run=False,
+        gated=False,
+        gated_why="",
+        manual_file=pdf,
+    )
+
+    assert result["state"] == "blocked"
+    assert "--title" in result["error"]
+    # Usage-error blocked: registers nothing, writes nothing
+    assert not (vault / "knowledge-base" / "source-queue.md").exists()
+    raw_dir = vault / "knowledge-base" / "raw" / "example"
+    assert not raw_dir.exists() or list(raw_dir.iterdir()) == []
+
+
+def test_manual_pdf_collision_refused(tmp_path):
+    vault = _make_vault(tmp_path)
+    pdf = _make_pdf(tmp_path)
+    raw_dir = vault / "knowledge-base" / "raw" / "example"
+    raw_dir.mkdir(parents=True)
+    existing = raw_dir / "my-report.pdf"
+    original = b"%PDF-1.4\nORIGINAL\n%%EOF\n"
+    existing.write_bytes(original)
+
+    result = capture(
+        url="https://example.com/report.pdf",
+        origin="example",
+        mode="manual",
+        title="My Report",
+        thesis=None,
+        vault_root=vault,
+        dry_run=False,
+        gated=False,
+        gated_why="",
+        manual_file=pdf,
+    )
+
+    assert result["state"] == "blocked"
+    assert "collision" in result["error"]
+    # NEVER overwritten — byte-identical original
+    assert existing.read_bytes() == original
+
+
+def test_manual_pdf_dry_run_writes_nothing(tmp_path):
+    vault = _make_vault(tmp_path)
+    pdf = _make_pdf(tmp_path)
+
+    result = capture(
+        url="https://example.com/report.pdf",
+        origin="example",
+        mode="manual",
+        title="Dry Run Report",
+        thesis=None,
+        vault_root=vault,
+        dry_run=True,
+        gated=False,
+        gated_why="",
+        manual_file=pdf,
+        pdf_text=True,
+    )
+
+    assert result["state"] == "approved_for_capture"
+    assert result["dry_run"] is True
+    raw_dir = vault / "knowledge-base" / "raw" / "example"
+    assert not raw_dir.exists() or list(raw_dir.iterdir()) == []
+
+
+def test_manual_pdf_text_companion_written(tmp_path):
+    vault = _make_vault(tmp_path)
+    pdf = _make_pdf(tmp_path)
+    body = "Health spending by age group. " * 20  # > _PDF_TEXT_MIN_CHARS
+
+    with patch("investment_source_capture._extract_pdf_text", return_value=(body, "")):
+        result = capture(
+            url="https://example.com/report.pdf",
+            origin="example",
+            mode="manual",
+            title="Spending Report",
+            thesis=None,
+            vault_root=vault,
+            dry_run=False,
+            gated=False,
+            gated_why="",
+            manual_file=pdf,
+            pdf_text=True,
+        )
+
+    assert result["state"] == "captured_to_raw"
+    assert len(result["saved_paths"]) == 2
+    companion = Path(result["saved_paths"][1])
+    assert companion.name == "spending-report.md"
+    content = companion.read_text(encoding="utf-8")
+    # Provenance header + extracted text; extracted text never in the JSON
+    assert content.startswith("<!-- text extracted from spending-report.pdf")
+    assert body in content
+    assert body not in json.dumps(result)
+
+
+def test_manual_pdf_text_near_empty_warns_no_companion(tmp_path):
+    vault = _make_vault(tmp_path)
+    pdf = _make_pdf(tmp_path)
+
+    with patch("investment_source_capture._extract_pdf_text", return_value=("scan", "")):
+        result = capture(
+            url="https://example.com/report.pdf",
+            origin="example",
+            mode="manual",
+            title="Scanned Report",
+            thesis=None,
+            vault_root=vault,
+            dry_run=False,
+            gated=False,
+            gated_why="",
+            manual_file=pdf,
+            pdf_text=True,
+        )
+
+    assert result["state"] == "captured_to_raw"
+    assert "transform_warning" in result
+    assert len(result["saved_paths"]) == 1  # PDF only — no husk companion
+    raw_dir = vault / "knowledge-base" / "raw" / "example"
+    assert list(raw_dir.glob("*.md")) == []
+
+
+def test_manual_pdf_text_extraction_failure_never_blocks_capture(tmp_path):
+    vault = _make_vault(tmp_path)
+    pdf = _make_pdf(tmp_path)
+
+    with patch("investment_source_capture._extract_pdf_text",
+               return_value=("", "pypdf extraction failed: boom")):
+        result = capture(
+            url="https://example.com/report.pdf",
+            origin="example",
+            mode="manual",
+            title="Broken Extract",
+            thesis=None,
+            vault_root=vault,
+            dry_run=False,
+            gated=False,
+            gated_why="",
+            manual_file=pdf,
+            pdf_text=True,
+        )
+
+    assert result["state"] == "captured_to_raw"  # capture itself succeeded
+    assert result["transform_error"] == "pypdf extraction failed: boom"
+    assert len(result["saved_paths"]) == 1
+    assert Path(result["saved_paths"][0]).exists()
+
+
+def test_manual_pdf_text_real_pypdf_blank_page(tmp_path):
+    # Real pypdf round-trip: a generated blank-page PDF extracts near-empty →
+    # warning path, no companion. Exercises the real lazy import.
+    pypdf = pytest.importorskip("pypdf")
+    vault = _make_vault(tmp_path)
+    pdf = tmp_path / "blank.pdf"
+    writer = pypdf.PdfWriter()
+    writer.add_blank_page(width=612, height=792)
+    with pdf.open("wb") as fh:
+        writer.write(fh)
+
+    result = capture(
+        url="https://example.com/blank.pdf",
+        origin="example",
+        mode="manual",
+        title="Blank Page Document",
+        thesis=None,
+        vault_root=vault,
+        dry_run=False,
+        gated=False,
+        gated_why="",
+        manual_file=pdf,
+        pdf_text=True,
+    )
+
+    assert result["state"] == "captured_to_raw"
+    assert "transform_warning" in result
+    assert (vault / "knowledge-base" / "raw" / "example" / "blank-page-document.pdf").exists()
+
+
+def test_manual_pdf_text_flag_ignored_on_non_pdf(tmp_path):
+    vault = _make_vault(tmp_path)
+    page = tmp_path / "page.md"
+    page.write_text("A saved landing page.", encoding="utf-8")
+
+    result = capture(
+        url="https://example.com/page",
+        origin="example",
+        mode="manual",
+        title="Landing Page",
+        thesis=None,
+        vault_root=vault,
+        dry_run=False,
+        gated=False,
+        gated_why="",
+        manual_file=page,
+        pdf_text=True,
+    )
+
+    assert result["state"] == "captured_to_raw"
+    assert result["pdf_text"] == "ignored (manual file is not a PDF)"
+    saved = Path(result["saved_paths"][0])
+    assert saved.suffix == ".md"
+    assert saved.name.startswith("20")  # legacy date-prefixed name unchanged
+
+
+def test_manual_md_legacy_json_shape_unchanged(tmp_path):
+    # C4 regression guard: without --pdf-text, a landing-page manual capture
+    # returns EXACTLY the legacy key set — no new keys leak in.
+    vault = _make_vault(tmp_path)
+    page = tmp_path / "page.md"
+    page.write_text("A saved landing page.", encoding="utf-8")
+
+    result = capture(
+        url="https://example.com/page",
+        origin="example",
+        mode="manual",
+        title="Landing Page",
+        thesis=None,
+        vault_root=vault,
+        dry_run=False,
+        gated=False,
+        gated_why="",
+        manual_file=page,
+    )
+
+    assert set(result.keys()) == {
+        "state", "url", "title", "origin", "related_thesis",
+        "saved_paths", "bytes", "manual_source", "dry_run",
+    }
+
+
+def test_title_slug_conformance_examples():
+    # The four documented examples from naming-convention.md § Title-slug algorithm.
+    _title_slug = sys.modules["investment_source_capture"]._title_slug
+    assert _title_slug("International AI Safety Report 2026") == \
+        "international-ai-safety-report-2026"
+    assert _title_slug("You Only Look Once: Unified, Real-Time Object Detection") == \
+        "you-only-look-once-unified-real-time-object-detection"
+    assert _title_slug('Is there "Secret Sauce" in Large Language Model Development?') == \
+        "is-there-secret-sauce-in-large-language-model-development"
+    assert _title_slug("Machine Learning: The High-Interest Credit Card of Technical Debt") == \
+        "machine-learning-the-high-interest-credit-card-of-technical-debt"
+
+
+def test_cli_pdf_text_flag_end_to_end(tmp_path):
+    vault = _make_vault(tmp_path)
+    pdf = _make_pdf(tmp_path)
+    body = "Extracted body text. " * 20
+
+    with patch("investment_source_capture._extract_pdf_text", return_value=(body, "")):
+        exit_code = main([
+            "--url", "https://www.cms.gov/files/highlights.pdf",
+            "--origin", "cms",
+            "--mode", "manual",
+            "--manual-file", str(pdf),
+            "--title", "CLI PDF Capture",
+            "--pdf-text",
+            "--vault-root", str(vault),
+        ])
+
+    assert exit_code == 0
+    raw_dir = vault / "knowledge-base" / "raw" / "cms"
+    assert (raw_dir / "cli-pdf-capture.pdf").exists()
+    assert (raw_dir / "cli-pdf-capture.md").exists()
+
+
+def test_cli_pdf_missing_title_exits_one(tmp_path):
+    vault = _make_vault(tmp_path)
+    pdf = _make_pdf(tmp_path)
+
+    exit_code = main([
+        "--url", "https://example.com/report.pdf",
+        "--origin", "example",
+        "--mode", "manual",
+        "--manual-file", str(pdf),
+        "--vault-root", str(vault),
+    ])
+
+    assert exit_code == 1

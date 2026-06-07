@@ -10,12 +10,24 @@ CLI:
         [--manual-file PATH]
         [--no-curl-fallback]
         [--ext md|html|json]
+        [--pdf-text]
         [--dry-run]
 
 --ext overrides the saved-file extension for markdown mode and manual/browser
 saves (default md). Use --ext json to capture XBRL companyfacts JSON data
 artifacts (consumed by investment_financials_extract). html-archive/both .html
 output is unaffected by --ext.
+
+Manual/browser PDF handling: a --manual-file detected as a PDF (.pdf extension
+or %PDF- magic bytes) is BINARY-COPIED to raw/{origin}/{title-slug}.pdf per the
+wiki Raw PDF Title-Conformance rule — title-slug filename derived from --title
+(REQUIRED for PDF captures), no date prefix, and an existing {title-slug}.pdf
+is NEVER overwritten (state=blocked collision error instead). --pdf-text
+additionally writes a {title-slug}.md text companion extracted via pypdf
+(optional dependency) so a text raw exists for grep-based ingest verification;
+an extraction failure or near-empty result is surfaced in the JSON
+(transform_error / transform_warning) and never blocks the PDF capture itself.
+--ext does not apply to PDF saves.
 
 Returns a metadata summary only — never dumps fetched text into stdout.
 Honors the 6-state source lifecycle:
@@ -53,6 +65,8 @@ Fetch modes:
     both          — save as .md AND .html
     browser       — no fetch; saves the user-fetched file passed via --manual-file
     manual        — no fetch; saves the user-fetched file passed via --manual-file
+                    (both: a PDF --manual-file is binary-copied to
+                    {title-slug}.pdf — see PDF handling above)
 
 Exit 0 = success (captured or dry-run).
 Exit 1 = error (bad args, fetch failed, unknown origin, etc.).
@@ -113,6 +127,151 @@ def _filename(title: str, url: str, ext: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Manual PDF capture (Raw PDF Title-Conformance)
+# ---------------------------------------------------------------------------
+
+# wiki/workflows/shared/naming-convention.md § Title-slug algorithm: lowercase;
+# each run of whitespace and + / : – — becomes a single "-"; remaining
+# punctuation is removed; consecutive "-" collapse. The canonical PDF filename
+# is {title-slug}.pdf — NO date prefix (unlike the date-prefixed fetch-mode
+# saves produced by _filename above).
+_TITLE_HYPHEN_RE = re.compile(r"[\s+/:–—]+")
+_TITLE_DROP_RE = re.compile(r"[^a-z0-9-]")
+
+# Below this many extracted characters the PDF is treated as scanned/image-only
+# and the --pdf-text companion is NOT written (a husk would let grep-based
+# ingest verification pass on nothing).
+_PDF_TEXT_MIN_CHARS = 200
+
+
+def _title_slug(title: str) -> str:
+    """Kebab-slug of a document title per the Raw PDF Title-Conformance rule."""
+    s = _TITLE_HYPHEN_RE.sub("-", title.lower())
+    s = _TITLE_DROP_RE.sub("", s)
+    return re.sub(r"-{2,}", "-", s).strip("-")
+
+
+def _is_pdf(path: Path) -> bool:
+    """Detect a PDF by .pdf extension OR %PDF- magic bytes (mislabeled files)."""
+    if path.suffix.lower() == ".pdf":
+        return True
+    try:
+        with path.open("rb") as fh:
+            return fh.read(5) == b"%PDF-"
+    except OSError:
+        return False
+
+
+def _extract_pdf_text(src: Path) -> tuple[str, str]:
+    """Return (extracted_text, error). pypdf is a lazy optional dependency."""
+    try:
+        from pypdf import PdfReader  # type: ignore
+    except ImportError:
+        return "", "pypdf is required for --pdf-text. Install it: pip install pypdf"
+    try:
+        reader = PdfReader(str(src))
+        return "\n\n".join(page.extract_text() or "" for page in reader.pages), ""
+    except Exception as exc:
+        return "", f"pypdf extraction failed: {exc}"
+
+
+def _capture_manual_pdf(
+    *,
+    src: Path,
+    url: str,
+    origin: str,
+    title: str,
+    thesis: Optional[str],
+    raw_dir: Path,
+    dry_run: bool,
+    pdf_text: bool,
+) -> dict:
+    """Binary-copy a user-fetched PDF into raw/{origin}/{title-slug}.pdf.
+
+    Raw PDF Title-Conformance: the filename is the kebab-slug of the document's
+    printed title (--title REQUIRED), no date prefix, and an existing
+    {title-slug}.pdf is NEVER overwritten (duplicate raw — merge/delete via
+    lint). --pdf-text writes a {title-slug}.md text companion (pypdf) so a text
+    raw exists for grep-based ingest verification; transform problems are
+    surfaced in the result, never fatal to the PDF capture.
+    """
+    if not title:
+        return {
+            "state": "blocked",
+            "url": url,
+            "origin": origin,
+            "error": (
+                "PDF manual capture requires --title: the raw filename MUST be "
+                "the kebab-slug of the document's printed title (Raw PDF "
+                'Title-Conformance). Re-run with --title "<document title>".'
+            ),
+        }
+    slug = _title_slug(title)
+    if not slug:
+        return {
+            "state": "blocked",
+            "url": url,
+            "origin": origin,
+            "error": f"--title {title!r} yields an empty title-slug; pass the document's printed title.",
+        }
+    dest = raw_dir / f"{slug}.pdf"
+    if dest.exists():
+        return {
+            "state": "blocked",
+            "url": url,
+            "origin": origin,
+            "error": (
+                f"collision: {dest} already exists — raw PDFs are never "
+                "overwritten (duplicate raw; ingest halts, lint flags for merge/delete)."
+            ),
+        }
+    size = src.stat().st_size
+    if not dry_run:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, dest)
+    result = {
+        "state": "captured_to_raw" if not dry_run else "approved_for_capture",
+        "url": url,
+        "title": title,
+        "origin": origin,
+        "related_thesis": thesis,
+        "saved_paths": [str(dest)],
+        "bytes": size,
+        "format": "pdf",
+        "manual_source": str(src),
+        "dry_run": dry_run,
+    }
+    if pdf_text:
+        companion = raw_dir / f"{slug}.md"
+        if companion.exists():
+            result["transform_error"] = (
+                f"companion exists, not overwritten: {companion}"
+            )
+            return result
+        text, transform_error = _extract_pdf_text(src)
+        if transform_error:
+            result["transform_error"] = transform_error
+            return result
+        stripped = text.strip()
+        if len(stripped) < _PDF_TEXT_MIN_CHARS:
+            result["transform_warning"] = (
+                f"extracted text is near-empty ({len(stripped)} chars < "
+                f"{_PDF_TEXT_MIN_CHARS}) — likely a scanned/image PDF; "
+                "companion NOT written"
+            )
+            return result
+        header = (
+            f"<!-- text extracted from {slug}.pdf by pypdf for grep-based "
+            f"ingest verification; captured {date.today().isoformat()} "
+            f"from {url} -->\n\n"
+        )
+        n = _save(companion, header + text, dry_run)
+        result["saved_paths"].append(str(companion))
+        result["bytes"] += n
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Source-queue registration (gated + blocked lifecycle states)
 # ---------------------------------------------------------------------------
 
@@ -155,6 +314,7 @@ def _register_queue_entry(
     manual_hint = (
         f"fetch manually and re-run the tool with "
         f"--mode manual --manual-file <path> --origin {origin}"
+        f' (PDFs: add --title "<printed title>"; optional --pdf-text text companion)'
     )
     lines = [
         f"\n## {state} — {date.today().isoformat()}\n",
@@ -286,6 +446,7 @@ def capture(
     manual_file: Optional[Path] = None,
     curl_fallback: bool = True,
     ext: str = "md",
+    pdf_text: bool = False,
 ) -> dict:
     """Capture a source and return a metadata summary dict.
 
@@ -417,12 +578,23 @@ def capture(
                 "origin": origin,
                 "error": f"--manual-file not found: {src}",
             }
+        if _is_pdf(src):
+            return _capture_manual_pdf(
+                src=src,
+                url=url,
+                origin=origin,
+                title=title,
+                thesis=thesis,
+                raw_dir=raw_dir,
+                dry_run=dry_run,
+                pdf_text=pdf_text,
+            )
         body = src.read_text(encoding="utf-8")
         resolved_title = title or _extract_title(body) or url
         fname = _filename(resolved_title, url, ext)
         dest = raw_dir / fname
         n = _save(dest, body, dry_run)
-        return {
+        result = {
             "state": "captured_to_raw" if not dry_run else "approved_for_capture",
             "url": url,
             "title": resolved_title,
@@ -433,6 +605,9 @@ def capture(
             "manual_source": str(src),
             "dry_run": dry_run,
         }
+        if pdf_text:
+            result["pdf_text"] = "ignored (manual file is not a PDF)"
+        return result
 
     return {
         "state": "blocked",
@@ -484,6 +659,13 @@ def _build_parser() -> argparse.ArgumentParser:
              "(default md; use json for XBRL companyfacts data artifacts). "
              "Does not affect html-archive/both .html output.",
     )
+    p.add_argument(
+        "--pdf-text",
+        action="store_true",
+        help="For a PDF --manual-file: also write a {title-slug}.md text companion "
+             "extracted via pypdf (optional dependency) beside the PDF, for "
+             "grep-based ingest verification. Ignored for non-PDF captures.",
+    )
     p.add_argument("--gated", action="store_true", help="Declare source gated (no fetch; register only)")
     p.add_argument("--gated-why", default="(not specified)", help="Why this source matters (for source-queue.md)")
     return p
@@ -515,6 +697,7 @@ def main(argv: list[str] | None = None) -> int:
         manual_file=Path(args.manual_file) if args.manual_file else None,
         curl_fallback=not args.no_curl_fallback,
         ext=args.ext,
+        pdf_text=args.pdf_text,
     )
 
     # Print metadata summary only — never the fetched content
