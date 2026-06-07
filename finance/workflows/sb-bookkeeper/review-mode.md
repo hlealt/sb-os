@@ -104,7 +104,7 @@ Present items batch-by-batch (5–7 per batch), one item per row, following `bat
   4. Applying a resolution via an unregistered ad-hoc script is a tools-only-invariant violation — if no write tool exists for the needed mutation, that is a Rule B deviation (missing write capability → `tool-builder`).
   - The underlying lib functions (`lib.queue.apply_pass_1_resolution`, `lib.queue.apply_pass_3_resolution`) are the mechanism the tool uses internally; they are NOT a direct agent-facing apply path.
 
-- **Supplier config changes (canonical rename, alias edits)** → use `rename_canonical` tool (`migrations/rename_canonical.py`).
+- **Supplier config changes (canonical rename, alias edits)** → use `rename_canonical` tool (`migrations/rename_canonical.py`). When already-stamped rows on closed months must be brought current with a config-side canonical fix (casing-duplicate merges), use the bulk `restamp_supplier_canonical` tool (`migrations/restamp_supplier_canonical.py`) instead of per-row resolutions.
 - **Tag changes on the namespace** → use `rename_tags` tool (`migrations/rename_tags.py`) or `lib.tags.accept_tag` / `merge_tag` / `reject_tag` + `lib.tags.save_tags` for within-session tag-state edits that do not require a durable retro-rewrite.
 - **New category creation** → update `{CONFIG_DIR}/categories.json` directly (config file, not a ledger row — direct edit is permitted).
 - `data_caixa` is NEVER mutable — the `apply_review_resolution` tool hard-rejects any attempt to set it.

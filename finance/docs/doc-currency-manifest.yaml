@@ -138,6 +138,7 @@ couplings:
       - "scripts/migrations/rename_canonical.py"
       - "scripts/migrations/merge_categories.py"
       - "scripts/migrations/apply_review_resolution.py"
+      - "scripts/migrations/restamp_supplier_canonical.py"
       - "scripts/investimentos/investment_source_capture.py"
       - "scripts/investimentos/investment_financials_extract.py"
       - "scripts/investimentos/market_price.py"

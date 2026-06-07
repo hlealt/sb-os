@@ -137,6 +137,21 @@ When in doubt, classify as **blocking** — surfacing too much beats shipping a 
 2. **Do not block the current step.** Continue.
 3. **At the end of the interaction, surface the deferred list to the user** so nothing dies silently; the user decides whether to act now or later.
 
+### Manual-bridge handoff (blocked / gated sources)
+
+Fires whenever THIS session registers a `blocked` or `gated_pending_access` source — a failed capture, a `--gated` registration, a discovery wave deferring a gated candidate — or offers the manual path. At BOTH points — the checkpoint that surfaces the issue AND the end-of-interaction deferred-list surfacing (step 3 above) — present, WITHOUT the user asking, one ready-to-act block per source:
+
+```
+**{title}**
+{url}
+format: PDF expected → lands as raw/{origin}/{title-slug}.pdf (--title required; --pdf-text adds a text companion)
+        page/text  → lands date-prefixed in raw/{origin}/
+→ Save it anywhere and give me the path. I re-run:
+  investment_source_capture --mode manual --manual-file <path> --origin {origin} --title "{title}" [--pdf-text]
+```
+
+Render the `format:` line for the source's expected format only. A session that ends with an in-session `blocked`/`gated_pending_access` row presented WITHOUT this block has violated this rule. `{wiki_root}/source-queue.md` remains the durable record (its `required_user_action` field carries the same how-to); this block is the CHAT-time surfacing that stops the user having to ask "give me the links to capture manually".
+
 ---
 
 ## B6 Policy thin mode (inline)

@@ -217,7 +217,11 @@ def print_impact_report(report: ImpactReport, *, applying: bool) -> None:
 
 
 def _backup_token() -> str:
-    return _dt.datetime.now().strftime("%Y%m%dT%H%M%S")
+    # Microsecond resolution: back-to-back runs in the same second must NEVER
+    # share backup/manifest names — a shared token lets a later run overwrite
+    # an earlier run's .bak files and rollback manifest (observed 2026-06-07,
+    # 4 restamp applies in one second).
+    return _dt.datetime.now().strftime("%Y%m%dT%H%M%S%f")
 
 
 def backup_path_for(target: Path, token: str) -> Path:

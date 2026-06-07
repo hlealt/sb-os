@@ -576,3 +576,16 @@ canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/fechamento/{YYYY
 dry_run: not-applicable
 last_validated: 2026-06-06
 ```
+
+```yaml
+tool: restamp_supplier_canonical (python migrations/restamp_supplier_canonical.py --from "Old" --to "New" [--months YYYY-MM,YYYY-MM] [--apply] [--rollback TOKEN])
+purpose: Bulk re-stamp of the supplier_canonical column across closed fechamento months — rewrites every transactions.csv row whose supplier_canonical exactly equals --from to --to, for casing-duplicate canonical merges where a config-side fix (rename_canonical / standing-rules name_canonicalization exceptions) corrects future closes but leaves already-stamped derived rows split across two spend buckets. Refuses any --to the live name-canonicalization pipeline would not itself stamp (convergence guard: a later categorize.py regeneration produces the same value). Touches ONLY supplier_canonical; data_caixa and every other column preserved.
+owner_script: migrations/restamp_supplier_canonical.py
+class: write
+use: retro-rewrite
+expected_inputs: --from "Old value" and --to "New value" (required; exact match, --to must resolve from a suppliers.json canonical through the live name_canonicalization standing rule); optional --months comma-separated scope (default all fechamento months); --apply to execute (DRY-RUN is the DEFAULT); --rollback TOKEN to undo; env overrides BOOKKEEPER_ROOT / BOOKKEEPER_CONFIG_DIR / BOOKKEEPER_LEDGER_DIR; reads suppliers.json + standing-rules.yaml (live-canonical validation) and the scoped transactions.csv files
+outputs: Fix-impact preview with per-month matched-row counts BEFORE any write; blocking refusal (exit 1) when --from == --to or --to is not a live canonical form; advisory warning when --from is itself still a live form; under --apply rewrites each affected transactions.csv atomically (safe_write), backs each up to a microsecond-timestamped .bak (back-to-back runs never share tokens), persists a rollback manifest to corrections/.rollback/, and emits one ledger_write audit event per written file (fail-soft). Dry-run writes NOTHING.
+canonical_reader_writer: overwrites .user/finance/bookkeeper/ledgers/fechamento/{YYYY-MM}/transactions.csv (supplier_canonical column only)
+dry_run: default
+last_validated: 2026-06-07
+```
