@@ -75,7 +75,7 @@ created: <today YYYY-MM-DD>
 last-touched: <today YYYY-MM-DD>
 related:
   - "[[<sibling-thesis-or-triggering-page>.md]]"
-tags: []
+tags: [thesis]
 status: seed | developing | active | rejected | archived
 conviction: low | medium | high
 time_horizon: short | medium | long

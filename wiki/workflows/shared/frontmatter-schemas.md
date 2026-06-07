@@ -11,11 +11,15 @@ created: YYYY-MM-DD
 last-touched: YYYY-MM-DD
 related:
   - "[[other-page.md]]"
-tags: []
+tags: [<type>]
 ---
 ```
 
-`tags` is optional and free-form. `related` uses quoted wikilinks.
+`tags` MUST include the page's `type:` value as one entry (a concept page carries `concept`, a thesis page `thesis`, …) — Obsidian graph groups color by `tag:`, not by frontmatter fields. Write it at page creation; `/sb-wiki-lint`'s type-tag sync enforces it (append-only — user tags are free-form and always preserved). `related` uses quoted wikilinks.
+
+## Index files — `type: index`
+
+Every agent-maintained index file (wiki leaf indexes, per-kind subfolder indexes, type-folder routers, `wiki/sources/{origin}/{origin}.md`) carries `type: index` + `tags: [index]`. Not a synthesis page type — excluded from stub/orphan/page-type checks. `created`/`related` are not required on index files.
 
 ## Concept — adds `kind`
 

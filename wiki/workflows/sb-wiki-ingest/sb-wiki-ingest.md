@@ -158,7 +158,7 @@ raw: "[[<raw-filename>]]"
 url: <source URL if present in raw>
 author: <author if present in raw>
 related: []
-tags: []
+tags: [source]
 ---
 ```
 

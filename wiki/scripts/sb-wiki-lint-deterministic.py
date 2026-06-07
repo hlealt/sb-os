@@ -184,6 +184,97 @@ def sync_wiki_leaf_headers_and_queue(wiki_root: Path, report: Report, apply_chan
             )
 
 
+NON_PAGE_TYPES = {"purpose", "questions", "questions-index", "source-queue"}
+
+
+def _parse_inline_tags(value: str) -> list[str]:
+    inner = value.strip()
+    if inner.startswith("[") and inner.endswith("]"):
+        inner = inner[1:-1]
+    return [item.strip().strip("\"'") for item in inner.split(",") if item.strip().strip("\"'")]
+
+
+def sync_type_tags(wiki_root: Path, report: Report, apply_changes: bool) -> None:
+    """Ensure every wiki page carries its `type:` value as a frontmatter tag.
+
+    Deterministic: the tag IS the type value — no judgment. Leaf/router indexes
+    (stem == parent dir name) missing `type:` get `type: index`. Pages with no
+    frontmatter and no deterministic type are reported, never guessed.
+    """
+    wiki_dir = wiki_root / "wiki"
+    if not wiki_dir.exists():
+        return
+    tags_added = 0
+    type_index_added = 0
+    unresolved: list[str] = []
+    for page in sorted(wiki_dir.rglob("*.md")):
+        rel = page.relative_to(wiki_root)
+        if excluded_dir(rel) or page.name in NON_SOURCE_FILES:
+            continue
+        raw_text = read_text(page)
+        bom = "﻿" if raw_text.startswith("﻿") else ""
+        text = raw_text[len(bom) :]
+        rel_str = str(rel).replace("\\", "/")
+        is_index = page.stem == page.parent.name
+        fm_match = re.match(r"^---[ \t]*\n(.*?)\n---[ \t]*\n", text, flags=re.S)
+        if not fm_match:
+            if is_index:
+                new_text = f"{bom}---\ntype: index\ntags: [index]\n---\n\n{text}"
+                write_text(page, new_text, report, apply_changes)
+                type_index_added += 1
+                tags_added += 1
+            else:
+                unresolved.append(f"{rel_str}: no frontmatter and type not deterministic")
+            continue
+        fm_text = fm_match.group(1)
+        type_match = re.search(r"^type:\s*(\S+)\s*$", fm_text, flags=re.M)
+        if type_match:
+            type_val = type_match.group(1).strip().strip("\"'")
+        elif is_index:
+            type_val = "index"
+            fm_text = f"type: index\n{fm_text}"
+            type_index_added += 1
+        else:
+            unresolved.append(f"{rel_str}: missing type: and not an index file")
+            continue
+        if type_val in NON_PAGE_TYPES:
+            continue
+        tags_match = re.search(r"^tags:[ \t]*(.*)$", fm_text, flags=re.M)
+        if tags_match:
+            value = tags_match.group(1).strip()
+            if value:  # inline form: tags: [...] or tags: a
+                items = _parse_inline_tags(value)
+                if type_val not in items:
+                    items.append(type_val)
+                    new_line = "tags: [" + ", ".join(items) + "]"
+                    fm_text = fm_text[: tags_match.start()] + new_line + fm_text[tags_match.end() :]
+                    tags_added += 1
+            else:  # block form: tags: followed by "- item" lines (or nothing)
+                rest = fm_text[tags_match.end() :]
+                block_match = re.match(r"((?:\n[ \t]+-[ \t]*\S[^\n]*)*)", rest)
+                block = block_match.group(1) if block_match else ""
+                items = [
+                    line.strip().lstrip("-").strip().strip("\"'")
+                    for line in block.splitlines()
+                    if line.strip().startswith("-")
+                ]
+                if type_val not in items:
+                    insert_at = tags_match.end() + len(block)
+                    fm_text = fm_text[:insert_at] + f"\n  - {type_val}" + fm_text[insert_at:]
+                    tags_added += 1
+        else:
+            fm_text = fm_text + f"\ntags: [{type_val}]"
+            tags_added += 1
+        new_text = f"{bom}---\n{fm_text}\n---\n" + text[fm_match.end() :]
+        if new_text != raw_text:
+            write_text(page, new_text, report, apply_changes)
+    report.detected["type_tags"] = {
+        "tags_added": tags_added,
+        "type_index_added": type_index_added,
+        "unresolved": unresolved,
+    }
+
+
 def section_body(text: str, heading: str) -> str:
     pattern = re.compile(rf"^##+\s+{re.escape(heading)}\s*$", flags=re.M)
     match = pattern.search(text)
@@ -1038,6 +1129,7 @@ def main() -> int:
         report = Report(mode="apply" if args.apply else "check")
         sync_raw_indexes(wiki_root, report, args.apply)
         sync_wiki_leaf_headers_and_queue(wiki_root, report, args.apply)
+        sync_type_tags(wiki_root, report, args.apply)
         sync_source_my_take_and_queue(wiki_root, report, args.apply)
         detect_broken_wikilinks(wiki_root, report)
         detect_subdivision(wiki_root, report)

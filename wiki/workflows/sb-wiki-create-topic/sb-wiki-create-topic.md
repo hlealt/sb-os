@@ -78,7 +78,7 @@ last-touched: <today YYYY-MM-DD>
 related:
   - "[[<triggering-page-1>.md]]"
   - "[[<triggering-page-2>.md]]"
-tags: []
+tags: [topic]
 ---
 ```
 

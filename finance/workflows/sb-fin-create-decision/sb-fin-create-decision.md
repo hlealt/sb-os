@@ -71,7 +71,7 @@ created: <today YYYY-MM-DD>
 last-touched: <today YYYY-MM-DD>
 related:
   - "[[<related-thesis-or-entity>.md]]"
-tags: []
+tags: [decision]
 date: <decision date YYYY-MM-DD>
 decision_type: buy | sell | trim | add | hold | pass | reject | pause | review | rebalance
 related_thesis: "[[<thesis-slug>.md]]"

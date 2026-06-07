@@ -255,9 +255,11 @@ created: YYYY-MM-DD
 last-touched: YYYY-MM-DD
 related:
   - "[[other-page.md]]"
-tags: []                    # optional, free-form
+tags: [<type>]              # MUST include the page's `type:` value; further tags optional, free-form
 ---
 ```
+
+**Type tag (mandatory).** Every wiki page carries its `type:` value as an entry in `tags:` (a concept page carries `concept`, a thesis page `thesis`, an index file `index`, …). Rationale: Obsidian's graph-view groups color nodes by `tag:` but cannot key on an arbitrary frontmatter field — the type tag makes the page taxonomy visible and colorable in the graph. Page-creating workflows write it at birth; `/sb-wiki-lint` enforces it everywhere via the deterministic type-tag sync (auto-applied, see `/sb-wiki-lint` step 7). Additional user tags are free-form and always preserved — the sync only appends, never removes.
 
 ### Concept pages add
 ```yaml
@@ -281,6 +283,10 @@ Rationale: `read-date` is not used — `created` covers the same intent (ingest 
 
 ### Topic pages
 No additional frontmatter. While unpromoted, a topic candidate lives in `log.md` as a `candidate-topic` entry; once the page exists, that entry is removed (resolution = page exists).
+
+### `type: index` — agent-owned index files
+
+`type: index` is the frontmatter value for every agent-maintained index file: wiki leaf indexes (`concepts.md`, `entities.md`, `topics.md`, per-kind subfolder indexes), type-folder router indexes, and wiki sources origin indexes (`wiki/sources/{origin}/{origin}.md`). It is NOT a synthesis page type — index files are excluded from stub detection, orphan detection, and page-type section checks exactly as before. Index files carry the minimal frontmatter `type: index` + `tags: [index]` (the type-tag rule above applies — `index` is the tag); `created`/`related` are not required. `/sb-wiki-lint`'s type-tag sync adds this frontmatter to any index file missing it (an index file is deterministically recognizable: filename stem equals its parent directory name).
 
 ### `type: purpose` — non-page regulatory value
 
@@ -1004,7 +1010,7 @@ Before walking the tree, agents run this command from the vault root with the ac
 python {sb_os_path}/wiki/scripts/sb-wiki-lint-deterministic.py --apply --report {wiki_root}/lint-deterministic-report.json
 ```
 
-The script executes the deterministic halves of steps 1, 2, 4, 5, 6, 7, 7.5, 7.6, and 8 in one pass — index sync writes, stub/orphan/footnote-state detection, log prune-test (unknown types kept + reported), `questions.md` link check, PDF title-conformance detection, subdivision detection — and emits `judgment_needed`. The agent reads every queued item, reads the referenced file, and fills the required semantic index cell. Agents NEVER re-derive these detections via LLM file walks. Two additional surfaces: `--prune-log` executes the step-8 log prune (lint-contract-authorized); `--execute-renames <plan.json>` and `--execute-subdivision <plan.json>` are USER-GATED executors invoked only after a step-9 accept — `CLAUDE.md` routing rows and first-time router rewrites stay agent-applied (the script returns them as pending work, never editing CLAUDE.md itself). Report-key-to-step mapping: `sb-wiki-lint.md` § "Deterministic Helper".
+The script executes the deterministic halves of steps 1, 2, 4, 5, 6, 7, 7.5, 7.6, and 8 in one pass — index sync writes, type-tag sync (every page's `tags:` includes its `type:` value; index files missing `type:` get `type: index`), stub/orphan/footnote-state detection, log prune-test (unknown types kept + reported), `questions.md` link check, PDF title-conformance detection, subdivision detection — and emits `judgment_needed`. The agent reads every queued item, reads the referenced file, and fills the required semantic index cell. Agents NEVER re-derive these detections via LLM file walks. Two additional surfaces: `--prune-log` executes the step-8 log prune (lint-contract-authorized); `--execute-renames <plan.json>` and `--execute-subdivision <plan.json>` are USER-GATED executors invoked only after a step-9 accept — `CLAUDE.md` routing rows and first-time router rewrites stay agent-applied (the script returns them as pending work, never editing CLAUDE.md itself). Report-key-to-step mapping: `sb-wiki-lint.md` § "Deterministic Helper".
 
 | Step | Operation |
 |------|-----------|
@@ -1015,7 +1021,7 @@ The script executes the deterministic halves of steps 1, 2, 4, 5, 6, 7, 7.5, 7.6
 | 4 | Walk `log.md` — flag `candidate-topic` entries aged >30 days whose topic page does NOT yet exist (resolution = page exists, so a candidate with a live page is not "aging", it is spent and pruned at step 8) |
 | 5 | Walk all wiki pages — verify wikilinks resolve (broken if target file missing); collect broken links |
 | 6 | For each `wiki/sources/{origin}/` — re-sync `My take` column from each source page's `My take` section per the three-state rule (`pending` / `—` / reflected preview — see "Wiki sources index format" §); renumber footnotes (safe bijections only); REPORT unreferenced defs and set mismatches per "Citation format" § — stale-def removal is never auto-applied |
-| 7 | For each `raw/{origin}/` — verify `{origin}.md` index exists; if missing, create it with the standard `\| File \| Title \| Date \| Wiki \|` columns. For each raw file in `{origin}/`, ensure a row exists with `Wiki = No` (default) or `Yes/Partial` (preserved). Same for `raw/studies/studies.md`. **Index creation and maintenance is the agent's job**, not the user's. |
+| 7 | For each `raw/{origin}/` — verify `{origin}.md` index exists; if missing, create it with the standard `\| File \| Title \| Date \| Wiki \|` columns. For each raw file in `{origin}/`, ensure a row exists with `Wiki = No` (default) or `Yes/Partial` (preserved). Same for `raw/studies/studies.md`. **Index creation and maintenance is the agent's job**, not the user's. Also: **type-tag sync** (deterministic, auto-applied) — every page under `wiki/` gets its `type:` value appended to `tags:` when absent (append-only, user tags preserved); index files (stem = parent dir name) missing `type:` get `type: index` + `tags: [index]`; non-index pages with no resolvable `type:` are reported, never guessed. Per Frontmatter schemas § "Type tag (mandatory)". |
 | 7.5 | Folder-subdivision detection. For `wiki/concepts/` and `wiki/entities/`, group pages by `kind:` frontmatter. Surface kinds at ≥5 pages as a SUBDIVISION PROPOSAL block. Skip `wiki/topics/` (count <20) and `wiki/sources/` (already subdivided by origin). On user accept at step 9, the agent creates `{type}/{subfolder}/`, leaf index, parent CLAUDE.md marker-block routing rules, moves pages, and rewrites parent index as router. The folder structure and indexes are the record — NO log entry. Naming and policy per schema § "Folder subdivision". |
 | 7.6 | **PDF title-conformance detection.** For each PDF in `raw/{origin}/`, compare the stem to the kebab-slug of the raw index `Title` (Naming convention § "Raw PDF title-conformance"). Mismatch + no name collision → `rename-proposals` row; mismatch + `{title-slug}.pdf` already exists → `duplicate-raws` finding (no rename). Detection only — execution is USER-GATED at step 9, updating the full referrer set per "PDF title-conformance (lint)" below. Markdown sources exempt. |
 | 8 | Prune `log.md`: DELETE every `candidate-topic` / `candidate-mention` entry whose matching page now exists (resolution = page exists), and DELETE any retired history entries (`ingest`, `concept-created`, `entity-created`, `topic-created`, `topic-updated`, `topic-coverage-candidate`, `lint`, `query`). NO `lint` entry is written — findings live in the report only. `candidate-mention` entries with no matching page are NEVER auto-aged; they persist until the page exists or the user dismisses them. Entries of an UNKNOWN type (neither active nor retired) are KEPT and surfaced in the report for manual routing — never auto-deleted |
@@ -1035,6 +1041,7 @@ Candidate-topics aging without promotion (1): "mcp-debate" — logged 2026-04-12
 Broken wikilinks (0)
 Index sync — wiki/sources My take refreshed: 4 source pages
 Index sync — raw indexes: 1 created (raw/studies/studies.md), 3 rows added across raw/{origins}
+Type tags synced: 5 pages (type appended to tags), 1 index given type: index
 Footnotes renumbered: 2 source pages
 PDF renames proposed (N): <old>.pdf → <title-slug>.pdf, …
 Duplicate raws — title-slug already taken (N): <old>.pdf ≡ <existing>.pdf
