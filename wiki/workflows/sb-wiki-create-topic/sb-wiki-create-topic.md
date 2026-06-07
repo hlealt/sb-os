@@ -20,6 +20,7 @@ Read `3-resources/tools/sb-os/wiki/docs/wiki-schema.md` — Operations § "sb-wi
 |--------|------------|
 | `{wiki_root}` | Read from `sb-os.json` at vault root → `wiki_root` field. Resolve via `install/manifest.py` (`manifest.read(vault_root)`). Never hardcode. |
 | `{user_context_root}` | Read from `sb-os.json` → `user_context_root`. Never hardcode. |
+| `{sb_os_path}` | Read from `sb-os.json` → `sb_os_path` field. Never hardcode. |
 | `{wiki_root}/wiki/topics/` | Topic page tree. |
 | `{wiki_root}/wiki/topics/topics.md` | Topics leaf index. |
 | `{wiki_root}/log.md` | Actionable queue — `candidate-topic` + `candidate-mention` entries only. |
@@ -53,7 +54,7 @@ These files codify rules referenced across multiple `sb-wiki-*` workflows. Load 
 1. Determine the topic slug per `../shared/naming-convention.md` — `lowercase-kebab.md`. If invoked via user intent and the user phrasing is non-kebab (e.g., "MCP debate"), derive the slug as `mcp-debate`. If invoked mid-ingest, the slug is passed in by the caller.
 2. Verify the slug does NOT already exist as a topic page at `{wiki_root}/wiki/topics/{slug}.md`. If it exists, halt and surface the conflict to the user — do NOT overwrite.
 3. Verify the slug does NOT collide with an existing `concepts/{slug}.md` or `entities/{slug}.md`. Per `../shared/naming-convention.md`, same slug in `concepts/` and `topics/` is FORBIDDEN (and `entities/` and `topics/` is FORBIDDEN). If a collision exists, halt and surface — the user may rename or retire the old slug.
-4. **Scope-overlap check (semantic, not slug).** Read `{wiki_root}/wiki/topics/topics.md`. For every existing row, compare its `Scope` cell to the proposed scope sentence. If overlap is plausible — shared subject, shared sources, shared positions, or the proposed topic could be framed as a sibling/sub-debate of an existing one — halt and present the user with three options:
+4. **Scope-overlap check (semantic, not slug).** Read `{wiki_root}/wiki/topics/topics.md`. For every existing row, compare its `Scope` cell to the proposed scope sentence. When the semantic tier is available (schema § "Retrieval tiers — hybrid search"), ALSO run `python {sb_os_path}/wiki/scripts/sb-wiki-search.py search "<proposed scope sentence>" --type topic --k 5` from the vault root and treat returned topic pages as overlap candidates the `Scope`-cell comparison may have missed (tier unavailable → the `Scope`-cell comparison alone is the check; a helper failure NEVER halts this workflow). If overlap is plausible — shared subject, shared sources, shared positions, or the proposed topic could be framed as a sibling/sub-debate of an existing one — halt and present the user with three options:
    - `extend N` — append a new `Position` / `Angle` / sub-section to the existing topic page rather than create a new one. Skill exits without writing a new page; emits an `extend` directive the caller may act on, or, if invoked user-intent, performs the append directly using the source signals already gathered.
    - `new` — proceed with a new topic page; the existing topic and the new one will cross-link as siblings (each lists the other in `related:` frontmatter). Mid-ingest invocation defaults to `new` only if the parent ingest's candidate-topic entry recorded `overlap-checked: true`.
    - `abort` — no writes.

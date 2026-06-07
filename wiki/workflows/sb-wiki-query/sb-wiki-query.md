@@ -1,19 +1,26 @@
 ---
 name: sb-wiki-query
-description: Synthesize an answer to a user question from the wiki — parse question, read leaf indexes, fall back to grep/ripgrep over wiki/ content (Karpathy fallback — never embeddings/RAG), follow wikilinks for depth, synthesize with inline citations, present answer, offer to file the result back as a Concept/Entity/Topic page.
+description: Synthesize an answer to a user question from the wiki — parse question, read leaf indexes, fall back to hybrid semantic+keyword retrieval (sb-wiki-search.py) with grep/ripgrep as the deterministic floor, follow wikilinks for depth, synthesize with inline citations, present answer, offer to file the result back as a Concept/Entity/Topic page.
 ---
 
 # sb-wiki-query
 
-Synthesize an answer to a user question from the Karpathy-style wiki layer; optionally file the answer back as a wiki page. Implements the 7-step query flow defined in the wiki schema. Retrieval uses `grep` / `ripgrep` only — NEVER embeddings, vector search, or RAG.
+Synthesize an answer to a user question from the Karpathy-style wiki layer; optionally file the answer back as a wiki page. Implements the 7-step query flow defined in the wiki schema. Retrieval is availability-gated per schema § "Retrieval tiers — hybrid search" — hybrid semantic+keyword search when the tier is available, grep/ripgrep deterministic floor otherwise.
 
 ## Schema Source
 
 Read `3-resources/tools/sb-os/wiki/docs/wiki-schema.md` — Operations § "/sb-wiki-query" — for canonical step definitions. This workflow body implements that spec verbatim. Schema deviations require updating the schema first.
 
-## Karpathy Fallback Assertion
+## Retrieval Tiers
 
-This workflow uses `grep` / `ripgrep` for substring search across `{wiki_root}/wiki/` and `{wiki_root}/raw/` content. NEVER use embeddings, vector search, retrieval-augmented generation, or any model-based retrieval. The wiki schema and shape both lock this contract in.
+Schema § "Retrieval tiers — hybrid search" governs Step 3. Probe the semantic tier by invoking the helper once; degrade gracefully:
+
+| Tier | Step 3 behavior |
+|------|-----------------|
+| Semantic / keyword (helper runs, exit 0, results) | `python {sb_os_path}/wiki/scripts/sb-wiki-search.py search "<question>" --k 8` — result pages feed `picks` |
+| Deterministic floor (helper missing, errors, exit 2, or zero results) | `grep` / `ripgrep` substring search across `{wiki_root}/wiki/`, expanding to `{wiki_root}/raw/` |
+
+The helper self-syncs its index before answering (changed pages re-indexed incrementally) — NEVER run a manual index step from this workflow. `{wiki_root}/raw/` expansion ALWAYS uses grep (raw is never indexed). A helper failure NEVER aborts the query — drop to the floor and continue.
 
 ## Path Resolution
 
@@ -21,6 +28,7 @@ This workflow uses `grep` / `ripgrep` for substring search across `{wiki_root}/w
 |--------|------------|
 | `{wiki_root}` | Read from `sb-os.json` at vault root → `wiki_root` field. Resolve via `install/manifest.py` (`manifest.read(vault_root)`). Never hardcode. |
 | `{user_context_root}` | Read from `sb-os.json` → `user_context_root`. Never hardcode. |
+| `{sb_os_path}` | Read from `sb-os.json` → `sb_os_path` field. Never hardcode. |
 | `{wiki_root}/wiki/` | Wiki page tree (concepts, entities, topics, sources). |
 | `{wiki_root}/raw/` | Raw source tree. |
 | `{wiki_root}/log.md` | Actionable queue — `candidate-topic` + `candidate-mention` entries only. |
@@ -88,16 +96,17 @@ For each leaf folder selected by `candidate-types` from step 1 — `{wiki_root}/
 
 If `wiki/sources/` may also hold relevant material (the question references a specific source slug, an origin, or a date), add matching source pages from `{wiki_root}/wiki/sources/{*}/` to `picks` using the same scoring against the wiki sources index per `../shared/index-formats.md`.
 
-### Step 3 — Karpathy fallback: grep / ripgrep over wiki content
+### Step 3 — Retrieval fallback: hybrid search, then grep floor
 
-Fires only when step 2 marked the index lookup as `ambiguous`. NEVER fall through to embeddings, vector search, or RAG.
+Fires only when step 2 marked the index lookup as `ambiguous`. Apply the Retrieval Tiers ladder above.
 
-1. For each keyword in `keywords` from step 1, run a substring search across `{wiki_root}/wiki/` content:
+1. **Semantic tier.** From the vault root run `python {sb_os_path}/wiki/scripts/sb-wiki-search.py search "<question>" --k 8`, passing the user's question verbatim (full natural-language phrasing — NOT extracted keywords). Optionally constrain with `--type` when `candidate-types` from step 1 is a strict subset (e.g., `--type topic`). Each result line carries `path#anchor` — aggregate the result pages into `picks`.
+2. **Floor.** If the helper is unavailable (missing, non-zero exit, runtime error) OR returned zero results, run the floor for each keyword in `keywords` from step 1 across `{wiki_root}/wiki/` content:
    - Use `ripgrep` (`rg`) when available; fall back to `grep -r` otherwise.
    - Search filenames AND file content (page bodies, frontmatter, footnote definitions).
    - Case-insensitive match.
-2. If wiki-only search returns no hits, expand the search to `{wiki_root}/raw/` for the same keywords.
-3. Aggregate hit pages into `picks` set. Deduplicate. If still empty, halt step 4 and proceed directly to step 5 with an empty-evidence answer ("No wiki pages match this question — answer cannot be synthesized from the current wiki content.").
+3. If wiki search returns no hits from EITHER tier, expand the search to `{wiki_root}/raw/` for the same keywords (grep ONLY — raw is never indexed).
+4. Aggregate hit pages into `picks` set. Deduplicate. If still empty, halt step 4 and proceed directly to step 5 with an empty-evidence answer ("No wiki pages match this question — answer cannot be synthesized from the current wiki content.").
 
 ### Step 4 — Read picked pages; follow wikilinks for depth
 
@@ -151,7 +160,7 @@ If the user response is ambiguous (no clear `c`/`e`/`t`/`s` letter), re-prompt w
 
 #### 6m — Register-as-open-question offer (genuine miss ONLY)
 
-Fires ONLY when the answer presented is the **empty-evidence answer** — i.e., Step 3's grep/ripgrep returned zero hits across `wiki/` AND `raw/` and Step 5 emitted the empty-evidence template ("No wiki pages match this question — answer cannot be synthesized from the current wiki content."). NEVER fires on a successful (evidence-backed) answer; filing such an answer back is the file-back menu's job, not this offer's.
+Fires ONLY when the answer presented is the **empty-evidence answer** — i.e., Step 3 exhausted both retrieval tiers AND the `raw/` expansion with zero hits and Step 5 emitted the empty-evidence template ("No wiki pages match this question — answer cannot be synthesized from the current wiki content."). NEVER fires on a successful (evidence-backed) answer; filing such an answer back is the file-back menu's job, not this offer's.
 
 On a genuine miss, present this offer ALONGSIDE the file-back menu (append it below the menu line):
 
@@ -238,8 +247,10 @@ End of flow.
 | `<question>` empty | Halt at step 1; ask the user to provide a question. No writes. |
 | `{wiki_root}/questions.md` malformed at Step 0 (unreadable, invalid frontmatter, or no parseable H2 entries) | WARN and proceed with an EMPTY question set. NEVER abort the query. The Step 6m register offer still fires on a genuine miss; an accepted register CREATES a fresh `questions.md` (overwriting an unreadable file is NOT done — surface the conflict instead and skip the write). (Absent `questions.md` is NOT a failure — Step 0 loads it empty and Step 6m creates it on first capture.) |
 | Step 2 leaf index file missing for a `candidate-type` | Skip that leaf for indexed scoring; rely on the Karpathy fallback in step 3. Capture in answer if no other leaves contribute matches. |
-| Step 3 grep / ripgrep returns zero hits across `wiki/` AND `raw/` | Proceed to step 5 with the empty-evidence answer template ("No wiki pages match this question — answer cannot be synthesized from the current wiki content."). Step 6 still presents the file-back menu; if the user files-back, step 7 writes a stub-shaped page (no inline citations). Step 6m ALSO fires here (genuine miss) — offer to register the question as an open `questions.md` entry. |
-| `ripgrep` (`rg`) not installed | Fall back to `grep -r` for step 3 substring search. Both must be exhausted before declaring zero hits. |
+| Step 3 returns zero hits across both retrieval tiers AND `raw/` | Proceed to step 5 with the empty-evidence answer template ("No wiki pages match this question — answer cannot be synthesized from the current wiki content."). Step 6 still presents the file-back menu; if the user files-back, step 7 writes a stub-shaped page (no inline citations). Step 6m ALSO fires here (genuine miss) — offer to register the question as an open `questions.md` entry. |
+| `sb-wiki-search.py` unavailable (missing, non-zero exit, runtime error) | Drop to the grep floor silently per Retrieval Tiers. NEVER abort the query. |
+| `VOYAGE_API_KEY` unset | The helper runs in FTS5-only keyword mode — still a valid tier; no behavior change in this workflow. |
+| `ripgrep` (`rg`) not installed | Fall back to `grep -r` for the step 3 floor. Both must be exhausted before declaring zero hits. |
 | Wikilink target in step 4 missing (broken link) | Skip the expansion silently; do NOT halt. The page is consulted only if it exists. |
 | User response at step 6 file-back menu ambiguous | Re-prompt with the same menu. Do NOT default to skip. |
 | Step 7 slug collision (slug already exists at `wiki/{type}/`) | Halt at step 7b; surface conflict. No writes. The user may rename or merge manually. |

@@ -1,4 +1,4 @@
-# Wiki Schema (v5 — questions-layer)
+# Wiki Schema (v6 — retrieval-tiers)
 
 > **Status:** Locked design. Operational spec for the Karpathy-style wiki layer shipped by **sb-os v2** (per `sb-os-build/second-brain-os-architecture.md` §12 and Decisions Log #12). sb-os v1 ships only the `wiki_root` config slot in `sb-os.json` (default `3-resources/knowledge-base/`), the empty default folder, and a placeholder managed `CLAUDE.md` at `{wiki_root}/CLAUDE.md`. The schema, the four `sb-wiki-*` components, and any populated wiki content described below are out of v1 scope — they ship in **sb-os v2**. Agents and CLAUDE.md files reference this document only after v2 lands.
 
@@ -760,7 +760,7 @@ The scan matches open questions in **both** homes against new and existing wiki 
 | Where | Behavior |
 |-------|----------|
 | **Ingest** (`/sb-wiki-ingest`, active) | Load `questions.md` (skip if absent). Match the new source against open questions in both homes, then surface a **`PROPOSED ANSWERS`** block at the Stage-1 checkpoint alongside the existing proposal blocks. **Default reject.** On accept: topic-home → strike the line + fold the answer into the topic body (append-only + cite); `questions.md` → append an inline `answer:` bullet (cited). Silent mode auto-**rejects** all proposed answers (same posture as topic updates). |
-| **Lint** (`/sb-wiki-lint`, periodic) | A `questions.md` step (skip if absent): **sweep** every open question (both homes) against the existing wiki for now-available answers (off the ingest hot-path → may be more thorough than ingest's mechanical match); **GRADUATION PROPOSAL** — surface mature `answered` entries → on accept invoke `sb-wiki-create-topic` (user-gated, same model as `SUBDIVISION` / `RENAME`); **prune** — remove `questions.md` entries that are promoted (page exists) or retired; verify `relates:` / `seeded-by:` wikilinks resolve via the existing wikilink check; **regenerate `open-gaps.md`**. |
+| **Lint** (`/sb-wiki-lint`, periodic) | A `questions.md` step (skip if absent): **sweep** every open question (both homes) against the existing wiki for now-available answers (off the ingest hot-path → may be more thorough than ingest's mechanical match; when the semantic tier is available, the sweep uses `sb-wiki-search.py` per § "Retrieval tiers — hybrid search" to match questions against wiki content); **GRADUATION PROPOSAL** — surface mature `answered` entries → on accept invoke `sb-wiki-create-topic` (user-gated, same model as `SUBDIVISION` / `RENAME`); **prune** — remove `questions.md` entries that are promoted (page exists) or retired; verify `relates:` / `seeded-by:` wikilinks resolve via the existing wikilink check; **regenerate `open-gaps.md`**. |
 
 > **Validation window — ON.** Three heuristics are run ON for an initial validation window (≈ first 10 graduations / scans) before their wording is frozen here, exactly as the `purpose.md` design did: (1) the **graduation maturity** heuristic (when an accreted answer is "ripe" for a page); (2) the **scan match thresholds** (how much wikilink/token overlap fires a `PROPOSED ANSWER` — starting point: mirror the speculative-topic tier, ≥2 shared substantive tokens); (3) the **lint sweep thoroughness** (how much more than ingest's mechanical match the sweep does). Tune in the window, then freeze.
 
@@ -781,6 +781,46 @@ The scan matches open questions in **both** homes against new and existing wiki 
 3. The scan **never drops** wiki content; topic-question resolution is an **append-only** topic update plus a strike of the answered line.
 4. Graduation **never auto-authors** a topic page — it routes through `sb-wiki-create-topic`.
 5. Malformed `questions.md` → warn and proceed as if absent (never abort the ingest or lint).
+
+## Retrieval tiers — hybrid search
+
+Wiki retrieval is **availability-gated**: a zero-dependency deterministic floor that always works, upgraded by a semantic tier when its prerequisites are present. Consumers MUST degrade down the ladder gracefully — the semantic tier is NEVER a required dependency, and a vault with no API key, no Python, or no index behaves exactly as the floor describes.
+
+| Tier | Mechanism | Available when |
+|------|-----------|----------------|
+| **Semantic (hybrid)** | `sb-wiki-search.py` — SQLite FTS5 keyword ranking + Voyage embedding cosine, RRF-fused | `VOYAGE_API_KEY` set and the script runs (exit 0) |
+| **Keyword (FTS5-only)** | Same script, vector arm off — ranked BM25 keyword search, zero API calls | Key absent but the script runs |
+| **Deterministic floor** | Leaf indexes + wikilink graph + `grep`/`ripgrep` substring search | Always — the contract minimum |
+
+### The helper script
+
+`{sb_os_path}/wiki/scripts/sb-wiki-search.py` — invoked from the vault root with the active Python interpreter:
+
+```bash
+python {sb_os_path}/wiki/scripts/sb-wiki-search.py search "<natural-language query>" --k 8 [--type concept,entity,topic,source,thesis,decision] [--json]
+python {sb_os_path}/wiki/scripts/sb-wiki-search.py index          # build / refresh the index
+python {sb_os_path}/wiki/scripts/sb-wiki-search.py status         # freshness + mode as JSON
+```
+
+| Property | Rule |
+|----------|------|
+| Index artifact | `{wiki_root}/.sb-wiki-search/index.db` — DERIVED data, machine-local. Never commit it (add the folder to the vault `.gitignore`); deleting it is always safe (rebuilt by the next `index`/`search`). |
+| Scope | `{wiki_root}/wiki/**/*.md` pages only — leaf/origin indexes, `CLAUDE.md`, `raw/`, and root-level queues (`log.md`, `questions.md`, `open-gaps.md`, `purpose.md`) are NEVER indexed. Extension page trees (e.g. `wiki/theses/`, `wiki/decisions/`) are included automatically. |
+| Self-healing | `search` re-syncs before answering: changed/added/removed pages are detected (mtime+size prefilter, sha256 confirm) and re-indexed incrementally. Results never go stale; unchanged files are never re-embedded. |
+| Read-only | The script only READS wiki content. It never writes a wiki page, index cell, or queue entry — judgment-bearing cells stay LLM-owned per the lint contract. |
+| Installer | `install.py` never creates, reads, or writes the index artifact (installer scope guarantee unchanged). Lint never walks it (`.sb-wiki-search/` is a root-level dot-folder sibling of `wiki/` and `raw/`, outside both lint subtrees). |
+| Privacy | With `VOYAGE_API_KEY` set, page text is sent to the Voyage API to be embedded. Key absent → FTS5-only mode and nothing leaves the machine. |
+| Failure | Script missing, Python missing, or exit code 2 (unresolvable `wiki_root`) → consumers drop to the deterministic floor silently. A search error NEVER aborts the consuming operation. |
+
+### Consumers
+
+| Operation | Where the tier plugs in |
+|-----------|------------------------|
+| `/sb-wiki-query` | Step 3 retrieval fallback — semantic tier first, grep floor when unavailable |
+| `/sb-wiki-lint` | Step 7.7a questions answer-sweep — matching open questions against existing wiki content |
+| `sb-wiki-create-topic` | Step 1.5 scope-overlap check — surface overlap candidates beyond the `Scope`-cell comparison |
+| `sb-fin-create-thesis` (finance ext) | Step 1.3 scope-overlap check — same pattern over `wiki/theses/` |
+| Any agent reading the wiki | Per the `{wiki_root}/CLAUDE.md` Retrieval rule — search before bulk-reading |
 
 ## Operations
 
@@ -946,7 +986,7 @@ A skill agents can invoke mid-ingest (when the user accepts a PROPOSED TOPIC at 
 | Step | Operation | Owner |
 |------|-----------|-------|
 | 1 | Resolve topic name; if from a candidate, load the candidate-topic log entry (claim A, claim B, trigger, sources) | Agent |
-| 1.5 | **Scope-overlap check (semantic, not slug).** Read `wiki/topics/topics.md` and compare the proposed scope sentence to every existing row's `Scope` cell. If overlap is plausible (shared subject, shared sources, shared positions, sibling/sub-debate framing), surface three options to the user: `extend N` (append a new `Position` / `Angle` to the existing topic; no new page), `new` (proceed with a new sibling-cross-linked topic), or `abort`. Skipped only when the caller (e.g., `/sb-wiki-query` Step 7a) passes `overlap-checked: true` proving the check already ran upstream. Slug-collision check from step 1 is necessary but NOT sufficient — both checks must pass. | Agent + User |
+| 1.5 | **Scope-overlap check (semantic, not slug).** Read `wiki/topics/topics.md` and compare the proposed scope sentence to every existing row's `Scope` cell. When the semantic tier is available (§ "Retrieval tiers — hybrid search"), ALSO run `sb-wiki-search.py search "<proposed scope sentence>" --type topic` and treat its hits as overlap candidates the `Scope`-cell comparison may have missed. If overlap is plausible (shared subject, shared sources, shared positions, sibling/sub-debate framing), surface three options to the user: `extend N` (append a new `Position` / `Angle` to the existing topic; no new page), `new` (proceed with a new sibling-cross-linked topic), or `abort`. Skipped only when the caller (e.g., `/sb-wiki-query` Step 7a) passes `overlap-checked: true` proving the check already ran upstream. Slug-collision check from step 1 is necessary but NOT sufficient — both checks must pass. | Agent + User |
 | 2 | Write `wiki/topics/{slug}.md` with frontmatter, `Scope` (required), `Sources` (required), and optional sections per topic shape (see Topic page menu). On `new` from step 1.5, also append the new topic's wikilink to the overlapping topic's `related:` frontmatter (sibling cross-link). | Agent |
 | 3 | Cross-link from triggering concept/entity pages: add wikilink to the new topic in their `Related` section | Agent |
 | 4 | If promoted from a candidate, REMOVE that `candidate-topic` entry from `log.md` (the topic page is now the record — resolution = page exists). No `topic-created` entry is written | Agent |
@@ -1045,7 +1085,7 @@ Single command: `/sb-wiki-query <question>`. Returns a synthesized answer; optio
 |------|-----------|-------|
 | 1 | Parse question; identify candidate page types (concept / entity / topic) and likely keywords | Agent |
 | 2 | Read leaf indexes (`concepts.md`, `entities.md`, `topics.md`) — sub-agent picks pages by name match + index summary | Agent |
-| 3 | If index lookup is ambiguous, fall back to `grep` / `ripgrep` over `wiki/` content (Karpathy fallback — never embeddings/RAG) | Agent |
+| 3 | If index lookup is ambiguous, fall back per § "Retrieval tiers — hybrid search": run `sb-wiki-search.py` when available (semantic/keyword tier), degrade to `grep` / `ripgrep` over `wiki/` content when not (deterministic floor) | Agent |
 | 4 | Read picked pages; if depth needed, follow wikilinks to neighbors | Agent |
 | 5 | Synthesize answer with inline citations to wiki pages (`[[page.md]]`) and source pages (footnote definitions) | Agent |
 | 6 | Present answer + offer to file as a wiki page (Concept / Entity / Topic) if "valuable enough" — the user picks file/skip | Agent + User |
