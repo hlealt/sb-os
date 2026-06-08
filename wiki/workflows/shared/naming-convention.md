@@ -53,6 +53,8 @@ A raw **PDF** filename MUST equal the kebab-slug of the paper's actual title. Cr
 
 Always use the format that matches the target file's actual filename (including date format).
 
+**Broken / missing-target links.** A wikilink whose target file does not exist is detected, classified, and repaired by `/sb-wiki-lint` (Step 5): typo/encoding mismatches (curly quote, dash, accent, case) are auto-fixed to the existing filename on accept; genuinely-missing concept/entity targets are offered as web-verified stubs; unresolvable targets are reported. Do NOT hand-build a separate broken-link inventory — run `/sb-wiki-lint`.
+
 ## Type Folder Collision Rules
 
 | Collision | Rule |

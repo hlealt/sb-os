@@ -1037,22 +1037,22 @@ Before walking the tree, agents run this command from the vault root with the ac
 python {sb_os_path}/wiki/scripts/sb-wiki-lint-deterministic.py --apply --report {wiki_root}/lint-deterministic-report.json
 ```
 
-The script executes the deterministic halves of steps 1, 2, 4, 5, 6, 7, 7.5, 7.6, and 8 in one pass — index sync writes, type-tag sync (every page's `tags:` includes its `type:` value; index files missing `type:` get `type: index`), stub/orphan/footnote-state detection, log prune-test (unknown types kept + reported), `questions.md` link check, PDF title-conformance detection, subdivision detection — and emits `judgment_needed`. The agent reads every queued item, reads the referenced file, and fills the required semantic index cell. Agents NEVER re-derive these detections via LLM file walks. Two additional surfaces: `--prune-log` executes the step-8 log prune (lint-contract-authorized); `--execute-renames <plan.json>` and `--execute-subdivision <plan.json>` are USER-GATED executors invoked only after a step-9 accept — `CLAUDE.md` routing rows and first-time router rewrites stay agent-applied (the script returns them as pending work, never editing CLAUDE.md itself). Report-key-to-step mapping: `sb-wiki-lint.md` § "Deterministic Helper".
+The script executes the deterministic halves of steps 1, 2, 3, 4, 5, 6, 7, 7.5, 7.6, and 8 in one pass — index sync writes, type-tag sync (every page's `tags:` includes its `type:` value; index files missing `type:` get `type: index`), stub/orphan/footnote-state detection, unresolved-Disputed-callout detection (>30d, no resolving topic page), broken-wikilink classification (bucket A unique fold-match vs needs-judgment), log prune-test (unknown types kept + reported), `questions.md` link check, PDF title-conformance detection, subdivision detection — and emits `judgment_needed`. The agent reads every queued item, reads the referenced file, and fills the required semantic index cell. Agents NEVER re-derive these detections via LLM file walks. Three additional surfaces: `--prune-log` executes the step-8 log prune (lint-contract-authorized); `--execute-renames <plan.json>`, `--execute-subdivision <plan.json>`, and `--execute-link-fixes <plan.json>` are USER-GATED executors invoked only after a step-9 accept — `CLAUDE.md` routing rows and first-time router rewrites stay agent-applied (the script returns them as pending work, never editing CLAUDE.md itself). Report-key-to-step mapping: `sb-wiki-lint.md` § "Deterministic Helper".
 
 | Step | Operation |
 |------|-----------|
 | 0 | **Load extensions** (runs before Step 1) — MERGE each registered module's `wiki-ext/` definitions (including its `lint-rules.ext.md`) into the active rule set per Module extensions §; no-op when `wiki_extensions` is absent/empty |
 | 1 | Walk all wiki pages — detect stubs (structural rule) and record age via `created` |
 | 2 | Walk all wiki pages — detect orphans (no inbound wikilinks). **Orphan-detection scope is STRICT** — see "Orphan-detection scope" below |
-| 3 | Walk wiki concept/entity pages — detect unresolved Disputed callouts (older than 30 days without resolution) |
+| 3 | **Deterministic.** Detect unresolved Disputed callouts in concepts/entities — flagged date (first `YYYY-MM-DD` in the callout body) >30 days old AND no referenced topic page exists to resolve it (resolution = page exists). Callouts with no resolving topic AND no parseable date surface as `unparseable` for manual review |
 | 4 | Walk `log.md` — flag `candidate-topic` entries aged >30 days whose topic page does NOT yet exist (resolution = page exists, so a candidate with a live page is not "aging", it is spent and pruned at step 8) |
-| 5 | Walk all wiki pages — verify wikilinks resolve (broken if target file missing); collect broken links |
+| 5 | **Deterministic + judgment.** Verify wikilinks resolve (broken if target file missing); CLASSIFY each broken link — `bucket A` (unique casefold+accent+quote/dash fold-match to an existing file → auto-fixable, exact `suggestion`) or `needs-judgment` (LLM splits into bucket B = genuinely-missing concept/entity to author as a stub, vs bucket C = unresolvable/duplicate, reported only). Ambiguous targets (≥2 fold-candidates) report candidates and default to C |
 | 6 | For each `wiki/sources/{origin}/` — re-sync `My take` column from each source page's `My take` section per the three-state rule (`pending` / `—` / reflected preview — see "Wiki sources index format" §); renumber footnotes (safe bijections only); REPORT unreferenced defs and set mismatches per "Citation format" § — stale-def removal is never auto-applied |
 | 7 | For each `raw/{origin}/` — verify `{origin}.md` index exists; if missing, create it with the standard `\| File \| Title \| Date \| Wiki \|` columns. For each raw file in `{origin}/`, ensure a row exists with `Wiki = No` (default) or `Yes/Partial` (preserved). Same for `raw/studies/studies.md`. **Index creation and maintenance is the agent's job**, not the user's. Also: **type-tag sync** (deterministic, auto-applied) — every page under `wiki/` gets its `type:` value appended to `tags:` when absent (append-only, user tags preserved); index files (stem = parent dir name) missing `type:` get `type: index` + `tags: [index]`; non-index pages with no resolvable `type:` are reported, never guessed. Per Frontmatter schemas § "Type tag (mandatory)". |
 | 7.5 | Folder-subdivision detection. For `wiki/concepts/` and `wiki/entities/`, group pages by `kind:` frontmatter. Surface kinds at ≥5 pages as a SUBDIVISION PROPOSAL block. Skip `wiki/topics/` (count <20) and `wiki/sources/` (already subdivided by origin). On user accept at step 9, the agent creates `{type}/{subfolder}/`, leaf index, parent CLAUDE.md marker-block routing rules, moves pages, and rewrites parent index as router. The folder structure and indexes are the record — NO log entry. Naming and policy per schema § "Folder subdivision". |
 | 7.6 | **PDF title-conformance detection.** For each PDF in `raw/{origin}/`, compare the stem to the kebab-slug of the raw index `Title` (Naming convention § "Raw PDF title-conformance"). Mismatch + no name collision → `rename-proposals` row; mismatch + `{title-slug}.pdf` already exists → `duplicate-raws` finding (no rename). Detection only — execution is USER-GATED at step 9, updating the full referrer set per "PDF title-conformance (lint)" below. Markdown sources exempt. |
 | 8 | Prune `log.md`: DELETE every `candidate-topic` / `candidate-mention` entry whose matching page now exists (resolution = page exists), and DELETE any retired history entries (`ingest`, `concept-created`, `entity-created`, `topic-created`, `topic-updated`, `topic-coverage-candidate`, `lint`, `query`). NO `lint` entry is written — findings live in the report only. `candidate-mention` entries with no matching page are NEVER auto-aged; they persist until the page exists or the user dismisses them. Entries of an UNKNOWN type (neither active nor retired) are KEPT and surfaced in the report for manual routing — never auto-deleted |
-| 9 | Present findings to the user (read-only summary for findings 1-7; the `candidate-mention` review queue is surfaced here; SUBDIVISION PROPOSAL is the only interactive block — user accepts per kind or defers all) |
+| 9 | Present findings to the user (read-only summary for findings 1-7; the `candidate-mention` review queue is surfaced here). USER-GATED interactive blocks: LINK-FIX PROPOSAL (bucket-A broken links → accept runs `--execute-link-fixes`), MISSING-PAGE PROPOSAL (bucket-B → accept authors a web-verified stub), RENAME PROPOSAL, SUBDIVISION PROPOSAL, and (questions layer ON) PROPOSED ANSWERS + GRADUATION PROPOSAL — each accepts all / accepts N / rejects / defers |
 
 #### Lint output format
 
@@ -1065,7 +1065,7 @@ Stubs aged >30 days (3): [[X.md]], [[Y.md]], [[Z.md]]
 Orphans (no inbound) (2): [[A.md]], [[B.md]]
 Unresolved Disputed callouts (1): [[mcp-debate.md]] — flagged 2026-04-12
 Candidate-topics aging without promotion (1): "mcp-debate" — logged 2026-04-12
-Broken wikilinks (0)
+Broken wikilinks (4): A=1 auto-fixable | B=2 need a page | C=1 unresolvable
 Index sync — wiki/sources My take refreshed: 4 source pages
 Index sync — raw indexes: 1 created (raw/studies/studies.md), 3 rows added across raw/{origins}
 Type tags synced: 5 pages (type appended to tags), 1 index given type: index
@@ -1073,9 +1073,11 @@ Footnotes renumbered: 2 source pages
 PDF renames proposed (N): <old>.pdf → <title-slug>.pdf, …
 Duplicate raws — title-slug already taken (N): <old>.pdf ≡ <existing>.pdf
 
+LINK-FIX PROPOSAL — bucket-A broken links | accept all | accept N | reject | defer (default defer; --execute-link-fixes rewrites the links only on accept)
+MISSING-PAGE PROPOSAL — bucket-B broken links | accept all | accept N | reject | defer (default defer; web-verified stub authored only on accept)
 RENAME PROPOSAL — accept all | accept N | reject | defer (default defer; renames + referrer rewrites apply only on accept)
 
-No action required for read-mostly findings (index sync auto-applied). RENAME PROPOSAL and SUBDIVISION PROPOSAL are the interactive blocks.
+No action required for read-mostly findings (index sync auto-applied). LINK-FIX, MISSING-PAGE, RENAME, and SUBDIVISION PROPOSAL are the interactive blocks.
 ```
 
 #### PDF title-conformance (lint)

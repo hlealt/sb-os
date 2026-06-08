@@ -60,6 +60,8 @@ This workflow is read-mostly by contract. Auto-applied writes are SCOPED to inde
 | PDF title-conformance rename execution (step 7.6) — rename raw PDF + source page, rewrite all referrers (frontmatter, footnotes, both indexes, `log.md`) | `{wiki_root}/raw/{origin}/`, `{wiki_root}/wiki/...`, `{wiki_root}/log.md` | USER-GATED — executed only on `accept` at step 9 |
 | Questions answer-sweep apply (step 7.7) — accrete a cited `answer:` bullet on a `questions.md` entry, OR strike + fold a topic-home `Open questions` answer into the topic body (append-only) | `{wiki_root}/questions.md`, `{wiki_root}/wiki/topics/*.md` | USER-GATED — applied only on `accept` at step 9. Skipped entirely when `questions.md` is absent |
 | Graduation execution (step 9 GRADUATION PROPOSAL) — invoke `sb-wiki-create-topic` for an accepted mature `questions.md` entry (NEVER auto-author a page) | (the skill writes the page; lint writes nothing directly) | USER-GATED — invoked only on `accept` at step 9. Skipped entirely when `questions.md` is absent |
+| Broken-link bucket-A fix execution (step 9 LINK-FIX PROPOSAL) — rewrite `[[old…]]`→`[[new…]]` wikilinks via `--execute-link-fixes` | wikilink text inside `{wiki_root}/wiki/**` pages (`#anchor`/`\|alias` preserved); NEVER `raw/` | USER-GATED — executed only on `accept` at step 9 |
+| Missing-page bucket-B stub authoring (step 9 MISSING-PAGE PROPOSAL) — author a web-verified stub per `../shared/stub-policy.md` for an accepted genuinely-missing target | `{wiki_root}/wiki/concepts/` or `entities/` (matching `kind:` subfolder) | USER-GATED — authored only on `accept` at step 9 |
 
 NEVER edit page bodies, frontmatter (other than `last-touched` on indexes and on pages moved by subdivision, the append-only type-tag sync per step 7, and wikilink-target rewrites performed by a user-accepted PDF title-conformance rename per step 7.6), or any user-authored content from this workflow. NEVER delete pages. NEVER write a `lint` entry — lint findings live in the report only. The log is an actionable queue (`candidate-topic` + `candidate-mention` only); lint MAY delete entries that are spent (page exists) or retired (history types), but NEVER edits the body of a `candidate-topic`/`candidate-mention` it keeps, and NEVER auto-deletes a `candidate-mention` whose page does not yet exist. `questions.md` is the parallel user queue: lint MAY delete an entry that is promoted (matching wiki page now exists) or retired (by the same "page exists" test the `candidate-mention` prune uses), but NEVER edits the body of a kept entry and NEVER prunes a merely-answered entry that has not yet graduated. `open-gaps.md` is lint-generated and READ-ONLY — lint OVERWRITES it wholesale each run; the user's edits to it are not preserved.
 
@@ -81,7 +83,8 @@ Run both, in order — the first owns the deterministic index-row + footnote wor
 | `writes`, `judgment_needed` | 6, 7 | Auto-applied index writes; queue of judgment-bearing cells (incl. `row-shape` malformed rows) |
 | `detected.stubs_aged_gt30`, `stubs_fresh_count`, `stubs_no_created` | 1 | Stub state + age (user-half exemption applied) |
 | `detected.orphans` | 2 | STRICT-scope orphans (concept/entity/topic inbound only) |
-| `detected.broken_wikilinks` | 5 | Unresolved wikilink inventory |
+| `detected.disputed_callouts`, `disputed_callouts_unparseable` | 3 | Unresolved Disputed callouts (>30d, no resolving topic page); callouts with no resolving topic AND no parseable date surface as `unparseable` for manual review |
+| `detected.broken_wikilinks` | 5 | Classified broken-wikilink inventory — each row `{source, target, bucket, suggestion, candidates}`. `bucket: "A"` = unique fold-match (auto-fixable, `suggestion` = exact existing filename); `bucket: "needs-judgment"` = no unique match (LLM splits B/C; `candidates` non-empty when ambiguous) |
 | `detected.questions_broken_links` | 5 | `questions.md` `relates:`/`seeded-by:` targets that do not resolve (absent file → key empty) |
 | `detected.footnote_issues`, `provenance_only_count`, `renumbered` | 6 | Set-mismatch findings (report-only); pages with defs-and-no-inline (never touched); safe-bijection renumbers auto-applied under `--apply` |
 | `detected.log_spent_entries`, `log_retired_entries`, `log_unknown_type_entries`, `log_aging_candidate_topics` | 4, 8 | Prune-test results + aging candidates + non-canonical entries (kept) |
@@ -97,6 +100,7 @@ Execution flags — the helper also owns the mechanical halves of the write path
 | `--prune-log` | Safe auto-apply (lint-contract-authorized) | Step 8 — deletes spent + retired `log.md` entries exactly as steps 8.2-8.4 specify; unknown types and plain headings always survive |
 | `--execute-renames <plan.json>` | USER-GATED executor | Step 9, on RENAME PROPOSAL accept — plan rows `{origin, old_stem, new_stem}`; rewrites scoped wikilink patterns in non-raw files + raw indexes only, then moves the two files (per step 7.6 execution) |
 | `--execute-subdivision <plan.json>` | USER-GATED executor | Step 9, on SUBDIVISION PROPOSAL accept — plan rows `{type_folder, slug, target_subfolder}`; moves pages, bumps `last-touched`, performs index row surgery. `CLAUDE.md` routing rows and first-time router rewrites are returned as `claude_md_pending`/errors for the AGENT to apply — the script never edits CLAUDE.md |
+| `--execute-link-fixes <plan.json>` | USER-GATED executor | Step 9, on LINK-FIX PROPOSAL accept — plan rows `{file, old, new}` (`file` wiki-root-relative, `old`/`new` exact filenames); rewrites `[[old…]]`→`[[new…]]` preserving any `#anchor`/`\|alias` tail, scoped to `wiki/**` only (rows pointing outside `wiki/` are rejected, never written) |
 
 NEVER run an executor flag without an explicit user accept at step 9. After any executor run, apply every `claude_md_pending` row and resolve every error surfaced in `detected.renames` / `detected.subdivision`.
 
@@ -104,7 +108,7 @@ The helper MUST NOT fill judgment-bearing cells. `Description`, `Scope`, and `Wh
 
 ## Flow
 
-Steps 1-8.5 run unattended. Step 8 PRUNES `log.md` (deletes spent candidates + retired history; writes NO `lint` entry) and, when the questions layer is ON, PRUNES `questions.md` (deletes promoted entries whose page now exists + retired entries, by the same "page exists" test). Step 8.5 REGENERATES `{wiki_root}/open-gaps.md` wholesale — a read-only cross-wiki aggregate of every open question across both homes (always emitted, empty-state when nothing is open; skipped only as a no-op when the questions layer is OFF and no topic has an open question). Step 9 is read-only for findings 1-7 and surfaces the `candidate-mention` review queue; when step 7.5 produced a non-empty `subdivision-proposals` set, the LINT REPORT at step 9 includes a SUBDIVISION PROPOSAL block that requires a user decision (accept all / accept N / reject / defer). On user accept, the agent executes the subdivision per step 7.5 § "Subdivision execution" (no log entry). Likewise, when step 7.6 produced a non-empty `rename-proposals` set, the report includes a RENAME PROPOSAL block; on user accept the agent executes the rename + full referrer rewrite per step 7.6 § "PDF title-conformance execution". When the questions layer is ON (step 7.7), the report additionally surfaces any answer-sweep matches as a USER-GATED `PROPOSED ANSWERS` block (accept → accrete a cited `answer:` bullet on the `questions.md` entry, or strike + fold a topic-home answer append-only) and any mature `questions.md` entries as a USER-GATED `GRADUATION PROPOSAL` block (accept → invoke `sb-wiki-create-topic`, NEVER auto-author). The agent must perform the LLM judgment pass from the deterministic helper report before Step 8.
+Steps 1-8.5 run unattended. Step 8 PRUNES `log.md` (deletes spent candidates + retired history; writes NO `lint` entry) and, when the questions layer is ON, PRUNES `questions.md` (deletes promoted entries whose page now exists + retired entries, by the same "page exists" test). Step 8.5 REGENERATES `{wiki_root}/open-gaps.md` wholesale — a read-only cross-wiki aggregate of every open question across both homes (always emitted, empty-state when nothing is open; skipped only as a no-op when the questions layer is OFF and no topic has an open question). Step 9 is read-only for findings 1-7 and surfaces the `candidate-mention` review queue; when step 5 classified broken links into buckets, the report includes a USER-GATED `LINK-FIX PROPOSAL` block (bucket A — accept → run `--execute-link-fixes` to rewrite the typo/encoding links) and a `MISSING-PAGE PROPOSAL` block (bucket B — accept → author a web-verified stub per `../shared/stub-policy.md`); bucket C is reported only. When step 7.5 produced a non-empty `subdivision-proposals` set, the LINT REPORT at step 9 includes a SUBDIVISION PROPOSAL block that requires a user decision (accept all / accept N / reject / defer). On user accept, the agent executes the subdivision per step 7.5 § "Subdivision execution" (no log entry). Likewise, when step 7.6 produced a non-empty `rename-proposals` set, the report includes a RENAME PROPOSAL block; on user accept the agent executes the rename + full referrer rewrite per step 7.6 § "PDF title-conformance execution". When the questions layer is ON (step 7.7), the report additionally surfaces any answer-sweep matches as a USER-GATED `PROPOSED ANSWERS` block (accept → accrete a cited `answer:` bullet on the `questions.md` entry, or strike + fold a topic-home answer append-only) and any mature `questions.md` entries as a USER-GATED `GRADUATION PROPOSAL` block (accept → invoke `sb-wiki-create-topic`, NEVER auto-author). The agent must perform the LLM judgment pass from the deterministic helper report before Step 8.
 
 ### Step 0 — Load extensions
 
@@ -136,13 +140,12 @@ Lint MERGES each registered module's `lint-rules.ext.md`. Extension lint rules a
 
 **Rationale.** Forcing inbound links to come from real wiki content (concept / entity / topic pages) keeps the orphan bar high and preserves the signal's diagnostic value. A stub created from a Notable Quote will, by design, be flagged as an orphan on the next lint run if no concept/entity/topic page links to it — this is correct behavior, not a false positive (per schema § "Orphan-detection scope (STRICT)").
 
-### Step 3 — Walk wiki concept/entity pages; detect unresolved Disputed callouts
+### Step 3 — Detect unresolved Disputed callouts (deterministic)
 
-1. Walk `{wiki_root}/wiki/concepts/` and `{wiki_root}/wiki/entities/`. Skip leaf indexes.
-2. Detect `> [!warning] Disputed` callouts per `../shared/section-menus.md` "Contradiction — Disputed Callout" section.
-3. For each callout, parse the referenced candidate-topic timestamp (e.g., `[YYYY-MM-DD HH:MM]`) embedded in the callout body. Compute age in days from that timestamp.
-4. Mark a callout as `unresolved` if age >30 days AND the candidate-topic it references has not been promoted (no topic page exists resolving the dispute — resolution = page exists).
-5. Build `unresolved-disputed` set: page filename + flagged date for the LINT REPORT.
+Consume `detected.disputed_callouts` from the helper — do NOT re-walk pages by LLM. The helper walks `{wiki_root}/wiki/concepts/` and `entities/` (skipping leaf indexes), detects `> [!warning] Disputed` callouts per `../shared/section-menus.md` "Contradiction — Disputed Callout", and applies the resolution rule: a callout is RESOLVED when it references a topic page (`See topic [[slug.md]]`) that exists (resolution = page exists). An UNRESOLVED callout has no existing resolving topic page AND a flagged date (the first `YYYY-MM-DD` in the callout body) >30 days old.
+
+1. Read `detected.disputed_callouts` — each row `{page, flagged, age_days}`. This IS the `unresolved-disputed` set for the LINT REPORT.
+2. Read `detected.disputed_callouts_unparseable` — callouts with no resolving topic AND no parseable date (cannot be aged). Surface these in the LINT REPORT for manual review; never silently drop them.
 
 ### Step 4 — Walk `log.md`; detect aging candidate-topics
 
@@ -153,14 +156,18 @@ Lint MERGES each registered module's `lint-rules.ext.md`. Extension lint rules a
 5. Mark a candidate as `aging` if age >30 days AND its topic page does NOT exist.
 6. Build `candidates-aging` set: candidate slug + logged date for the LINT REPORT.
 
-### Step 5 — Walk all wiki pages; verify wikilinks resolve
+### Step 5 — Verify wikilinks resolve; classify broken links (deterministic + judgment)
 
-1. Walk every wiki page per `../shared/folder-structure.md`. Skip leaf indexes.
-2. Extract all `[[<target>.md]]` wikilinks from each page body, frontmatter `related:` list, and footnote definitions per `../shared/naming-convention.md`.
-3. For each wikilink, verify the target file exists. Resolution rule: `<target>.md` must match an actual filename in `{wiki_root}/wiki/concepts/`, `entities/`, `topics/`, `sources/{*}/`, or `{wiki_root}/raw/{*}/` — EXCLUDING `raw/assets/` (assets are binary attachments, not wiki targets, per `../shared/folder-structure.md` "Asset Folder"). Filename match is exact — wikilinks preserve the date format the target file uses (per `../shared/naming-convention.md`).
-4. Image-embed wikilinks (`![[<target>.<ext>]]` where `<ext>` is `png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`, `pdf`, or any non-`md` extension) are SKIPPED at this step. Obsidian resolves embeds via global attachment search; they target `raw/assets/` (or pre-existing exception folders), which lint does not validate.
-5. **`questions.md` link resolution (skip if the questions layer is OFF — `{wiki_root}/questions.md` absent or malformed).** When `questions.md` is present and parseable, parse every H2 entry per `../shared/question-entry-shapes.md` and extract each `relates:` wikilink and each `seeded-by:` wikilink. Verify each target resolves by the SAME rule as item 3 (exact filename match in `wiki/concepts/`, `entities/`, `topics/`, `sources/{*}/`, or `raw/{*}/`, EXCLUDING `raw/assets/`). Treat the `questions.md` filename as the source location for any broken target. Do NOT rewrite or repair links — report only.
-6. Build `broken-wikilinks` set: source-page filename (or `questions.md` for a broken `relates:`/`seeded-by:` target) + missing target for the LINT REPORT.
+Consume `detected.broken_wikilinks` from the helper — do NOT re-walk pages by LLM. The helper extracts every `[[<target>.md]]` from each wiki page (body, frontmatter `related:`, footnote defs), verifies the target against actual filenames in `{wiki_root}/wiki/{concepts,entities,topics,sources}/` and `{wiki_root}/raw/{*}/` (EXCLUDING `raw/assets/`; image embeds `![[…non-md]]` skipped), and classifies each unresolved target.
+
+1. Read `detected.broken_wikilinks`. Each row is `{source, target, bucket, suggestion, candidates}`:
+   - **`bucket: "A"`** — a UNIQUE existing file fold-matches the target (typo / curly-quote / dash / accent / case). `suggestion` is the exact existing filename. Auto-fixable: feeds the LINK-FIX PROPOSAL at step 9 (executed via `--execute-link-fixes`).
+   - **`bucket: "needs-judgment"`** — no unique fold-match. Split it by judgment into:
+     - **bucket B** — `target` is a plausible concept/entity that genuinely belongs in the wiki but was never created (e.g. `nrel.md`, `sempra.md`). Feeds the MISSING-PAGE PROPOSAL at step 9 (on accept, author a web-verified stub).
+     - **bucket C** — not a real thing, a duplicate of an existing page under a different name, or a reference that should not exist. Reported for the user — never auto-fixed or unlinked.
+     - When `candidates` is non-empty (≥2 existing files share the fold key), the target is AMBIGUOUS — surface the candidates and treat as bucket C (user disambiguates) unless one is the obvious intent.
+2. **`questions.md` link resolution (skip if the questions layer is OFF — `{wiki_root}/questions.md` absent or malformed).** Read `detected.questions_broken_links` from the helper (the `relates:`/`seeded-by:` targets in `questions.md` that do not resolve). Treat `questions.md` as the source location. Report only — questions-layer broken links are NOT classified into A/B/C and are NOT auto-repaired.
+3. Build the `broken-wikilinks` set for the LINT REPORT as bucket counts: A (auto-fixable) / B (needs page) / C (unresolvable), plus the `questions.md` broken targets.
 
 ### Step 6 — Re-sync wiki sources `My take` column; renumber footnotes; remove stale footnote definitions
 
@@ -398,7 +405,7 @@ Row rules:
 
 ### Step 9 — Present findings to the user
 
-Present the LINT REPORT VERBATIM in the format below. Read-only for findings 1-7; the interactive parts (each present only when its proposal set is non-empty) are the RENAME PROPOSAL, SUBDIVISION PROPOSAL, PROPOSED ANSWERS, and GRADUATION PROPOSAL blocks — auto-applied writes from steps 6-8 have already committed. The PROPOSED ANSWERS and GRADUATION PROPOSAL blocks are omitted entirely when the questions layer is OFF (`questions.md` absent or malformed).
+Present the LINT REPORT VERBATIM in the format below. Read-only for findings 1-7; the interactive parts (each present only when its proposal set is non-empty) are the LINK-FIX PROPOSAL, MISSING-PAGE PROPOSAL, RENAME PROPOSAL, SUBDIVISION PROPOSAL, PROPOSED ANSWERS, and GRADUATION PROPOSAL blocks — auto-applied writes from steps 6-8 have already committed. The PROPOSED ANSWERS and GRADUATION PROPOSAL blocks are omitted entirely when the questions layer is OFF (`questions.md` absent or malformed).
 
 ```
 LINT REPORT — YYYY-MM-DD HH:MM
@@ -406,8 +413,9 @@ LINT REPORT — YYYY-MM-DD HH:MM
 Stubs aged >30 days (N): [[X.md]], [[Y.md]], [[Z.md]]
 Orphans (no inbound) (N): [[A.md]], [[B.md]]
 Unresolved Disputed callouts (N): [[<page>.md]] — flagged YYYY-MM-DD
+Disputed callouts needing manual review (N): [[<page>.md]] — no resolving topic + no parseable date (omit when zero)
 Candidate-topics aging without promotion (N): "<slug>" — logged YYYY-MM-DD
-Broken wikilinks (N)
+Broken wikilinks (N): A=<n> auto-fixable | B=<m> need a page | C=<k> unresolvable; questions.md broken (J): <target>, … (omit the questions.md clause when zero or layer OFF)
 Index sync — wiki/sources My take refreshed: <N> source pages
 Index sync — raw indexes: <N> created (raw/<origin>/<origin>.md), <M> rows added across raw/{origins}
 Index sync — wiki leaf indexes: <N> created (wiki/<type>/<type>.md), <M> rows added across wiki/{concepts,entities,topics}
@@ -420,6 +428,23 @@ Questions pruned: <N> promoted (page now exists), <M> retired entries removed (o
 Open gaps regenerated: <N> open questions across both homes → open-gaps.md (or "empty" / omit when questions layer OFF and no topic open questions)
 Candidate-mentions to review (N): "<slug>", "<slug>", … (the actionable queue — promote to a stub or dismiss)
 Duplicate raws — title-slug already taken (N): <old>.pdf ≡ <existing>.pdf (merge or delete manually)
+
+LINK-FIX PROPOSAL — broken-link bucket A (typo/encoding, auto-fixable) (omit block entirely when empty):
+| # | source page | broken link | → existing file |
+|---|-------------|-------------|-----------------|
+| 1 | debasement-scarce-assets.md | [[…'the-debasement-trade'….md]] | …'the-debasement-trade'….md |
+
+Decisions: accept all | accept N (e.g. "accept 1") | reject | defer
+(Default if the user does not respond: defer all — broken links persist until repaired.)
+
+MISSING-PAGE PROPOSAL — broken-link bucket B (genuinely-missing concept/entity) (omit block entirely when empty):
+| # | broken target | referenced by | proposed type | proposed kind |
+|---|---------------|---------------|---------------|---------------|
+| 1 | miami-international-holdings.md | miaexdx.md, +1 | entity | organization |
+
+Decisions: accept all | accept N (e.g. "accept 1") | reject | defer
+(Default if the user does not respond: defer all — targets re-surface next lint run.)
+(On accept, the agent authors a web-verified stub per `../shared/stub-policy.md` + `../shared/frontmatter-schemas.md`, then runs `sb-wiki-fill-index-descriptions.py --apply`. Bucket C — unresolvable — is reported in the Broken wikilinks line only; never auto-fixed.)
 
 RENAME PROPOSAL — PDF title-conformance (omit block entirely when empty):
 | # | origin | old filename | → new filename |
@@ -459,7 +484,25 @@ Decisions: accept all | accept N (e.g. "accept 1") | reject | defer
 No action required for findings 1-7 (lint is read-mostly; index sync + log prune auto-applied). The candidate-mention queue is yours to work through at your pace — nothing is auto-deleted.
 ```
 
-Omit any zero-count line with empty list (e.g., `Broken wikilinks (0)` may be elided when the body would be empty). The wiki leaf indexes line is omitted when both counts are 0. The `Questions pruned` line is omitted when the questions layer is OFF (`questions.md` absent or malformed); the `Open gaps regenerated` line is omitted only when the questions layer is OFF AND no topic has an open question (the empty-state file is still written per Step 8.5, but there is nothing to report). The SUBDIVISION PROPOSAL block is omitted when the proposal set is empty. The PROPOSED ANSWERS block is omitted when `questions-answer-proposals` is empty (or the questions layer is OFF). The GRADUATION PROPOSAL block is omitted when `graduation-proposals` is empty (or the questions layer is OFF). The trailing closing line is REQUIRED.
+Omit any zero-count line with empty list (e.g., `Broken wikilinks (0)` may be elided when the body would be empty). The wiki leaf indexes line is omitted when both counts are 0. The `Disputed callouts needing manual review` line is omitted when zero. The `Questions pruned` line is omitted when the questions layer is OFF (`questions.md` absent or malformed); the `Open gaps regenerated` line is omitted only when the questions layer is OFF AND no topic has an open question (the empty-state file is still written per Step 8.5, but there is nothing to report). The LINK-FIX PROPOSAL block is omitted when no bucket-A link exists; the MISSING-PAGE PROPOSAL block is omitted when no bucket-B target exists. The SUBDIVISION PROPOSAL block is omitted when the proposal set is empty. The PROPOSED ANSWERS block is omitted when `questions-answer-proposals` is empty (or the questions layer is OFF). The GRADUATION PROPOSAL block is omitted when `graduation-proposals` is empty (or the questions layer is OFF). The trailing closing line is REQUIRED.
+
+User response handling for LINK-FIX PROPOSAL (broken-link bucket A, step 5):
+
+| Response | Behavior |
+|----------|----------|
+| `accept all` | Build a plan of all bucket-A rows (`{file, old, new}` where `old` = broken target, `new` = `suggestion`) and run `python {sb_os_path}/wiki/scripts/sb-wiki-lint-deterministic.py --execute-link-fixes <plan.json>` from the vault root. Then re-read `detected.link_fixes` and resolve every `skipped`/`errors` entry. No log entry. |
+| `accept N` (e.g. `accept 1,2`) | Plan + execute the listed rows only. Others defer. |
+| `reject` | All fixes defer; broken links persist and re-surface next lint run. |
+| `defer` (default) | Same as `reject` for this run; re-detected next run while the link stays broken. |
+
+User response handling for MISSING-PAGE PROPOSAL (broken-link bucket B, step 5):
+
+| Response | Behavior |
+|----------|----------|
+| `accept all` | For EACH accepted target, invoke `rbtv-web-searching` to verify what the concept/entity actually is (one authoritative source), then author a stub per `../shared/stub-policy.md` + `../shared/frontmatter-schemas.md` at `wiki/concepts/{slug}.md` or `wiki/entities/{slug}.md` (matching `kind:` subfolder per the type folder's `CLAUDE.md` routing). A 1–2 sentence definition lead line + a `## Sources` section with the citation. After authoring, run `python {sb_os_path}/wiki/scripts/sb-wiki-fill-index-descriptions.py --apply` to add each stub's leaf-index Description row. NEVER invent a definition. No log entry — the page is the record. |
+| `accept N` (e.g. `accept 1,2`) | Author the listed stubs only. Others defer. |
+| `reject` | All defer; targets re-surface next lint run. |
+| `defer` (default) | Same as `reject` for this run. |
 
 User response handling for SUBDIVISION PROPOSAL:
 

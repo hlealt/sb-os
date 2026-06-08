@@ -13,6 +13,7 @@ import datetime
 import json
 import os
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -552,25 +553,141 @@ def detect_subdivision(wiki_root: Path, report: Report) -> None:
     report.detected["generic_kind_flags"] = generic_kind_flags
 
 
+_FOLD_TRANS = {
+    "‘": "'", "’": "'", "“": '"', "”": '"',  # curly quotes
+    "–": "-", "—": "-", "−": "-",                  # en/em dash, minus
+}
+
+
+def fold_key(name: str) -> str:
+    """Normalize a filename for fuzzy bucket-A matching.
+
+    Folds the differences that produce typo/encoding broken links: casing,
+    accents, curly quotes vs straight, en/em-dash vs hyphen, and separator
+    runs. Drops the `.md` extension. Two names that differ ONLY in those
+    dimensions collapse to the same key — a unique collision against an
+    existing file is the bucket-A "did you mean" signal.
+    """
+    text = "".join(_FOLD_TRANS.get(ch, ch) for ch in name)
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    text = text.casefold()
+    if text.endswith(".md"):
+        text = text[:-3]
+    return re.sub(r"[^a-z0-9]+", "-", text).strip("-")
+
+
 def detect_broken_wikilinks(wiki_root: Path, report: Report) -> None:
+    """Inventory + classify every broken wikilink target.
+
+    bucket `A`            — a UNIQUE existing file fold-matches the target
+                            (typo / curly quote / dash / accent / case). The
+                            exact existing filename rides as `suggestion` —
+                            mechanically auto-fixable via --execute-link-fixes.
+    bucket `needs-judgment` — no unique fold-match. Either a genuinely-missing
+                            page (LLM bucket B: author a stub) or unresolvable
+                            (LLM bucket C). When >=2 existing files share the
+                            fold key the target is ambiguous; the candidates
+                            ride along so the LLM/user can disambiguate.
+    """
     targets: set[str] = set()
+    fold_map: dict[str, set[str]] = {}
     for root in [wiki_root / "wiki", wiki_root / "raw"]:
         if not root.exists():
             continue
         for item in root.rglob("*.md"):
             if "raw/assets" not in item.as_posix():
                 targets.add(item.name)
-    broken: list[str] = []
+                fold_map.setdefault(fold_key(item.name), set()).add(item.name)
+    broken: list[dict[str, object]] = []
+    seen: set[tuple[str, str]] = set()
     wiki_dir = wiki_root / "wiki"
     if wiki_dir.exists():
-        for page in wiki_dir.rglob("*.md"):
+        for page in sorted(wiki_dir.rglob("*.md")):
+            rel = str(page.relative_to(wiki_root)).replace("\\", "/")
             text = read_text(page)
             for embed, target in re.findall(r"(!)?\[\[([^\]|#]+)", text):
+                target = target.strip()
                 if embed and not target.endswith(".md"):
                     continue
-                if target.endswith(".md") and Path(target).name not in targets:
-                    broken.append(f"{page}: [[{target}]]")
+                if not target.endswith(".md") or Path(target).name in targets:
+                    continue
+                key = (rel, target)
+                if key in seen:
+                    continue
+                seen.add(key)
+                matches = sorted(fold_map.get(fold_key(Path(target).name), set()))
+                if len(matches) == 1:
+                    broken.append({"source": rel, "target": target, "bucket": "A", "suggestion": matches[0]})
+                else:
+                    broken.append(
+                        {
+                            "source": rel,
+                            "target": target,
+                            "bucket": "needs-judgment",
+                            "suggestion": None,
+                            "candidates": matches,
+                        }
+                    )
     report.detected["broken_wikilinks"] = broken
+
+
+DISPUTED_HEADER_RE = re.compile(r"^>\s*\[!warning\][-+]?\s*Disputed\b", re.M)
+DISPUTED_DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
+DISPUTED_LINK_RE = re.compile(r"\[\[([^\]|#]+?\.md)")
+
+
+def detect_disputed_callouts(wiki_root: Path, report: Report) -> None:
+    """Flag unresolved `> [!warning] Disputed` callouts. Deterministic Step 3.
+
+    Resolution = page exists: a Disputed callout is RESOLVED when a topic page
+    it references (`See topic [[slug.md]]`) exists in `wiki/topics/`. An
+    UNRESOLVED callout is one with no existing resolving topic page AND a
+    flagged date >30 days old. The flagged date is the first `YYYY-MM-DD` in
+    the callout body — robust to the format drift seen in the wild
+    (bracketed/unbracketed stamp, placeholder `HH:MM`). A callout with no
+    resolving topic AND no parseable date cannot be aged — surfaced separately
+    for manual review (fail loud, never silently dropped).
+    """
+    _, topic_names = wiki_page_names(wiki_root)
+    unresolved: list[dict[str, object]] = []
+    unparseable: list[str] = []
+    for type_folder in ("concepts", "entities"):
+        type_dir = wiki_root / "wiki" / type_folder
+        if not type_dir.exists():
+            continue
+        for page in sorted(type_dir.rglob("*.md")):
+            if page.name in NON_SOURCE_FILES or page.stem == page.parent.name or excluded_dir(page):
+                continue
+            rel = str(page.relative_to(wiki_root)).replace("\\", "/")
+            lines = read_text(page).splitlines()
+            for idx, line in enumerate(lines):
+                if not DISPUTED_HEADER_RE.match(line):
+                    continue
+                body = [line]
+                for follow in lines[idx + 1 :]:
+                    if follow.lstrip().startswith(">"):
+                        body.append(follow)
+                    else:
+                        break
+                blob = "\n".join(body)
+                # Resolution: any referenced page that is an existing topic page.
+                if any(Path(t).name in topic_names for t in DISPUTED_LINK_RE.findall(blob)):
+                    continue
+                date_match = DISPUTED_DATE_RE.search(blob)
+                if not date_match:
+                    unparseable.append(rel)
+                    continue
+                date_str = date_match.group(1)
+                try:
+                    age = (today() - datetime.date.fromisoformat(date_str)).days
+                except ValueError:
+                    unparseable.append(rel)
+                    continue
+                if age > STUB_AGE_FLOOR_DAYS:
+                    unresolved.append({"page": rel, "flagged": date_str, "age_days": age})
+    report.detected["disputed_callouts"] = unresolved
+    report.detected["disputed_callouts_unparseable"] = sorted(set(unparseable))
 
 
 # ---------------------------------------------------------------------------
@@ -1087,6 +1204,53 @@ def execute_subdivision(wiki_root: Path, plan_path: Path, report: Report) -> Non
     }
 
 
+# ---------------------------------------------------------------------------
+# C6 — broken-link bucket-A fix executor (user-gated)
+# ---------------------------------------------------------------------------
+
+
+def execute_link_fixes(wiki_root: Path, plan_path: Path, report: Report) -> None:
+    """Rewrite accepted bucket-A wikilink fixes. USER-GATED (step 9 accept).
+
+    Plan rows `{file, old, new}` — `file` is wiki-root-relative, `old`/`new`
+    are exact filenames (e.g. `Foo.md`). Rewrites `[[old…]]` -> `[[new…]]`
+    preserving any `#anchor`/`|alias` tail and the embed `!` prefix. Scoped to
+    `wiki/**` only — NEVER edits `raw/` (raw-immutability contract).
+    """
+    plan = json.loads(read_text(plan_path))
+    rewritten: list[dict[str, object]] = []
+    skipped: list[str] = []
+    errors: list[str] = []
+    for row in plan:
+        file_rel, old, new = row["file"], row["old"], row["new"]
+        parts = Path(file_rel).parts
+        if not parts or parts[0] != "wiki" or ".." in parts:
+            errors.append(f"{file_rel}: outside wiki/ scope — row skipped")
+            continue
+        page = wiki_root / file_rel
+        if excluded_dir(page.relative_to(wiki_root)):
+            errors.append(f"{file_rel}: excluded path — row skipped")
+            continue
+        if not os.path.exists(_fspath(page)):
+            errors.append(f"{file_rel}: file missing — row skipped")
+            continue
+        text = read_text(page)  # re-read immediately before writing (pitfall 6)
+        pattern = re.compile(
+            r"(!?\[\[)" + re.escape(old) + r"((?:#[^\]|]*)?(?:\|[^\]]*)?\]\])"
+        )
+        updated, count = pattern.subn(lambda m: m.group(1) + new + m.group(2), text)
+        if count == 0:
+            skipped.append(f"{file_rel}: [[{old}]] not found")
+            continue
+        write_text(page, updated, report, apply_changes=True)
+        rewritten.append({"file": file_rel, "old": old, "new": new, "count": count})
+    report.detected["link_fixes"] = {
+        "rewritten": rewritten,
+        "skipped": skipped,
+        "errors": errors,
+    }
+
+
 def resolve_wiki_root(vault_root: Path) -> Path:
     manifest = json.loads(read_text(vault_root / "sb-os.json"))
     return vault_root / manifest["wiki_root"]
@@ -1114,17 +1278,25 @@ def main() -> int:
         metavar="PLAN_JSON",
         help="USER-GATED: execute folder-subdivision moves from a step-9 plan",
     )
+    parser.add_argument(
+        "--execute-link-fixes",
+        type=Path,
+        metavar="PLAN_JSON",
+        help="USER-GATED: apply accepted bucket-A broken-link fixes from a step-9 plan",
+    )
     args = parser.parse_args()
 
     wiki_root = resolve_wiki_root(args.vault_root.resolve())
 
-    if args.execute_renames or args.execute_subdivision:
+    if args.execute_renames or args.execute_subdivision or args.execute_link_fixes:
         # Executor mode: run ONLY the requested user-gated executor(s).
         report = Report(mode="execute")
         if args.execute_renames:
             execute_renames(wiki_root, args.execute_renames, report)
         if args.execute_subdivision:
             execute_subdivision(wiki_root, args.execute_subdivision, report)
+        if args.execute_link_fixes:
+            execute_link_fixes(wiki_root, args.execute_link_fixes, report)
     else:
         report = Report(mode="apply" if args.apply else "check")
         sync_raw_indexes(wiki_root, report, args.apply)
@@ -1132,6 +1304,7 @@ def main() -> int:
         sync_type_tags(wiki_root, report, args.apply)
         sync_source_my_take_and_queue(wiki_root, report, args.apply)
         detect_broken_wikilinks(wiki_root, report)
+        detect_disputed_callouts(wiki_root, report)
         detect_subdivision(wiki_root, report)
         scan_log(wiki_root, report, prune=args.prune_log)
         check_questions_links(wiki_root, report)
