@@ -345,15 +345,15 @@ last_validated: 2026-05-27
 
 ```yaml
 tool: gate_coverage (python shared/gate_coverage.py [--transactions PATH] [--loop-count N] [--config-dir PATH] [--ack-file PATH])
-purpose: Gates #1/#3 (ANDed, P2, S7) — R$-coverage >= config threshold (0.75) AND no unacknowledged untagged despesa > config floor (R$300); gate 2 row-coverage is informational only (printed + audit event, never fails); auto-loops up to 3 times then surfaces the "Proceed anyway? [S/N]" user prompt.
+purpose: Gates #1/#3 (ANDed, P2, S7) — R$-coverage >= config threshold (0.75) AND no unacknowledged untagged despesa > config floor (R$300); gate 2 row-coverage is informational only (printed + audit event, never fails); auto-loops up to 3 times then surfaces the "Proceed anyway? [S/N]" user prompt. THRESHOLD PROVENANCE (compound cp-sb-bookkeeper-gates-measure-meaning, change 3): each config threshold MUST carry a sibling `*_provenance` block naming the metric it was decided for (step_5_5_coverage.threshold → despesas_tagged_brl_pct; tag_coverage.gate.untagged_amount_threshold_brl → untagged_despesa_floor_brl); a missing or metric-mismatched (inherited) block makes the gate refuse to run (exit 2) rather than silently enforce a borrowed number.
 owner_script: shared/gate_coverage.py
 class: read
 use: validation-gate
 expected_inputs: optional --transactions PATH to transactions.csv (default: latest fechamento month); optional --loop-count N (current auto-loop iteration, default 0); optional --config-dir PATH; optional --ack-file PATH to tag-review-acks.csv (default: .user/finance/bookkeeper/config/corrections/tag-review-acks.csv); reads standing-rules.yaml for R$ threshold (gates.step_5_5_coverage.threshold, 0.75) and floor (tag_coverage.gate.untagged_amount_threshold_brl, 300); reads tag-review-acks.csv (identity-keyed ack side-ledger; missing file treated as empty set; malformed file — missing identity columns — exits 2); excludes receitas/intercontas/ignorar/venda
-outputs: R$ coverage % + row coverage % (informational) + ACK/VIOLATION lines per large-untagged row (ACK = row acked in tag-review-acks.csv, VIOLATION = unacked); PASS (exit 0) gate 1 R$ >= threshold AND gate 3 zero VIOLATION lines; FAIL (exit 1) gate 1 below threshold OR any VIOLATION line; exit 2 on missing transactions.csv or malformed ack file; emits coverage_progress (x2) + gate_pass/gate_fail events (trigger_context.gate3_acked_skips = count of acked rows above floor). Max-loop guard at 3 iterations.
-canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/fechamento/{YYYY-MM}/transactions.csv; reads .user/finance/bookkeeper/config/corrections/tag-review-acks.csv (no write)
+outputs: R$ coverage % + row coverage % (informational) + a `Provenance:` line per config threshold naming the metric it was decided for + ACK/VIOLATION lines per large-untagged row (ACK = row acked in tag-review-acks.csv, VIOLATION = unacked); PASS (exit 0) gate 1 R$ >= threshold AND gate 3 zero VIOLATION lines; FAIL (exit 1) gate 1 below threshold OR any VIOLATION line; exit 2 on missing transactions.csv, malformed ack file, OR a config threshold whose `*_provenance` block is absent or names a different metric (threshold-provenance check, compound change 3); emits coverage_progress (x2) + gate_pass/gate_fail events (trigger_context.gate3_acked_skips = count of acked rows above floor; gate1_threshold_metric / gate3_floor_metric = the provenance metric per threshold). Max-loop guard at 3 iterations.
+canonical_reader_writer: reads .user/finance/bookkeeper/ledgers/fechamento/{YYYY-MM}/transactions.csv; reads .user/finance/bookkeeper/config/corrections/tag-review-acks.csv (no write); reads gates.step_5_5_coverage.threshold(+_provenance) and tag_coverage.gate.untagged_amount_threshold_brl(+_provenance) from standing-rules.yaml
 dry_run: not-applicable
-last_validated: 2026-06-05
+last_validated: 2026-06-08
 ```
 
 ```yaml

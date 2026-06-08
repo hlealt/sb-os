@@ -851,3 +851,183 @@ def test_gate_trigger_context_has_gate2_row_coverage(tmp_path, monkeypatch):
     assert "gate2_row_coverage" in tc
 
     audit_mod._reset_cache_for_tests()
+
+
+# ---------------------------------------------------------------------------
+# Threshold provenance (compound cp-sb-bookkeeper-gates-measure-meaning, change 3)
+# A config-provided threshold must declare the metric it was decided for, and
+# that metric must match the metric the gate applies it to — else exit 2.
+# ---------------------------------------------------------------------------
+
+from lib.standing_rules import check_threshold_provenance, ThresholdProvenanceError
+
+
+def _write_standing_rules(
+    config_dir: Path,
+    *,
+    r_threshold: float = 0.75,
+    r_prov_metric: str = "despesas_tagged_brl_pct",
+    include_r_prov: bool = True,
+    floor: int = 300,
+    floor_prov_metric: str = "untagged_despesa_floor_brl",
+    include_floor_prov: bool = True,
+):
+    """Write a minimal valid standing-rules.yaml for gate_coverage provenance tests.
+
+    Satisfies load_standing_rules (_meta + supplier_rules) and load_gates (the
+    three required gate sub-sections), then carries (or omits) provenance blocks
+    on the two coverage thresholds.
+    """
+    config_dir.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "_meta:",
+        "  schema_version: 1",
+        '  rule_set_version: "test"',
+        "supplier_rules:",
+        "  status: active",
+        "tag_coverage:",
+        "  status: active",
+        "  gate:",
+        f"    untagged_amount_threshold_brl: {floor}",
+    ]
+    if include_floor_prov:
+        lines += [
+            "    untagged_amount_threshold_brl_provenance:",
+            f"      metric: {floor_prov_metric}",
+            '      decided_on: "2026-06-05"',
+        ]
+    lines += [
+        "gates:",
+        "  status: active",
+        "  step_01_file_identification:",
+        "    user_confirmation_required: true",
+        "  step_3d_unmatched_rows:",
+        "    enforcement: no_silent_skip",
+        "  step_5_5_coverage:",
+        f"    threshold: {r_threshold}",
+    ]
+    if include_r_prov:
+        lines += [
+            "    threshold_provenance:",
+            f"      metric: {r_prov_metric}",
+            '      decided_on: "2026-06-05"',
+        ]
+    (config_dir / "standing-rules.yaml").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+# --- pure helper unit tests ---
+
+
+def test_provenance_match_returns_block():
+    parent = {"threshold": 0.75, "threshold_provenance": {"metric": "m1", "decided_on": "2026-06-05"}}
+    assert check_threshold_provenance(parent, "threshold", "m1")["metric"] == "m1"
+
+
+def test_provenance_missing_block_raises():
+    with pytest.raises(ThresholdProvenanceError):
+        check_threshold_provenance({"threshold": 0.75}, "threshold", "m1")
+
+
+def test_provenance_metric_mismatch_raises():
+    parent = {"threshold": 0.75, "threshold_provenance": {"metric": "other_metric"}}
+    with pytest.raises(ThresholdProvenanceError):
+        check_threshold_provenance(parent, "threshold", "m1")
+
+
+def test_provenance_custom_provenance_key():
+    parent = {"floor": 300, "floor_prov": {"metric": "m3"}}
+    assert check_threshold_provenance(parent, "floor", "m3", provenance_key="floor_prov")["metric"] == "m3"
+
+
+# --- gate integration: provenance drives the exit code ---
+
+
+def test_main_provenance_valid_passes(tmp_path, monkeypatch):
+    """Valid provenance on both thresholds → gate evaluates normally (exit 0)."""
+    cfg = tmp_path / "config"
+    _write_standing_rules(cfg)
+    tx = tmp_path / "transactions.csv"
+    _write_csv(tx, [
+        {"date": "2026-04-01", "description": "A", "amount": "-75", "category": "alimentacao", "tags": "x"},
+        {"date": "2026-04-02", "description": "B", "amount": "-25", "category": "transporte", "tags": ""},
+    ])
+    monkeypatch.setenv("BOOKKEEPER_AUDIT_DISABLED", "1")
+    monkeypatch.setattr(sys, "argv", [
+        "gate_coverage.py", "--transactions", str(tx), "--config-dir", str(cfg),
+    ])
+    assert main() == 0
+
+
+def test_main_provenance_r_metric_mismatch_exits_2(tmp_path, monkeypatch):
+    """R$ threshold provenance names a different metric (inheritance) → exit 2."""
+    cfg = tmp_path / "config"
+    _write_standing_rules(cfg, r_prov_metric="some_other_metric")
+    tx = tmp_path / "transactions.csv"
+    _write_csv(tx, [{"date": "2026-04-01", "description": "A", "amount": "-75", "category": "alimentacao", "tags": "x"}])
+    monkeypatch.setenv("BOOKKEEPER_AUDIT_DISABLED", "1")
+    monkeypatch.setattr(sys, "argv", [
+        "gate_coverage.py", "--transactions", str(tx), "--config-dir", str(cfg),
+    ])
+    assert main() == 2
+
+
+def test_main_provenance_r_missing_exits_2(tmp_path, monkeypatch):
+    """R$ threshold present but no provenance block → exit 2."""
+    cfg = tmp_path / "config"
+    _write_standing_rules(cfg, include_r_prov=False)
+    tx = tmp_path / "transactions.csv"
+    _write_csv(tx, [{"date": "2026-04-01", "description": "A", "amount": "-75", "category": "alimentacao", "tags": "x"}])
+    monkeypatch.setenv("BOOKKEEPER_AUDIT_DISABLED", "1")
+    monkeypatch.setattr(sys, "argv", [
+        "gate_coverage.py", "--transactions", str(tx), "--config-dir", str(cfg),
+    ])
+    assert main() == 2
+
+
+def test_main_provenance_floor_metric_mismatch_exits_2(tmp_path, monkeypatch):
+    """Untagged-floor provenance names a different metric → exit 2."""
+    cfg = tmp_path / "config"
+    _write_standing_rules(cfg, floor_prov_metric="some_other_floor")
+    tx = tmp_path / "transactions.csv"
+    _write_csv(tx, [{"date": "2026-04-01", "description": "A", "amount": "-75", "category": "alimentacao", "tags": "x"}])
+    monkeypatch.setenv("BOOKKEEPER_AUDIT_DISABLED", "1")
+    monkeypatch.setattr(sys, "argv", [
+        "gate_coverage.py", "--transactions", str(tx), "--config-dir", str(cfg),
+    ])
+    assert main() == 2
+
+
+def test_main_provenance_printed_in_output(tmp_path, monkeypatch, capsys):
+    """Provenance lines (metric ownership) are printed in the gate output."""
+    cfg = tmp_path / "config"
+    _write_standing_rules(cfg)
+    tx = tmp_path / "transactions.csv"
+    _write_csv(tx, [
+        {"date": "2026-04-01", "description": "A", "amount": "-75", "category": "alimentacao", "tags": "x"},
+        {"date": "2026-04-02", "description": "B", "amount": "-25", "category": "transporte", "tags": ""},
+    ])
+    monkeypatch.setenv("BOOKKEEPER_AUDIT_DISABLED", "1")
+    monkeypatch.setattr(sys, "argv", [
+        "gate_coverage.py", "--transactions", str(tx), "--config-dir", str(cfg),
+    ])
+    main()
+    out = capsys.readouterr().out
+    assert "Provenance" in out
+    assert "despesas_tagged_brl_pct" in out
+    assert "untagged_despesa_floor_brl" in out
+
+
+def test_main_fallback_path_no_provenance_check(tmp_path, monkeypatch):
+    """No standing-rules.yaml (config unreachable) → in-code fallback, NO provenance
+    check (the fallback path is not subject to the bar). Untagged below fallback
+    floor R$100, R$ above fallback 0.75 → exit 0."""
+    tx = tmp_path / "transactions.csv"
+    _write_csv(tx, [
+        {"date": "2026-04-01", "description": "A", "amount": "-200", "category": "alimentacao", "tags": "x"},
+        {"date": "2026-04-02", "description": "B", "amount": "-50", "category": "transporte", "tags": ""},
+    ])
+    monkeypatch.setenv("BOOKKEEPER_AUDIT_DISABLED", "1")
+    monkeypatch.setattr(sys, "argv", [
+        "gate_coverage.py", "--transactions", str(tx), "--config-dir", str(tmp_path),
+    ])
+    assert main() == 0

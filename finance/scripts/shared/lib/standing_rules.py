@@ -47,6 +47,23 @@ class StandingRulesError(RuntimeError):
     """Raised when the standing-rules YAML is missing or malformed."""
 
 
+class ThresholdProvenanceError(StandingRulesError):
+    """Raised when a config-provided gate threshold lacks valid provenance for
+    the metric consuming it (compound cp-sb-bookkeeper-gates-measure-meaning,
+    change 3).
+
+    Two cases, both the "inherited / un-owned threshold" failure class exposed by
+    the 2026-06-05 coverage-gate incident:
+      - the threshold is present in config but carries no provenance block; or
+      - the provenance block names a `metric` different from the metric the gate
+        applies the threshold to (a number decided for metric X binding metric Y).
+
+    Subclasses StandingRulesError so config-load handlers can still catch it, but
+    gate programs MUST NOT swallow it into a fallback: a threshold the config DID
+    provide must be honestly owned, never silently bypassed.
+    """
+
+
 def standing_rules_path(config_folder: Path | str) -> Path:
     """Canonical path to the rules file inside a bookkeeper config folder."""
     return Path(config_folder) / "standing-rules.yaml"
@@ -686,6 +703,54 @@ def check_gates_coverage_threshold(
     if rule_counter is not None:
         rule_counter.record("gates_coverage_threshold_read")
     return float(threshold)
+
+
+def check_threshold_provenance(
+    parent: dict[str, Any],
+    threshold_key: str,
+    applied_metric: str,
+    *,
+    provenance_key: str | None = None,
+) -> dict[str, Any]:
+    """Assert a config-provided threshold is owned by the metric consuming it.
+
+    `parent` holds BOTH the threshold scalar (at `threshold_key`) and its
+    provenance block (at `provenance_key`, default `f"{threshold_key}_provenance"`).
+    `applied_metric` is the metric identifier the calling gate applies this
+    threshold to.
+
+    Returns the provenance dict on a clean match (its `metric` == applied_metric).
+    Raises `ThresholdProvenanceError` when the provenance block is absent/malformed,
+    or when its `metric` differs from `applied_metric` (the inherited-threshold
+    class). Call ONLY when the threshold is actually present in config — a
+    threshold the config does not provide (caller uses an in-code fallback) is not
+    subject to this check. Pure.
+
+    Compound: cp-sb-bookkeeper-gates-measure-meaning, change 3 (threshold
+    provenance enforced in code).
+    """
+    pkey = provenance_key or f"{threshold_key}_provenance"
+    prov = parent.get(pkey)
+    if not isinstance(prov, dict):
+        raise ThresholdProvenanceError(
+            f"threshold '{threshold_key}' is present in config but has no "
+            f"provenance block ('{pkey}'). A binding threshold MUST declare the "
+            f"metric it was decided for. Add a sibling block:\n"
+            f"  {pkey}:\n"
+            f"    metric: {applied_metric}\n"
+            f"    decided_on: <YYYY-MM-DD>\n"
+            f"    decision: <why this number, for this metric>"
+        )
+    declared_metric = prov.get("metric")
+    if declared_metric != applied_metric:
+        raise ThresholdProvenanceError(
+            f"threshold '{threshold_key}' was decided for metric "
+            f"{declared_metric!r} but is being applied to metric "
+            f"{applied_metric!r} — an inherited threshold (the failure class this "
+            f"check prevents). Record a deliberate threshold + provenance for "
+            f"{applied_metric!r}, or apply the threshold decided for it."
+        )
+    return prov
 
 
 def load_batch_ui(standing_rules: dict[str, Any]) -> dict[str, Any]:

@@ -57,6 +57,13 @@ from lib import audit, standing_rules as sr
 
 _GATE_NAME = "gate_1_coverage"
 
+# Metric identifiers each config threshold is decided FOR (compound
+# cp-sb-bookkeeper-gates-measure-meaning, change 3). The provenance block in
+# standing-rules.yaml MUST name the matching metric, or gate_coverage refuses to
+# run (exit 2) — a borrowed / un-owned threshold never silently binds.
+_METRIC_R_COVERAGE = "despesas_tagged_brl_pct"          # gate #1 R$ coverage threshold
+_METRIC_UNTAGGED_FLOOR = "untagged_despesa_floor_brl"   # gate #3 large-untagged floor
+
 _EXCLUDED_CATEGORIES = {"receitas", "intercontas", "ignorar", "venda"}
 
 # Fallback threshold if config is unreachable.
@@ -84,38 +91,73 @@ def _find_vault_root() -> Path:
     raise RuntimeError(f"Vault root not found from {__file__}")
 
 
-def _load_threshold(config_dir: Path) -> float:
-    """Read the coverage threshold from standing-rules.yaml."""
+def _load_threshold(config_dir: Path) -> tuple[float, dict | None]:
+    """Read the R$ coverage threshold + its provenance from standing-rules.yaml.
+
+    Returns (threshold, provenance_block). When config PROVIDES the threshold it
+    MUST carry provenance naming metric `_METRIC_R_COVERAGE` — otherwise
+    `sr.check_threshold_provenance` raises `ThresholdProvenanceError`, which
+    propagates to main() and becomes exit 2 (a config threshold that is un-owned
+    or inherited never silently binds — compound change 3). When config is
+    unreachable/malformed, returns the in-code fallback with provenance None (the
+    fallback path is not subject to the provenance bar).
+    """
     try:
         rules = sr.load_standing_rules(config_dir)
         gates_cfg = sr.load_gates(rules)
         step_5_5 = gates_cfg.get("step_5_5_coverage", {})
         threshold = step_5_5.get("threshold")
-        if threshold is not None and isinstance(threshold, (int, float)):
-            return float(threshold)
     except sr.StandingRulesError:
-        pass
-    return _COVERAGE_THRESHOLD_FALLBACK
+        return _COVERAGE_THRESHOLD_FALLBACK, None
+    if threshold is None or not isinstance(threshold, (int, float)):
+        return _COVERAGE_THRESHOLD_FALLBACK, None
+    # Config provides the threshold → it MUST be owned by this metric. A
+    # ThresholdProvenanceError here is intentionally NOT caught (it is not a
+    # config-unreachable fallback case) — it propagates to main() → exit 2.
+    prov = sr.check_threshold_provenance(step_5_5, "threshold", _METRIC_R_COVERAGE)
+    return float(threshold), prov
 
 
-def _load_untagged_floor(config_dir: Path) -> float:
-    """Read the untagged-amount floor from standing-rules.yaml.
+def _load_untagged_floor(config_dir: Path) -> tuple[float, dict | None]:
+    """Read the untagged-amount floor + its provenance from standing-rules.yaml.
 
     Canonical (and only) source: tag_coverage.gate.untagged_amount_threshold_brl.
     p5-8 removed the former gates.step_5_5_coverage.untagged_amount_threshold alias,
-    so this reads the single canonical key. Returns _UNTAGGED_FLOOR_FALLBACK if
-    config is unavailable.
+    so this reads the single canonical key. Returns (floor, provenance_block).
+
+    When config PROVIDES the floor it MUST carry provenance naming metric
+    `_METRIC_UNTAGGED_FLOOR` — otherwise `sr.check_threshold_provenance` raises
+    `ThresholdProvenanceError` (→ exit 2 in main(); compound change 3). Returns
+    the in-code fallback with provenance None when config is unavailable.
     """
     try:
         rules = sr.load_standing_rules(config_dir)
         tag_cov = rules.get("tag_coverage", {})
         gate_section = tag_cov.get("gate", {}) if isinstance(tag_cov, dict) else {}
         canonical = gate_section.get("untagged_amount_threshold_brl")
-        if canonical is not None and isinstance(canonical, (int, float)):
-            return float(canonical)
     except sr.StandingRulesError:
-        pass
-    return _UNTAGGED_FLOOR_FALLBACK
+        return _UNTAGGED_FLOOR_FALLBACK, None
+    if canonical is None or not isinstance(canonical, (int, float)):
+        return _UNTAGGED_FLOOR_FALLBACK, None
+    prov = sr.check_threshold_provenance(
+        gate_section, "untagged_amount_threshold_brl", _METRIC_UNTAGGED_FLOOR
+    )
+    return float(canonical), prov
+
+
+def _format_threshold_provenance(label: str, value: float, prov: dict | None, *, is_pct: bool) -> str:
+    """Render one provenance line for the gate output (compound change 3).
+
+    Shows the metric a config threshold was decided for, so the owner can see at
+    a glance the number is owned by THIS check, not borrowed. Fallback path
+    (prov None) is labelled as such.
+    """
+    shown = f"{value:.0%}" if is_pct else f"R${value:.0f}"
+    if prov is None:
+        return f"Provenance: {label} = {shown} from in-code fallback (config unreachable; no provenance)."
+    metric = prov.get("metric", "?")
+    decided = prov.get("decided_on", "?")
+    return f"Provenance: {label} = {shown} decided for metric '{metric}' on {decided}."
 
 
 def _tx_amount_key(amount: object) -> str:
@@ -365,9 +407,16 @@ def main() -> int:
     # Load ack set (fail-soft on missing; fail-loud on bad header → exits 2).
     ack_keys = load_tag_review_acks(ack_path)
 
-    # Load thresholds from config.
-    threshold = _load_threshold(config_dir)
-    floor_brl = _load_untagged_floor(config_dir)
+    # Load thresholds from config — provenance-checked (compound change 3).
+    # A config threshold that is un-owned (no provenance) or inherited (provenance
+    # names a different metric) makes the gate refuse to run with exit 2, rather
+    # than silently enforcing a borrowed number.
+    try:
+        threshold, threshold_prov = _load_threshold(config_dir)
+        floor_brl, floor_prov = _load_untagged_floor(config_dir)
+    except sr.ThresholdProvenanceError as exc:
+        print(f"ERROR: gate threshold provenance check failed — {exc}", file=sys.stderr)
+        return 2
 
     # Load transactions.
     try:
@@ -440,6 +489,8 @@ def main() -> int:
             "gate3_large_untagged_count": len(large_untagged),
             "gate3_floor_brl": floor_brl,
             "gate3_acked_skips": len(acked_rows),
+            "gate1_threshold_metric": (threshold_prov or {}).get("metric"),  # provenance (compound change 3)
+            "gate3_floor_metric": (floor_prov or {}).get("metric"),
         },
     )
 
@@ -453,6 +504,10 @@ def main() -> int:
         f"Row coverage: {coverage_rows:.1%} "
         f"({tagged_rows} tagged / {total_rows} total expenses) [informational]"
     )
+
+    # Threshold provenance (compound change 3): show each config threshold's owner-metric.
+    print(_format_threshold_provenance("R$ coverage threshold", threshold, threshold_prov, is_pct=True))
+    print(_format_threshold_provenance("untagged floor", floor_brl, floor_prov, is_pct=False))
 
     # Print acked rows as visible ACK notes (never silent skip).
     if acked_rows:
