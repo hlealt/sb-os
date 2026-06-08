@@ -62,7 +62,7 @@ These files codify rules referenced across multiple `sb-wiki-*` workflows. Load 
 5. Determine if invocation is from a candidate or fresh:
    - **From candidate** — caller provides the parent ingest timestamp OR the user references an existing `candidate-topic` log entry. Read `{wiki_root}/log.md`, locate the `candidate-topic` entry by timestamp + slug. Extract: trigger type, source filenames, claim A + claim B (Contradiction only), parent ingest timestamp.
    - **Fresh proposal** — no candidate exists. Caller (or user) supplies trigger type and source filenames directly. No claim A / claim B unless explicitly provided.
-5. Classify the topic shape per `../shared/page-types.md` Topic discriminator: `debate` | `comparison` | `landscape` | `decision-frame` | `evolution`. Drives optional section selection in step 2.
+6. Classify the topic shape per `../shared/page-types.md` Topic discriminator: `debate` | `comparison` | `landscape` | `decision-frame` | `evolution`. Drives optional section selection in step 2.
 
 ### Step 2 — Write topic page
 

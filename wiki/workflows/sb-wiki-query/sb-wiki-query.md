@@ -210,7 +210,7 @@ If target type is `topic`:
    - `extend N` — append the synthesized answer's content to the existing topic page (as a new `Position` / `Angle` or sub-section). No new page is written; skill is not invoked.
    - `new` — proceed to step 3 with sibling cross-linking (the existing topic gets a `related:` entry to the new one and vice versa).
    - `abort` — skip step 7 entirely; only the `query` log entry from step 7c is written.
-   The skill's own scope-overlap check (Step 1.4) is the second safety net — but this pre-check fires first because the query workflow has the synthesized answer in hand and can frame the extend-vs-new decision better than the skill alone.
+   The skill's own scope-overlap check (in its Step 1) is the second safety net — but this pre-check fires first because the query workflow has the synthesized answer in hand and can frame the extend-vs-new decision better than the skill alone.
 3. Invoke the `sb-wiki-create-topic` skill via the user-intent invocation mode. Pass:
    - The proposed topic slug.
    - The triggering pages (the `picks` set from steps 2–4) for cross-linking.
