@@ -1056,7 +1056,7 @@ The script executes the deterministic halves of steps 1, 2, 4, 5, 6, 7, 7.5, 7.6
 
 #### Lint output format
 
-Step 7 does not authorize scripts to write blank semantic cells. `Description`, `Scope`, and `What it says` require LLM judgment. Raw index `Title` is script-safe only when it comes from frontmatter or an H1; filename slug guesses are forbidden.
+Step 7 does not authorize scripts to write blank or guessed semantic cells. Concept/entity `Description` cells (leaf indexes + router `## Flat pages` tables) ARE auto-filled by `sb-wiki-fill-index-descriptions.py` from each page's lead definition sentence (wikilinks flattened, footnote/emphasis stripped, truncated to one sentence) — these pages are authored definition-first, so the lead line IS the description. A page with NO clean lead sentence is REPORTED as `weak`, NEVER written; weak `Description` cells stay LLM-owned. `Scope` (topics) and `What it says` (sources) still require LLM judgment and are never script-filled. Raw index `Title` is script-safe only when it comes from frontmatter or an H1; filename slug guesses are forbidden.
 
 ```
 LINT REPORT — 2026-04-30 09:00

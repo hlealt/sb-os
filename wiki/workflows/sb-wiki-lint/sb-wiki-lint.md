@@ -51,6 +51,7 @@ This workflow is read-mostly by contract. Auto-applied writes are SCOPED to inde
 | Renumber footnotes — safe bijections only; stale-def removal is REPORT-ONLY per `../shared/citation-format.md` (step 6) | Per source page touched | Auto-applied — no user diff |
 | Create missing raw `{origin}.md` indexes; add missing rows with `Wiki = No` default (step 7) | `{wiki_root}/raw/{origin}/{origin}.md`, `{wiki_root}/raw/studies/studies.md` | Auto-applied — no user diff |
 | Create missing wiki leaf indexes (`concepts.md`, `entities.md`, `topics.md`) (step 7) | `{wiki_root}/wiki/concepts/concepts.md`, `entities/entities.md`, `topics/topics.md` | Auto-applied — no user diff |
+| Fill concept/entity `Description` cells from each page's lead definition sentence; weak pages (no clean lead sentence) reported, never written (step 7) | concept/entity leaf indexes + router `## Flat pages` tables under `{wiki_root}/wiki/{concepts,entities}/` | Auto-applied — no user diff |
 | Type-tag sync (step 7) — append each page's `type:` value to its `tags:` frontmatter when absent (append-only, user tags preserved); add `type: index` + `tags: [index]` to index files missing `type:` | Every page under `{wiki_root}/wiki/` | Auto-applied — no user diff |
 | Prune spent/retired entries from `log.md` (step 8) — delete `candidate-topic`/`candidate-mention` entries whose page now exists, and delete retired history entries | `{wiki_root}/log.md` | Auto-applied — no user diff |
 | Prune promoted/retired entries from `questions.md` (step 8) — delete entries whose matching wiki page now exists (promoted) or that the user retired, by the same "page exists" test as the `candidate-mention` prune | `{wiki_root}/questions.md` | Auto-applied — no user diff. Skipped entirely when `questions.md` is absent |
@@ -70,9 +71,10 @@ Before Step 1, run the deterministic helper from the vault root with the active 
 
 ```bash
 python {sb_os_path}/wiki/scripts/sb-wiki-lint-deterministic.py --apply --report {wiki_root}/lint-deterministic-report.json
+python {sb_os_path}/wiki/scripts/sb-wiki-fill-index-descriptions.py --apply
 ```
 
-The helper is mandatory. It executes the deterministic halves of the lint steps in one pass — NEVER re-derive these by walking files with LLM reads. Consume the JSON report keys per this map:
+Run both, in order — the first owns the deterministic index-row + footnote work; the second (step 7) fills concept/entity `Description` cells from each page's lead definition sentence and reports pages with no clean lead sentence as `weak` (those stay LLM-owned). The helper is mandatory. It executes the deterministic halves of the lint steps in one pass — NEVER re-derive these by walking files with LLM reads. Consume the JSON report keys per this map:
 
 | Report key | Feeds step | Content |
 |------------|-----------|---------|
@@ -206,12 +208,12 @@ For each wiki leaf folder (`{wiki_root}/wiki/concepts/`, `entities/`, `topics/`)
 2. If `wiki/topics/topics.md` is missing, CREATE it with the 2-column header `| File | Scope |` (per `shared/folder-structure.md` "Creation Rules" table; topics-leaf-index format defined alongside `sb-wiki-create-topic`).
 3. If `wiki/topics/topics.md` exists with a different column layout (user-customized), preserve the user's columns. Operate accordingly: read filenames from the `File` column; do NOT rewrite the layout.
 4. For `wiki/concepts/concepts.md` and `wiki/entities/entities.md`: create with the standard wiki leaf-index header (`| File | Description |`) if missing. Preserve user-customized layouts when present.
-5. For each page in the leaf folder, ensure a row exists for that page. If missing, read the page and add a row with a semantic `Description` or `Scope`; never leave judgment-bearing columns blank.
+5. For each page in the leaf folder, ensure a row exists for that page. Concept/entity `Description` cells are auto-filled by `sb-wiki-fill-index-descriptions.py` (run in the Deterministic Helper step) from each page's lead definition sentence; topic `Scope` cells stay LLM-filled. Never leave judgment-bearing columns blank.
 6. Capture `wiki-leaf-indexes-created` count and `wiki-leaf-rows-added` total for the LINT REPORT.
 
 **Type-tag sync (deterministic, auto-applied by the helper):** every page under `{wiki_root}/wiki/` MUST carry its `type:` frontmatter value as an entry in `tags:` (per `../shared/frontmatter-schemas.md` — Obsidian graph groups color by `tag:`, not frontmatter fields). The helper appends the missing tag (append-only — existing user tags are NEVER removed or reordered); index files (filename stem = parent directory name) missing `type:` get `type: index` + `tags: [index]`, creating the frontmatter block when absent. Non-index pages whose `type:` cannot be derived deterministically are reported in `detected.type_tags.unresolved` — surfaced in the LINT REPORT, never guessed. Capture `tags_added` and `type_index_added` for the LINT REPORT.
 
-**Judgment-bearing cell rule:** Steps above never authorize blank semantic cells. `Description`, `Scope`, and `What it says` require LLM judgment. If the deterministic helper reports a missing row for those cells, the agent MUST read the referenced page and write the semantic cell before Step 8 (the log-prune pass).
+**Judgment-bearing cell rule:** Steps above never authorize blank semantic cells. Concept/entity `Description` cells are auto-filled by `sb-wiki-fill-index-descriptions.py` from the page's lead definition sentence; the agent fills ONLY the pages that helper reports as `weak` (no clean lead sentence) by reading the page and writing the cell. `Scope` (topics) and `What it says` (sources) remain fully LLM-owned — if the deterministic helper reports a missing row for those cells, the agent MUST read the referenced page and write the semantic cell before Step 8 (the log-prune pass).
 
 ### Step 7.5 — Folder-subdivision detection
 
