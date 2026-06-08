@@ -33,14 +33,14 @@ Develop the thesis content through reasoning. The thesis is a single falsifiable
 | Claim | The single falsifiable statement the thesis defends — written first |
 | Hypotheses | The sub-claims that, if true, make the claim hold — populated from the Step 2a Assumption Audit's testable questions |
 | Causal mechanism | WHY the claim would play out — the chain from cause to outcome |
-| Evidence for | Concrete, sourced support; tie each item to the EXACT captured raw file that carries the claim — before the Step 4 checkpoint, VERIFY the cited file actually contains the stat/claim (a targeted Grep of the raw, never a full-text read into context). A claim attributed to the wrong captured file is a citation defect, not a formatting nit |
+| Evidence for | Concrete, sourced support; tie each item to the EXACT captured raw file that carries the claim — before the Step 4 checkpoint, VERIFY the cited file actually contains the stat/claim (a targeted Grep of the raw, never a full-text read into context). A claim attributed to the wrong captured file is a citation defect, not a formatting nit. **Wave-returned figures are NEVER citable here until an ingest has confirmed the figure in the captured source** — a wave returns LEADS, not citable facts; only the ingest's figures-to-verify return (the captured-source verification record) makes a figure citable. Consult `data/correction-classes.md` for the failure modes to check when judging whether a captured source genuinely carries a claimed figure |
 | Evidence against | MANDATORY and substantive — the strongest disconfirming evidence and counter-arguments; never an empty placeholder. Populated by the Step 2b Disconfirm dispatch (not reasoned from context alone) |
 | Risks | What could break the thesis or the position independent of the core claim |
 | Invalidation criteria | MANDATORY and substantive — the specific, observable conditions under which the thesis is wrong and must be retired — seeded from the Step 2a Assumption Audit's testable questions on weak assumptions |
 
 The Assumption Audit (Step 2a) is the METHOD that fills `Hypotheses`, `Invalidation criteria`, and the Disconfirm targets; the Disconfirm dispatch (Step 2b) is the METHOD that fills `Evidence against`. They are not new output sections — they are how the elements above get reasoned. Run Step 2a, then Step 2b, then complete the remaining elements.
 
-**Market-figure range rule.** When cited sources disagree on a numeric market figure (price level, drawdown magnitude, multiple, growth rate), resolve it ONLY through a registered `class: read` tool in `../../scripts/tools-index.md` (tools-only invariant). If no registered tool resolves the figure, the draft states the source-attributed RANGE — e.g. `-35% [^a] to -66% [^b]` — and NEVER silently picks one source's value.
+**Market-figure range rule.** When cited sources disagree on a numeric market figure (price level, drawdown magnitude, multiple, growth rate), resolve it ONLY through a registered `class: read` tool in `../../scripts/tools-index.md` (tools-only invariant). If no registered tool resolves the figure, the draft states the source-attributed RANGE — e.g. `-35% [^a] to -66% [^b]` — and NEVER silently picks one source's value. **Methodology/benchmark conflict:** when two figures disagree because they use different benchmarks or methodologies, STATE BOTH figures WITH their respective methodologies — e.g. `23% [^a, total-return index] vs 18% [^b, price-only index]` — and NEVER average them and NEVER silently pick one.
 
 Surface a problem with the reasoning or its inputs (a source failing the `source-policy` trust bar, a contradicted premise) per `./investor-loop.md` § Issue-surfacing — never pass it silently.
 
@@ -66,9 +66,9 @@ The claim rests on hidden assumptions; left implicit, they become the thesis's b
 
 Surface any assumption the audit cannot resolve from reasoning alone (e.g. a `convenience` assumption with no supporting basis) per `./investor-loop.md` § Issue-surfacing — do not bury it. The audit produces classified assumptions as testable questions; it does NOT produce a project plan — never append owners, timelines, metrics, or next-action lists (alien to this read-only reasoning mode, which never executes).
 
-### Step 2b — Populate `Evidence against` via a Disconfirm dispatch
+### Step 2b — Populate `Evidence against` via a Disconfirm dispatch + FOR-side ad-hoc election
 
-Populate `Evidence against` by HUNTING for the sources that would overturn the claim — not by reasoning counter-arguments from context alone. The discovery lives in `research`; this mode DISPATCHES it (it does NOT re-implement discovery, re-specify the search mechanics, or restate the cost cap — `./research.md` owns all of that). This mirrors the `review`→`research` sub-agent dispatch precedent (`./review.md` Step 3).
+Populate `Evidence against` by HUNTING for the sources that would overturn the claim — not by reasoning counter-arguments from context alone. The discovery lives in `research`; this mode DISPATCHES it by **dispatching the canonical disconfirm-wave skeleton in `research.md` Step 7a** (it does NOT re-implement discovery, re-specify the search mechanics, or restate the cost cap — `./research.md` owns all of that). This mirrors the `review`→`research` sub-agent dispatch precedent (`./review.md` Step 3).
 
 For the audit's weak assumptions (the `unproven` / `convenience` testable questions from Step 2a), dispatch the Disconfirm wave. Dispatch one sub-agent whose prompt MUST direct it to:
 
@@ -77,6 +77,38 @@ For the audit's weak assumptions (the `unproven` / `convenience` testable questi
 3. **Return only the structured result `./research.md` produces** — the ranked disconfirming candidates + metadata + each candidate's why-it-would-overturn note (Step 7a's documented output). Full source text MUST NOT return to this mode (anti-context-rot — the parent context stays clean).
 
 Fold the returned disconfirming candidates into `Evidence against`, each tied to its source per the element table. A disconfirming candidate that was NOT approved/captured contributes METADATA only — mark its evidence item **`not captured`** explicitly (its claim rests on title/metadata, not a readable source) and NEVER cite it as if a raw file existed. If the dispatch returns no disconfirming candidate that clears the `source-policy` trust bar, `Evidence against` is still filled by reasoning (the element stays MANDATORY and substantive — never an empty placeholder), and the empty hunt is surfaced per `./investor-loop.md` § Issue-surfacing. The agent NEVER hand-writes a raw source or wiki page from this dispatch — `./research.md`'s own tool and ingest sub-agents persist anything captured (delegate-not-replace).
+
+**FOR-side ad-hoc election (capture floor).** After the Disconfirm wave returns, AUDIT the `Evidence for` items in the thesis:
+
+1. Classify each Evidence-for claim as `captured` (a raw file exists in `raw/`) or `uncaptured` (no raw file — the claim rests only on context or memory).
+2. If ANY Evidence-for claim cited in a **thesis CONCLUSION** is `uncaptured`, the checkpoint MUST OFFER a bounded FOR-side hunt:
+
+   > "Evidence-for claim(s) backing the conclusion are uncaptured. A bounded FOR-side hunt can find and capture supporting sources. Proceed with FOR-side hunt, skip it, or re-scope the conclusion to only cite captured sources?"
+
+   Disconfirm remains the default spend; the FOR-side hunt is an additional opt-in. The CAPTURE FLOOR is absolute: any claim cited in a thesis conclusion MUST have a captured source page (FOR or against) before the thesis reaches `status: active` at the scribe — `sb-fin-create-thesis` gates on this. The FOR-side hunt (via the `research` mode FOR candidates, approved at the Step 4 Propose checkpoint) is the mechanism; its capture election table follows the **Capture-election table spec** below.
+
+3. If ALL conclusion-cited claims are `captured`, skip the offer.
+
+**Capture-election table spec (A9 — applies to EVERY capture-election surface this mode renders, FOR-side and disconfirm alike).**
+
+Every capture-election table MUST include a `url` column:
+
+```
+| # | title | url | source | trust class | why it matters | relation to the thesis |
+```
+
+Hunt targets (Next-questions, chat surfacing, election follow-ups) MUST always carry their URL wherever surfaced — never a bare title.
+
+**Mid-run firing surface (A9).** The capture-step report IS the firing surface for ready-to-act blocks. EACH source whose capture returns `blocked`, `gated`, or a failed registration MUST emit its ready-to-act block IMMEDIATELY — do NOT hold them for close-time only:
+
+```
+Source blocked: {title}
+URL: {url}
+Expected format: {format note}
+Save it anywhere and give me the path — I will re-run capture with --mode manual --manual-file <your path>.
+```
+
+**Close-time ready-to-act blocks.** At mode close, emit the same block for any source still in `blocked` / `gated` state — these complement the mid-run blocks and MUST NOT be removed.
 
 ## Step 3 — Select related entities + position mapping
 
@@ -122,6 +154,13 @@ The refuter returns its § Output schema verbatim — one `overturned | weakened
 - The `[S]/[E]/[N]` choice then follows unchanged — the critique informs the decision; the user still decides. A failed or unavailable refuter NEVER blocks this checkpoint: present the proposed thesis unchanged and proceed (`./adversarial-refuter.md` § Step 2).
 
 ## Step 5 — Delegate persistence to `sb-fin-create-thesis`
+
+**File and image routing (A10 — thesis capture step).** Before invoking the scribe, handle any user-referenced files or images the thesis cites:
+
+| Item | Rule |
+|------|------|
+| File not yet in `raw/{origin}/` | Route via `investment_source_capture --mode manual --manual-file <path>` — the SOLE raw writer. When origin is ambiguous, CONFIRM with the user before calling the tool. |
+| Image at a local path | Move it into `{wiki_root}/raw/_assets/` with a descriptive slug (e.g. `{entity}-{topic}-{date}.png`). Embed as `![[slug.png]]` in place of the original path reference. Flag uncertain placement explicitly. |
 
 On `[S]`, invoke `sb-fin-create-thesis` in its **investor-orchestrated mode** (Skill tool). Pass these inputs; the scribe runs its steps without re-prompting:
 

@@ -596,7 +596,7 @@ def detect_broken_wikilinks(wiki_root: Path, report: Report) -> None:
         if not root.exists():
             continue
         for item in root.rglob("*.md"):
-            if "raw/assets" not in item.as_posix():
+            if "raw/_assets" not in item.as_posix():
                 targets.add(item.name)
                 fold_map.setdefault(fold_key(item.name), set()).add(item.name)
     broken: list[dict[str, object]] = []

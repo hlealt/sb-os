@@ -139,7 +139,7 @@ When in doubt, classify as **blocking** — surfacing too much beats shipping a 
 
 ### Manual-bridge handoff (blocked / gated sources)
 
-Fires whenever THIS session registers a `blocked` or `gated_pending_access` source — a failed capture, a `--gated` registration, a discovery wave deferring a gated candidate — or offers the manual path. At BOTH points — the checkpoint that surfaces the issue AND the end-of-interaction deferred-list surfacing (step 3 above) — present, WITHOUT the user asking, one ready-to-act block per source:
+Fires whenever THIS session registers a `blocked` or `gated_pending_access` source — a failed capture, a `--gated` registration, a discovery wave deferring a gated candidate — or offers the manual path. Present, WITHOUT the user asking, one ready-to-act block per source at BOTH moments: (1) the mid-run checkpoint that surfaces the issue (inline, immediately when the block/gate is detected), AND (2) the end-of-interaction deferred-list surfacing (step 3 above). Each block MUST carry all four elements: title, clickable URL, expected-format note, and the save-and-give-path instruction.
 
 ```
 **{title}**
@@ -151,6 +151,10 @@ format: PDF expected → lands as raw/{origin}/{title-slug}.pdf (--title require
 ```
 
 Render the `format:` line for the source's expected format only. A session that ends with an in-session `blocked`/`gated_pending_access` row presented WITHOUT this block has violated this rule. `{wiki_root}/source-queue.md` remains the durable record (its `required_user_action` field carries the same how-to); this block is the CHAT-time surfacing that stops the user having to ask "give me the links to capture manually".
+
+### Close-protocol append pattern
+
+When appending to an append-only log section at session close (investor `log.md`, `source-queue.md`, or any append-only log the investor writes to), use an EOF-append (`Add-Content` on Windows / append-mode write) rather than a read-modify-write. EOF-append is collision-immune under parallel sessions — it never overwrites a concurrent session's tail — and is the confirmed pattern across investor bootstrap units. READ-MODIFY-WRITE on append-only logs is NEVER permitted at close.
 
 ---
 

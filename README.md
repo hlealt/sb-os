@@ -59,6 +59,19 @@ Every PARA folder has a managed `CLAUDE.md` your agent reads to route content. M
 | Claude Code | Required for the agent layer; the directory convention works without it |
 | Git on the target vault | Strongly recommended before install — gives you a rollback tag |
 
+### Finance module optional dependencies
+
+The finance module's `investment_source_capture` tool uses lazy optional dependencies for article extraction. Install these in the vault's Python environment for best results:
+
+| Package | Role |
+|---|---|
+| `trafilatura` | **Primary** article extractor — purpose-built readability library for diverse sites. `pip install trafilatura` |
+| `beautifulsoup4` | **Fallback** article extractor — richest-container bs4 logic runs when trafilatura is unavailable or returns near-empty output |
+| `httpx` | HTTP fetch (required for fetch modes) |
+| `pypdf` | PDF text extraction for `--pdf-text` (optional) |
+
+Both `trafilatura` and `beautifulsoup4` are optional: the capture tool degrades gracefully through trafilatura → bs4 → regex tag-strip. A missing extractor is recorded in `extraction_note` in the result JSON.
+
 ## Install
 
 ```bash

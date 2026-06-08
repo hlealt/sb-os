@@ -30,7 +30,7 @@ The FIRST helper call of the run syncs the index (the step-2 source page enters 
 | `{user_context_root}` | Read from `sb-os.json` → `user_context_root`. Never hardcode. |
 | `{sb_os_path}` | Read from `sb-os.json` → `sb_os_path` field. Never hardcode. |
 | `{wiki_root}/wiki/` | Wiki page tree (concepts, entities, topics, sources). |
-| `{wiki_root}/raw/` | Raw source tree — Markdown (`.md`) and PDF (`.pdf`) sources. **EXCLUDES `raw/assets/`** (user-maintained binary attachments — per `../shared/folder-structure.md` "Asset Folder"). This workflow NEVER reads or writes `raw/assets/`. |
+| `{wiki_root}/raw/` | Raw source tree — Markdown (`.md`) and PDF (`.pdf`) sources. **EXCLUDES `raw/_assets/`** (user-maintained binary attachments — per `../shared/folder-structure.md` "Asset Folder"). This workflow NEVER reads or writes `raw/_assets/` on its own initiative (see write-surface contract § "A10" for the user-directed exception). |
 | `{wiki_root}/log.md` | Actionable queue — `candidate-topic` + `candidate-mention` entries only. |
 | `{wiki_root}/purpose.md` | OPTIONAL regulatory file — the focus-lens source loaded at Step 0.5. Root-level sibling of `raw/`, `wiki/`, `log.md`; NOT a wiki page, NOT raw. Absent → lens OFF (ingest identical to today). Per `../../docs/wiki-schema.md` § "Regulatory layer — purpose.md". |
 | `{wiki_root}/questions.md` | OPTIONAL questions-layer registry — the user's open questions loaded at Step 0.6 for the answer-scan. Root-level sibling of `raw/`, `wiki/`, `log.md`, `purpose.md`; NOT a wiki page, NOT raw. Absent → questions layer OFF (ingest identical to today). Per `../../docs/wiki-schema.md` § "Questions layer — questions.md". |
@@ -75,6 +75,34 @@ The mode changes ONLY four things; everything else (clustering, stub rules, appe
 | Step 11 — Stage 2 reflection | SKIPPED entirely — never presented, never awaited. See step 11 silent clause. |
 
 When the `silent` keyword is ABSENT, NONE of the silent clauses below apply — the workflow behaves EXACTLY as the default-mode body specifies.
+
+## Write-Surface Contract
+
+These rules bind ALL write operations in this workflow regardless of mode (default or silent).
+
+### A7 — Thesis pages are scribe-only
+
+`/sb-wiki-ingest` MUST NEVER create or edit ANY page under `wiki/theses/`. Thesis-relevant figures, conclusions, or data encountered during ingest MUST be reported in the Stage 1 RETURN table — NEVER written to a thesis page. Thesis authoring and editing is exclusively the domain of `sb-fin-create-thesis`.
+
+### D24 — Two-tier T4 write rule
+
+| Tier | Where it lives | Rule |
+|------|----------------|------|
+| Raw T4 framing — a specific below-bar claim extracted from a source | Source page ONLY | Write verbatim on its source page. NEVER on an entity page. |
+| Synthesized below-bar verdict | Entity page (permitted) | MUST include attribution: `per {source}, T4 — see [[source-page]]`. NEVER absorb unattributed. |
+
+### A10 — File and image routing
+
+**Rule A — Relocate referenced files via the designated capture tool.**
+When the user directs ingest to handle a file NOT yet in `raw/{origin}/` (parked in Downloads or in `raw/_unrouted/`), route it into `raw/{origin}/{title-slug}.{ext}` via the workspace's DESIGNATED sole raw-capture tool — the SOLE raw writer, NEVER an ad-hoc file move. Guard: fire ONLY on explicit ingest/capture intent. Infer `origin` from URL/content and CONFIRM when ambiguous. For files already in `raw/_unrouted/`, this IS the staging→`raw/{origin}/` move.
+
+**Rule B — Screenshot images → `raw/_assets/` + embedded in place.**
+When the user explicitly mentions a file has images and provides their paths (e.g. from the OS screenshot folder), the agent MUST:
+1. Move each image into `{wiki_root}/raw/_assets/` renamed to a descriptive slug (NEVER preserve a name like "Captura de tela …").
+2. Embed `![[slug.png]]` in the raw Markdown at the position each image appears, using image-read + surrounding context.
+3. FLAG any placement it is unsure of in the Stage 1 table — NEVER silently guess placement.
+
+The user's explicit mention of the file/images IS the required direction to write under `raw/_assets/`.
 
 ## Flow
 
@@ -121,17 +149,22 @@ Read + parse the OPTIONAL questions-layer registry `{wiki_root}/questions.md`. T
 2. Read the raw file in full. For a PDF source, read it natively (the Read tool renders PDF pages); read every page — issue successive page-range requests when the file exceeds the per-request page limit. Capture origin (`{origin}` = parent folder name; `studies` is a valid origin).
 3. Note the source kind from origin and content shape: `article` | `paper` | `podcast` | `study` | `repo` (a PDF source is typically `paper` or `article`).
 
-### Step 1.5 — PDF title-conformance rename (PDF sources only)
+### Step 1.5 — PDF title-conformance rename + text-twin extraction (PDF sources only)
 
 Markdown raw sources SKIP this step. For a PDF raw source:
 
 1. Determine the paper's title from the document (page 1 / metadata, already read in step 1).
 2. Compute `{title-slug}` per `../shared/naming-convention.md` § "Raw PDF Title-Conformance" → "Title-slug algorithm".
-3. Stem already equals `{title-slug}` → do nothing; proceed to step 2.
+3. Stem already equals `{title-slug}` → do nothing; proceed to sub-step 4 (text-twin check).
 4. Stem differs AND `raw/{origin}/{title-slug}.pdf` does NOT exist → rename `raw/{origin}/{stem}.pdf` → `raw/{origin}/{title-slug}.pdf` NOW, before the source page is created. The source page (step 2), its `raw:` frontmatter, and every downstream footnote are then born title-named — NO referrer propagation is needed because no page cites this source yet. Use `{title-slug}` as the slug for the rest of the flow.
 5. Collision — `raw/{origin}/{title-slug}.pdf` already exists → this raw duplicates an already-ingested paper. ERROR-halt and ask the user: abort (skip the duplicate) or proceed without renaming. **Silent mode:** do NOT halt — RETURN `failed (duplicate raw: {title-slug}.pdf exists)` and ingest nothing.
+6. **Text-twin extraction (non-optional).** After the rename (or no-rename) above, check whether a Markdown twin `raw/{origin}/{title-slug}.md` already exists.
+   - **Twin exists** → skip extraction; proceed to step 2 using the existing twin as the source text.
+   - **Twin absent** → MUST extract a durable text twin using `pypdf`-extraction: write the extracted text to `raw/{origin}/{title-slug}.md`. NEVER delete or replace the PDF — BOTH files MUST be preserved. The source page (step 2) MUST link both:
+     - `raw:` frontmatter: `"[[{title-slug}.md]]"` (the Markdown twin)
+     - body line `Original PDF: [[{title-slug}.pdf]]` immediately after the frontmatter block (the preserved PDF) — NOT a frontmatter key
 
-The rename changes the FILENAME only — raw content is never edited (immutability governs content, per `../shared/folder-structure.md`).
+The rename changes the FILENAME only — raw content is never edited (immutability governs content, per `../shared/folder-structure.md`). The text-twin extraction writes a NEW file; the PDF is preserved.
 
 ### Step 2 — Write source page
 
@@ -205,7 +238,11 @@ Citations: emit inline `[^N]` markers at every claim derived from the raw, then 
    | **off-purpose** | As peripheral |
 
    The bias only tilts the existing yes/no heuristic — it NEVER fires the mechanical branch differently, NEVER drops a Substance-bullet stub, and NEVER coarsens peripheral clustering below baseline (guarantee #4). A demoted name still lands in `mention-only` (logged `candidate-mention`), so nothing is dropped. Lens OFF → apply the heuristic exactly as clause 5 specifies, no bias.
-5c. **Near-duplicate probe (semantic tier; SKIP when the tier is unavailable).** For EACH candidate that cleared the stub rule in clauses 5–5b, run ONE helper call: `search "<candidate name> — <planned preamble>" --type concept,entity,topic --k 8` (first call of the run syncs; later calls `--no-sync`). Apply the same-referent test per the schema (Stub policy § "Near-duplicate probe") to concept/entity hits: a hit denoting the SAME referent under a different slug (synonym, alias, spelling/formatting variant — NOT merely related) reroutes the candidate to `existing-pages` (the step-4 append-only update path) instead of stub creation; merely-related or UNCERTAIN → keep the stub (when in doubt, create). HOLD each call's topic-page hits for clause 7b's semantic fires — do NOT re-call the helper there.
+5c. **Near-duplicate probe (NON-SKIPPABLE gates — run for EVERY candidate regardless of tier availability).** Before creating any stub, EVERY candidate MUST pass ALL of the following gates:
+
+   1. **Cross-kind + theses-namespace check (always runs).** The planned slug MUST NOT already exist in ANY kind folder under `wiki/` — `concepts/`, `entities/`, `topics/` — OR as a filename in `wiki/theses/` (vault-wide filename uniqueness). A `concepts/` vs `entities/` collision is allowed per the naming convention; `concepts/` vs `topics/` and any `wiki/theses/` collision are FORBIDDEN. A collision routes the candidate to the `existing-pages` set (step-4 update path) or halts to ask.
+   2. **Stub routing validation (always runs).** The planned path MUST match the kind-routing table (schema § "Folder subdivision" naming policy). A `kind: tool` MUST NOT land in `organizations/`; a financial benchmark MUST land in `ai-benchmarks/`; etc. Misrouting is caught HERE, not at lint time.
+   3. **Semantic same-referent check (tier-gated; SKIP only when the tier is unavailable).** For EACH candidate that cleared gates 1–2, run ONE helper call: `search "<candidate name> — <planned preamble>" --type concept,entity,topic --k 8` (first call of the run syncs; later calls `--no-sync`). Apply the same-referent test per the schema (Stub policy § "Near-duplicate probe") to concept/entity hits: a hit denoting the SAME referent under a different slug (synonym, alias, spelling/formatting variant — NOT merely related) reroutes the candidate to `existing-pages` instead of stub creation; merely-related or UNCERTAIN → keep the stub (when in doubt, create). HOLD each call's topic-page hits for clause 7b's semantic fires — do NOT re-call the helper there. Tier unavailable → skip gate 3 only; gates 1–2 ALWAYS run.
 6. Build five working sets for downstream steps:
    - `existing-pages` — concept/entity pages that already exist (handled in step 4)
    - `stub-candidates` — new concept/entity pages whose stub-creation rule fires (handled in step 5)
@@ -324,7 +361,7 @@ If no triggers fire, leave the candidate set empty — Stage 1 omits the PROPOSE
 1. Resolve raw index: `{wiki_root}/raw/{origin}/{origin}.md` (or `{wiki_root}/raw/studies/studies.md`).
 2. Locate the row whose `File` column wikilinks the current raw filename.
 3. Set `Wiki = Yes` in that row. Format per `../shared/index-formats.md` raw index entry.
-4. If the row does not exist → create it (lint owns raw-index creation, but ingest may add a missing row defensively). If the index file itself is missing → log a warning entry for lint to handle; do not block the ingest.
+4. Raw-index ROW missing → CREATE it. Raw-index FILE missing → LOG A WARNING; do NOT create the file (lint owns raw-index files); do not block the ingest.
 
 ### Step 8 — Update wiki sources index
 
@@ -516,12 +553,14 @@ End of flow.
 |---------|----------|
 | `<slug>` resolves to multiple raw files | Halt at step 1; ask user to disambiguate. No writes. |
 | PDF `{title-slug}.pdf` already exists at step 1.5 (duplicate raw) | Error-halt; ask abort / proceed-without-rename. Silent: RETURN `failed (duplicate raw: {title-slug}.pdf exists)`. No writes. |
+| `pypdf` extraction fails at step 1.5 (text-twin write error) | LOG A WARNING; proceed with native PDF read from step 1 as source text; write the `Original PDF: [[{title-slug}.pdf]]` body line but omit the `raw:` twin link in the source page (no twin was produced). Do NOT abort the ingest. |
 | `<slug>` resolves to multiple raw files (silent mode) | No halt. RETURN summary `failed (slug ambiguous: N matches)`. No writes. |
 | `<slug>` resolves to zero raw files (silent mode) | RETURN summary `failed (slug not found)`. No writes. |
 | `{wiki_root}` cannot be resolved from `sb-os.json` | Halt before step 1; surface error. No writes. |
 | Stage 1 not yet reached when the user interrupts | Roll back any partial writes from steps 2–8. |
 | `sb-wiki-create-topic` skill fails mid-Stage-1 acceptance | Mark the topic row as failed; keep the `candidate-topic` log entry; proceed with the rest of the acceptance. |
-| Raw index file missing at step 7 | Log a warning for lint; do not block the ingest. |
+| Raw-index ROW missing at step 7 | CREATE the row (deterministic — no warning). |
+| Raw-index FILE missing at step 7 | LOG A WARNING; do not create the file (lint owns raw-index files); do not block the ingest. |
 | Wiki sources index file missing at step 8 | Create it with header row; proceed. |
 | `sb-wiki-search.py` unavailable (missing, non-zero exit, runtime error) at any tier-gated touchpoint (3·5c, 3·7b semantic fires, 3·7c semantic membership) | Drop ALL tier-gated augments silently — the run is the mechanical baseline (exact-slug existence, token-overlap fires only). NEVER abort the ingest. |
 | `{wiki_root}/wiki/topics/topics.md` missing or a topic lacks its index row at step 3·7b | Read the affected topic page(s) directly for `Scope` text; proceed. Never skip a topic for a missing index row. |

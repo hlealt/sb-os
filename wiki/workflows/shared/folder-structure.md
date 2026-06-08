@@ -11,7 +11,7 @@ Directory layout for `{wiki_root}/`. All paths are relative to `{wiki_root}`. Re
 ├── questions.md                        OPTIONAL user open-questions queue (not a page; lint OWNS maintenance; skip-if-absent)
 ├── open-gaps.md                        lint-generated cross-wiki aggregate of all open questions (not a page; read-only; skipped from orphan/stub checks)
 ├── raw/
-│   ├── assets/                         local images / attachments (flat, shared) — user-maintained via Obsidian's "Download attachments for current file"
+│   ├── _assets/                        local images / attachments (flat, shared) — user-maintained via Obsidian's "Download attachments for current file"
 │   ├── {origin}/                       articles, podcasts, papers — by source origin
 │   │   ├── {origin}.md                 raw leaf index (File, Title, Date, Wiki columns)
 │   │   └── {date}-{slug}.md            verbatim source file (immutable)
@@ -51,7 +51,7 @@ Directory layout for `{wiki_root}/`. All paths are relative to `{wiki_root}`. Re
 |------|-----------|------|
 | `{wiki_root}/log.md` | Ingest (first run) or user | Before first ingest |
 | `raw/{origin}/` and `raw/{origin}/{origin}.md` | Lint | On first lint sweep that finds a missing raw index |
-| `raw/assets/` | The user (via Obsidian) | First time Obsidian's "Download attachments for current file" runs against the configured `raw/assets` destination. Agents NEVER create or write to this folder. |
+| `raw/_assets/` | The user (via Obsidian) | First time Obsidian's "Download attachments for current file" runs against the configured `raw/_assets` destination. Agents NEVER create or write to this folder. |
 | `wiki/concepts/`, `wiki/entities/`, `wiki/topics/`, `wiki/sources/` | Ingest | Lazily on first page creation in each folder |
 | Leaf indexes (`concepts.md`, `entities.md`, `topics.md`) | Lint | On first lint sweep; ingest may create defensively for sources only |
 | `wiki/sources/{origin}/{origin}.md` | Ingest step 8 | If missing, created with header row before adding the first entry |
@@ -83,24 +83,24 @@ Subdivision relies on Obsidian filename-based wikilink resolution. Required sett
 | Maintained by | The user (vault content). Only the ingest mechanism that READS it ships in sb-os. |
 | Agent writes | Lint NEVER writes or edits it. `/sb-wiki-ingest` reads it only (Step 0.5). |
 | Optionality | Absent → lens OFF → ingest identical to today. |
-| Lint behavior | SKIP entirely — NEVER flag as orphan/stray/stub, NEVER index, NEVER count in orphan detection (in or out). Holds structurally: lint walks only `wiki/` and `raw/` subtrees, so a root-level sibling is never walked. Mirrors the `raw/assets/` skip contract. |
+| Lint behavior | SKIP entirely — NEVER flag as orphan/stray/stub, NEVER index, NEVER count in orphan detection (in or out). Holds structurally: lint walks only `wiki/` and `raw/` subtrees, so a root-level sibling is never walked. Mirrors the `raw/_assets/` skip contract. |
 
 Full spec: `3-resources/tools/sb-os/wiki/docs/wiki-schema.md` § "Regulatory layer — purpose.md".
 
 ## Asset Folder
 
-`raw/assets/` is the standard, flat, shared destination for local images and binary attachments referenced by source pages and wiki pages. It is **NOT a raw origin** — it has no `{origin}.md` leaf index, no source pages, and is excluded from every raw-origin walk.
+`raw/_assets/` is the standard, flat, shared destination for local images and binary attachments referenced by source pages and wiki pages. It is **NOT a raw origin** — it has no `{origin}.md` leaf index, no source pages, and is excluded from every raw-origin walk.
 
 | Aspect | Rule |
 |--------|------|
-| Path | `{wiki_root}/raw/assets/` (flat, single shared folder) |
-| Maintained by | The user via Obsidian's core "Download attachments for current file" command. Obsidian Settings → Files and links → "Default location for new attachments" → `raw/assets`. |
-| Agent writes | NEVER. No sb-os workflow creates, moves, renames, or deletes files inside `raw/assets/`. |
+| Path | `{wiki_root}/raw/_assets/` (flat, single shared folder) |
+| Maintained by | The user via Obsidian's core "Download attachments for current file" command. Obsidian Settings → Files and links → "Default location for new attachments" → `raw/_assets`. |
+| Agent writes | NEVER. No sb-os workflow creates, moves, renames, or deletes files inside `raw/_assets/`. |
 | Filename convention | None enforced. Obsidian writes whatever names it writes. |
 | Referenced from pages | `![[filename.png]]` — Obsidian resolves via global attachment search. |
-| Iteration in workflows that walk `raw/` | EXCLUDE `raw/assets/` from every iteration set. It is not an origin. |
+| Iteration in workflows that walk `raw/` | EXCLUDE `raw/_assets/` from every iteration set. It is not an origin. |
 | Lint behavior | SKIP entirely — no index creation, no orphan-detection participation (in or out), no filename validation. |
-| Pre-existing exceptions | A vault may carry legacy asset folders nested inside specific origins (e.g., `raw/mails/assets/{message-folder}/` from `gmail-bridge`). User-owned; untouched by every sb-os component. New assets land in `{wiki_root}/raw/assets/`. |
+| Pre-existing exceptions | A vault may carry legacy asset folders nested inside specific origins (e.g., `raw/mails/assets/{message-folder}/` from `gmail-bridge`). User-owned; untouched by every sb-os component. New assets land in `{wiki_root}/raw/_assets/`. |
 
 Pattern source: Karpathy-style workflow. Full schema: `3-resources/tools/sb-os/wiki/docs/wiki-schema.md` § "Asset folder".
 

@@ -65,7 +65,7 @@ This workflow is read-mostly by contract. Auto-applied writes are SCOPED to inde
 
 NEVER edit page bodies, frontmatter (other than `last-touched` on indexes and on pages moved by subdivision, the append-only type-tag sync per step 7, and wikilink-target rewrites performed by a user-accepted PDF title-conformance rename per step 7.6), or any user-authored content from this workflow. NEVER delete pages. NEVER write a `lint` entry — lint findings live in the report only. The log is an actionable queue (`candidate-topic` + `candidate-mention` only); lint MAY delete entries that are spent (page exists) or retired (history types), but NEVER edits the body of a `candidate-topic`/`candidate-mention` it keeps, and NEVER auto-deletes a `candidate-mention` whose page does not yet exist. `questions.md` is the parallel user queue: lint MAY delete an entry that is promoted (matching wiki page now exists) or retired (by the same "page exists" test the `candidate-mention` prune uses), but NEVER edits the body of a kept entry and NEVER prunes a merely-answered entry that has not yet graduated. `open-gaps.md` is lint-generated and READ-ONLY — lint OVERWRITES it wholesale each run; the user's edits to it are not preserved.
 
-**`raw/assets/` is OUT OF SCOPE for this workflow.** No reads, no writes, no walks, no index creation, no orphan-detection participation, no filename validation. The folder is user-maintained via Obsidian's "Download attachments for current file" command (per `../shared/folder-structure.md` "Asset Folder" and schema § "Asset folder"). Treat it as if it were not present in the tree. Same exclusion applies to any pre-existing legacy asset folder nested under a specific origin (e.g., `raw/mails/assets/`) — user-owned, untouched.
+**`raw/_assets/` is OUT OF SCOPE for this workflow.** No reads, no writes, no walks, no index creation, no orphan-detection participation, no filename validation. The folder is user-maintained via Obsidian's "Download attachments for current file" command (per `../shared/folder-structure.md` "Asset Folder" and schema § "Asset folder"). Treat it as if it were not present in the tree. Same exclusion applies to any pre-existing legacy asset folder nested under a specific origin (e.g., `raw/mails/assets/`) — user-owned, untouched.
 
 ## Deterministic Helper
 
@@ -131,7 +131,7 @@ Lint MERGES each registered module's `lint-rules.ext.md`. Extension lint rules a
 |-------|-------|
 | **Pages eligible to BE orphans** | `wiki/concepts/*.md`, `wiki/entities/*.md`, `wiki/topics/*.md` (excluding leaf indexes `concepts.md`, `entities.md`, `topics.md`) |
 | **Files in scope as INBOUND-LINK SOURCES** | The same set above — `wiki/concepts/*.md`, `wiki/entities/*.md`, `wiki/topics/*.md` (excluding leaf indexes) |
-| **Files OUT OF SCOPE as inbound-link sources** | `log.md`, `wiki/sources/{origin}/{origin}.md` indexes, `wiki/sources/{origin}/<date>-<slug>.md` source pages, raw source pages under `raw/`, `raw/{origin}/{origin}.md` raw indexes, all leaf indexes (`concepts.md`, `entities.md`, `topics.md`, `studies.md`), and **everything inside `raw/assets/`** (binary attachments — image embeds inside source/wiki pages do NOT count as inbound links toward orphan status) |
+| **Files OUT OF SCOPE as inbound-link sources** | `log.md`, `wiki/sources/{origin}/{origin}.md` indexes, `wiki/sources/{origin}/<date>-<slug>.md` source pages, raw source pages under `raw/`, `raw/{origin}/{origin}.md` raw indexes, all leaf indexes (`concepts.md`, `entities.md`, `topics.md`, `studies.md`), and **everything inside `raw/_assets/`** (binary attachments — image embeds inside source/wiki pages do NOT count as inbound links toward orphan status) |
 
 1. Build the eligible-orphan set: every concept/entity/topic page (excluding leaf indexes).
 2. Build the inbound-link map: scan ONLY concept/entity/topic page bodies, frontmatter `related:` lists, and `Sources` section footnote definitions for `[[<target>.md]]` references. Do NOT scan source pages, log entries, raw files, or any leaf index.
@@ -158,7 +158,7 @@ Consume `detected.disputed_callouts` from the helper — do NOT re-walk pages by
 
 ### Step 5 — Verify wikilinks resolve; classify broken links (deterministic + judgment)
 
-Consume `detected.broken_wikilinks` from the helper — do NOT re-walk pages by LLM. The helper extracts every `[[<target>.md]]` from each wiki page (body, frontmatter `related:`, footnote defs), verifies the target against actual filenames in `{wiki_root}/wiki/{concepts,entities,topics,sources}/` and `{wiki_root}/raw/{*}/` (EXCLUDING `raw/assets/`; image embeds `![[…non-md]]` skipped), and classifies each unresolved target.
+Consume `detected.broken_wikilinks` from the helper — do NOT re-walk pages by LLM. The helper extracts every `[[<target>.md]]` from each wiki page (body, frontmatter `related:`, footnote defs), verifies the target against actual filenames in `{wiki_root}/wiki/{concepts,entities,topics,sources}/` and `{wiki_root}/raw/{*}/` (EXCLUDING `raw/_assets/`; image embeds `![[…non-md]]` skipped), and classifies each unresolved target.
 
 1. Read `detected.broken_wikilinks`. Each row is `{source, target, bucket, suggestion, candidates}`:
    - **`bucket: "A"`** — a UNIQUE existing file fold-matches the target (typo / curly-quote / dash / accent / case). `suggestion` is the exact existing filename. Auto-fixable: feeds the LINK-FIX PROPOSAL at step 9 (executed via `--execute-link-fixes`).
@@ -201,7 +201,7 @@ For each wiki page (concepts, entities, topics, source pages):
 
 ### Step 7 — Verify and create raw indexes; verify wiki leaf indexes
 
-For each `{wiki_root}/raw/{origin}/` directory (including `studies/`), **EXCLUDING `raw/assets/`** (per `../shared/folder-structure.md` "Asset Folder" — `raw/assets/` is NOT a raw origin and MUST NOT receive an `assets.md` leaf index, MUST NOT be walked as part of raw-origin maintenance, and MUST NOT have its filenames validated):
+For each `{wiki_root}/raw/{origin}/` directory (including `studies/`), **EXCLUDING `raw/_assets/`** (per `../shared/folder-structure.md` "Asset Folder" — `raw/_assets/` is NOT a raw origin and MUST NOT receive an `_assets.md` leaf index, MUST NOT be walked as part of raw-origin maintenance, and MUST NOT have its filenames validated):
 
 1. Verify `{origin}.md` (or `studies.md`) exists. If missing, CREATE it with the standard raw index header per `../shared/index-formats.md` "Raw Index" section: `| File | Title | Date | Wiki |`.
 2. For each raw file in the directory, ensure a row exists in the index. If missing, add the row only when `Title` and `Date` are deterministic from frontmatter, an H1, or the filename date.
@@ -275,7 +275,7 @@ Run the mechanical moves and index row surgery via the deterministic helper: `--
 
 ### Step 7.6 — PDF title-conformance detection
 
-For each PDF raw source in `{wiki_root}/raw/{origin}/` (EXCLUDING `raw/assets/`):
+For each PDF raw source in `{wiki_root}/raw/{origin}/` (EXCLUDING `raw/_assets/`):
 
 1. Read the raw index `Title` for that file (raw indexes are verified/created at step 7, so titles are present). Compute `{title-slug}` per `../shared/naming-convention.md` § "Raw PDF Title-Conformance" → "Title-slug algorithm".
 2. Stem already equals `{title-slug}` → skip.

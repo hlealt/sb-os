@@ -461,16 +461,107 @@ last_validated: 2026-05-27
 ```
 
 ```yaml
-tool: investment_source_capture (python investimentos/investment_source_capture.py --url URL --origin ORIGIN [--mode markdown|html-archive|both|browser|manual] [--ext md|html|json] [--title TITLE] [--thesis SLUG] [--vault-root PATH] [--user-agent UA] [--manual-file PATH] [--no-curl-fallback] [--pdf-text] [--dry-run] [--gated] [--gated-why TEXT])
-purpose: Save an approved open-web URL to {wiki_root}/raw/{origin}/ and return a metadata summary only (title, url, origin, related thesis, saved path, lifecycle state, byte count, fetch method); on transport-level httpx failure (403 / bot-fingerprint rejection / connection reset) the tool retries once via subprocess curl with the same UA and records provenance (fetch_method: httpx | curl-fallback) — state=blocked only after BOTH fail; gated sources register gated_pending_access in {wiki_root}/source-queue.md without fetching (no curl either); transport-level blocked outcomes ALSO register a blocked entry there (dedup by state+url; usage-error blocked and dry-run register nothing) — the queue sb-wiki-lint (finance extension) surfaces and prunes; browser/manual modes save user-fetched local content via --manual-file without any HTTP call — a PDF --manual-file (.pdf extension or %PDF- magic bytes) is BINARY-COPIED to {title-slug}.pdf per the Raw PDF Title-Conformance rule (--title required, no date prefix, never overwritten on collision), with an optional --pdf-text pypdf companion {title-slug}.md for grep-based ingest verification.
+tool: investment_source_capture (python investimentos/investment_source_capture.py --url URL --origin ORIGIN [--mode markdown|html-archive|both|browser|manual] [--ext md|html|json] [--title TITLE] [--thesis SLUG] [--vault-root PATH] [--user-agent UA] [--manual-file PATH|-] [--no-curl-fallback] [--pdf-text] [--dry-run] [--gated] [--gated-why TEXT])
+purpose: |
+  Save an approved open-web URL to {wiki_root}/raw/{origin}/ and return a metadata summary only
+  (title, url, origin, related thesis, saved path, lifecycle state, byte count, fetch method).
+
+  Content-validation (A1): before returning captured_to_raw, every fetched body is validated:
+  (1) byte floor — 0-byte / near-0-byte bodies fail; (2) CAPTCHA/bot-wall fingerprint scan —
+  known interstitials (Cloudflare, Imperva, captcha markers) in a 200 body fail;
+  (3) article-body density — prose extracted after stripping scripts/nav/boilerplate must
+  meet a minimum; pure JS shells (emarketer, Next.js self.__next_f.push() soup) fail this
+  even if they pass the byte floor. On fail: state=blocked, source-queue row written via the
+  same blocked path as transport failures (failure_reason recorded). Manual-file and PDF paths
+  are EXEMPT from density checks (user already vetted); only byte floor applies.
+
+  Article-body extraction (A2): for markdown and both modes, a two-tier extractor produces
+  the primary .md written to raw/. PRIMARY: trafilatura (lazy optional dep) — purpose-built
+  readability, handles diverse site layouts. FALLBACK (trafilatura unavailable OR near-empty):
+  BeautifulSoup4 (lazy optional dep) richest-container logic — strips scripts/styles/nav/header/
+  footer, evaluates every content-selector container plus <body>, keeps the richest-prose result.
+  The full original HTML is preserved as a .full.html sidecar (listed under sidecar_paths in the
+  result, NOT in saved_paths) so the full dump is never lost. Multi-MB single-line HTML (CNN
+  5.5 MB, SEC EDGAR 1.9 MB, ELC 8-K 258K tokens on one line) is split into readable prose.
+  extraction_note in the result JSON records the extraction regime when not primary-trafilatura.
+
+  Transport fallback: on httpx failure (403/bot-fingerprint rejection/connection reset) retries
+  once via subprocess curl with the same UA (fetch_method: curl-fallback) — state=blocked only
+  after BOTH fail. Gated sources register gated_pending_access without fetching. Transport-level
+  and content-validation blocked outcomes both register a source-queue entry (dedup by state+url;
+  usage-error blocked and dry-run register nothing).
+
+  Manual/browser: saves user-fetched local content via --manual-file without HTTP. PDF --manual-file
+  is BINARY-COPIED to {title-slug}.pdf per Raw PDF Title-Conformance (--title required, no date
+  prefix, never overwritten on collision); --pdf-text writes a pypdf companion .md.
+
+  --manual-file path contract (A3): paths with Unicode characters (curly quotes, accented letters,
+  spaces) MUST be literal-quoted in the shell. PowerShell: --manual-file '"Weird Title".html'
+  (single-quote the whole argument). bash: --manual-file $'"Weird Title".html'. Pass '-' to
+  read content from stdin (--title MUST be supplied for slug derivation).
+
+  Preservation rules (tool contract): user originals are NEVER deleted. Binaries are filed
+  raw/{origin}/{title-slug}.{ext} + a raw-index row. ONLY byte-identical agent-created temp
+  files are removable. Obsidian-clipper " 1.md" copies of a verbatim-captured text original
+  are byte-identical temps → removable under the same rule.
 owner_script: investimentos/investment_source_capture.py
 class: write
 use: parser
-expected_inputs: --url (required); --origin folder name (required); --mode (markdown|html-archive|both|browser|manual, default markdown); --ext (md|html|json — overrides the saved-file extension for markdown-mode and manual/browser-mode saves; the XBRL companyfacts data-artifact path uses --ext json; html-archive/both unaffected; does NOT apply to PDF saves); optional --title, --thesis slug, --vault-root, --dry-run, --gated, --gated-why; --user-agent (fetch modes send it as the User-Agent header on BOTH httpx and the curl fallback; default = descriptive tool UA; fair-access endpoints like SEC EDGAR require a contact-bearing UA — see source-policy.md Capture User-Agent); --manual-file local path (required by browser/manual modes; PDF detection by .pdf extension or %PDF- magic bytes; --title REQUIRED for PDF captures — the filename is the title-slug); --pdf-text (PDF manual captures only: also write a {title-slug}.md text companion extracted via pypdf, a lazy optional dependency; extraction failure or near-empty scanned-PDF result is surfaced as transform_error/transform_warning in the JSON and never blocks the PDF capture); --no-curl-fallback (disable the subprocess-curl retry; fallback ON by default, curl binary resolved via shutil.which — never a shell alias; missing binary degrades to state=blocked); reads {wiki_root}/raw/{origin}/ (wiki raw store)
-outputs: JSON metadata summary to stdout (state, url, title, origin, related_thesis, saved_paths, bytes, fetch_method, dry_run; manual path adds manual_source; PDF manual path adds format: pdf and lists the companion in saved_paths when --pdf-text elected). For gated: state=gated_pending_access + queue_path + queue (registered | already-registered | dry-run); for transport blocked: state=blocked + error (both-fail error names both methods) + queue_path + queue. Writes raw .md/.html file(s) to {wiki_root}/raw/{origin}/ — or the --ext extension (.json data artifacts named YYYY-MM-DD-{entity}-xbrl-companyfacts.json; manual path defaults .md, honors --ext); a PDF manual capture writes {title-slug}.pdf (binary copy, no date prefix, collision → state=blocked exit 1) plus the optional {title-slug}.md companion. Creates {wiki_root}/source-queue.md with type: source-queue frontmatter when absent. Dry-run writes nothing.
-canonical_reader_writer: writes {wiki_root}/raw/{origin}/<YYYY-MM-DD-slug>.{md,html} and {wiki_root}/raw/{origin}/<title-slug>.pdf (+ companion .md); appends {wiki_root}/source-queue.md (gated + transport-blocked registrations)
+expected_inputs: |
+  --url (required); --origin folder name (required); --mode (markdown|html-archive|both|browser|manual,
+  default markdown); --ext (md|html|json — overrides the saved-file extension for markdown-mode and
+  manual/browser-mode saves; XBRL companyfacts data artifacts use --ext json; html-archive/both
+  unaffected; does NOT apply to PDF saves); optional --title, --thesis slug, --vault-root, --dry-run;
+  --gated (declare source gated — no fetch, registers gated_pending_access in source-queue.md);
+  --gated-why TEXT (reason recorded in the queue entry, shown to user for context); --user-agent
+  (fetch modes send it as User-Agent on BOTH httpx and the curl fallback; default = descriptive
+  tool UA; fair-access endpoints like SEC EDGAR require a contact-bearing UA per source-policy.md);
+  --manual-file PATH or '-' (required by browser/manual modes; PDF detection by .pdf extension or
+  %PDF- magic bytes; --title REQUIRED for PDF captures — filename is the title-slug; '-' reads from
+  stdin, --title required; paths with Unicode characters MUST be literal-quoted — see A3 contract
+  above); --pdf-text (PDF manual captures only: write a {title-slug}.md companion via pypdf, a lazy
+  optional dep; extraction failure or near-empty scanned-PDF surfaced as transform_error/warning,
+  never fatal); --no-curl-fallback (disable subprocess-curl retry; fallback ON by default, binary
+  resolved via shutil.which — never a shell alias; missing binary → state=blocked)
+
+  Worked examples:
+    # Gated paywall source — register without fetching
+    python investimentos/investment_source_capture.py \
+      --url "https://www.mckinsey.com/report" --origin mckinsey \
+      --gated --gated-why "Key aging-consumer market share data"
+
+    # Manual capture of a user-fetched HTML clip (Unicode filename — PowerShell)
+    python investimentos/investment_source_capture.py \
+      --url "https://ft.com/article" --origin ft \
+      --mode manual --manual-file '"FT Article 2026".html' --title "FT Article 2026"
+
+    # PDF binary capture with optional pypdf text companion
+    python investimentos/investment_source_capture.py \
+      --url "https://www.cms.gov/files/report.pdf" --origin cms \
+      --mode manual --manual-file report.pdf \
+      --title "CMS Health Spending Highlights 2020" --pdf-text
+outputs: |
+  JSON metadata summary to stdout (state, url, title, origin, related_thesis, saved_paths, bytes,
+  fetch_method, dry_run; manual path adds manual_source; PDF manual path adds format: pdf and lists
+  companion in saved_paths when --pdf-text elected; markdown/both modes add sidecar_paths for the
+  .full.html full-dump sidecar; extraction_note added when trafilatura unavailable/near-empty or bs4 fallback runs;
+  content-validation blocked adds failure_reason).
+  For gated: state=gated_pending_access + queue_path + queue (registered|already-registered|dry-run).
+  For blocked (transport or content-validation): state=blocked + error + failure_reason + queue_path + queue.
+
+  Writes to {wiki_root}/raw/{origin}/:
+  - markdown/both: YYYY-MM-DD-{slug}.{ext} (extracted article prose) + YYYY-MM-DD-{slug}.full.html sidecar
+  - html-archive/both: YYYY-MM-DD-{slug}.html (full body)
+  - manual non-PDF: YYYY-MM-DD-{slug}.{ext} (default .md, honors --ext)
+  - manual PDF: {title-slug}.pdf (binary copy, no date prefix, collision → blocked)
+  - manual PDF --pdf-text: {title-slug}.md companion (pypdf text extraction)
+  - .json data artifacts (--ext json): YYYY-MM-DD-{slug}.json
+
+  Creates {wiki_root}/source-queue.md with type: source-queue frontmatter when absent.
+  Dry-run writes nothing.
+canonical_reader_writer: writes {wiki_root}/raw/{origin}/<YYYY-MM-DD-slug>.{md,html,json} and <YYYY-MM-DD-slug>.full.html (sidecar) and {wiki_root}/raw/{origin}/<title-slug>.pdf (+ companion .md); appends {wiki_root}/source-queue.md (gated + transport-blocked + content-validation-blocked registrations)
 dry_run: available
-last_validated: 2026-06-07
+last_validated: 2026-06-08
 ```
 
 ```yaml

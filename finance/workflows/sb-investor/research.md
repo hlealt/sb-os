@@ -66,9 +66,20 @@ Each discovery sub-agent's prompt MUST:
 2. Carry its assigned sub-question, the anchor (thesis claim / research question), the entity(ies), and the `research-policy` scope and exclusions so the sub-agent does not surface excluded topics.
 3. **Verify every candidate URL is live before returning it** — the wave's own fetch of the page, or a HEAD-level liveness check when the page was not fetched, MUST confirm the URL resolves. A dead, 404, or unresolvable URL is dropped, NEVER returned as a candidate.
 4. **Assign each candidate's trust class against the rubric carried in the prompt.** The parent passes the `source-policy.md` trust tiers (loaded in Step 1) into the wave prompt; while those tiers are unfilled, pass the seed rubric: `1 = primary (filings, regulator/company official) · 2 = trusted analysis (named research firm/analyst with a track record) · 3 = established press · 4 = unverified (blog / UGC / aggregator)`. When in doubt between two classes, assign the LOWER trust (the higher number) — never inflate.
-5. **Return ONLY ranked candidates + metadata** — `| title | url | source | trust class | why it matters | relation to the thesis |`. The **full source text MUST stay inside the sub-agent** and NEVER returns to this mode or `sb-investor.md` (anti-context-rot — the parent context stays clean; only ranked candidates + metadata cross back).
+5. **Return ONLY ranked candidates + metadata** — `| title | url | source | trust class | why it matters | relation to the thesis |`. The **full source text MUST stay inside the sub-agent** and NEVER returns to this mode or `sb-investor.md` (anti-context-rot — the parent context stays clean; only ranked candidates + metadata cross back). **Wave-figure status (BINDING):** any figure a wave sub-agent cites in its metadata is UNVERIFIED by default and is NEVER citable until an ingest confirms it in the captured source (Step 7 item 3 figures-to-verify RETURN). Wave rankers MUST watch for the correction classes catalogued in `./data/correction-classes.md` — these are the named failure modes a figure can carry before ingest verification.
 
 Merge the waves' returned candidates and rank them by relevance to the anchor AND by `source-policy` trust class (loaded in Step 1). A candidate that fails the `source-policy` trust bar is surfaced per `./investor-loop.md` § Issue-surfacing — never silently dropped or silently kept. Discovery writes NOTHING; it only returns ranked candidates with metadata. The merged candidate set (plus the Step 7a disconfirming candidates) is what Step 4 Propose presents.
+
+### D25 — Reachability probe (parent runs AFTER wave returns)
+
+After the Step 3 fan-out returns — before presenting Step 4 — the PARENT issues one HEAD request per election candidate (each URL from the merged candidate set). This is a HINT ONLY:
+
+| Result | Action |
+|--------|--------|
+| Non-2xx | Flag the row "possibly blocked — bridge link required"; PREPEND its bridge link in the candidates table. The row STAYS in the table — a non-2xx probe NEVER auto-removes a row |
+| 2xx | No change to the row |
+
+**Counter-lesson (BINDING).** Wave-side fetch failure does NOT predict tool-side capturability. Real evidence: IMF, JPM, BLS, pv-magazine all returned 403s during the Step 3 wave AND were captured cleanly by the tool afterward. ALWAYS attempt capture on approved candidates; the probe only adds a bridge link, it NEVER skips a row.
 
 ## Step 4 — Propose (present-and-confirm; DEFAULT = propose before capture)
 
@@ -113,6 +124,26 @@ For EACH `approved_for_capture` OPEN source, call the registered `investment_sou
 
 **User-Agent.** If `source-policy.md` (loaded in Step 1) declares a `Capture User-Agent`, pass it via `--user-agent` on EVERY capture call. Fair-access endpoints (e.g. SEC EDGAR) 403 non-contact UAs — the tool's default UA is NOT sufficient there; the contact-bearing UA from `source-policy.md` is.
 
+**Worked examples (B11).**
+
+```
+# Standard open capture
+investment_source_capture --url https://example.com/report.html --origin spglobal --title "S&P Report 2025" --thesis my-thesis-slug
+
+# Gated registration (no fetch)
+investment_source_capture --gated --gated-why "requires brokerage login" --url https://broker.example.com/report --origin broker --title "Broker Report 2025" --thesis my-thesis-slug
+
+# Manual file (user-fetched content)
+investment_source_capture --mode manual --manual-file /path/to/downloaded.html --url https://example.com/report.html --origin spglobal --title "S&P Report 2025" --thesis my-thesis-slug
+
+# PDF with text extraction
+investment_source_capture --pdf-text --url https://example.com/doc.pdf --origin imf --title "IMF Article IV 2025" --thesis my-thesis-slug
+```
+
+**Preservation rules (B11 — BINDING).** User originals are NEVER deleted. Binaries (PDFs, images) are filed at `raw/{origin}/{title-slug}.{ext}` with a raw-index row — NEVER moved ad-hoc. ONLY byte-identical agent-generated temp files are removable. Clipper-duplicate disposal: an Obsidian-clipper " 1.md" copy of a verbatim-captured text original is byte-identical to the already-captured file → removable under the same byte-identical temp rule.
+
+**Referenced-file capture (A10).** When the user directs capture/ingest of a file not yet in `raw/{origin}/` — present in Downloads or `raw/_unrouted/` — route it via `investment_source_capture --mode manual --manual-file <path> --url <URL> --origin <origin> --title "<title>"`. The tool is the SOLE raw writer; NEVER move or copy the file ad-hoc. Infer origin from file provenance and CONFIRM with the user when origin is ambiguous. When the user states a source has images at given paths, move each into `{wiki_root}/raw/_assets/` with a descriptive slug and embed `![[slug.png]]` in place of the original path; flag uncertain placement for user review.
+
 The tool saves to `{wiki_root}/raw/{origin}/` and returns a **metadata summary only** (state, saved path, title, origin, related thesis, byte count) — full source text NEVER enters this mode's context. On success → state `captured_to_raw`; capture the returned raw filename for Step 7. A tool result of `state=blocked` (unreachable / fetch failed) → surface it per `./investor-loop.md` § Issue-surfacing; that source stops at `blocked` and is NOT ingested.
 
 **Blocked-fetch recovery (manual path).** The tool itself transparently retries a transport-level fetch failure (403 / bot-fingerprint rejection / connection reset) via an in-tool subprocess-curl fallback with the same UA BEFORE returning `state=blocked` — the metadata return records which method fetched (`fetch_method: httpx | curl-fallback`), so a returned `blocked` already means BOTH methods failed. The tool also registers the blocked source in `{wiki_root}/source-queue.md` (dedup by state+url), so an unrecovered block survives the session and `sb-wiki-lint` surfaces it as a retry candidate. When an approved source (user-approved or standing-policy AUTO) still returns `state=blocked`, offer the manual path at the checkpoint instead of escalating an unstructured doubt: the USER fetches the page by their own means and provides a local file path; the agent re-runs the tool with `--mode manual --manual-file <path>` — the tool (still the SOLE writer) saves it into `raw/{origin}/` with standard naming and the source resumes the normal lifecycle (`captured_to_raw` → Step 7). The agent NEVER fetches outside the tool, NEVER stores files outside `raw/`, and NEVER hand-places the content itself.
@@ -120,6 +151,8 @@ The tool saves to `{wiki_root}/raw/{origin}/` and returns a **metadata summary o
 ## Step 6 — Gated sources register (NOT fetched)
 
 A gated source (paywall / login / IR / broker portal) is NEVER fetched — the permanent source boundary in `./investor-loop.md` (no paywall bypass, no bank/brokerage credentials). Register it as `gated_pending_access` by calling the `investment_source_capture` tool with its `--gated` path — the SOLE writer of the gated record (it appends to `{wiki_root}/source-queue.md` without fetching — the investment source queue that `sb-wiki-lint` surfaces and prunes; the agent NEVER hand-writes that record, per `./investor-loop.md` § Own-workspace-writes boundary). Pass title, url, origin, the related thesis slug, and why it matters per the tool's `expected_inputs`; the tool records the required user action. So the gated source surfaces at end-of-interaction instead of dying in chat, ALSO record it as a deferrable issue per `./investor-loop.md` § Issue-surfacing. State → `gated_pending_access`. Never advance a gated source to capture or ingest.
+
+**Preservation rules carry forward (B11).** User-provided originals for gated sources are NEVER deleted — the same byte-identical-temp-only deletion rule applies. No file moves outside the tool's write path.
 
 ## Step 7 — Auto-ingest (one sub-agent per captured source, SEQUENTIAL)
 
@@ -161,9 +194,16 @@ Each sub-agent prompt MUST direct it to:
 
 1. **Run `/sb-wiki-ingest silent <slug>`** — the non-interactive form (`<slug>` = the raw filename returned by Step 5). The `silent` keyword makes the run emit no checkpoints and return a structured per-file summary, per `sb-wiki-ingest`'s Silent Mode.
 2. **Invoke the `sb-wiki-ingest` skill and follow it exactly**, and **invoke the `sb-vault-ops` skill before the file operations it performs and follow it exactly** (per the sub-agents rule — stated explicitly and imperatively because a sub-agent does not inherit these requirements).
-3. **Return only the structured summary** (per-file status `committed` / `partial (<reason>)` / `failed (<reason>)`, plus pages created/updated and any candidate-topic or lint flags). The full source text MUST NOT be returned to the parent.
+3. **Return only the structured summary** (per-file status `committed` / `partial (<reason>)` / `failed (<reason>)`, plus pages created/updated and any candidate-topic or lint flags). The full source text MUST NOT be returned to the parent. **Figures-to-verify contract (BINDING):** the RETURN MUST include, for every headline figure the source page captured, the exact figure AND the location in the captured source where it appears (the citation-verification record). This is the verification record B13 couples to: a wave-returned figure is UNVERIFIED until an ingest return confirms it against the captured source.
 4. **NEVER add, modify, or delete `## Financials` rows on any entity page** — the sole writer of that section is the `investment_financials_extract` tool (Step 7b), per `section-menus.ext.md` § `## Financials`. Extractable fundamentals found during ingest are reported as extraction candidates in the summary, never written.
 5. **Run NO git commands** (no `add` / `commit` / `push`) — return the summary only; per § Commit policy the orchestrator makes the run's single commit at the very end.
+6. **NEVER create or edit thesis pages** — per the `sb-wiki-ingest` write-surface contract (thesis pages scribe-only; A7). Thesis-relevant figures, conclusions, or data found during ingest MUST be reported in the return summary — NEVER written to a thesis page.
+7. **Environment caveats (A8 — these do NOT inherit from the parent session):**
+   - **Verify absence with a second method** before concluding a file is missing: a content search, directory listing, or per-directory pattern MUST confirm absence — Glob on Windows silently returns empty or partial results (false-negative).
+   - **Platform write path:** use PowerShell / the Write and Edit tools; NEVER construct phantom WSL paths (e.g., `/mnt/c/…`) — the vault is on Windows.
+8. **Accept-all pre-approval (gate-approved runs — BINDING).** Once the Ingest gate is approved (`[S]` or `[E]`'s adjusted list), the dispatch carries accept-all pre-approval: the ingest sub-agent NEVER re-prompts the user per source mid-run. The gate `[S]` IS the authorization for every source in the approved set; sequential dispatch does not create additional checkpoints.
+9. **`{IF MANUAL-BRIDGED BINARY}`** When the ingested raw is a manual-bridged binary (PDF captured via `--mode manual` or `--pdf-text`), the ingest MUST write the body line `Original PDF: [[{title-slug}.pdf]]` on the source page immediately after frontmatter (the A6 convention; ADX-2). This line is a body line — NEVER a frontmatter key.
+10. **Model: `sonnet`.** Ingest sub-agents run on `sonnet` — NEVER Haiku. Numeric and structured content demands the reasoning capacity; Haiku is cost-cap for discovery only (Step 3 / Step 7a).
 
 On a returned summary → state `ingested_to_wiki` for that source. A `failed` / `partial` status is surfaced per `./investor-loop.md` § Issue-surfacing — never silently treated as ingested.
 
@@ -211,6 +251,52 @@ The highest-value discovery primitive: instead of asking "what supports the anch
 5. **Return ONLY ranked disconfirming candidates + metadata + the why-it-would-overturn note.** The **full source text MUST stay inside the sub-agent** (anti-context-rot — the parent context stays clean).
 
 Rank the returned disconfirming candidates by `source-policy` trust class (loaded in Step 1) exactly as Step 3 does; a candidate that fails the trust bar is surfaced per `./investor-loop.md` § Issue-surfacing — never silently dropped or kept. The wave writes NOTHING and fetches nothing into this mode; it adds no new data-access path. Its candidates feed the Step 4 Propose checkpoint, where the user approves or rejects them through the unchanged present-and-confirm subset flow — nothing disconfirming is captured before approval, per-run or standing (the Step 4 auto-capture partition applies to disconfirming candidates identically).
+
+### B10 — Canonical Disconfirm-Wave Prompt Skeleton (SINGLE SOURCE — `thesis.md` Step 2b dispatches this)
+
+This is the CANONICAL skeleton. `thesis.md` (Step 2b) DISPATCHES `research` pointing at this skeleton — do NOT duplicate it there.
+
+```
+You are a disconfirm-wave sub-agent. Your SOLE job is to find the strongest source(s) that would FALSIFY the anchor claim below. Do NOT search for confirmation.
+
+MANDATORY — invoke the `rbtv-web-searching` skill before any web work and follow it exactly.
+
+--- INPUT CONTRACT ---
+Anchor claim: {anchor_claim}
+Entity/entities: {entities}
+Specific assumption or invalidation criterion (if dispatched by thesis/review): {specific_assumption_or_criterion}
+Research-policy scope: {scope}
+Research-policy exclusions: {exclusions}
+Source-policy trust tiers: {trust_tiers}
+--- END INPUT CONTRACT ---
+
+SCOPE: adversarial only — hunt for data, analysis, or primary sources that, if true, break the anchor claim. Respect the research-policy exclusions above; drop any candidate touching an excluded topic.
+
+HARD BOUNDARIES:
+- Model: Haiku
+- Max fetches: ≤ 5
+- Wave shape: single-pass, NEVER loop
+- Return ONLY ranked candidates + metadata (full source text MUST stay inside this sub-agent — anti-context-rot)
+- Verify every candidate URL is live before returning it (HEAD or page fetch); drop dead / 404 / unresolvable URLs
+- Trust-class assignment: when uncertain between two tiers, assign the LOWER trust (higher number) — NEVER inflate
+
+TRUST-TIER SEED RUBRIC (use tiers from INPUT CONTRACT if filled; fall back to this):
+1 = primary (filings, regulator / company official)
+2 = trusted analysis (named research firm / analyst with a track record)
+3 = established press
+4 = unverified (blog / UGC / aggregator)
+Uncertain → assign LOWER trust (higher tier number).
+
+ORCHESTRATION LESSONS (BINDING):
+(a) Worklist / input notes are LEADS, not citation mandates — a lead points to a domain, not a pre-approved source; verify and qualify independently.
+(b) Input notes are point-in-time — RE-VERIFY every claim against the live wiki before acting on it; a stale note is not ground truth.
+
+RETURN SHAPE — return ONLY this table, no other text:
+| title | url | source | trust class | why it matters | relation to the thesis | why-it-would-overturn |
+(Tag each row: disconfirming (evidence-against))
+
+WAVE-FIGURE STATUS (BINDING): any figure cited in the metadata above is UNVERIFIED by default — NEVER citable until a Step 7 ingest confirms it in the captured source. Watch for the correction classes in `./data/correction-classes.md` when assigning trust and why-it-would-overturn.
+```
 
 ## Step 8 — Feed forward
 

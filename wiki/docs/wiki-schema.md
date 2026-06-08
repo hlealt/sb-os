@@ -179,23 +179,23 @@ When a stub fires for a kind that already has a subfolder, the stub MUST be crea
 
 ## Asset folder
 
-Local storage for images and other binary attachments referenced by source pages and wiki pages. The standard is **flat, single shared folder** at `{wiki_root}/raw/assets/`. Karpathy-style workflow: after clipping a page or article into `raw/{origin}/`, the user runs Obsidian's core "Download attachments for current file" command (introduced in Obsidian 1.8.0, January 2025) to download all referenced external images locally. This keeps images viewable by LLMs on demand and immune to upstream URL rot.
+Local storage for images and other binary attachments referenced by source pages and wiki pages. The standard is **flat, single shared folder** at `{wiki_root}/raw/_assets/`. Karpathy-style workflow: after clipping a page or article into `raw/{origin}/`, the user runs Obsidian's core "Download attachments for current file" command (introduced in Obsidian 1.8.0, January 2025) to download all referenced external images locally. This keeps images viewable by LLMs on demand and immune to upstream URL rot.
 
 ### Path
 
-`{wiki_root}/raw/assets/` — single shared folder at the root of `raw/`. Flat. No per-source or per-note subfolders.
+`{wiki_root}/raw/_assets/` — single shared folder at the root of `raw/`. Flat. No per-source or per-note subfolders.
 
 **Why flat.** Obsidian's core "Download attachments for current file" command follows the global "Default location for new attachments" setting and does NOT support per-file subfolder templates (`${filename}`, `${noteFileName}`, etc., as of Obsidian 1.9.6). Every download for every note lands in the same destination. The schema standardizes on that destination rather than fighting it.
 
 ### Maintained by
 
-The user, via Obsidian. Configuration: Obsidian Settings → Files and links → "Default location for new attachments" → `raw/assets`. The user binds the "Download attachments for current file" command to a hotkey (e.g. Ctrl+Shift+D) and runs it after each clip.
+The user, via Obsidian. Configuration: Obsidian Settings → Files and links → "Default location for new attachments" → `raw/_assets`. The user binds the "Download attachments for current file" command to a hotkey (e.g. Ctrl+Shift+D) and runs it after each clip.
 
-**Agents NEVER write to `raw/assets/`.** Neither `sb-wiki-ingest`, `sb-wiki-lint`, `sb-wiki-create-topic`, nor `sb-wiki-query` create, move, rename, or delete files inside `raw/assets/`. The folder is user-owned content, populated by Obsidian's own command.
+**Agents NEVER write to `raw/_assets/` unless the user explicitly directs them to handle specific files or images.** Neither `sb-wiki-ingest`, `sb-wiki-lint`, `sb-wiki-create-topic`, nor `sb-wiki-query` create, move, rename, or delete files inside `raw/_assets/` on their own initiative. The user's explicit mention of a file or image to handle IS the required direction (see `/sb-wiki-ingest` write-surface contract § "Ingest write rules — A10").
 
 ### Filenames
 
-Whatever Obsidian writes — typically the original remote filename, or `Image 1.jpg` / `Image 2.jpg` patterns when filenames collide or are missing. (A known Obsidian 1.9.6 bug affects this renaming; fix pending upstream.) Agents do NOT enforce a filename convention inside `raw/assets/`.
+Whatever Obsidian writes — typically the original remote filename, or `Image 1.jpg` / `Image 2.jpg` patterns when filenames collide or are missing. (A known Obsidian 1.9.6 bug affects this renaming; fix pending upstream.) When `sb-wiki-ingest` moves a user-directed screenshot image into `raw/_assets/`, it MUST rename the image to a descriptive slug (NEVER preserve a name like "Captura de tela …").
 
 ### Referencing assets
 
@@ -203,21 +203,21 @@ Source pages (`raw/{origin}/*.md`) and wiki pages (`wiki/concepts/*.md`, `wiki/e
 
 ### Lint behavior — SKIP entirely
 
-`raw/assets/` is NOT a raw origin. It has no source pages, no wiki sources index, no leaf index. Lint MUST NOT:
+`raw/_assets/` is NOT a raw origin. It has no source pages, no wiki sources index, no leaf index. Lint MUST NOT:
 
 | Behavior | Required state |
 |----------|----------------|
-| Create an index file at `raw/assets/assets.md` | NEVER. `raw/assets/` is not an origin. |
-| Walk `raw/assets/` as part of raw-origin sweeps (step 7 of `/sb-wiki-lint`) | NEVER. Skip the directory entirely. |
-| Count files inside `raw/assets/` toward orphan detection (in or out) | NEVER. Assets are out of scope for orphan computation in BOTH directions — they are not eligible to be orphans, and image embeds inside them do not count as inbound links. |
-| Enforce filename conventions inside `raw/assets/` | NEVER. Obsidian writes whatever names it writes. |
-| Treat `raw/assets/` as an origin folder for any other purpose | NEVER. |
+| Create an index file at `raw/_assets/_assets.md` | NEVER. `raw/_assets/` is not an origin. |
+| Walk `raw/_assets/` as part of raw-origin sweeps (step 7 of `/sb-wiki-lint`) | NEVER. Skip the directory entirely. |
+| Count files inside `raw/_assets/` toward orphan detection (in or out) | NEVER. Assets are out of scope for orphan computation in BOTH directions — they are not eligible to be orphans, and image embeds inside them do not count as inbound links. |
+| Enforce filename conventions inside `raw/_assets/` | NEVER (except the descriptive-slug rename rule applied by `sb-wiki-ingest` on user-directed moves — see above). |
+| Treat `raw/_assets/` as an origin folder for any other purpose | NEVER. |
 
-Workflows that walk `{wiki_root}/raw/` MUST explicitly exclude `raw/assets/` from their iteration sets.
+Workflows that walk `{wiki_root}/raw/` MUST explicitly exclude `raw/_assets/` from their iteration sets.
 
 ### Pre-existing exceptions
 
-A vault MAY have legacy asset folders nested inside specific origin subdirectories (for example, `raw/mails/assets/{message-folder}/`, written historically by tools like `gmail-bridge` before this standard existed). These are NOT the standard going forward. New assets land in `{wiki_root}/raw/assets/`. Existing legacy structures are user-owned, untouched by lint and any other sb-os component, and may be migrated to the standard at the user's discretion.
+A vault MAY have legacy asset folders nested inside specific origin subdirectories (for example, `raw/mails/assets/{message-folder}/`, written historically by tools like `gmail-bridge` before this standard existed). These are NOT the standard going forward. New assets land in `{wiki_root}/raw/_assets/`. Existing legacy structures are user-owned, untouched by lint and any other sb-os component, and may be migrated to the standard at the user's discretion.
 
 ## Naming convention
 
@@ -533,16 +533,18 @@ The agent auto-creates a stub Concept or Entity page when the cluster representa
 
 If none of the three branches fire, log a `candidate-mention` in `log.md` for periodic review by lint. Do NOT create a page.
 
-#### Near-duplicate probe (semantic tier)
+#### Near-duplicate probe (non-skippable)
 
-Exact-slug existence is checked mechanically before any stub is created (unchanged — a slug that exists routes to the update path). When the semantic tier is available (§ "Retrieval tiers — hybrid search"), the agent ADDITIONALLY probes each stub-candidate for an existing page covering the SAME referent under a DIFFERENT slug: ONE helper call per stub-candidate — `search "<candidate name> — <planned preamble>" --type concept,entity,topic --k 8`. The call's topic hits feed the speculative tier (§ "Existing topic updates") — one call serves both probes. Concept/entity hits trigger the same-referent test:
+Exact-slug existence is checked mechanically before any stub is created (unchanged — a slug that exists routes to the update path). The probe MUST ALSO check ACROSS ALL KINDS and the `wiki/theses/` namespace (vault-wide filename uniqueness) — a slug must not already exist in a sibling type folder (`concepts/` vs `entities/` is allowed per the naming convention, but `concepts/` vs `topics/` is forbidden) OR as a thesis page filename. **Stub routing MUST validate against the kind-routing table** (per schema § "Folder subdivision" naming policy) BEFORE writing — catching a `kind: tool` landing in `organizations/`, a financial benchmark landing in `ai-benchmarks/`, etc. Both the probe and routing-validation are NON-SKIPPABLE gates: every stub-candidate MUST pass both before creation.
+
+When the semantic tier is available (§ "Retrieval tiers — hybrid search"), the agent ADDITIONALLY probes each stub-candidate for an existing page covering the SAME referent under a DIFFERENT slug: ONE helper call per stub-candidate — `search "<candidate name> — <planned preamble>" --type concept,entity,topic --k 8`. The call's topic hits feed the speculative tier (§ "Existing topic updates") — one call serves both probes. Concept/entity hits trigger the same-referent test:
 
 | Test outcome | Action |
 |--------------|--------|
 | The hit denotes the SAME thing — synonym, alias, spelling/formatting variant (e.g. `llm-as-judge` vs `llm-as-a-judge`) | Do NOT create the stub. Reroute the candidate to the `existing-pages` set — the source's perspective lands on the existing page via the step-4 append-only update path |
 | The hit is merely RELATED (parent, sibling, instance, neighbor) OR same-referent is UNCERTAIN | Create the stub (baseline behavior). When in doubt, create — a duplicate stub is lint-recoverable; a wrong merge misroutes content onto the wrong page |
 
-Tier unavailable → exact-slug check only (the floor, identical to pre-v7 behavior).
+Tier unavailable → exact-slug check + cross-kind + theses-namespace check + routing-validation only (the floor).
 
 #### Title-branch rule
 
@@ -875,19 +877,36 @@ Two invocations: `/sb-wiki-ingest <slug>` (default, interactive) and `/sb-wiki-i
 |------|-----------|-------|
 | 0 | **Load extensions** (runs before Step 1) — MERGE each registered module's `wiki-ext/` definitions into the active rule set per Module extensions §; no-op when `wiki_extensions` is absent/empty | Agent |
 | 1 | Read raw file — resolve `<slug>` against `raw/{origin}/*.md` and `raw/{origin}/*.pdf`; read PDFs natively (page-range requests for large files) | Agent |
-| 1.5 | **PDF title-conformance rename** (PDF sources only; markdown skips) — compute `{title-slug}` from the paper's title (Naming convention § "Raw PDF title-conformance"); if the PDF stem differs, rename `raw/{origin}/{stem}.pdf` → `{title-slug}.pdf` BEFORE the source page is created, so the source page and every footnote are born title-named (no referrer propagation needed). Collision → error-halt and ask (silent: `failed (duplicate raw)`). Filename-only — content immutable | Agent |
+| 1.5 | **PDF title-conformance rename** (PDF sources only; markdown skips) — compute `{title-slug}` from the paper's title (Naming convention § "Raw PDF title-conformance"); if the PDF stem differs, rename `raw/{origin}/{stem}.pdf` → `{title-slug}.pdf` BEFORE the source page is created, so the source page and every footnote are born title-named (no referrer propagation needed). Collision → error-halt and ask (silent: `failed (duplicate raw)`). Filename-only — content immutable. **PDF text-twin rule:** when ingesting a PDF that has no Markdown twin in the same `raw/{origin}/`, MUST extract a durable text twin (`{title-slug}.md`) alongside the PDF using `pypdf`-extraction; NEVER delete or replace the PDF (preserve both); the source page `raw:` frontmatter wikilinks the `.md` twin AND the page carries `Original PDF: [[{title-slug}.pdf]]` as a body line immediately after the frontmatter block. PDFs that arrived WITH a pre-existing Markdown twin skip extraction (twin already present). | Agent |
 | 2 | Write `wiki/sources/{origin}/{date}-{slug}.md` (`.md` extension even for a PDF source) (`Substance` and `Connections` always; `Notable quotes` / `Methodology` / `Counterpoints` per source kind; user-half sections present as empty shells with headings only). **Substance bullets MUST name entities/concepts at page-cluster granularity** per Page granularity § — sub-cluster names go in prose without wikilinks | Agent |
 | 3 | Identify entity/concept mentions; **cluster candidates by page-granularity** (variants, whole+part, siblings, producer+work — see Page granularity §); for each cluster representative, apply the stub-creation rule (Substance bullet = mechanical; title-only = discretion; Notable Quote = discretion), then the **near-duplicate probe** when the semantic tier is available (Stub policy § "Near-duplicate probe" — same-referent hit reroutes to the update path). ALSO detect existing topic pages relevant to this source per "Existing topic updates" § — deterministic read-shortlist (slug listing + ONE grep alternation pass), reading ONLY matched topic pages; the semantic tier NEVER shortlists the firm tier — build the `candidate-topic-updates` sets | Agent |
 | 4 | Update existing entity/concept pages with new perspective + citation; populate `Open variants / debates` section if Contradiction fires. **Agent NEVER overwrites a main section that already contains substantive content (>50 words) — only appends new sections, adds bullets to existing lists, or adds footnote definitions to Sources. User-fleshed content is treated as authoritative.** Existing topic pages are NOT updated at this step — they go through the Stage 1 user gate per "Existing topic updates" § | Agent |
 | 5 | Create stubs for new entities/concepts that meet the rule | Agent |
 | 6 | Detect candidate-topic triggers (Contradiction, Evolution, Cross-application); add `> [!warning] Disputed` callouts on Contradiction-`same-scope-opposing` | Agent |
-| 7 | Update raw index: `Wiki = Yes` | Agent |
-| 8 | Update wiki sources index (`What it says` filled; `My take` set to `pending` — populated post Stage 2 per the three-state rule) | Agent |
+| 7 | Update raw index: `Wiki = Yes`. **Tier-specific rule:** raw-index ROW missing → CREATE it; raw-index FILE missing → LOG A WARNING and do NOT create (lint owns raw-index files); wiki-sources index FILE missing → CREATE with header (step 8 responsibility). | Agent |
+| 8 | Update wiki sources index (`What it says` filled; `My take` set to `pending` — populated post Stage 2 per the three-state rule). Index FILE missing → CREATE with header row. | Agent |
 | 9 | Append `candidate-topic` and `candidate-mention` entries to `log.md` when triggered (the actionable queue). NO `ingest` / `concept-created` / `entity-created` / `topic-updated` entries — created pages and updates are recorded by the pages themselves | Agent |
 | 10 | **Stage 1 checkpoint**: present structured table + PROPOSED TOPICS block; the user accepts-all / rejects N / aborts file changes; per topic: accept (agent invokes `sb-wiki-create-topic` skill now) / defer (keeps as candidate in log). Approved changes commit before Stage 2 begins. | Agent + User |
 | 11 | **Stage 2 checkpoint** (optional, post-commit): present reflection prompt after approved changes are committed. The user can ignore it, decline it, or answer with freeform reflection content in any order. The agent routes content by intent — `My take` → the source page `My take` section; questions / dive-deepers → `{wiki_root}/questions.md` entries (`seeded-by:` this source) — writes the routed content, and syncs the `My take` column to the wiki sources index. | Agent + User |
 
 **No mid-flow user input during steps 1–9.** All user interaction happens at steps 10–11.
+
+#### Ingest write rules (component contract)
+
+These are binding constraints on ALL write operations performed by `/sb-wiki-ingest`. They apply in both default and silent modes.
+
+**A7 — Thesis pages are scribe-only.**
+`/sb-wiki-ingest` MUST NEVER create or edit ANY page under `wiki/theses/`. Thesis-relevant figures, conclusions, or data encountered during ingest MUST be reported in the structured RETURN (or the Stage 1 checkpoint table) — they are NEVER written to a thesis page by the ingest component. Thesis authoring and editing is exclusively the domain of `sb-fin-create-thesis`.
+
+**D24 — Two-tier T4 write rule.**
+A raw T4 framing (a specific below-bar claim extracted verbatim from a source) MUST live on its SOURCE page only. A SYNTHESIZED below-bar verdict MAY live on the ENTITY page WITH attribution (`per {source}, T4 — see [[source-page]]`). Entity pages MUST NEVER absorb a raw T4 claim unattributed.
+
+**A10 — Ingest file and image routing.**
+
+| Rule | Requirement |
+|------|-------------|
+| **A — Relocate referenced files into raw via the designated capture tool** | When the user directs ingest to handle a file NOT yet in `raw/{origin}/` (in Downloads, or parked in `raw/_unrouted/`), route it into `raw/{origin}/{title-slug}.{ext}` via the workspace's DESIGNATED sole raw-capture tool — the SOLE raw writer, NEVER an ad-hoc file move. Guard: fire ONLY on explicit ingest/capture intent. Infer `origin` from URL/content and CONFIRM when ambiguous (routing error risk). For files already in `raw/_unrouted/`, this IS the staging→`raw/{origin}/` move. |
+| **B — Screenshot images → `_assets/` + embedded in place** | When the user explicitly mentions a file has images and provides their paths (e.g. from `C:\Users\...\Screenshots`), the ingesting agent MUST: (1) move each image into `{wiki_root}/raw/_assets/` renamed to a descriptive slug (NEVER a name like "Captura de tela …"); (2) embed `![[slug.png]]` in the raw Markdown at the position each image appears, using image-read + surrounding context; (3) FLAG any placement it is unsure of — NEVER silently guess placement. The user's explicit mention of the file/images IS the required direction to write under `raw/_assets/`. |
 
 #### Stage 1 checkpoint format
 
@@ -1111,7 +1130,7 @@ Orphan-detection is the lint signal for "the wiki is not actually building knowl
 
 #### purpose.md — SKIP entirely (v1)
 
-`/sb-wiki-lint` MUST skip `{wiki_root}/purpose.md` entirely — NEVER flag it as orphan, stray, or stub; NEVER index it; NEVER count it in orphan detection (in or out). It is regulatory configuration (`type: purpose`), not a wiki page. This holds structurally: lint walks only the `wiki/` and `raw/` subtrees (steps 1–7), and `purpose.md` is a root-level sibling outside both — so it is never walked. Mirrors the existing `raw/assets/` skip contract. No semantic purpose-lint in v1 (off-purpose-drift / thin-focus / gap detection are parked backlog).
+`/sb-wiki-lint` MUST skip `{wiki_root}/purpose.md` entirely — NEVER flag it as orphan, stray, or stub; NEVER index it; NEVER count it in orphan detection (in or out). It is regulatory configuration (`type: purpose`), not a wiki page. This holds structurally: lint walks only the `wiki/` and `raw/` subtrees (steps 1–7), and `purpose.md` is a root-level sibling outside both — so it is never walked. Mirrors the existing `raw/_assets/` skip contract. No semantic purpose-lint in v1 (off-purpose-drift / thin-focus / gap detection are parked backlog).
 
 ### `/sb-wiki-query`
 

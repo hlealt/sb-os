@@ -66,9 +66,45 @@ def _make_vault(tmp_path: Path) -> Path:
 
 
 def _mock_response(body: str, title_tag: str = "") -> MagicMock:
-    html_body = f"<html><head><title>{title_tag}</title></head><body>{body}</body></html>"
+    """Build a mocked httpx response with a REALISTIC article body.
+
+    The caller's ``body`` is preserved verbatim inside an <article> <p> (so
+    sentinel assertions still hold) and surrounded by genuine prose so the
+    extracted content clears the A1 content-validation gates (absolute prose
+    floor + size-gated density ratio). The scaffold stays well under the
+    ratio-gate body size so these legit small mocks are never density-blocked.
+    For raw JSON data-artifact bodies (--ext json), the body is passed through
+    as the whole response with no HTML scaffold — see _mock_json_response.
+    """
+    article = (
+        f"<article><h1>{title_tag or 'Article'}</h1>"
+        f"<p>{body}</p>"
+        "<p>This article reports on the topic above with supporting analysis, "
+        "context, and commentary across several paragraphs of readable prose.</p>"
+        "<p>Additional reporting provides background and the broader market "
+        "implications for investors following this development.</p>"
+        "</article>"
+    )
+    html_body = (
+        f"<html><head><title>{title_tag}</title></head>"
+        f"<body><nav>Home About</nav>{article}<footer>(c) 2026</footer></body></html>"
+    )
     resp = MagicMock()
     resp.text = html_body
+    resp.raise_for_status = MagicMock()
+    return resp
+
+
+def _mock_json_response(body: str) -> MagicMock:
+    """Mocked response whose body is a raw JSON data artifact (--ext json path).
+
+    Realistic XBRL companyfacts payloads are large; this builds a body well
+    above the byte floor so the capture is not blocked as truncated. The
+    density check does not apply to the JSON capture's stored output, but the
+    fetched body still passes through _validate_body, so it must be non-trivial.
+    """
+    resp = MagicMock()
+    resp.text = body
     resp.raise_for_status = MagicMock()
     return resp
 
@@ -428,7 +464,10 @@ def test_manual_file_missing_is_blocked(tmp_path):
 def test_manual_file_dry_run_writes_nothing(tmp_path):
     vault = _make_vault(tmp_path)
     fetched = tmp_path / "hand-fetched.md"
-    fetched.write_text("BODY", encoding="utf-8")
+    fetched.write_text(
+        "Hand-fetched filing body with enough text to clear the byte floor.",
+        encoding="utf-8",
+    )
 
     result = capture(
         url="https://example.com/x",
@@ -452,7 +491,10 @@ def test_manual_file_dry_run_writes_nothing(tmp_path):
 def test_cli_manual_file_exits_zero(tmp_path):
     vault = _make_vault(tmp_path)
     fetched = tmp_path / "filing.md"
-    fetched.write_text("FILING", encoding="utf-8")
+    fetched.write_text(
+        "SEC exhibit filing body with sufficient length for the byte floor.",
+        encoding="utf-8",
+    )
 
     exit_code = main([
         "--url", "https://www.sec.gov/exhibit",
@@ -847,9 +889,15 @@ def test_gated_never_invokes_curl(tmp_path):
 
 def test_ext_json_saves_dot_json_markdown_mode(tmp_path):
     vault = _make_vault(tmp_path)
-    # companyfacts-like JSON body fetched over the wire
-    body = '{"cik": 1650372, "facts": {}}'
-    mock_resp = _mock_response(body, title_tag="companyfacts")
+    # companyfacts-like JSON body fetched over the wire — realistic size so the
+    # fetched body clears the A1 byte floor (real companyfacts are 100s of KB).
+    body = json.dumps({
+        "cik": 1650372,
+        "entityName": "Atlassian Corp",
+        "facts": {"us-gaap": {f"Metric{i}": {"units": {"USD": [{"val": i}]}}
+                              for i in range(200)}},
+    })
+    mock_resp = _mock_json_response(body)
 
     with patch("httpx.get", return_value=mock_resp):
         result = capture(
@@ -973,7 +1021,12 @@ def test_ext_html_archive_unaffected(tmp_path):
 def test_cli_ext_json_flag(tmp_path):
     vault = _make_vault(tmp_path)
     fetched = tmp_path / "cf.json"
-    fetched.write_text('{"cik": 1}', encoding="utf-8")
+    # Realistic companyfacts payload — comfortably above the A1 byte floor.
+    fetched.write_text(
+        json.dumps({"cik": 1, "entityName": "Example Corp",
+                    "facts": {"us-gaap": {"Revenue": {"units": {"USD": [{"val": 1}]}}}}}),
+        encoding="utf-8",
+    )
 
     exit_code = main([
         "--url", "https://data.sec.gov/api/xbrl/companyfacts/CIK0001650372.json",

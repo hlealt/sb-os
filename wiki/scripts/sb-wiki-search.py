@@ -77,6 +77,23 @@ def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _find_vault_root() -> Path | None:
+    """Walk up from the script's own directory, then from cwd, to find sb-os.json.
+
+    Returns the directory containing sb-os.json, or None if not found.
+    """
+    for start in (Path(__file__).resolve().parent, Path.cwd().resolve()):
+        candidate = start
+        for _ in range(20):  # cap ascent to 20 levels
+            if (candidate / "sb-os.json").is_file():
+                return candidate
+            parent = candidate.parent
+            if parent == candidate:
+                break
+            candidate = parent
+    return None
+
+
 def resolve_wiki_root(vault_root: Path) -> Path:
     manifest = json.loads(read_text(vault_root / "sb-os.json"))
     return vault_root / manifest["wiki_root"]
@@ -471,7 +488,9 @@ def main() -> int:
         pass
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--vault-root", type=Path, default=Path.cwd())
+    parser.add_argument("--vault-root", type=Path, default=None,
+                        help="vault root (directory containing sb-os.json); "
+                             "auto-detected by walking up from the script location when omitted")
     parser.add_argument("--db", type=Path, help="index db path (default {wiki_root}/.sb-wiki-search/index.db)")
     parser.add_argument("--model", default=DEFAULT_MODEL)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -490,8 +509,18 @@ def main() -> int:
 
     args = parser.parse_args()
 
+    if args.vault_root is not None:
+        vault_root = args.vault_root.resolve()
+    else:
+        vault_root = _find_vault_root()
+        if vault_root is None:
+            print("cannot resolve vault root: sb-os.json not found in script directory "
+                  "ancestors or cwd ancestors; pass --vault-root explicitly",
+                  file=sys.stderr)
+            return 2
+
     try:
-        wiki_root = resolve_wiki_root(args.vault_root.resolve())
+        wiki_root = resolve_wiki_root(vault_root)
     except (FileNotFoundError, KeyError, json.JSONDecodeError) as err:
         print(f"cannot resolve wiki_root from sb-os.json: {err}", file=sys.stderr)
         return 2
@@ -499,7 +528,7 @@ def main() -> int:
         print(f"no wiki tree at {wiki_root / 'wiki'}", file=sys.stderr)
         return 2
 
-    api_key = resolve_api_key(args.vault_root.resolve())
+    api_key = resolve_api_key(vault_root)
     embedder = make_voyage_embedder(api_key, args.model) if api_key else None
     mode = "hybrid" if embedder else "fts-only"
     db_path = args.db or _default_db(wiki_root)
