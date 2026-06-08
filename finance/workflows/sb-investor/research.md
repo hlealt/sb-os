@@ -147,11 +147,15 @@ Fires on EVERY run that captured at least one source — even when every capture
 
 Wait for the user's choice — this is a mode checkpoint per `./investor-loop.md` § Per-Step Checkpoint.
 
+**Deferred captures (BINDING — name them on the durable page).** Every source captured this run but NOT ingested — `[E]` exclusions or an `[N]` deferral — is recorded to `.user/finance/investor/log.md` per `./investor-loop.md` § Issue-surfacing AND named on the anchoring thesis/topic page under a `Captured — pending ingest` list (`slug · origin · trust class · why it matters · raw path`), so the deferred set lives on the durable page the user reads — not only in the log. When the run chains to `thesis`/`review`, hand the pending-ingest list to `sb-fin-create-thesis` for that section; a bare research question with no thesis names them on its candidate-topic/topic page instead. A deferred capture present in neither the log NOR a durable page has violated this rule.
+
 ### Dispatch
 
 After the gate clears (`[S]`, or `[E]`'s adjusted list), file each `captured_to_raw` source into the wiki by dispatching **one sub-agent per source, ONE AT A TIME — never in parallel**. Full text still stays in each sub-agent's context, so this mode and `sb-investor.md` stay clean (anti-context-rot holds). The agent invokes the real ingest command via the sub-agent; it NEVER reimplements ingest.
 
 **Why sequential (BINDING).** Ingest sub-agents write SHARED wiki surfaces — topic hubs, concept/entity stubs, leaf indexes, `log.md` — and parallel ingests race on them (observed 2026-06-03: a lost-then-restored section and four duplicate-stub clusters from a 16-agent fan-out). Dispatch sub-agent N+1 only after sub-agent N returns its summary. Parallel ingest dispatch returns ONLY if `sb-wiki-ingest` ever gains page-level write locking.
+
+**Commit policy (BINDING).** NO git command runs during ingestion — ingest sub-agents NEVER git-commit, and this mode NEVER commits per source, per batch, or per wave (mirrors `sb-wiki-ingest-all` § single git commit). A sub-agent's per-file status `committed` means staged FILE changes written to disk, NEVER git. The run produces EXACTLY ONE git commit at the very end — after ALL ingests, Step 7b extractions, and any chained `thesis`/`review` authoring finish — covering every change the run produced, made via the workspace commit path (`rbtv-commit`). Skip when the vault root is not a git repository.
 
 Each sub-agent prompt MUST direct it to:
 
@@ -159,6 +163,7 @@ Each sub-agent prompt MUST direct it to:
 2. **Invoke the `sb-wiki-ingest` skill and follow it exactly**, and **invoke the `sb-vault-ops` skill before the file operations it performs and follow it exactly** (per the sub-agents rule — stated explicitly and imperatively because a sub-agent does not inherit these requirements).
 3. **Return only the structured summary** (per-file status `committed` / `partial (<reason>)` / `failed (<reason>)`, plus pages created/updated and any candidate-topic or lint flags). The full source text MUST NOT be returned to the parent.
 4. **NEVER add, modify, or delete `## Financials` rows on any entity page** — the sole writer of that section is the `investment_financials_extract` tool (Step 7b), per `section-menus.ext.md` § `## Financials`. Extractable fundamentals found during ingest are reported as extraction candidates in the summary, never written.
+5. **Run NO git commands** (no `add` / `commit` / `push`) — return the summary only; per § Commit policy the orchestrator makes the run's single commit at the very end.
 
 On a returned summary → state `ingested_to_wiki` for that source. A `failed` / `partial` status is surfaced per `./investor-loop.md` § Issue-surfacing — never silently treated as ingested.
 
