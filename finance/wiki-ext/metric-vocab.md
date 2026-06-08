@@ -10,9 +10,9 @@ Feeds the `metric` and `unit` columns of the uniform long-format `## Financials`
 
 ### company / equity
 
-`revenue, gross_profit, ebitda, ebit, operating_income, net_income, gross_margin, ebitda_margin, operating_margin, net_margin, roic, roe, net_debt, net_debt_ebitda, fcf, operating_cash_flow, capex, rpo, crpo, subscription_revenue, subscription_support_revenue, cloud_revenue, data_center_revenue, data_cloud_ai_arr, cash_and_securities`
+`revenue, gross_profit, ebitda, ebit, operating_income, net_income, gross_margin, ebitda_margin, operating_margin, net_margin, roic, roe, net_debt, net_debt_ebitda, fcf, operating_cash_flow, capex, rpo, crpo, subscription_revenue, subscription_support_revenue, cloud_revenue, data_center_revenue, data_cloud_ai_arr, cash_and_securities, arpu, net_interest_margin`
 
-GAAP is the unqualified default — `operating_income`/`operating_margin` mean the GAAP figure; non-GAAP variants take the `_non_gaap` suffix (see Suffix Families). `data_cloud_ai_arr` is an operational-KPI-class identifier (admitted 2026-06-04, governed). `cash_and_securities` is a balance-sheet point figure (`period_type: point`).
+GAAP is the unqualified default — `operating_income`/`operating_margin` mean the GAAP figure; non-GAAP variants take the `_non_gaap` suffix (see Suffix Families). `data_cloud_ai_arr` is an operational-KPI-class identifier (admitted 2026-06-04, governed). `cash_and_securities` is a balance-sheet point figure (`period_type: point`). `arpu` (average revenue per user — consumer-platform KPI, unit USD) and `net_interest_margin` (annualized net interest income / avg interest-earning assets — broker/bank KPI, unit pct) admitted 2026-06-08 (governed; prediction-markets §10 follow-up).
 
 Valuation point metrics (use `period_type: point`):
 
