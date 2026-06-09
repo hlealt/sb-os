@@ -44,10 +44,24 @@ class TestModuleAwareLoaders(unittest.TestCase):
             name="sb-wiki-ingest",
             sb_os_path="3-resources/tools/sb-os",
             module="wiki",
+            description="Two-stage ingest of a raw source into the wiki.",
         )
-        self.assertEqual(
-            text.strip(),
+        self.assertTrue(text.startswith("---\n"))
+        self.assertIn("description: Two-stage ingest of a raw source into the wiki.", text)
+        self.assertIn(
             "Read and execute `3-resources/tools/sb-os/wiki/commands/sb-wiki-ingest.md`.",
+            text,
+        )
+
+    def test_command_description_sourced_from_frontmatter(self) -> None:
+        cmds = {name: desc for name, desc, _mod in loaders.manifest_commands()}
+        # sb-wiki-ingest-all's description contains a colon — exercises the
+        # single-quote round-trip through the frontmatter parser.
+        self.assertIn("sb-wiki-ingest-all", cmds)
+        self.assertEqual(
+            cmds["sb-wiki-ingest-all"],
+            "Backfill the wiki: ingest every non-ingested raw source via "
+            "batched Opus subagents, then lint.",
         )
 
     def test_missing_module_raises(self) -> None:
@@ -80,10 +94,61 @@ class TestModuleAwareLoaders(unittest.TestCase):
         rules = loaders.manifest_rules()
         for name, _desc, module in skills:
             self.assertTrue(_valid(module), msg=f"skill {name}: module {module!r} is not an on-disk folder")
-        for name, module in commands:
+        for name, _desc, module in commands:
             self.assertTrue(_valid(module), msg=f"command {name}: module {module!r} is not an on-disk folder")
         for filename, module in rules:
             self.assertTrue(_valid(module), msg=f"rule {filename}: module {module!r} is not an on-disk folder")
+
+    def test_skill_description_sourced_from_frontmatter(self) -> None:
+        # sb-vault-ops' source SKILL.md frontmatter carries the long, narrowed
+        # description; the manifest's old short string must NOT be what ships.
+        skills = {name: desc for name, desc, _mod in loaders.manifest_skills()}
+        self.assertIn("sb-vault-ops", skills)
+        self.assertTrue(
+            skills["sb-vault-ops"].startswith("Use when creating or routing tasks"),
+            msg=f"expected frontmatter-sourced description, got: {skills['sb-vault-ops']!r}",
+        )
+        self.assertNotEqual(
+            skills["sb-vault-ops"],
+            "Gatekeeper for vault content and component modifications.",
+            msg="skill description must come from SKILL.md frontmatter, not the manifest",
+        )
+
+    def test_manifest_carries_no_skill_descriptions(self) -> None:
+        import json
+
+        manifest_path = Path(__file__).resolve().parent.parent / "module-manifest.json"
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        for mod_name, mod in data["modules"].items():
+            for skill in mod.get("skills", []):
+                self.assertNotIn(
+                    "description", skill,
+                    msg=f"skill {skill.get('name')!r} in module {mod_name!r} still has a manifest description",
+                )
+
+    def test_manifest_carries_no_command_descriptions(self) -> None:
+        import json
+
+        manifest_path = Path(__file__).resolve().parent.parent / "module-manifest.json"
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        for mod_name, mod in data["modules"].items():
+            for cmd in mod.get("commands", []):
+                self.assertNotIn(
+                    "description", cmd,
+                    msg=f"command {cmd.get('name')!r} in module {mod_name!r} still has a manifest description",
+                )
+
+    def test_parse_frontmatter_description_variants(self) -> None:
+        self.assertEqual(
+            loaders._parse_frontmatter_description("---\nname: x\ndescription: hello world\n---\nbody"),
+            "hello world",
+        )
+        self.assertEqual(
+            loaders._parse_frontmatter_description("---\ndescription: 'quoted: ok'\n---\n"),
+            "quoted: ok",
+        )
+        self.assertIsNone(loaders._parse_frontmatter_description("no frontmatter here"))
+        self.assertIsNone(loaders._parse_frontmatter_description("---\nname: x\n---\n"))
 
     def test_manifest_rule_sources_paths_module_prefixed(self) -> None:
         for filename, source_rel, module in loaders.manifest_rule_sources():
@@ -107,10 +172,10 @@ class TestModuleAwareLoaders(unittest.TestCase):
 
     def test_stale_rules_excluded_from_manifest_rules(self) -> None:
         rule_names = {fn for fn, _mod in loaders.manifest_rules()}
-        self.assertNotIn("sb-source-of-truth.md", rule_names)
         self.assertNotIn("sb-user-preferences.md", rule_names)
-        # a non-stale core rule is still shipped
+        # non-stale core rules are still shipped
         self.assertIn("sb-workflow-context.md", rule_names)
+        self.assertIn("sb-source-of-truth.md", rule_names)
 
 
 if __name__ == "__main__":

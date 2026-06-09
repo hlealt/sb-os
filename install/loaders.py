@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -132,32 +133,135 @@ def _entry_module(entry: dict[str, Any]) -> str:
     return module
 
 
+def _repo_root() -> Path:
+    """Return the sb-os repo root (the parent of the ``install/`` package)."""
+    return _module_manifest_path().parent.parent
+
+
+def _parse_frontmatter_description(text: str) -> str | None:
+    """Extract the ``description`` value from a file's YAML frontmatter block.
+
+    Handles the single-line form sb-os skills use (quoted or unquoted). Returns
+    None when there is no leading ``---`` frontmatter, no ``description:`` key,
+    an empty value, or a YAML block scalar (``>``/``|``). Pure string parsing —
+    no YAML dependency, so the installer stays stdlib-only.
+    """
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return None
+    block: list[str] | None = None
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            block = lines[1:i]
+            break
+    if block is None:
+        return None
+    for line in block:
+        m = re.match(r"\s*description:\s*(.*)$", line)
+        if not m:
+            continue
+        val = m.group(1).strip()
+        if not val or val[0] in (">", "|"):
+            return None
+        if len(val) >= 2 and val[0] == val[-1] and val[0] in ("'", '"'):
+            quote = val[0]
+            inner = val[1:-1]
+            if quote == "'":
+                inner = inner.replace("''", "'")
+            else:
+                inner = inner.replace('\\"', '"').replace("\\\\", "\\")
+            val = inner.strip()
+        return val or None
+    return None
+
+
+def _read_skill_description(repo_root: Path, module: str, name: str) -> str | None:
+    """Return the ``description`` from a skill's source ``SKILL.md`` frontmatter.
+
+    The skill source lives at ``{repo_root}/{module}/skills/{name}/SKILL.md``.
+    Returns None when the file is missing or carries no usable description.
+    """
+    src = Path(repo_root) / module / "skills" / name / "SKILL.md"
+    if not src.is_file():
+        return None
+    return _parse_frontmatter_description(src.read_text(encoding="utf-8"))
+
+
 def manifest_skills(
     modules: dict[str, dict[str, Any]] | None = None,
     excluded: set[str] | None = None,
 ) -> tuple[tuple[str, str, str], ...]:
     """Return ``((name, description, module), ...)`` for every shippable skill.
 
+    The ``description`` is read from each skill's source ``SKILL.md``
+    frontmatter — the single source of truth — NOT from the manifest, so a
+    description edit propagates on the next install with no manifest sync
+    (architecture §4, Loader pattern). A skill whose ``SKILL.md`` lacks a
+    description is warned about and falls back to a loader placeholder.
+
     With no args, returns ALL skills across ALL modules (used by upgrade
     orphan-cleanup and tests). Pass ``modules`` to scope to selected ones.
     """
     mods = modules if modules is not None else manifest_modules()
-    return tuple(
-        (entry["name"], entry.get("description", ""), _entry_module(entry))
-        for entry in _flatten(mods, "skills", excluded)
-    )
+    repo_root = _repo_root()
+    out: list[tuple[str, str, str]] = []
+    for entry in _flatten(mods, "skills", excluded):
+        name = entry["name"]
+        module = _entry_module(entry)
+        description = _read_skill_description(repo_root, module, name)
+        if not description:
+            sys.stderr.write(
+                f"warning: sb-os skill {name!r} has no usable 'description' in its "
+                f"source frontmatter ({module}/skills/{name}/SKILL.md); the installed "
+                "loader will use a placeholder.\n"
+            )
+            description = ""
+        out.append((name, description, module))
+    return tuple(out)
+
+
+def _read_command_description(repo_root: Path, module: str, name: str) -> str | None:
+    """Return the ``description`` from a command's source frontmatter.
+
+    The command source lives at ``{repo_root}/{module}/commands/{name}.md``.
+    Returns None when the file is missing or carries no usable description.
+    """
+    src = Path(repo_root) / module / "commands" / f"{name}.md"
+    if not src.is_file():
+        return None
+    return _parse_frontmatter_description(src.read_text(encoding="utf-8"))
 
 
 def manifest_commands(
     modules: dict[str, dict[str, Any]] | None = None,
     excluded: set[str] | None = None,
-) -> tuple[tuple[str, str], ...]:
-    """Return ``((name, module), ...)`` for every shippable command."""
+) -> tuple[tuple[str, str, str], ...]:
+    """Return ``((name, description, module), ...)`` for every shippable command.
+
+    The ``description`` is read from each command's source frontmatter — the
+    single source of truth, same as skills — NOT from the manifest. A command
+    whose source lacks a description is warned about and falls back to a loader
+    placeholder.
+
+    With no args, returns ALL commands across ALL modules. Pass ``modules`` to
+    scope to selected ones.
+    """
     mods = modules if modules is not None else manifest_modules()
-    return tuple(
-        (entry["name"], _entry_module(entry))
-        for entry in _flatten(mods, "commands", excluded)
-    )
+    repo_root = _repo_root()
+    out: list[tuple[str, str, str]] = []
+    for entry in _flatten(mods, "commands", excluded):
+        name = entry["name"]
+        module = _entry_module(entry)
+        description = _read_command_description(repo_root, module, name)
+        if not description:
+            sys.stderr.write(
+                f"warning: sb-os command {name!r} has no usable 'description' in its "
+                f"source frontmatter ({module}/commands/{name}.md); the installed loader "
+                "will use a placeholder.\n"
+            )
+            description = ""
+        out.append((name, description, module))
+    return tuple(out)
 
 
 def manifest_rules(
@@ -296,6 +400,24 @@ def _validate_module(module: str) -> str:
     return text
 
 
+def _yaml_quote(value: str) -> str:
+    """Return ``value`` as a YAML-safe scalar for a loader ``description:``.
+
+    Plain scalars are kept as-is when safe; a value containing a colon, ``#``,
+    or a leading YAML indicator is single-quoted (doubling any apostrophe) so
+    generated frontmatter never breaks a YAML parser — e.g. a description like
+    "Backfill the wiki: ingest …".
+    """
+    if (
+        value
+        and ":" not in value
+        and "#" not in value
+        and value[0] not in "!&*?|>%@`\"'-[]{} "
+    ):
+        return value
+    return "'" + value.replace("'", "''") + "'"
+
+
 def generate_skill_loader(
     name: str,
     sb_os_path: str | Path,
@@ -316,7 +438,7 @@ def generate_skill_loader(
     return (
         "---\n"
         f"name: {name}\n"
-        f"description: {desc}\n"
+        f"description: {_yaml_quote(desc)}\n"
         "---\n"
         "\n"
         f"Read and execute `{base}/{mod}/skills/{name}/SKILL.md`.\n"
@@ -327,17 +449,28 @@ def generate_command_loader(
     name: str,
     sb_os_path: str | Path,
     module: str,
+    description: str = "",
 ) -> str:
     """Return the file content for `.claude/commands/<name>.md`.
 
-    Mirrors the existing sb-os command loader convention (one imperative
-    Read line). Claude Code surfaces commands by filename, no frontmatter
-    required. ``module`` selects the module folder under which the command
-    source lives.
+    The command loader carries a YAML frontmatter block (`name` +
+    `description`) followed by the imperative Read directive pointing to the
+    canonical source. The ``description`` is single-sourced from the command's
+    own source frontmatter — editing it there propagates on the next install
+    with no manifest sync. ``module`` selects the module folder under which the
+    command source lives.
     """
     base = _normalize_sb_os_path(sb_os_path)
     mod = _validate_module(module)
-    return f"Read and execute `{base}/{mod}/commands/{name}.md`.\n"
+    desc = description.strip() or f"Loader for sb-os command `{name}`."
+    return (
+        "---\n"
+        f"name: {name}\n"
+        f"description: {_yaml_quote(desc)}\n"
+        "---\n"
+        "\n"
+        f"Read and execute `{base}/{mod}/commands/{name}.md`.\n"
+    )
 
 
 def install_skill_loader(
@@ -367,6 +500,7 @@ def install_command_loader(
     name: str,
     sb_os_path: str | Path,
     module: str,
+    description: str = "",
 ) -> Path:
     """Write the command loader to `target_root/.claude/commands/<name>.md`.
 
@@ -376,7 +510,7 @@ def install_command_loader(
     target = Path(target_root) / ".claude" / "commands" / f"{name}.md"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(
-        generate_command_loader(name, sb_os_path, module),
+        generate_command_loader(name, sb_os_path, module, description),
         encoding="utf-8",
     )
     return target

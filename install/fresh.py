@@ -351,7 +351,7 @@ def build_fresh_plan(
     templates = loaders.manifest_templates(modules_scoped, excluded)
     for name, _desc, _module in skills:
         _add_loader_action(plan, f".claude/skills/{name}/SKILL.md")
-    for name, _module in commands:
+    for name, _desc, _module in commands:
         _add_loader_action(plan, f".claude/commands/{name}.md")
     for filename, _module in rules:
         _add_file_action(plan, f".claude/rules/{filename}", detail="rule (verbatim copy)")
@@ -543,12 +543,13 @@ def _execute_fresh(
         rel = f".claude/skills/{name}/SKILL.md"
         if rel not in created:
             created.append(rel)
-    for name, module in loaders.manifest_commands(modules_scoped, excluded_components):
+    for name, desc, module in loaders.manifest_commands(modules_scoped, excluded_components):
         loaders.install_command_loader(
             target_root=target_root,
             name=name,
             sb_os_path=sb_os_loader_path,
             module=module,
+            description=desc,
         )
         rel = f".claude/commands/{name}.md"
         if rel not in created:

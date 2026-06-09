@@ -163,7 +163,7 @@ For workflow-content changes, that's enough — agents read directly from the so
 
 ## Source of truth
 
-Files in `.claude/skills/sb-*`, `.claude/commands/sb-*.md`, and `.claude/rules/sb-*.md` are regenerated on every install. **Do not edit them in your vault** — edit the source in this repo and re-install. This README section is the canonical statement of that principle — the always-on `sb-source-of-truth` rule is retired (see [Retired components](#retired-components)).
+Files in `.claude/skills/sb-*`, `.claude/commands/sb-*.md`, and `.claude/rules/sb-*.md` are regenerated on every install. **Do not edit them in your vault** — edit the source in this repo and re-install. The always-on `sb-source-of-truth` rule restates this every session.
 
 ## Retired components
 
@@ -171,7 +171,6 @@ Some components ship in this repo but carry `"stale": true` in `install/module-m
 
 | Component | Module | Why retired |
 |---|---|---|
-| `sb-source-of-truth` (rule) | core | The edit-source-not-installed-copies principle is already in the managed CLAUDE.md and the **Source of truth** section above — the always-on rule duplicated it every turn. |
 | `sb-user-preferences` (rule) | core | Superseded by host CLAUDE.md prefs (cross-cutting) + per-workflow context-injection via `sb-workflow-context` (workflow-scoped). The always-on monolithic loader cost context on every turn for content most turns don't need. |
 
 ## Architecture notes

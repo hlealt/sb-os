@@ -11,15 +11,13 @@
           "name": "sb-vault-ops",
           "module": "para",
           "source_template": "para/skills/sb-vault-ops/SKILL.md",
-          "target": ".claude/skills/sb-vault-ops/SKILL.md",
-          "description": "Gatekeeper for vault content and component modifications."
+          "target": ".claude/skills/sb-vault-ops/SKILL.md"
         },
         {
           "name": "sb-vault-integrity",
           "module": "para",
           "source_template": "para/skills/sb-vault-integrity/SKILL.md",
-          "target": ".claude/skills/sb-vault-integrity/SKILL.md",
-          "description": "Post-operation structural sweep after file moves, renames, or deletes."
+          "target": ".claude/skills/sb-vault-integrity/SKILL.md"
         }
       ],
       "commands": [
@@ -27,15 +25,13 @@
           "name": "sb-inject-context",
           "module": "para",
           "source_template": "para/commands/sb-inject-context.md",
-          "target": ".claude/commands/sb-inject-context.md",
-          "description": "Manual context injection helper."
+          "target": ".claude/commands/sb-inject-context.md"
         },
         {
           "name": "sb-onboarder",
           "module": "para",
           "source_template": "para/commands/sb-onboarder.md",
-          "target": ".claude/commands/sb-onboarder.md",
-          "description": "Post-install interactive onboarding — orient the user, populate PARA, optionally build Home, optionally point at RBTV."
+          "target": ".claude/commands/sb-onboarder.md"
         }
       ],
       "rules": [
@@ -79,9 +75,7 @@
           "source": "para/rules/sb-source-of-truth.md",
           "target": ".claude/rules/sb-source-of-truth.md",
           "mode": "copy",
-          "description": "Warns that sb-os components in .claude/ are overwritten on re-install.",
-          "stale": true,
-          "stale_reason": "Redundant — the edit-source-not-installed-copies principle is already documented in the shipped managed CLAUDE.md and the README 'Source of truth' section; the always-on rule duplicated it on every turn."
+          "description": "Warns that sb-os components in .claude/ are overwritten on re-install."
         }
       ],
       "templates": [
@@ -125,8 +119,7 @@
           "name": "sb-wiki-create-topic",
           "module": "wiki",
           "source_template": "wiki/skills/sb-wiki-create-topic/SKILL.md",
-          "target": ".claude/skills/sb-wiki-create-topic/SKILL.md",
-          "description": "Create a wiki topic page from a candidate or freshly-proposed topic."
+          "target": ".claude/skills/sb-wiki-create-topic/SKILL.md"
         }
       ],
       "commands": [
@@ -134,36 +127,31 @@
           "name": "sb-archivist",
           "module": "para",
           "source_template": "para/commands/sb-archivist.md",
-          "target": ".claude/commands/sb-archivist.md",
-          "description": "Knowledge-base ingestion and routing."
+          "target": ".claude/commands/sb-archivist.md"
         },
         {
           "name": "sb-wiki-ingest",
           "module": "wiki",
           "source_template": "wiki/commands/sb-wiki-ingest.md",
-          "target": ".claude/commands/sb-wiki-ingest.md",
-          "description": "Two-stage Karpathy-style ingest of a raw source into the wiki."
+          "target": ".claude/commands/sb-wiki-ingest.md"
         },
         {
           "name": "sb-wiki-ingest-all",
           "module": "wiki",
           "source_template": "wiki/commands/sb-wiki-ingest-all.md",
-          "target": ".claude/commands/sb-wiki-ingest-all.md",
-          "description": "Backfill the wiki: ingest every non-ingested raw source via batched Opus subagents, then lint."
+          "target": ".claude/commands/sb-wiki-ingest-all.md"
         },
         {
           "name": "sb-wiki-lint",
           "module": "wiki",
           "source_template": "wiki/commands/sb-wiki-lint.md",
-          "target": ".claude/commands/sb-wiki-lint.md",
-          "description": "Structural and citation lint for the wiki."
+          "target": ".claude/commands/sb-wiki-lint.md"
         },
         {
           "name": "sb-wiki-query",
           "module": "wiki",
           "source_template": "wiki/commands/sb-wiki-query.md",
-          "target": ".claude/commands/sb-wiki-query.md",
-          "description": "Query the wiki and synthesize an answer with grep fallback."
+          "target": ".claude/commands/sb-wiki-query.md"
         }
       ],
       "rules": []
@@ -177,8 +165,7 @@
           "name": "sb-life-planner",
           "module": "para",
           "source_template": "para/skills/sb-life-planner/SKILL.md",
-          "target": ".claude/skills/sb-life-planner/SKILL.md",
-          "description": "Run the life-planning workflow when the user initiates a personal review session."
+          "target": ".claude/skills/sb-life-planner/SKILL.md"
         }
       ],
       "commands": [],
@@ -194,8 +181,7 @@
           "name": "sb-tutor",
           "module": "para",
           "source_template": "para/commands/sb-tutor.md",
-          "target": ".claude/commands/sb-tutor.md",
-          "description": "Tutor persona for guided learning sessions."
+          "target": ".claude/commands/sb-tutor.md"
         }
       ],
       "rules": []
@@ -209,29 +195,25 @@
           "name": "sb-fin-create-thesis",
           "module": "finance",
           "source_template": "finance/skills/sb-fin-create-thesis/SKILL.md",
-          "target": ".claude/skills/sb-fin-create-thesis/SKILL.md",
-          "description": "Persist an investment thesis as a wiki thesis page. Invoked ONLY by the `sb-investor` agent in its investor-orchestrated mode — when `/sb-investor thesis` authors a new thesis the user reasoned through, or when `/sb-investor review` extends an existing thesis. The agent reasons; this skill persists. NEVER auto-fire on standalone user intent (\"create a thesis for X\") — `/sb-investor thesis` is the sole front door for thesis authoring; route such intent there. Do NOT use to create decision, concept, entity, or topic pages — decisions are authored by `sb-fin-create-decision`, and concept/entity/topic pages by `/sb-wiki-ingest` or `sb-wiki-create-topic`."
+          "target": ".claude/skills/sb-fin-create-thesis/SKILL.md"
         },
         {
           "name": "sb-fin-create-decision",
           "module": "finance",
           "source_template": "finance/skills/sb-fin-create-decision/SKILL.md",
-          "target": ".claude/skills/sb-fin-create-decision/SKILL.md",
-          "description": "Create a wiki decision page recording a dated investment action and its reasoning. Use when the user expresses intent to record an investment decision — \"record my decision to sell X\", \"log that I'm holding Y\", \"write a decision page for passing on Z\", or any phrasing that asks to capture a buy/sell/trim/add/hold/pass/reject/pause/review/rebalance call in the wiki. Also invoked by the `sb-investor` agent when the user elects to record a decision the agent reasoned through (B5). Records reasoning only — transaction price/qty live in the bookkeeper ledger, never here. Do NOT use to create thesis, concept, entity, or topic pages — theses are authored by `sb-fin-create-thesis`, and concept/entity/topic pages by `/sb-wiki-ingest` or `sb-wiki-create-topic`."
+          "target": ".claude/skills/sb-fin-create-decision/SKILL.md"
         },
         {
           "name": "sb-tool-builder",
           "module": "finance",
           "source_template": "finance/skills/sb-tool-builder/SKILL.md",
-          "target": ".claude/skills/sb-tool-builder/SKILL.md",
-          "description": "Build and register a finance tool (parser, importer, reader, validator, retro-rewrite) when a needed capability has no registered tool in the finance tool registry — the user asks to build a finance tool, a finance data read/mutation has no registered tool in tools-index.md, or a new bank/broker/exchange source has no parser. Loads the tool-builder companion workflow; the invoking agent becomes the caller-broker of its batched iteration loop. Binding constraints (carried by the workflow, not waivable by casual invocation): authority boundary — output is tool code only, NEVER ledgers, portfolio.json, or dashboard writes; real-sample requirement — no build without the user's actual source file; ME gate before any new store/config schema; dry-run-first quality bar; registration in tools-index.md as definition-of-done. Sibling workflows (sb-bookkeeper) keep dispatching the companion via the Agent tool per gatekeeper-loop Seam 1 — this skill is the user-facing front door, not a replacement for that seam."
+          "target": ".claude/skills/sb-tool-builder/SKILL.md"
         },
         {
           "name": "sb-doc-maintainer",
           "module": "finance",
           "source_template": "finance/skills/sb-doc-maintainer/SKILL.md",
-          "target": ".claude/skills/sb-doc-maintainer/SKILL.md",
-          "description": "Reconcile the finance module's living documentation after an approved durable-structure change — a new/changed/retired tool, a renamed tag, a new config contract, a new parser, a store/schema change — when the user reports finance docs stale, a docs_potentially_stale signal is pending, or the pre-commit doc-currency block fires. Loads the doc-maintainer companion workflow; the invoking agent becomes the caller-broker of its reconcile loop. Binding constraints (carried by the workflow, not waivable by casual invocation): authority boundary — output is documentation only, NEVER config data, ledgers, portfolio.json, or tool code; a change spec is required — reconciling without knowing what changed is refused; surgical scope — only the sections the change implicates, never blanket rewrites. Sibling workflows (sb-bookkeeper) keep dispatching the companion via the Agent tool per gatekeeper-loop Seam 2 — this skill is the user-facing front door, not a replacement for that seam."
+          "target": ".claude/skills/sb-doc-maintainer/SKILL.md"
         }
       ],
       "commands": [
@@ -239,15 +221,13 @@
           "name": "sb-bookkeeper",
           "module": "finance",
           "source_template": "finance/commands/sb-bookkeeper.md",
-          "target": ".claude/commands/sb-bookkeeper.md",
-          "description": "Monthly financial closing — gastos, investimentos, or both."
+          "target": ".claude/commands/sb-bookkeeper.md"
         },
         {
           "name": "sb-investor",
           "module": "finance",
           "source_template": "finance/commands/sb-investor.md",
-          "target": ".claude/commands/sb-investor.md",
-          "description": "Read-only investment-reasoning agent — thesis, research, review, portfolio, decision, policy modes."
+          "target": ".claude/commands/sb-investor.md"
         }
       ],
       "rules": [

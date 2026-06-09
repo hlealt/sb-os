@@ -394,7 +394,7 @@ def build_upgrade_plan(
             target=f".claude/skills/{name}/SKILL.md",
             detail="rewrite",
         ))
-    for name, _module in loaders.manifest_commands(modules_scoped, excl):
+    for name, _desc, _module in loaders.manifest_commands(modules_scoped, excl):
         plan.add(cli.Action(
             category="loader",
             target=f".claude/commands/{name}.md",
@@ -467,12 +467,13 @@ def _execute_upgrade(
             module=module,
             description=desc,
         )
-    for name, module in loaders.manifest_commands(modules_scoped, excluded_components):
+    for name, desc, module in loaders.manifest_commands(modules_scoped, excluded_components):
         loaders.install_command_loader(
             target_root=target_root,
             name=name,
             sb_os_path=sb_os_loader_path,
             module=module,
+            description=desc,
         )
 
     # Rules — copies with placeholder substitution (§8: always rewritten)
