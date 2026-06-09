@@ -14,11 +14,11 @@ behavior changes; this file follows.
 
 Karpathy-style wiki layer — synthesis space for consumed external content. Path configured at install time (`wiki_root` in `sb-os.json`).
 
-Raw consumption (articles, papers, transcripts, study sessions) lives under `{wiki_root}/raw/`; synthesized pages live under `{wiki_root}/wiki/`; a single actionable queue (open `candidate-topic` + `candidate-mention` items) lives at `{wiki_root}/log.md`.
+Raw consumption (articles, papers, transcripts, study sessions) lives under `{wiki_root}/raw/`; synthesized pages live under `{wiki_root}/wiki/`; actionable queues (open `candidate-topic`, `candidate-mention`, and thesis-candidate items) live under `{wiki_root}/logs/` — split by type into `topics.md`, `mentions.md`, and `theses.md`.
 
 Locked schema: `3-resources/tools/sb-os/wiki/docs/wiki-schema.md`. Operational details below summarize the schema — read the schema for the canonical spec.
 
-> **Installer scope guarantee.** The sb-os installer (`install.py`) NEVER reads or writes anything under `{wiki_root}/wiki/` or `{wiki_root}/raw/` — wiki content (pages, indexes, `log.md`) is created and maintained EXCLUSIVELY by `/sb-wiki-ingest` and `/sb-wiki-lint`. Re-running `install.py --upgrade` is safe at any time. Full guarantee: schema § "Installer scope guarantee".
+> **Installer scope guarantee.** The sb-os installer (`install.py`) NEVER reads or writes anything under `{wiki_root}/wiki/` or `{wiki_root}/raw/` — wiki content (pages, indexes, the `logs/` queues) is created and maintained EXCLUSIVELY by `/sb-wiki-ingest` and `/sb-wiki-lint`. Re-running `install.py --upgrade` is safe at any time. Full guarantee: schema § "Installer scope guarantee".
 
 ---
 
@@ -49,7 +49,7 @@ When a module is listed in `sb-os.json` → `wiki_extensions`, `/sb-wiki-ingest`
 
 `{wiki_root}/purpose.md` is an **OPTIONAL** regulatory file that gives `/sb-wiki-ingest` a **focus lens** — it biases how deeply a source is synthesized, which entities/concepts become pages, and how topics are suggested toward the user's stated focus areas, and flags sources that match nothing. It is the regulatory-layer twin of the locked schema. It never drops content and never alters a deterministic rule.
 
-It is a root-level sibling of `raw/`, `wiki/`, and `log.md` — NOT a wiki page, NOT raw. It carries `type: purpose` (a non-page value excluded from page-type checks, indexes, and orphan detection). The user owns it; lint never edits it and skips it entirely.
+It is a root-level sibling of `raw/`, `wiki/`, and `logs/` — NOT a wiki page, NOT raw. It carries `type: purpose` (a non-page value excluded from page-type checks, indexes, and orphan detection). The user owns it; lint never edits it and skips it entirely.
 
 **Optionality (no-op contract).** Absent → lens OFF → ingest behaves exactly as today; malformed → ingest warns and proceeds lens-OFF. Mirrors the `wiki_extensions` Step 0 no-op contract.
 
@@ -61,7 +61,7 @@ Canonical spec (artifact, format, parsing contract, classification bands, discre
 
 `{wiki_root}/questions.md` is an **OPTIONAL** registry of the **user's open questions** — a queue-style inbox (actionable, NOT a log) that the wiki gradually answers as sources land and topics form. Questions are captured at ingest (Stage-2 reflection), on a `/sb-wiki-query` miss, in chat, or by direct Obsidian edit. The **answer-scan** revisits open questions at ingest (active) and lint (periodic) and accretes cited answers inline until each question **graduates** to a page (via `sb-wiki-create-topic` — never auto-authored) or is **retired**. It never drops content and never alters a deterministic rule.
 
-It is a root-level sibling of `raw/`, `wiki/`, `log.md`, and `purpose.md` — NOT a wiki page, NOT raw. It carries `type: questions` (a non-page value excluded from page-type checks, indexes, and orphan detection). **Lint OWNS** its maintenance — sweep, graduation proposals, prune, and regenerating the read-only cross-wiki aggregate `{wiki_root}/open-gaps.md` (`type: questions-index`).
+It is a root-level sibling of `raw/`, `wiki/`, `logs/`, and `purpose.md` — NOT a wiki page, NOT raw. It carries `type: questions` (a non-page value excluded from page-type checks, indexes, and orphan detection). **Lint OWNS** its maintenance — sweep, graduation proposals, prune, and regenerating the read-only cross-wiki aggregate `{wiki_root}/open-gaps.md` (`type: questions-index`).
 
 **Two homes.** Topic `Open questions` stay on the topic page (menu UNCHANGED) and resolve in place — strike the line + fold the answer into the topic body via the existing `PROPOSED TOPIC UPDATES` append-only machinery. `questions.md` holds the user's registered questions (including cross-cutting ones tied to no page) and accretes an inline `answer:` until it graduates or is retired (entry then REMOVED). `open-gaps.md` recovers the single-pane view across both homes.
 
@@ -110,7 +110,7 @@ Agent auto-creates a stub Concept or Entity page ONLY when the entity/concept na
 1. **Source title/headline**, OR
 2. **An extracted Notable Quote OR a `Substance` bullet** (the agent's own output from ingest step 2)
 
-Deterministic — tied to artifacts the agent has already produced, not to recounting the source. If the rule does NOT fire, the agent logs a `candidate-mention` entry in `log.md` for periodic review by lint — never creates a page.
+Deterministic — tied to artifacts the agent has already produced, not to recounting the source. If the rule does NOT fire, the agent logs a `candidate-mention` entry in `logs/mentions.md` for periodic review by lint — never creates a page.
 
 Lint detects stub-state structurally (frontmatter + ≤2-sentence preamble + Sources section, with main content sections empty or absent) and flags stubs aged >30 days. Empty user-half sections on Source pages do NOT count toward stub-state.
 
@@ -158,7 +158,7 @@ If a leaf index exists with a user-customized column layout, lint preserves it �
 
 | Path | Contents |
 |------|----------|
-| `{wiki_root}/log.md` | Actionable queue — 2 entry types: `candidate-topic` (promote or dismiss) and `candidate-mention` (review → stub or dismiss). Completed history is NOT logged; resolution = the page exists. Lint prunes spent entries |
+| `{wiki_root}/logs/` | Actionable queue folder, split by type: `topics.md` (`candidate-topic` — promote or dismiss), `mentions.md` (`candidate-mention` — review → stub or dismiss), `theses.md` (`proposed-new-thesis` + `speculative-thesis-update` — surface-only thesis proposals). Completed history is NOT logged; resolution = the page exists. Lint prunes spent entries, but NEVER auto-prunes `speculative-thesis-update` (no "page exists" signal — resolves on explicit user action only) |
 | `{wiki_root}/raw/{origin}/` | Verbatim source files by origin (immutable — never edit) |
 | `{wiki_root}/raw/studies/` | Study sessions (`/sb-tutor` outputs, multi-source notes) |
 | `{wiki_root}/wiki/concepts/`, `wiki/entities/`, `wiki/topics/`, `wiki/sources/{origin}/` | Synthesized pages |

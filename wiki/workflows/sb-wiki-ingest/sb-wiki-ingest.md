@@ -31,9 +31,9 @@ The FIRST helper call of the run syncs the index (the step-2 source page enters 
 | `{sb_os_path}` | Read from `sb-os.json` → `sb_os_path` field. Never hardcode. |
 | `{wiki_root}/wiki/` | Wiki page tree (concepts, entities, topics, sources). |
 | `{wiki_root}/raw/` | Raw source tree — Markdown (`.md`) and PDF (`.pdf`) sources. **EXCLUDES `raw/_assets/`** (user-maintained binary attachments — per `../shared/folder-structure.md` "Asset Folder"). This workflow NEVER reads or writes `raw/_assets/` on its own initiative (see write-surface contract § "A10" for the user-directed exception). |
-| `{wiki_root}/log.md` | Actionable queue — `candidate-topic` + `candidate-mention` entries only. |
-| `{wiki_root}/purpose.md` | OPTIONAL regulatory file — the focus-lens source loaded at Step 0.5. Root-level sibling of `raw/`, `wiki/`, `log.md`; NOT a wiki page, NOT raw. Absent → lens OFF (ingest identical to today). Per `../../docs/wiki-schema.md` § "Regulatory layer — purpose.md". |
-| `{wiki_root}/questions.md` | OPTIONAL questions-layer registry — the user's open questions loaded at Step 0.6 for the answer-scan. Root-level sibling of `raw/`, `wiki/`, `log.md`, `purpose.md`; NOT a wiki page, NOT raw. Absent → questions layer OFF (ingest identical to today). Per `../../docs/wiki-schema.md` § "Questions layer — questions.md". |
+| `{wiki_root}/logs/` | Actionable queue folder — `logs/topics.md` (`candidate-topic`) + `logs/mentions.md` (`candidate-mention`). Ingest writes these two only; `logs/theses.md` (thesis candidates) is Phase-B, NOT written here. |
+| `{wiki_root}/purpose.md` | OPTIONAL regulatory file — the focus-lens source loaded at Step 0.5. Root-level sibling of `raw/`, `wiki/`, `logs/`; NOT a wiki page, NOT raw. Absent → lens OFF (ingest identical to today). Per `../../docs/wiki-schema.md` § "Regulatory layer — purpose.md". |
+| `{wiki_root}/questions.md` | OPTIONAL questions-layer registry — the user's open questions loaded at Step 0.6 for the answer-scan. Root-level sibling of `raw/`, `wiki/`, `logs/`, `purpose.md`; NOT a wiki page, NOT raw. Absent → questions layer OFF (ingest identical to today). Per `../../docs/wiki-schema.md` § "Questions layer — questions.md". |
 
 ## Shared Data Files
 
@@ -374,12 +374,12 @@ If no triggers fire, leave the candidate set empty — Stage 1 omits the PROPOSE
 
 ### Step 9 — Append log entries
 
-Append entries to `{wiki_root}/log.md` per `../shared/log-entry-shapes.md`. The log is an ACTIONABLE QUEUE — emit ONLY the two types below, each a STANDALONE H2 entry (`## [YYYY-MM-DD HH:MM] <type> | <brief>`). Do NOT cross-reference a parent ingest.
+Append entries to the split logs under `{wiki_root}/logs/` per `../shared/log-entry-shapes.md` — each log is an ACTIONABLE QUEUE. Emit ONLY the two types below, each a STANDALONE H2 entry (`## [YYYY-MM-DD HH:MM] <type> | <brief>`) appended to its own file. Do NOT cross-reference a parent ingest.
 
-| Entry | When emitted |
-|-------|--------------|
-| `candidate-topic` | Once per trigger fire from step 6 |
-| `candidate-mention` | Once per name in the `mention-only` set from step 3 |
+| Entry | File | When emitted |
+|-------|------|--------------|
+| `candidate-topic` | `{wiki_root}/logs/topics.md` | Once per trigger fire from step 6 |
+| `candidate-mention` | `{wiki_root}/logs/mentions.md` | Once per name in the `mention-only` set from step 3 |
 
 Emit NOTHING for the ingest itself, for stubs created in step 5, or for topic updates from step 10. Those are recorded by the pages themselves (the source page's `raw:` field, the raw index `Wiki = Yes` row, the stub/topic pages). Overflow speculative matches dropped at step 3.7b are NOT logged — they re-detect on future ingests. Resolution = page exists: a candidate leaves the queue when its page is created (lint prunes it). See `../shared/log-entry-shapes.md` § "Retired Types".
 
@@ -409,7 +409,7 @@ INGEST PREVIEW — <source slug>   [purpose: in-focus | peripheral | ⚠ off-pur
 | 2 | wiki/concepts/<slug>.md | updated | + section "<new section name>" |
 | 3 | wiki/concepts/<slug>.md | new (stub) | <preamble first sentence, ≤80 chars, truncate with …> |
 | 4 | wiki/entities/<slug>.md | new (stub) | <preamble first sentence, ≤80 chars, truncate with …> |
-| 5 | log.md | appended | candidate-topic + candidate-mention entries (only if triggered) |
+| 5 | logs/topics.md, logs/mentions.md | appended | candidate-topic + candidate-mention entries (only if triggered) |
 | 6 | raw/<origin>/<origin>.md | row updated | Wiki = Yes |
 | 7 | wiki/sources/<origin>/<origin>.md | row added | new entry |
 
@@ -477,7 +477,7 @@ Default behavior when the user omits per-topic decisions: defer all topics, reje
 
 Only the FIRM tier of genuine topic updates auto-applies. Speculative updates and proposed answers (including answer-origin firm entries) NEVER auto-apply. For proposed topics and file changes these resolutions are IDENTICAL to the default-omission / `accept-all` behavior above. After committing, RETURN the structured summary the caller parses, per the schema § "/sb-wiki-ingest" subsection "Silent (non-interactive) mode" → "Return — structured summary (silent)". The summary's per-file status MUST be `committed` when all staged changes commit; `partial (<reason>)` ONLY when the source page committed but ≥1 staged change failed mid-commit (`<reason>` names what failed); `failed (<reason>)` when nothing committed (slug-resolution outcome from step 1, or an abort cause). NEVER emit `partial`/`failed` for a skipped step — clustering, trigger detection, and append-only protection all run in full. The mode NEVER writes a topic page and NEVER runs `/sb-wiki-lint`.
 
-**Audit records (silent firm-apply + rejections).** Each applied firm update and each rejected speculative-update / proposed-answer is recorded in the structured summary's `Flags` field (the existing caller-facing channel that already carries `deferred candidate-topic` flags — NO new `log.md` entry type, NO parallel log; `log.md`'s `topic-updated` type is retired and the queue holds no accretion/history entries per `../shared/log-entry-shapes.md`). One `Flags` line per record, each naming the topic page (or question), the action, and the citing source:
+**Audit records (silent firm-apply + rejections).** Each applied firm update and each rejected speculative-update / proposed-answer is recorded in the structured summary's `Flags` field (the existing caller-facing channel that already carries `deferred candidate-topic` flags — NO new log entry type, NO parallel log; the `topic-updated` type is retired and the queues hold no accretion/history entries per `../shared/log-entry-shapes.md`). One `Flags` line per record, each naming the topic page (or question), the action, and the citing source:
 
 | Record | `Flags` line shape |
 |--------|--------------------|

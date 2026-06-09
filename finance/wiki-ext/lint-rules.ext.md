@@ -33,7 +33,7 @@ Scope: `theses/`, `decisions/`, and investment entity kinds. Field/section names
 | 3 | A thesis with `status: active` whose `last_reviewed` is older than N days (stale review) | active thesis with stale `last_reviewed` |
 | 4 | A thesis with no entries in its `Sources` section / no source footnotes | thesis without sources |
 | 5 | An `asset` entity missing `asset_type`, OR a country used as a sovereign asset (the macro `country` entity conflated with an `asset`) | asset without `asset_type` / country-as-asset |
-| 6 | A page with `watchlist: true` lacking approval evidence in `log.md` or a `decisions/` decision | `watchlist: true` without approval evidence |
+| 6 | A page with `watchlist: true` lacking approval evidence in a `decisions/` decision | `watchlist: true` without approval evidence |
 | 7 | A decision page with no related thesis or asset (`related_thesis`, `related_asset`, and `related_company` all empty) | decision without a related thesis or asset |
 | 8 | A thesis with `status: archived` still wikilinked AS ACTIVE from another page | archived thesis referenced as active |
 
@@ -74,7 +74,7 @@ Captured XBRL companyfacts JSONs (`YYYY-MM-DD-{entity}-xbrl-companyfacts.json`, 
 
 ## Source-Lifecycle Rules (`source-queue.md`)
 
-Scope: `{wiki_root}/source-queue.md` — the investment source queue, a root-level sibling of `log.md` (frontmatter `type: source-queue` per `./frontmatter-schemas.ext.md`). It holds the open lifecycle states of investment sources that could not complete the capture→ingest path: `gated_pending_access` (paywalled/login — awaits user action) and `blocked` (fetch failed after both tool methods — retry candidate). The `sb-wiki-capture-source` tool is the SOLE writer of entries; lint's only write is the rule-3 prune; the user retires a source by deleting its entry.
+Scope: `{wiki_root}/source-queue.md` — the investment source queue, a root-level sibling of the `logs/` queues (frontmatter `type: source-queue` per `./frontmatter-schemas.ext.md`). It holds the open lifecycle states of investment sources that could not complete the capture→ingest path: `gated_pending_access` (paywalled/login — awaits user action) and `blocked` (fetch failed after both tool methods — retry candidate). The `sb-wiki-capture-source` tool is the SOLE writer of entries; lint's only write is the rule-3 prune; the user retires a source by deleting its entry.
 
 File absent → no sources are queued; skip these rules silently. Present but malformed (unreadable, or no parseable H2 entries) → WARN, skip these rules, NEVER abort the lint. Mirrors the `questions.md` skip-if-absent contract.
 
@@ -86,7 +86,7 @@ Process rule 3 (prune) FIRST, then surface the remaining entries via rules 1, 2,
 |---|-----------|---------------|
 | 1 | An open `gated_pending_access` entry | EVERY open gated entry with its `required_user_action`; append `[AGED]` when the entry date is >30 days old |
 | 2 | An open `blocked` entry | EVERY open blocked entry as a retry candidate (re-run the capture tool); append `[AGED]` when the entry date is >30 days old |
-| 3 | An entry whose wiki source page now EXISTS under `wiki/sources/` (resolution = page exists; match the entry's `url`/`title` against raw indexes and wiki source pages — LLM judgment, no tool-side markers) | PRUNE the entry — auto-applied write mirroring the base `log.md` prune; count for the report |
+| 3 | An entry whose wiki source page now EXISTS under `wiki/sources/` (resolution = page exists; match the entry's `url`/`title` against raw indexes and wiki source pages — LLM judgment, no tool-side markers) | PRUNE the entry — auto-applied write mirroring the base `logs/` prune; count for the report |
 | 4 | An entry whose raw file exists but whose wiki source page does NOT (a manually-recovered source awaiting ingest) | KEEP the entry open; append `[captured, awaiting ingest]` to its report row |
 
 Report block — append to the LINT REPORT after the base findings. Omit the whole block when the file is absent or holds zero entries after the prune; omit the `pruned` line when 0:

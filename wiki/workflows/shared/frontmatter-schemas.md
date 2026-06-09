@@ -49,7 +49,7 @@ author: "..."
 
 ## Topic
 
-No additional frontmatter. The trigger that produced the topic is recorded in `log.md`.
+No additional frontmatter. The trigger that produced the topic is recorded in `logs/topics.md`.
 
 ## `type: purpose` — non-page regulatory value
 

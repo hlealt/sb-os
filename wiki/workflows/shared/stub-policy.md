@@ -55,7 +55,7 @@ The agent auto-creates a stub Concept or Entity page when the cluster representa
 2. **Source title/headline** — fires only when the title name ALSO appears in a `Substance` bullet (see "Title-Branch Rule" below). Title-only names go to discretion.
 3. **An extracted Notable Quote** — DISCRETIONARY (see "Notable Quote Stub Creation" below).
 
-If none of the three branches fire, log a `candidate-mention` entry in `log.md` for periodic review by lint. Do NOT create a page.
+If none of the three branches fire, log a `candidate-mention` entry in `logs/mentions.md` for periodic review by lint. Do NOT create a page.
 
 ## Title-Branch Rule
 

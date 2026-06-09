@@ -109,10 +109,10 @@ If a related page does not exist, skip the cross-link silently for that link and
 
 ### Step 4 — Resolve any source signals in the log
 
-A decision page is the durable record of the action. There is no `candidate-decision` trigger type in the log to resolve (unlike `candidate-thesis`). Do NOT write a `decision-created` entry and do NOT remove unrelated log entries.
+A decision page is the durable record of the action. There is no `candidate-decision` trigger type in the logs to resolve (unlike the thesis-log's `proposed-new-thesis` / `speculative-thesis-update`). Do NOT write a `decision-created` entry and do NOT remove unrelated log entries.
 
-- If the user or investor referenced a specific `log.md` actionable item the decision closes (e.g., a `gated_pending_access` source the user finally read and acted on), resolve only that one referenced entry per its own type's resolution rule.
-- Otherwise the log is untouched.
+- If the user or investor referenced a specific actionable queue entry the decision closes — a `{wiki_root}/logs/theses.md` thesis entry, or a `{wiki_root}/source-queue.md` source entry (e.g., a `gated_pending_access` source the user finally read and acted on) — resolve only that one referenced entry per its own file/type's resolution rule. This workflow has no entry type of its own; it never invents one.
+- Otherwise the logs are untouched.
 
 Never write any other entry type.
 

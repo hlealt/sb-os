@@ -123,6 +123,16 @@ One row group per mode. Route on the **Fires on** intent; reach the capability t
 | When to use | The user reads or changes the policy content itself (scope, priorities, exclusions, watchlist-approval, horizon, source trust) |
 | When NOT | A mode merely LOADING policy before reasoning is the always-on read-rules wiring in `./investor-loop.md`, not this user-facing mode. Setting `watchlist: true` requires explicit user approval (watchlist invariant in `./investor-loop.md`) |
 
+### `log` (B7 — Resolve the investor log)
+
+| Field | Value |
+|-------|-------|
+| Fires on (intent) | "resolve my log", "work through my log", "what's in my investor log"; ALSO reached when a BARE `/sb-investor` invocation (no other ask) accepts the proactive offer to work the unresolved log (`../sb-investor.md` § Activation) |
+| Access mechanism | Read-and-follow `./log.md` (the read → resolve → delete flow over `.user/finance/investor/log.md`) |
+| Inputs | `.user/finance/investor/log.md` (the investor's own actionable log — read-write inside the own-workspace boundary); each entry's `why` / `action` / `deferred`; the capability the `action` routes to (do-in-scope) or the companion owner (out-of-structure) |
+| When to use | The user wants to clear deferred/blocked/tool-gap items the investor recorded — reading each, resolving it (do-in-scope / route to a companion / dismiss), and DELETING it on resolution. Read the log ONLY on a bare invocation or an explicit "resolve my log" request — `./log.md` § Read-rule |
+| When NOT | During `research` / `review` / `thesis` / `portfolio` / `decision` / `policy` reasoning — those modes only WRITE deferrable items to the log (via `./investor-loop.md` § Issue-surfacing / Rule A); they NEVER read or resolve it. Recording a buy/sell/hold → `decision`; changing policy content → `policy` |
+
 ---
 
 ## Multi-mode chaining

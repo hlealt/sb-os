@@ -4,7 +4,7 @@ The runtime shape of a `{wiki_root}/questions.md` entry — the copy ingest, lin
 
 ## Entry shape
 
-Each entry is an H2 heading (same shape family as `log.md` entries):
+Each entry is an H2 heading (same shape family as the wiki log entries under `logs/`):
 
 ```markdown
 ## [YYYY-MM-DD] <question text>

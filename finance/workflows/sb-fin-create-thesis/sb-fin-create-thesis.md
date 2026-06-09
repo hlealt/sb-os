@@ -7,7 +7,7 @@ description: Create or extend a single investment thesis page in the finance-ext
 
 Author a single `thesis` page — a falsifiable investment argument with explicit evidence and invalidation criteria. Thesis pages are authored DELIBERATELY (like topics via `sb-wiki-create-topic`), NEVER auto-created by ingest. This workflow is the `sb-investor` agent's persistence helper — the agent reasons, this workflow persists. It is invoked ONLY in its investor-orchestrated mode; it does NOT auto-fire on standalone user intent ("create a thesis for X"). `/sb-investor thesis` is the sole front door for thesis authoring — that intent routes there, where the agent reasons the thesis and then invokes this workflow. Two named entry points are supported, both investor-orchestrated (Invocation Inputs below):
 
-1. **Authoring (new)** — `/sb-investor thesis` invokes this workflow to persist a NEW thesis the user reasoned through with the agent (optionally promoting a `candidate-thesis` trigger the agent surfaced). Runs the full create flow (steps 1-5). NO separate checkpoint — the investor's own present-and-confirm step covers the invocation; proceed through the steps without re-prompting. The one carve-out is the Step 1 scope-overlap prompt (the single allowed interrupt — see Step 1).
+1. **Authoring (new)** — `/sb-investor thesis` invokes this workflow to persist a NEW thesis the user reasoned through with the agent (optionally promoting a `proposed-new-thesis` entry the agent surfaced). Runs the full create flow (steps 1-5). NO separate checkpoint — the investor's own present-and-confirm step covers the invocation; proceed through the steps without re-prompting. The one carve-out is the Step 1 scope-overlap prompt (the single allowed interrupt — see Step 1).
 2. **`extend` (update existing)** — `/sb-investor review` (or any caller that already KNOWS the target page) invokes this workflow to UPDATE an EXISTING thesis by slug: append evidence-against, sharpen invalidation criteria, and bump `status` / `conviction` / `last_reviewed`. The caller passes the existing thesis slug, so this entry point targets that page directly and MUST SKIP the Step 1 scope-overlap discovery prompt (the page is already identified — there is nothing to disambiguate). It appends in place and NEVER creates a new page. NO separate checkpoint. Follow the Step-by-step deltas marked **(extend)** below.
 
 This workflow loads only when `finance` is registered in `sb-os.json` → `wiki_extensions`. It mirrors the `sb-wiki-create-topic` 5-step flow, adapted to the `thesis` page type defined in the finance wiki extension.
@@ -21,7 +21,7 @@ This workflow loads only when `finance` is registered in `sb-os.json` → `wiki_
 | `{wiki_root}/wiki/theses/` | Thesis page tree. |
 | `{wiki_root}/wiki/theses/theses.md` | Theses leaf index. |
 | `{wiki_root}/wiki/entities/` | Entity pages cross-linked via `related_*` (companies under `organizations/`; assets, countries, sectors under their lazy subkind folders). |
-| `{wiki_root}/log.md` | Actionable queue — holds `candidate-thesis` entries (investor path) alongside base `candidate-topic` / `candidate-mention` entries. |
+| `{wiki_root}/logs/theses.md` | Thesis-log actionable queue — holds `proposed-new-thesis` and `speculative-thesis-update` entries (investor path). Sibling logs `logs/topics.md` / `logs/mentions.md` hold the base `candidate-topic` / `candidate-mention` entries. |
 
 ## Extension Data Files
 
@@ -39,7 +39,7 @@ The base wiki conventions still apply: read `{sb_os_path}/wiki/workflows/shared/
 
 | Entry point | Caller | Inputs passed in |
 |-------------|--------|------------------|
-| Authoring (new) | `sb-investor` agent (`/sb-investor thesis`) | Proposed thesis slug, candidate-thesis timestamp (if promoting one), the shared claim, source filenames, and the investment entity(ies). Workflow resolves the candidate from `log.md` when a timestamp is passed. |
+| Authoring (new) | `sb-investor` agent (`/sb-investor thesis`) | Proposed thesis slug, `proposed-new-thesis` entry timestamp (if promoting one), the shared claim, source filenames, and the investment entity(ies). Workflow resolves the candidate from `logs/theses.md` when a timestamp is passed. |
 | `extend` (update existing) | `sb-investor` agent (`/sb-investor review`) | The EXISTING thesis slug (the page to update — this is the named target, NOT a candidate to disambiguate); the new evidence-against items with their source filenames; the sharpened invalidation criteria; the confirmed `status` / `conviction` / `last_reviewed` values. The caller already identified the page, so the scope-overlap discovery prompt is SKIPPED for this entry point. |
 
 ## Flow
@@ -52,11 +52,11 @@ The base wiki conventions still apply: read `{sb_os_path}/wiki/workflows/shared/
 2. Verify the slug does NOT already exist as a thesis page at `{wiki_root}/wiki/theses/{slug}.md`. If it exists, halt and surface the conflict to the user — do NOT overwrite. **(extend)** SKIPPED — the named page MUST exist; the `extend` mode gate above already loaded it.
 3. **Scope-overlap check (semantic, not slug).** Read `{wiki_root}/wiki/theses/theses.md`. For every existing row, compare its `Description` cell to the proposed `Claim`. When the semantic tier is available (base schema § "Retrieval tiers — hybrid search"), ALSO run `python {sb_os_path}/wiki/scripts/sb-wiki-search.py search "<proposed Claim>" --type thesis --k 5` from the vault root and treat returned thesis pages as overlap candidates the `Description`-cell comparison may have missed (tier unavailable → the cell comparison alone is the check; a helper failure NEVER halts this workflow). If overlap is plausible — same investment entity, same directional claim, same mispricing argument, or the proposed thesis could be framed as a refinement/sibling of an existing one — halt and present three options: **(extend)** SKIPPED — the caller already identified the exact target page, so no disambiguation runs.
    - `extend N` — append to or revise the existing thesis page (e.g., a new `Hypotheses` line, an additional `Evidence for` item, or a sharpened `Claim`) rather than create a new one. The skill exits without writing a new page and emits an `extend` directive the investor acts on.
-   - `new` — proceed with a new thesis page; the existing thesis and the new one cross-link as siblings (each lists the other in `related:` frontmatter). Defaults to `new` only if the candidate-thesis entry recorded an overlap check.
+   - `new` — proceed with a new thesis page; the existing thesis and the new one cross-link as siblings (each lists the other in `related:` frontmatter). Defaults to `new` only if the `proposed-new-thesis` entry recorded an overlap check.
    - `abort` — no writes.
    This check fires for the authoring (new) path — NEVER for the `extend` entry point, which already names its target. Surface it as an inline prompt before commit. Skipping this check on the authoring (new) path is a workflow violation.
 4. Determine if invocation is from a candidate or fresh:
-   - **From candidate-thesis** — the investor provides the candidate-thesis timestamp. Read `{wiki_root}/log.md`, locate the `candidate-thesis` entry by timestamp + slug/entity. Extract: trigger type (Recurring Claim / Mispricing Signal / Thesis Invalidation / Thesis-Shaped Page Created), source filenames, the shared claim, and the investment entity(ies). For a Thesis-Shaped Page Created candidate, ALSO cross-link the originating `kind: thesis` concept page in `related:` and reconcile it (the concept page stays a concept; the new thesis page is the falsifiable record).
+   - **From a `proposed-new-thesis` entry** — the investor provides the entry's timestamp. Read `{wiki_root}/logs/theses.md`, locate the `proposed-new-thesis` entry by timestamp + slug (its H2 `<brief>` IS the thesis page slug). Extract: trigger (`recurring-claim` / `mispricing-signal` / `thesis-shaped-page-created`), source filenames, the shared claim, and the investment entity(ies). For a `thesis-shaped-page-created` candidate, ALSO cross-link the originating `kind: thesis` concept page in `related:` and reconcile it (the concept page stays a concept; the new thesis page is the falsifiable record). The `Thesis Invalidation` trigger does NOT arrive here — it produces a `speculative-thesis-update`, which the **(extend)** path resolves, never the authoring path.
    - **Fresh proposal** — no candidate exists. The investor supplies the claim, source filenames, and related entities directly.
 5. Read `{sb_os_path}/finance/wiki-ext/page-types.ext.md` to confirm the `thesis` definition and the `status` rule: a thesis cannot reach `status: active` without `Evidence against` and `Invalidation criteria`. A fresh or candidate-derived thesis defaults to `status: seed` unless the user/investor specifies otherwise.
 
@@ -101,7 +101,7 @@ Body composition rules:
 1. Write the `Claim` first — the single falsifiable statement the thesis defends.
 2. `Evidence against` and `Invalidation criteria` are MANDATORY and MUST be substantive (never empty placeholders) — they gate `status: active` per `page-types.ext.md`.
 3. Cite every claim with inline `[^N]` markers per `{sb_os_path}/wiki/workflows/shared/citation-format.md`. Append matching `[^N]: [[<source-filename>.md]]` definitions in the `Sources` section. A thesis cites entity `## Financials` rows and source pages as evidence via these footnotes.
-4. For a candidate-thesis derived from the **Thesis Invalidation** trigger, frame `Evidence against` around the contradicting source the candidate recorded.
+4. For a `speculative-thesis-update` derived from the **Thesis Invalidation** trigger (the **(extend)** path), frame `Evidence against` around the contradicting source the entry recorded.
 5. If the optional `Related companies/assets/sectors/countries` section is included, its wikilinks MUST mirror the `related_*` frontmatter exactly.
 
 ### Step 3 — Cross-link related entity pages
@@ -117,13 +117,13 @@ If a related entity page does not exist, skip the cross-link silently for that e
 
 **(extend)** Cross-link ONLY entities newly introduced by the update payload; the page's pre-existing entities are already linked. Before appending a thesis wikilink to an entity's `Related` section, verify it is not already present — never duplicate an existing cross-link.
 
-### Step 4 — Resolve the candidate-thesis in the log
+### Step 4 — Resolve the thesis-log entry
 
-The log is an actionable queue; resolution = the thesis page now exists. Do NOT write a `thesis-created` entry.
+The thesis-log (`{wiki_root}/logs/theses.md`) is an actionable queue. Do NOT write a `thesis-created` entry.
 
-- **Promoted from a candidate-thesis** — DELETE the matching `candidate-thesis` entry (header + body) from `{wiki_root}/log.md`. Locate it by the timestamp + slug/entity resolved in step 1. The newly created thesis page is now the record.
+- **Promoted from a `proposed-new-thesis`** — DELETE the matching `proposed-new-thesis` entry (header + body) from `{wiki_root}/logs/theses.md`. Locate it by the timestamp + slug resolved in step 1 (its H2 `<brief>` is the slug). Resolution = the thesis page now exists; the newly created page is the record (lint also auto-prunes a `proposed-new-thesis` by filename against `wiki/theses/` pages).
 - **Fresh proposal (no candidate)** — nothing to remove; the log is untouched.
-- **(extend)** — no candidate-thesis resolution. If the caller referenced a specific `log.md` entry the update closes (e.g., a `Thesis Invalidation` candidate-trigger that drove the review), resolve only that one referenced entry per its own type's rule; otherwise the log is untouched.
+- **(extend)** — applies a `speculative-thesis-update`. If the caller referenced a specific `speculative-thesis-update` entry the update closes (identified by its `- target thesis:` wikilink), DELETE only that one referenced entry from `{wiki_root}/logs/theses.md` on the user action. A `speculative-thesis-update` is NEVER auto-pruned by lint (its page already exists) — it leaves the queue ONLY by this explicit resolution or user dismissal. Otherwise the log is untouched.
 
 Never write any other entry type.
 
@@ -151,7 +151,7 @@ Both entry points are investor-orchestrated: NO separate checkpoint at the scrib
 | `{wiki_root}` or `{sb_os_path}` cannot be resolved from `sb-os.json` | Halt before step 1; surface error. No writes. |
 | Thesis slug already exists at `{wiki_root}/wiki/theses/{slug}.md` (authoring (new) path) | Halt at step 1; surface conflict. No writes. Does NOT apply to the `extend` entry point — there the page MUST exist. |
 | Scope overlap detected with an existing thesis (authoring (new) path) | Halt at step 1; present `extend N` / `new` / `abort`. No writes until the user resolves. The `extend` entry point SKIPS this check (the target is already named). |
-| Candidate-thesis timestamp referenced but not found in `log.md` | Halt at step 1; surface to user — the candidate may have been pruned or never logged. No writes. |
+| `proposed-new-thesis` timestamp referenced but not found in `logs/theses.md` | Halt at step 1; surface to user — the candidate may have been pruned or never logged. No writes. |
 | `extend` entry point invoked but the named thesis page does not exist at `{wiki_root}/wiki/theses/{slug}.md` | Halt at the step 1 mode gate; surface the conflict. No writes — this entry point only updates an existing page, never creates one. |
 | Caller attempts `status: active` without `Evidence against` or `Invalidation criteria` | Halt at step 2; require both sections before writing an active thesis (per `page-types.ext.md`). |
 | Related entity page named does not exist | Skip cross-link for that entity silently in step 3; continue with the others. |

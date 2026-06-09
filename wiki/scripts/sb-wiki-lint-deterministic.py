@@ -25,7 +25,21 @@ TOPIC_HEADER = "| File | Scope |\n|------|-------|\n"
 LEAF_INDEX_FRONTMATTER = "---\ntype: index\n---\n\n"
 DASH = "\u2014"
 NON_SOURCE_FILES = {"AGENTS.md", "CLAUDE.md", "README.md"}
-ACTIVE_LOG_TYPES = {"candidate-topic", "candidate-mention"}
+ACTIVE_LOG_TYPES = {
+    "candidate-topic",
+    "candidate-mention",
+    "proposed-new-thesis",
+    "speculative-thesis-update",
+}
+# Canonical writer mapping: each active log type lives in exactly one file under
+# {wiki_root}/logs/. The scanner reads each entry's type from its own H2 header
+# (so prune never depends on this map), but every writer MUST honor it.
+LOG_TYPE_FILES = {
+    "candidate-topic": "logs/topics.md",
+    "candidate-mention": "logs/mentions.md",
+    "proposed-new-thesis": "logs/theses.md",
+    "speculative-thesis-update": "logs/theses.md",
+}
 RETIRED_LOG_TYPES = {
     "ingest",
     "concept-created",
@@ -649,7 +663,7 @@ def detect_disputed_callouts(wiki_root: Path, report: Report) -> None:
     resolving topic AND no parseable date cannot be aged — surfaced separately
     for manual review (fail loud, never silently dropped).
     """
-    _, topic_names = wiki_page_names(wiki_root)
+    _, topic_names, _ = wiki_page_names(wiki_root)
     unresolved: list[dict[str, object]] = []
     unparseable: list[str] = []
     for type_folder in ("concepts", "entities"):
@@ -699,20 +713,24 @@ def normalize_slug(name: str) -> str:
     return re.sub(r"[^a-z0-9.-]+", "-", name.lower()).strip("-")
 
 
-def wiki_page_names(wiki_root: Path) -> tuple[set[str], set[str]]:
-    """(all wiki page filenames, topic page filenames) — leaf indexes excluded."""
+def wiki_page_names(wiki_root: Path) -> tuple[set[str], set[str], set[str]]:
+    """(all wiki page filenames, topic page filenames, theses page filenames) — leaf indexes excluded."""
     all_names: set[str] = set()
     topic_names: set[str] = set()
+    theses_names: set[str] = set()
     wiki_dir = wiki_root / "wiki"
     if not wiki_dir.exists():
-        return all_names, topic_names
+        return all_names, topic_names, theses_names
     for page in wiki_dir.rglob("*.md"):
         if page.name in NON_SOURCE_FILES or page.stem == page.parent.name or excluded_dir(page):
             continue
         all_names.add(page.name)
-        if "topics" in page.relative_to(wiki_dir).parts:
+        parts = page.relative_to(wiki_dir).parts
+        if "topics" in parts:
             topic_names.add(page.name)
-    return all_names, topic_names
+        if "theses" in parts:
+            theses_names.add(page.name)
+    return all_names, topic_names, theses_names
 
 
 def split_log_blocks(text: str) -> tuple[str, list[str]]:
@@ -738,53 +756,99 @@ def split_log_blocks(text: str) -> tuple[str, list[str]]:
 
 
 def scan_log(wiki_root: Path, report: Report, prune: bool) -> None:
-    log_path = wiki_root / "log.md"
-    if not os.path.exists(_fspath(log_path)):
+    """Prune-test every entry across the split logs under {wiki_root}/logs/.
+
+    Each entry carries its type in its own H2 header, so the scanner walks every
+    file in logs/ and resolves per type (resolution = page exists):
+      - candidate-topic       -> topic pages
+      - candidate-mention     -> ALL page names
+      - proposed-new-thesis   -> theses pages (like candidate-topic)
+      - speculative-thesis-update -> NEVER auto-pruned; aged + surfaced as
+        "awaiting investor decision" (the page already exists, so there is no
+        "page exists" resolution signal — DEC-2).
+    """
+    logs_dir = wiki_root / "logs"
+    if not os.path.exists(_fspath(logs_dir)):
         return
-    all_names, topic_names = wiki_page_names(wiki_root)
-    preamble, blocks = split_log_blocks(read_text(log_path))
+    all_names, topic_names, theses_names = wiki_page_names(wiki_root)
     spent: list[dict[str, str]] = []
     aging: list[dict[str, object]] = []
     unknown: list[str] = []
     retired: list[str] = []
-    keep: list[str] = []
-    for block in blocks:
-        header = block.splitlines()[0].rstrip()
-        match = LOG_HEADER_RE.match(header)
-        if not match:
-            keep.append(block)  # plain heading — never an entry, never pruned
-            continue
-        timestamp, entry_type, brief = match.groups()
-        if entry_type in RETIRED_LOG_TYPES:
-            retired.append(header)
-            continue  # dropped on prune
-        if entry_type not in ACTIVE_LOG_TYPES:
-            unknown.append(header)  # kept + reported, never deleted (Defect 3)
+    awaiting: list[dict[str, object]] = []
+    pruned_spent = 0
+    pruned_retired = 0
+    for log_path in sorted(logs_dir.glob("*.md")):
+        preamble, blocks = split_log_blocks(read_text(log_path))
+        keep: list[str] = []
+        file_spent = 0
+        file_retired = 0
+        for block in blocks:
+            header = block.splitlines()[0].rstrip()
+            match = LOG_HEADER_RE.match(header)
+            if not match:
+                keep.append(block)  # plain heading — never an entry, never pruned
+                continue
+            timestamp, entry_type, brief = match.groups()
+            if entry_type in RETIRED_LOG_TYPES:
+                retired.append(header)
+                file_retired += 1
+                continue  # dropped on prune
+            if entry_type not in ACTIVE_LOG_TYPES:
+                unknown.append(header)  # kept + reported, never deleted (Defect 3)
+                keep.append(block)
+                continue
+            if entry_type == "speculative-thesis-update":
+                # NEVER auto-pruned (no "page exists" signal — the thesis page
+                # already exists). Age + surface as awaiting investor decision.
+                date_match = re.match(r"(\d{4}-\d{2}-\d{2})", timestamp)
+                age_days = (
+                    (today() - datetime.date.fromisoformat(date_match.group(1))).days
+                    if date_match
+                    else None
+                )
+                awaiting.append(
+                    {
+                        "brief": brief,
+                        "logged": date_match.group(1) if date_match else None,
+                        "age_days": age_days,
+                    }
+                )
+                keep.append(block)
+                continue
+            candidates = {normalize_slug(brief)}
+            name_match = re.search(r"^- name:\s*(.+)$", block, flags=re.M)
+            if name_match:
+                candidates.add(normalize_slug(name_match.group(1)))
+            if entry_type == "candidate-topic":
+                page_set = topic_names
+            elif entry_type == "proposed-new-thesis":
+                page_set = theses_names
+            else:  # candidate-mention
+                page_set = all_names
+            matched = next((f"{c}.md" for c in candidates if f"{c}.md" in page_set), None)
+            if matched:
+                spent.append({"header": header, "matched_page": matched})
+                file_spent += 1
+                continue  # dropped on prune (resolution = page exists)
+            if entry_type == "candidate-topic":
+                date_match = re.match(r"(\d{4}-\d{2}-\d{2})", timestamp)
+                if date_match:
+                    age = (today() - datetime.date.fromisoformat(date_match.group(1))).days
+                    if age > STUB_AGE_FLOOR_DAYS:
+                        aging.append({"slug": brief, "logged": date_match.group(1), "age_days": age})
             keep.append(block)
-            continue
-        candidates = {normalize_slug(brief)}
-        name_match = re.search(r"^- name:\s*(.+)$", block, flags=re.M)
-        if name_match:
-            candidates.add(normalize_slug(name_match.group(1)))
-        page_set = topic_names if entry_type == "candidate-topic" else all_names
-        matched = next((f"{c}.md" for c in candidates if f"{c}.md" in page_set), None)
-        if matched:
-            spent.append({"header": header, "matched_page": matched})
-            continue  # dropped on prune (resolution = page exists)
-        if entry_type == "candidate-topic":
-            date_match = re.match(r"(\d{4}-\d{2}-\d{2})", timestamp)
-            if date_match:
-                age = (today() - datetime.date.fromisoformat(date_match.group(1))).days
-                if age > STUB_AGE_FLOOR_DAYS:
-                    aging.append({"slug": brief, "logged": date_match.group(1), "age_days": age})
-        keep.append(block)
+        if prune and (file_spent or file_retired):
+            write_text(log_path, preamble + "".join(keep), report, apply_changes=True)
+            pruned_spent += file_spent
+            pruned_retired += file_retired
     report.detected["log_spent_entries"] = spent
     report.detected["log_retired_entries"] = retired
     report.detected["log_unknown_type_entries"] = unknown
     report.detected["log_aging_candidate_topics"] = aging
-    if prune and (spent or retired):
-        write_text(log_path, preamble + "".join(keep), report, apply_changes=True)
-        report.detected["log_pruned"] = {"spent": len(spent), "retired": len(retired)}
+    report.detected["log_awaiting_thesis_decisions"] = awaiting
+    if prune and (pruned_spent or pruned_retired):
+        report.detected["log_pruned"] = {"spent": pruned_spent, "retired": pruned_retired}
 
 
 def check_questions_links(wiki_root: Path, report: Report) -> None:
@@ -1029,7 +1093,7 @@ def detect_pdf_title_conformance(wiki_root: Path, report: Report) -> None:
 
 
 def rename_referrer_files(wiki_root: Path) -> list[Path]:
-    """Rewrite scope per Defect-4 fix: wiki/**, log.md, raw INDEX files only."""
+    """Rewrite scope per Defect-4 fix: wiki/**, logs/**, raw INDEX files only."""
     files: list[Path] = []
     wiki_dir = wiki_root / "wiki"
     if wiki_dir.exists():
@@ -1037,9 +1101,9 @@ def rename_referrer_files(wiki_root: Path) -> list[Path]:
             p for p in wiki_dir.rglob("*.md")
             if p.name not in NON_SOURCE_FILES and not excluded_dir(p.relative_to(wiki_root))
         )
-    log_path = wiki_root / "log.md"
-    if log_path.exists():
-        files.append(log_path)
+    logs_dir = wiki_root / "logs"
+    if logs_dir.exists():
+        files.extend(sorted(logs_dir.glob("*.md")))
     raw_root = wiki_root / "raw"
     if raw_root.exists():
         for origin_dir in raw_root.iterdir():
@@ -1264,7 +1328,7 @@ def main() -> int:
     parser.add_argument(
         "--prune-log",
         action="store_true",
-        help="delete spent/retired log.md entries (lint-contract-authorized prune)",
+        help="delete spent/retired logs/*.md entries (lint-contract-authorized prune)",
     )
     parser.add_argument(
         "--execute-renames",

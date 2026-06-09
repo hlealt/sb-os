@@ -37,7 +37,7 @@ Filename convention: `YYYY-MM-DD-<action>-<asset-or-thesis>.md`, where `<action>
 
 ## Source queue (`type: source-queue`)
 
-`{wiki_root}/source-queue.md` — a root-level sibling of `log.md` (NOT a wiki page, NOT raw). Holds the open investment source-lifecycle entries (`gated_pending_access`, `blocked`) written by the `sb-wiki-capture-source` tool and surfaced/pruned by lint per `./lint-rules.ext.md` § Source-Lifecycle Rules.
+`{wiki_root}/source-queue.md` — a root-level sibling of the `logs/` queues (NOT a wiki page, NOT raw). Holds the open investment source-lifecycle entries (`gated_pending_access`, `blocked`) written by the `sb-wiki-capture-source` tool and surfaced/pruned by lint per `./lint-rules.ext.md` § Source-Lifecycle Rules.
 
 ```yaml
 type: source-queue

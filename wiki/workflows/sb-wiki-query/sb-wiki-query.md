@@ -31,8 +31,8 @@ The helper self-syncs its index before answering (changed pages re-indexed incre
 | `{sb_os_path}` | Read from `sb-os.json` → `sb_os_path` field. Never hardcode. |
 | `{wiki_root}/wiki/` | Wiki page tree (concepts, entities, topics, sources). |
 | `{wiki_root}/raw/` | Raw source tree. |
-| `{wiki_root}/log.md` | Actionable queue — `candidate-topic` + `candidate-mention` entries only. |
-| `{wiki_root}/questions.md` | OPTIONAL questions-layer registry — the user's open questions, loaded at Step 0 ONLY to decide whether the register-as-open-question offer fires at a query miss. Root-level sibling of `raw/`, `wiki/`, `log.md`; NOT a wiki page, NOT raw. Absent → loaded as empty; the register offer still fires and CREATES the file on first capture. Per `../../docs/wiki-schema.md` § "Questions layer — questions.md". |
+| `{wiki_root}/logs/` | Actionable queue folder — `logs/topics.md` (`candidate-topic`) + `logs/mentions.md` (`candidate-mention`) + `logs/theses.md` (thesis candidates). Query delegates candidate-topic resolution to `sb-wiki-create-topic`; it does not read these directly. |
+| `{wiki_root}/questions.md` | OPTIONAL questions-layer registry — the user's open questions, loaded at Step 0 ONLY to decide whether the register-as-open-question offer fires at a query miss. Root-level sibling of `raw/`, `wiki/`, `logs/`; NOT a wiki page, NOT raw. Absent → loaded as empty; the register offer still fires and CREATES the file on first capture. Per `../../docs/wiki-schema.md` § "Questions layer — questions.md". |
 
 ## Shared Data Files
 
@@ -218,7 +218,7 @@ If target type is `topic`:
    - A scope sentence derived from the synthesized answer.
    - An `overlap-checked: true` flag so the skill knows the pre-check ran.
 4. The `sb-wiki-create-topic` skill runs its own single confirmation checkpoint with the user (per `sb-wiki-create-topic.md` user-intent confirmation format) — DO NOT duplicate the confirmation here.
-5. The `sb-wiki-create-topic` skill removes the resolved `candidate-topic` entry from `{wiki_root}/log.md` if the topic was promoted from one (no `topic-created` entry is written).
+5. The `sb-wiki-create-topic` skill removes the resolved `candidate-topic` entry from `{wiki_root}/logs/topics.md` if the topic was promoted from one (no `topic-created` entry is written).
 
 #### 7b — File as Concept or Entity
 

@@ -71,7 +71,7 @@ The rule is: any action that REASONS about investments loads the relevant policy
 
 ## Watchlist Invariant
 
-Any page MAY carry `watchlist: true` in frontmatter, but an agent MAY set it ONLY after explicit user approval. Therefore `watchlist: true` ⇒ approval already happened. Lint surfaces a `watchlist: true` page that lacks approval evidence in `log.md` or a related decision (per `./wiki-ext/lint-rules.ext.md`); the agent never auto-approves to clear the flag.
+Any page MAY carry `watchlist: true` in frontmatter, but an agent MAY set it ONLY after explicit user approval. Therefore `watchlist: true` ⇒ approval already happened. Lint surfaces a `watchlist: true` page that lacks approval evidence in a related decision (per `./wiki-ext/lint-rules.ext.md`); the agent never auto-approves to clear the flag.
 
 ---
 

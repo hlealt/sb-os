@@ -14,7 +14,7 @@ This section is the single canonical description of what `sb-investor` currently
 
 ### Capabilities
 
-`sb-investor` exposes six capabilities, each mapped to an intent in `capability-manifest.md`:
+`sb-investor` exposes seven capabilities, each mapped to an intent in `capability-manifest.md`:
 
 - **thesis** (B1) — turns an informal investment idea into a structured, falsifiable thesis, then delegates persistence to `sb-fin-create-thesis`.
 - **research** (B2) — discovers, proposes, captures, and auto-files OPEN-web sources for a thesis or research question so research stops dying in chat.
@@ -22,6 +22,7 @@ This section is the single canonical description of what `sb-investor` currently
 - **portfolio** (B4) — maps belief to real exposure (positions without theses, theses without exposure, concentration) via the registered read tools plus an agent-performed thesis↔position join.
 - **decision** (B5) — records a buy/sell/hold/pass outcome and its reasoning as a dated `decisions/` page, delegating persistence to `sb-fin-create-decision`.
 - **policy** (B6) — reads or updates the user's `research-policy.md` / `source-policy.md`; thin mode inlined in `sb-investor-loop.md`.
+- **log** (B7) — reads the investor's actionable log (`.user/finance/investor/log.md`), resolves each deferred/blocked/tool-gap item (do-in-scope / route to a companion / dismiss), and DELETES it on resolution; flow in `log.md`. Read the log ONLY on a bare invocation or an explicit "resolve my log" request.
 
 The full intent map, per-capability access mechanism, inputs, when-to-use / when-NOT, and multi-mode chaining are defined in `{WORKFLOW_DIR}/capability-manifest.md`. Read it to route.
 
@@ -44,6 +45,7 @@ WORKFLOW_DIR = 3-resources/tools/sb-os/finance/workflows/sb-investor
 0. Load the runtime rulebook: read `{WORKFLOW_DIR}/sb-investor-loop.md`. It is the always-on agent-loop protocol (read-only / tools-only invariants, own-workspace boundary, watchlist invariant, policy read-rules wiring, present-and-confirm, issue-surfacing, Rule A, per-step Investor Checkpoint) and stays in force across every capability.
 1. Load the routing map: read `{WORKFLOW_DIR}/capability-manifest.md`. It maps intent → capability → access mechanism, with per-capability inputs and when-to-use / when-NOT.
 2. Infer the capability(ies) from the user's natural-language ask against `capability-manifest.md` § Capability map — never ask "which mode?". For a multi-intent ask, select ALL matching capabilities and order them per `capability-manifest.md` § Multi-mode chaining. Ambiguous scope → surface the candidate chain via `sb-investor-loop.md` § Present-and-confirm and let the user confirm.
+   - **Bare invocation (no ask).** When `/sb-investor` is invoked with NO task, read `.user/finance/investor/log.md` (per `log.md` § Read-rule — a bare invocation is one of the only two read triggers), count its unresolved entries, and if any exist PROACTIVELY OFFER: "You have N unresolved log items — work through them?" This is an intent-inferred yes/no offer, NEVER a numbered "which mode?" menu (the no-menu invariant holds). On acceptance, route to the `log` capability (B7); otherwise wait for the user's ask. Log empty/absent → no offer; wait for the ask.
 3. Reach each routed capability by its **Access mechanism** in `capability-manifest.md` (invoke an installed skill, read-and-follow an sb-os workflow file, or call a registered tool), load its **Inputs**, and execute it under the loop. Every capability's user-facing STOP is an Investor Checkpoint per `sb-investor-loop.md` § Per-Step Checkpoint.
 4. A capability whose access-mechanism file does not yet exist is not-yet-built: tell the user that capability is reserved but unimplemented and stop on that branch (the loop and manifest still bind; other routed capabilities in the chain proceed).
 

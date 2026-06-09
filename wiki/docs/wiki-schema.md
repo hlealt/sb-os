@@ -14,7 +14,7 @@ Audience: future agents executing wiki ingest / create-topic / lint / query oper
 
 ## Installer scope guarantee
 
-The sb-os installer (`install.py`) NEVER reads or writes any file under `{wiki_root}/wiki/` or `{wiki_root}/raw/`. The installer's write surface is limited to: managed CLAUDE.mds (marker blocks only), `.claude/` thin loaders, and `sb-os.json` at the vault root. Wiki content — leaf indexes (`wiki/concepts/concepts.md`, `wiki/entities/entities.md`, `wiki/topics/topics.md`, `wiki/sources/{origin}/{origin}.md`), raw leaf indexes (`raw/{origin}/{origin}.md`), source pages, concept pages, entity pages, topic pages, and `log.md` — is created and maintained EXCLUSIVELY by `/sb-wiki-lint` and `/sb-wiki-ingest`. Re-running `install.py --upgrade` is safe at any time and will not modify, overwrite, or delete any wiki content.
+The sb-os installer (`install.py`) NEVER reads or writes any file under `{wiki_root}/wiki/` or `{wiki_root}/raw/`. The installer's write surface is limited to: managed CLAUDE.mds (marker blocks only), `.claude/` thin loaders, and `sb-os.json` at the vault root. Wiki content — leaf indexes (`wiki/concepts/concepts.md`, `wiki/entities/entities.md`, `wiki/topics/topics.md`, `wiki/sources/{origin}/{origin}.md`), raw leaf indexes (`raw/{origin}/{origin}.md`), source pages, concept pages, entity pages, topic pages, and the `logs/` queues — is created and maintained EXCLUSIVELY by `/sb-wiki-lint` and `/sb-wiki-ingest`. Re-running `install.py --upgrade` is safe at any time and will not modify, overwrite, or delete any wiki content.
 
 ## Page types
 
@@ -83,7 +83,10 @@ The four page types above are the **base set**. Other sb-os modules MAY add thei
 ├── purpose.md                    OPTIONAL regulatory file — focus lens for ingest (not a page; lint skips it)
 ├── questions.md                  OPTIONAL user open-questions queue (not a page; lint OWNS sweep/graduate/prune)
 ├── open-gaps.md                  lint-generated read-only aggregate of all open questions, both homes (not a page)
-├── log.md                        actionable queue (candidate-topic + candidate-mention)
+├── logs/                         actionable queue folder — split by entry type (lint excludes it from the wiki walk)
+│   ├── topics.md                 candidate-topic queue
+│   ├── mentions.md               candidate-mention queue (concept + entity, classification inline)
+│   └── theses.md                 proposed-new-thesis + speculative-thesis-update queue
 ├── raw/
 │   ├── {origin}/                 articles, podcasts, papers — by source origin
 │   │   ├── {origin}.md           leaf index (factual, with Wiki column)
@@ -112,9 +115,9 @@ The four page types above are the **base set**. Other sb-os modules MAY add thei
 
 Type folders are stable — `concepts/`, `entities/`, `topics/`, `sources/` never rename or reorganize. Per-kind subfolders WITHIN a type folder are an opt-in subdivision pattern proposed by lint when one kind grows large enough to warrant separation (see "Folder subdivision" below). Pre-subdivision, every type folder is flat.
 
-`{wiki_root}/purpose.md` is an **optional regulatory file**, not a wiki page and not raw — the regulatory-layer twin of this locked schema (full spec in "Regulatory layer — purpose.md" below). It is a root-level sibling of `raw/`, `wiki/`, and `log.md`; lint never walks it (it lives outside the `wiki/` and `raw/` subtrees) and MUST skip it entirely. Absent → ingest behaves exactly as today.
+`{wiki_root}/purpose.md` is an **optional regulatory file**, not a wiki page and not raw — the regulatory-layer twin of this locked schema (full spec in "Regulatory layer — purpose.md" below). It is a root-level sibling of `raw/`, `wiki/`, and `logs/`; lint never walks it (it lives outside the `wiki/` and `raw/` subtrees) and MUST skip it entirely. Absent → ingest behaves exactly as today.
 
-`{wiki_root}/questions.md` is an **optional** user open-questions queue and `{wiki_root}/open-gaps.md` is its **lint-generated, read-only** cross-wiki aggregate — neither is a wiki page or raw (full spec in "Questions layer — questions.md" below). Both are root-level siblings of `raw/`, `wiki/`, `log.md`, and `purpose.md`; lint skips them from page/orphan/stub checks. Absent `questions.md` → ingest/lint behave exactly as today.
+`{wiki_root}/questions.md` is an **optional** user open-questions queue and `{wiki_root}/open-gaps.md` is its **lint-generated, read-only** cross-wiki aggregate — neither is a wiki page or raw (full spec in "Questions layer — questions.md" below). Both are root-level siblings of `raw/`, `wiki/`, `logs/`, and `purpose.md`; lint skips them from page/orphan/stub checks. Absent `questions.md` → ingest/lint behave exactly as today.
 
 ## Folder subdivision
 
@@ -282,7 +285,7 @@ author: "..."
 Rationale: `read-date` is not used — `created` covers the same intent (ingest = read in practice). Add a separate field only if a "read but not yet ingested" workflow surfaces.
 
 ### Topic pages
-No additional frontmatter. While unpromoted, a topic candidate lives in `log.md` as a `candidate-topic` entry; once the page exists, that entry is removed (resolution = page exists).
+No additional frontmatter. While unpromoted, a topic candidate lives in `logs/topics.md` as a `candidate-topic` entry; once the page exists, that entry is removed (resolution = page exists).
 
 ### `type: index` — agent-owned index files
 
@@ -450,7 +453,7 @@ The raw index (`raw/{origin}/{origin}.md`) keeps its existing format with `Wiki`
 **Agent NEVER auto-creates topic pages.** All topic creation flows through the `sb-wiki-create-topic` skill — agent-invokable mid-ingest when the user accepts a proposed topic, AND auto-discovered by Claude Code when the user later expresses intent to create or promote a topic (e.g., "create a topic for X", "promote the mcp-debate candidate"). The skill has no slash command — invocation is intent-driven.
 
 The agent detects 3 candidate-topic triggers and:
-1. Logs them in `log.md` as `candidate-topic` H2 entries.
+1. Logs them in `logs/topics.md` as `candidate-topic` H2 entries.
 2. Surfaces them inline at the Stage 1 ingest checkpoint as **PROPOSED TOPICS** — the user can accept-now (agent invokes `sb-wiki-create-topic` skill mid-run) or defer (the candidate-topic log entry persists; the user may promote later by expressing intent, which auto-fires the `sb-wiki-create-topic` skill).
 
 ### Existing topic updates (ingest)
@@ -531,7 +534,7 @@ The agent auto-creates a stub Concept or Entity page when the cluster representa
 2. **Source title/headline** — fires only when the title name ALSO appears in a `Substance` bullet (see "Title-branch rule" below). Title-only names go to discretion.
 3. **An extracted Notable Quote** — DISCRETIONARY (see "Notable Quote stub creation" below).
 
-If none of the three branches fire, log a `candidate-mention` in `log.md` for periodic review by lint. Do NOT create a page.
+If none of the three branches fire, log a `candidate-mention` in `logs/mentions.md` for periodic review by lint. Do NOT create a page.
 
 #### Near-duplicate probe (non-skippable)
 
@@ -595,7 +598,7 @@ Note: empty user-half sections on Source pages do NOT count toward stub-state �
 
 | Property | Rule |
 |----------|------|
-| Location | `{wiki_root}/purpose.md` — root-level sibling of `raw/`, `wiki/`, `log.md`. NOT a wiki page (not under `wiki/`), NOT raw. |
+| Location | `{wiki_root}/purpose.md` — root-level sibling of `raw/`, `wiki/`, `logs/`. NOT a wiki page (not under `wiki/`), NOT raw. |
 | Frontmatter | `type: purpose` — a non-page regulatory value (excluded from page-type checks, indexes, orphan detection; see "Frontmatter schemas" § `type: purpose`). |
 | Optionality | Absent → lens OFF → ingest behaves **exactly** as today. Mirrors the `wiki_extensions` Step 0 no-op contract. |
 | Malformed | Warn and proceed lens-OFF; NEVER abort the ingest. |
@@ -723,7 +726,7 @@ All standard Stage-1 controls (`accept-all` / `reject N` / `abort`, plus the top
 
 | Property | Rule |
 |----------|------|
-| Location | `{wiki_root}/questions.md` — root-level sibling of `raw/`, `wiki/`, `log.md`, `purpose.md`. NOT a wiki page (not under `wiki/`), NOT raw. |
+| Location | `{wiki_root}/questions.md` — root-level sibling of `raw/`, `wiki/`, `logs/`, `purpose.md`. NOT a wiki page (not under `wiki/`), NOT raw. |
 | Frontmatter | `type: questions` — a non-page value (excluded from page-type checks, indexes, orphan detection; see "Frontmatter schemas" § `type: questions`). |
 | Optionality | Absent → questions layer OFF → ingest/lint behave **exactly** as today. Mirrors the `purpose.md` no-op contract. |
 | Malformed | Warn and proceed as if absent; NEVER abort the ingest or lint. |
@@ -732,7 +735,7 @@ All standard Stage-1 controls (`accept-all` / `reject N` / `abort`, plus the top
 
 ### Entry schema
 
-Each entry is an H2 heading (same shape family as `log.md` entries). The runtime mirror of this shape is `wiki/workflows/shared/question-entry-shapes.md`.
+Each entry is an H2 heading (same shape family as the wiki log entries under `logs/`). The runtime mirror of this shape is `wiki/workflows/shared/question-entry-shapes.md`.
 
 ```markdown
 ## [YYYY-MM-DD] <question text>
@@ -773,7 +776,7 @@ open ──(scan / query / manual answer accretes inline)──▶ answered
 
 - `open` and `answered` are the only transient states, inferred from `answer:` presence; neither is stored as a field.
 - **Graduation** invokes the existing `sb-wiki-create-topic` skill (which carries its own `extend N` / `new` overlap check) — the agent **NEVER auto-authors** a topic page.
-- Resolution signal is the wiki's existing model: **the page exists ⇒ the queue entry is gone** (same principle as `candidate-topic` in `log.md`). Retirement removes the entry on user judgment with no page.
+- Resolution signal is the wiki's existing model: **the page exists ⇒ the queue entry is gone** (same principle as `candidate-topic` in `logs/topics.md`). Retirement removes the entry on user judgment with no page.
 
 ### The answer-scan (the engine, not a store)
 
@@ -839,7 +842,7 @@ Multi-call operations (e.g. an ingest probing several stub-candidates): the FIRS
 |----------|------|
 | Key resolution | The Voyage key resolves from the `VOYAGE_API_KEY` environment variable first, else from `{vault_root}/.user/config/env/.env` — the STANDARD location for local API keys in an sb-os vault. One `KEY=value` line per key (`VOYAGE_API_KEY=...`). The file is user-owned and MUST be gitignored (keep a tracked `.env.example` with empty values for new-machine setup). Missing file or empty value → keyword-only mode, never an error. |
 | Index artifact | `{wiki_root}/.sb-wiki-search/index.db` — DERIVED data, machine-local. Never commit it (add the folder to the vault `.gitignore`); deleting it is always safe (rebuilt by the next `index`/`search`). |
-| Scope | `{wiki_root}/wiki/**/*.md` pages only — leaf/origin indexes, `CLAUDE.md`, `raw/`, and root-level queues (`log.md`, `questions.md`, `open-gaps.md`, `purpose.md`) are NEVER indexed. Extension page trees (e.g. `wiki/theses/`, `wiki/decisions/`) are included automatically. |
+| Scope | `{wiki_root}/wiki/**/*.md` pages only — leaf/origin indexes, `CLAUDE.md`, `raw/`, the `logs/` queue folder, and root-level queues (`questions.md`, `open-gaps.md`, `purpose.md`) are NEVER indexed. Extension page trees (e.g. `wiki/theses/`, `wiki/decisions/`) are included automatically. |
 | Self-healing | `search` re-syncs before answering: changed/added/removed pages are detected (mtime+size prefilter, sha256 confirm) and re-indexed incrementally. Results never go stale; unchanged files are never re-embedded. |
 | Read-only | The script only READS wiki content. It never writes a wiki page, index cell, or queue entry — judgment-bearing cells stay LLM-owned per the lint contract. |
 | Installer | `install.py` never creates, reads, or writes the index artifact (installer scope guarantee unchanged). Lint never walks it (`.sb-wiki-search/` is a root-level dot-folder sibling of `wiki/` and `raw/`, outside both lint subtrees). |
@@ -885,7 +888,7 @@ Two invocations: `/sb-wiki-ingest <slug>` (default, interactive) and `/sb-wiki-i
 | 6 | Detect candidate-topic triggers (Contradiction, Evolution, Cross-application); add `> [!warning] Disputed` callouts on Contradiction-`same-scope-opposing` | Agent |
 | 7 | Update raw index: `Wiki = Yes`. **Tier-specific rule:** raw-index ROW missing → CREATE it; raw-index FILE missing → LOG A WARNING and do NOT create (lint owns raw-index files); wiki-sources index FILE missing → CREATE with header (step 8 responsibility). | Agent |
 | 8 | Update wiki sources index (`What it says` filled; `My take` set to `pending` — populated post Stage 2 per the three-state rule). Index FILE missing → CREATE with header row. | Agent |
-| 9 | Append `candidate-topic` and `candidate-mention` entries to `log.md` when triggered (the actionable queue). NO `ingest` / `concept-created` / `entity-created` / `topic-updated` entries — created pages and updates are recorded by the pages themselves | Agent |
+| 9 | Append `candidate-topic` entries to `logs/topics.md` and `candidate-mention` entries to `logs/mentions.md` when triggered (the actionable queues). NO `ingest` / `concept-created` / `entity-created` / `topic-updated` entries — created pages and updates are recorded by the pages themselves | Agent |
 | 10 | **Stage 1 checkpoint**: present structured table + PROPOSED TOPICS block; the user accepts-all / rejects N / aborts file changes; per topic: accept (agent invokes `sb-wiki-create-topic` skill now) / defer (keeps as candidate in log). Approved changes commit before Stage 2 begins. | Agent + User |
 | 11 | **Stage 2 checkpoint** (optional, post-commit): present reflection prompt after approved changes are committed. The user can ignore it, decline it, or answer with freeform reflection content in any order. The agent routes content by intent — `My take` → the source page `My take` section; questions / dive-deepers → `{wiki_root}/questions.md` entries (`seeded-by:` this source) — writes the routed content, and syncs the `My take` column to the wiki sources index. | Agent + User |
 
@@ -919,7 +922,7 @@ INGEST PREVIEW — <source slug>
 | 2 | wiki/concepts/model-context-protocol.md | updated | + section "Code Mode perspective" |
 | 3 | wiki/concepts/code-execution-pattern.md | new (stub) | <preamble first sentence> |
 | 4 | wiki/entities/cloudflare.md | new (stub) | <preamble first sentence> |
-| 5 | log.md | appended | candidate-topic + candidate-mention entries (only if triggered) |
+| 5 | logs/topics.md, logs/mentions.md | appended | candidate-topic + candidate-mention entries (only if triggered) |
 | 6 | raw/blog-cloudflare/blog-cloudflare.md | row updated | Wiki = Yes |
 | 7 | wiki/sources/blog-cloudflare/blog-cloudflare.md | row added | new entry |
 
@@ -997,7 +1000,7 @@ The default (interactive) mode is the behavior specified throughout this section
 | Stage 2 reflection (step 11) | Optional post-commit prompt | SKIPPED entirely — never presented, never awaited. The source page user-half stays empty shells; the wiki sources index `My take` cell stays `pending` (set at step 8). |
 | Mid-flow HALT | A `<slug>` resolving to multiple raw files HALTS at step 1 for disambiguation | No HALT — see slug-resolution rule below. |
 
-Only the FIRM tier of genuine topic updates auto-applies; speculative updates and proposed answers (including answer-origin firm entries) NEVER auto-apply. The audit records above are emitted to the structured-summary `Flags` channel (the existing caller-facing field — NO new `log.md` entry type, NO parallel log; `log.md`'s `topic-updated` type is retired per "Resolution signal" below and the queue holds no accretion/history entries). The applied topic page is its own durable record; `Flags` is the per-run audit trail `/sb-wiki-ingest-all` aggregates into its final-report counts (firm applied / speculative rejected / answers rejected). This is the v5 silent-mode behavior change.
+Only the FIRM tier of genuine topic updates auto-applies; speculative updates and proposed answers (including answer-origin firm entries) NEVER auto-apply. The audit records above are emitted to the structured-summary `Flags` channel (the existing caller-facing field — NO new log entry type, NO parallel log; the `topic-updated` type is retired per "Resolution signal" below and the queues hold no accretion/history entries). The applied topic page is its own durable record; `Flags` is the per-run audit trail `/sb-wiki-ingest-all` aggregates into its final-report counts (firm applied / speculative rejected / answers rejected). This is the v5 silent-mode behavior change.
 
 This silent mode is the SINGLE source of the non-interactive ingest semantics. `/sb-wiki-ingest-all` no longer carries its own copy — its subagents invoke `/sb-wiki-ingest silent <slug>` and inherit these defaults. A change here changes every caller; never re-state these defaults in a caller.
 
@@ -1041,7 +1044,7 @@ A skill agents can invoke mid-ingest (when the user accepts a PROPOSED TOPIC at 
 | 1.5 | **Scope-overlap check (semantic, not slug).** Read `wiki/topics/topics.md` and compare the proposed scope sentence to every existing row's `Scope` cell. When the semantic tier is available (§ "Retrieval tiers — hybrid search"), ALSO run `sb-wiki-search.py search "<proposed scope sentence>" --type topic` and treat its hits as overlap candidates the `Scope`-cell comparison may have missed. If overlap is plausible (shared subject, shared sources, shared positions, sibling/sub-debate framing), surface three options to the user: `extend N` (append a new `Position` / `Angle` to the existing topic; no new page), `new` (proceed with a new sibling-cross-linked topic), or `abort`. Skipped only when the caller (e.g., `/sb-wiki-query` Step 7a) passes `overlap-checked: true` proving the check already ran upstream. Slug-collision check from step 1 is necessary but NOT sufficient — both checks must pass. | Agent + User |
 | 2 | Write `wiki/topics/{slug}.md` with frontmatter, `Scope` (required), `Sources` (required), and optional sections per topic shape (see Topic page menu). On `new` from step 1.5, also append the new topic's wikilink to the overlapping topic's `related:` frontmatter (sibling cross-link). | Agent |
 | 3 | Cross-link from triggering concept/entity pages: add wikilink to the new topic in their `Related` section | Agent |
-| 4 | If promoted from a candidate, REMOVE that `candidate-topic` entry from `log.md` (the topic page is now the record — resolution = page exists). No `topic-created` entry is written | Agent |
+| 4 | If promoted from a candidate, REMOVE that `candidate-topic` entry from `logs/topics.md` (the topic page is now the record — resolution = page exists). No `topic-created` entry is written | Agent |
 | 5 | Update `wiki/topics/topics.md` leaf index with the new entry | Agent |
 
 When invoked mid-ingest, no separate user checkpoint — the parent `/sb-wiki-ingest` Stage 1 acceptance covers it AND the step 1.5 overlap prompt fires inline before commit. When auto-fired by user intent, the agent runs step 1.5 first, then confirms the proposed sections + scope sentence with the user before writing (single confirmation checkpoint, two distinct prompts when overlap is detected).
@@ -1064,13 +1067,13 @@ The script executes the deterministic halves of steps 1, 2, 3, 4, 5, 6, 7, 7.5, 
 | 1 | Walk all wiki pages — detect stubs (structural rule) and record age via `created` |
 | 2 | Walk all wiki pages — detect orphans (no inbound wikilinks). **Orphan-detection scope is STRICT** — see "Orphan-detection scope" below |
 | 3 | **Deterministic.** Detect unresolved Disputed callouts in concepts/entities — flagged date (first `YYYY-MM-DD` in the callout body) >30 days old AND no referenced topic page exists to resolve it (resolution = page exists). Callouts with no resolving topic AND no parseable date surface as `unparseable` for manual review |
-| 4 | Walk `log.md` — flag `candidate-topic` entries aged >30 days whose topic page does NOT yet exist (resolution = page exists, so a candidate with a live page is not "aging", it is spent and pruned at step 8) |
+| 4 | Walk `logs/topics.md` — flag `candidate-topic` entries aged >30 days whose topic page does NOT yet exist (resolution = page exists, so a candidate with a live page is not "aging", it is spent and pruned at step 8). ALSO walk `logs/theses.md` — flag every `speculative-thesis-update` as awaiting investor decision (never auto-pruned — the target thesis page already exists, so "page exists" is not a resolution signal); `proposed-new-thesis` resolves like `candidate-topic` (spent → pruned at step 8) |
 | 5 | **Deterministic + judgment.** Verify wikilinks resolve (broken if target file missing); CLASSIFY each broken link — `bucket A` (unique casefold+accent+quote/dash fold-match to an existing file → auto-fixable, exact `suggestion`) or `needs-judgment` (LLM splits into bucket B = genuinely-missing concept/entity to author as a stub, vs bucket C = unresolvable/duplicate, reported only). Ambiguous targets (≥2 fold-candidates) report candidates and default to C |
 | 6 | For each `wiki/sources/{origin}/` — re-sync `My take` column from each source page's `My take` section per the three-state rule (`pending` / `—` / reflected preview — see "Wiki sources index format" §); renumber footnotes (safe bijections only); REPORT unreferenced defs and set mismatches per "Citation format" § — stale-def removal is never auto-applied |
 | 7 | For each `raw/{origin}/` — verify `{origin}.md` index exists; if missing, create it with the standard `\| File \| Title \| Date \| Wiki \|` columns. For each raw file in `{origin}/`, ensure a row exists with `Wiki = No` (default) or `Yes/Partial` (preserved). Same for `raw/studies/studies.md`. **Index creation and maintenance is the agent's job**, not the user's. Also: **type-tag sync** (deterministic, auto-applied) — every page under `wiki/` gets its `type:` value appended to `tags:` when absent (append-only, user tags preserved); index files (stem = parent dir name) missing `type:` get `type: index` + `tags: [index]`; non-index pages with no resolvable `type:` are reported, never guessed. Per Frontmatter schemas § "Type tag (mandatory)". |
 | 7.5 | Folder-subdivision detection. For `wiki/concepts/` and `wiki/entities/`, group pages by `kind:` frontmatter. Surface kinds at ≥5 pages as a SUBDIVISION PROPOSAL block. Skip `wiki/topics/` (count <20) and `wiki/sources/` (already subdivided by origin). On user accept at step 9, the agent creates `{type}/{subfolder}/`, leaf index, parent CLAUDE.md marker-block routing rules, moves pages, and rewrites parent index as router. The folder structure and indexes are the record — NO log entry. Naming and policy per schema § "Folder subdivision". |
 | 7.6 | **PDF title-conformance detection.** For each PDF in `raw/{origin}/`, compare the stem to the kebab-slug of the raw index `Title` (Naming convention § "Raw PDF title-conformance"). Mismatch + no name collision → `rename-proposals` row; mismatch + `{title-slug}.pdf` already exists → `duplicate-raws` finding (no rename). Detection only — execution is USER-GATED at step 9, updating the full referrer set per "PDF title-conformance (lint)" below. Markdown sources exempt. |
-| 8 | Prune `log.md`: DELETE every `candidate-topic` / `candidate-mention` entry whose matching page now exists (resolution = page exists), and DELETE any retired history entries (`ingest`, `concept-created`, `entity-created`, `topic-created`, `topic-updated`, `topic-coverage-candidate`, `lint`, `query`). NO `lint` entry is written — findings live in the report only. `candidate-mention` entries with no matching page are NEVER auto-aged; they persist until the page exists or the user dismisses them. Entries of an UNKNOWN type (neither active nor retired) are KEPT and surfaced in the report for manual routing — never auto-deleted |
+| 8 | Prune the `logs/*.md` files: DELETE every `candidate-topic` / `candidate-mention` / `proposed-new-thesis` entry whose matching page now exists (resolution = page exists), and DELETE any retired history entries (`ingest`, `concept-created`, `entity-created`, `topic-created`, `topic-updated`, `topic-coverage-candidate`, `lint`, `query`). NO `lint` entry is written — findings live in the report only. `candidate-mention` entries with no matching page are NEVER auto-aged; they persist until the page exists or the user dismisses them. `speculative-thesis-update` entries are NEVER auto-pruned (no "page exists" signal — they resolve on explicit user action via `sb-fin-create-thesis` extend or dismiss; lint ages + surfaces them). Entries of an UNKNOWN type (neither active nor retired) are KEPT and surfaced in the report for manual routing — never auto-deleted |
 | 9 | Present findings to the user (read-only summary for findings 1-7; the `candidate-mention` review queue is surfaced here). USER-GATED interactive blocks: LINK-FIX PROPOSAL (bucket-A broken links → accept runs `--execute-link-fixes`), MISSING-PAGE PROPOSAL (bucket-B → accept authors a web-verified stub), RENAME PROPOSAL, SUBDIVISION PROPOSAL, and (questions layer ON) PROPOSED ANSWERS + GRADUATION PROPOSAL — each accepts all / accepts N / rejects / defers |
 
 #### Lint output format
@@ -1111,9 +1114,9 @@ Step 7.6 compares each raw PDF stem to the kebab-slug of its raw-index `Title`. 
 | Footnote definitions | every `[^N]: [[{old}.pdf]]` on any wiki page → `[[{title-slug}.pdf]]` |
 | Raw index `File` cell | `[[{old}.pdf]]` → `[[{title-slug}.pdf]]` |
 | Wiki sources index `File` cell | `[[{old}.md]]` → `[[{title-slug}.md]]` |
-| Other wikilinks + `log.md` | any `[[{old}.md]]` / `[[{old}.pdf]]` → new stem |
+| Other wikilinks + `logs/*.md` | any `[[{old}.md]]` / `[[{old}.pdf]]` → new stem |
 
-Mechanically: rewrite SCOPED wikilink patterns only — targets `[[{old-stem}.pdf` and `[[{old-stem}.md` (any `#anchor`/`|alias` tail), which cover every referrer row above — in NON-raw `.md` files (`wiki/**`, `log.md`) plus raw index files (`raw/{origin}/{origin}.md`); then move the two files. NEVER a blind global string replace: raw content file bodies are immutable, and `http(s)://` URLs containing the old stem (arXiv, repository deep links) are NEVER rewritten. After the move, verify remaining `{old-stem}` occurrences are only legitimate remnants (external URLs, raw bodies). `duplicate-raws` are reported, never auto-renamed — the user merges or deletes them.
+Mechanically: rewrite SCOPED wikilink patterns only — targets `[[{old-stem}.pdf` and `[[{old-stem}.md` (any `#anchor`/`|alias` tail), which cover every referrer row above — in NON-raw `.md` files (`wiki/**`, `logs/*.md`) plus raw index files (`raw/{origin}/{origin}.md`); then move the two files. NEVER a blind global string replace: raw content file bodies are immutable, and `http(s)://` URLs containing the old stem (arXiv, repository deep links) are NEVER rewritten. After the move, verify remaining `{old-stem}` occurrences are only legitimate remnants (external URLs, raw bodies). `duplicate-raws` are reported, never auto-renamed — the user merges or deletes them.
 
 #### Orphan-detection scope (STRICT)
 
@@ -1122,9 +1125,9 @@ Orphan-detection is the lint signal for "the wiki is not actually building knowl
 | Scope | Files |
 |-------|-------|
 | **In scope for inbound-link computation** | `wiki/concepts/*.md`, `wiki/entities/*.md`, `wiki/topics/*.md` — and ONLY these |
-| **Out of scope** (do NOT count as inbound links toward orphan status) | `log.md` entries, `wiki/sources/{origin}/{origin}.md` indexes, raw source pages under `raw/`, `wiki/sources/{origin}/<date>-<slug>.md` source pages, and any leaf index file (`concepts.md`, `entities.md`, `topics.md`, `{origin}.md`, `studies.md`) |
+| **Out of scope** (do NOT count as inbound links toward orphan status) | the `logs/*.md` queue files, `wiki/sources/{origin}/{origin}.md` indexes, raw source pages under `raw/`, `wiki/sources/{origin}/<date>-<slug>.md` source pages, and any leaf index file (`concepts.md`, `entities.md`, `topics.md`, `{origin}.md`, `studies.md`) |
 
-**Rationale.** Log entries and source-page footnote definitions are EVIDENCE OF MENTION, not synthesis. An entity referenced only by `log.md`, only by a source page, or only by a raw index is an entity the wiki has noticed but is not actively cross-linking from real synthesis. Orphan-detection is meant to surface exactly these — pages that exist as stubs but have not earned a place in the actual knowledge graph. Forcing inbound links to come from real wiki content (concept / entity / topic pages) keeps the bar high and preserves the orphan signal's diagnostic value.
+**Rationale.** Log entries and source-page footnote definitions are EVIDENCE OF MENTION, not synthesis. An entity referenced only by a `logs/*.md` queue file, only by a source page, or only by a raw index is an entity the wiki has noticed but is not actively cross-linking from real synthesis. Orphan-detection is meant to surface exactly these — pages that exist as stubs but have not earned a place in the actual knowledge graph. Forcing inbound links to come from real wiki content (concept / entity / topic pages) keeps the bar high and preserves the orphan signal's diagnostic value.
 
 **Practical implication.** A new stub created from a source page's `Notable Quotes` will, by design, be flagged as an orphan on the next lint run if no concept/entity/topic page links to it from its body or `Related` section. This is correct behavior, not a false positive — the orphan flag is the lint asking the user (or a future ingest) whether the stub deserves real synthesis.
 
@@ -1144,7 +1147,7 @@ Single command: `/sb-wiki-query <question>`. Returns a synthesized answer; optio
 | 4 | Read picked pages; if depth needed, follow wikilinks to neighbors | Agent |
 | 5 | Synthesize answer with inline citations to wiki pages (`[[page.md]]`) and source pages (footnote definitions) | Agent |
 | 6 | Present answer + offer to file as a wiki page (Concept / Entity / Topic) if "valuable enough" — the user picks file/skip | Agent + User |
-| 7 | If filed: for Topic, run a scope-overlap pre-check against `wiki/topics/topics.md` (offering `extend N` / `new` / `abort` to the user) before invoking `sb-wiki-create-topic` with `overlap-checked: true` — `extend N` writes the synthesized answer as a new `Position` / `Angle` on the existing topic and skips skill invocation; for Concept / Entity, write directly to `wiki/concepts/` / `wiki/entities/`; append `query` entry to `log.md` | Agent + User |
+| 7 | If filed: for Topic, run a scope-overlap pre-check against `wiki/topics/topics.md` (offering `extend N` / `new` / `abort` to the user) before invoking `sb-wiki-create-topic` with `overlap-checked: true` — `extend N` writes the synthesized answer as a new `Position` / `Angle` on the existing topic and skips skill invocation; for Concept / Entity, write directly to `wiki/concepts/` / `wiki/entities/`; no log entry is written (`query` is a retired type — the filed page is the record) | Agent + User |
 
 #### Query output format
 
@@ -1166,18 +1169,28 @@ If filed as Topic, the agent invokes `sb-wiki-create-topic` with the proposed na
 
 ## Log entry types
 
-The log is an ACTIONABLE QUEUE, not an event history. It holds ONLY items awaiting a user action. Completed events (ingests, page creations, topic updates, lint runs, filed queries) are NEVER logged — their provenance already lives in the source pages, the raw indexes, and the wiki pages themselves.
+The logs are ACTIONABLE QUEUES, not an event history. They hold ONLY items awaiting a user action. Completed events (ingests, page creations, topic updates, lint runs, filed queries) are NEVER logged — their provenance already lives in the source pages, the raw indexes, and the wiki pages themselves.
 
-2 types active at v1. Each entry is an H2 heading: `## [YYYY-MM-DD HH:MM] type | brief`.
+The queue is SPLIT into three per-type files under `{wiki_root}/logs/` (the deterministic prune maps filename → entry-type — there is no single `log.md`):
 
-| Type | Trigger | Awaiting action | Leaves the queue when |
-|------|---------|-----------------|------------------------|
-| `candidate-topic` | Auto-fired during `ingest` or `lint` when 1 of 3 triggers fires. Standalone H2 entry — does NOT reference a parent ingest | Decide whether to promote via the `sb-wiki-create-topic` skill | The topic page exists (create-topic removes the entry on promotion; lint prunes any candidate whose topic page exists) |
-| `candidate-mention` | Auto-fired during `ingest` step 3 when an entity/concept name surfaces but the stub-creation rule does NOT fire (per Stub policy). Standalone H2 entry | Review → promote to a stub, or dismiss | The matching page exists (lint prunes), or the user dismisses it. NEVER auto-aged — mentions persist until actioned |
+| File | Entry type(s) |
+|------|---------------|
+| `logs/topics.md` | `candidate-topic` |
+| `logs/mentions.md` | `candidate-mention` (concept + entity unified; `classification:` inline) |
+| `logs/theses.md` | `proposed-new-thesis`, `speculative-thesis-update` |
 
-**Resolution signal = the page exists.** There is no `topic-created` / `concept-created` / `entity-created` / `ingest` / `topic-updated` / `query` / `lint` entry. A candidate is "spent" the moment its page exists; lint detects this by filename and removes the entry. This replaces the old `topic-created`-as-resolution-signal model.
+4 types active. Each entry is an H2 heading: `## [YYYY-MM-DD HH:MM] type | brief`.
 
-**Unknown types.** An entry whose type is neither active nor retired is NON-CANONICAL — a writer violated the queue contract. Lint KEEPS it and surfaces it in the LINT REPORT for manual routing; it NEVER auto-deletes unknown content. Personal capture types are never registered into this enum — the log holds exclusively the two active types; personal captures route to vault files instead.
+| Type | File | Trigger | Awaiting action | Leaves the queue when |
+|------|------|---------|-----------------|------------------------|
+| `candidate-topic` | `logs/topics.md` | Auto-fired during `ingest` or `lint` when 1 of 3 triggers fires. Standalone H2 entry — does NOT reference a parent ingest | Decide whether to promote via the `sb-wiki-create-topic` skill | The topic page exists (create-topic removes the entry on promotion; lint prunes any candidate whose topic page exists) |
+| `candidate-mention` | `logs/mentions.md` | Auto-fired during `ingest` step 3 when an entity/concept name surfaces but the stub-creation rule does NOT fire (per Stub policy). Standalone H2 entry | Review → promote to a stub, or dismiss | The matching page exists (lint prunes), or the user dismisses it. NEVER auto-aged — mentions persist until actioned |
+| `proposed-new-thesis` | `logs/theses.md` | Fired on the investor path when a new-thesis trigger fires (per `finance/wiki-ext/candidate-thesis-triggers.md`). Standalone H2 entry | Decide whether to promote via `sb-fin-create-thesis` | The thesis page exists — create-thesis removes the entry on promotion; lint prunes by filename against `wiki/theses/` pages (resolves like `candidate-topic`) |
+| `speculative-thesis-update` | `logs/theses.md` | Fired on the investor path when a speculative change to an EXISTING thesis is proposed (e.g. a thesis-invalidation signal). Standalone H2 entry | `sb-fin-create-thesis` extend applies it on user action, or the user dismisses | The user acts or dismisses. **Lint NEVER auto-prunes it** — the target page already exists, so "page exists" is not a resolution signal; lint ages + surfaces it as "awaiting investor decision" |
+
+**Resolution signal = the page exists** — for `candidate-topic`, `candidate-mention`, and `proposed-new-thesis`. There is no `topic-created` / `concept-created` / `entity-created` / `ingest` / `topic-updated` / `query` / `lint` entry. A candidate is "spent" the moment its page exists; lint detects this by filename and removes the entry. This replaces the old `topic-created`-as-resolution-signal model. The EXCEPTION is `speculative-thesis-update`: its thesis page already exists, so it resolves EXPLICIT-ONLY (the user acts or dismisses) and lint never auto-prunes it. Thesis changes NEVER auto-apply (hard rule A7) — `logs/theses.md` is a surface-only proposal queue; every promotion/update flows through `sb-fin-create-thesis` with user approval.
+
+**Unknown types.** An entry whose type is neither active nor retired is NON-CANONICAL — a writer violated the queue contract. Lint KEEPS it and surfaces it in the LINT REPORT for manual routing; it NEVER auto-deletes unknown content. Personal capture types are never registered into this enum — the logs hold exclusively the active types; personal captures route to vault files instead.
 
 ### Entry shapes
 
@@ -1193,7 +1206,22 @@ The log is an ACTIONABLE QUEUE, not an event history. It holds ONLY items awaiti
 - name: sandboxing
 - classification: concept
 - reason: stub rule did not fire (name not in source title, Notable Quote, or Substance bullet)
+
+## [2026-06-09 10:15] proposed-new-thesis | ai-capex-overbuild
+- thesis: <one-line statement of the proposed new thesis>
+- trigger: recurring-claim | mispricing-signal | thesis-shaped-page-created
+- sources: [[2026-06-08-some-source.md]]
+- promote via: sb-fin-create-thesis (express intent: "create the ai-capex-overbuild thesis")
+
+## [2026-06-09 10:15] speculative-thesis-update | ai-capex-overbuild
+- target thesis: [[ai-capex-overbuild.md]]
+- trigger: thesis-invalidation
+- change: <one-line statement of the proposed change to the existing thesis>
+- source: [[2026-06-08-some-source.md]]
+- apply via: sb-fin-create-thesis extend (user decision REQUIRED — never auto-applies; lint never auto-prunes)
 ```
+
+A `proposed-new-thesis` `<brief>` MUST be the thesis page slug — lint resolves it by filename against `wiki/theses/` pages (resolution = page exists), like `candidate-topic`. A `speculative-thesis-update` carries no filename-prune contract (the page already exists); its `target thesis:` wikilink identifies the existing page the proposed change applies to.
 
 Pre-v1 logs may contain retired history types (`ingest`, `concept-created`, `entity-created`, `topic-created`, `topic-updated`, `topic-coverage-candidate`, `lint`, `query`). Lint removes them on its next pass.
 
@@ -1229,7 +1257,7 @@ Workflows hold all logic. Slash commands and skills are thin loaders only.
 
 This schema doc lives at its canonical home: `3-resources/tools/sb-os/wiki/docs/wiki-schema.md` (inside the sb-os repo). Relocated from `1-projects/second-brain-evolution/sb-wiki-build/wiki-schema.md` at sb-os v2 build time (p2-1).
 
-> **Configurability.** Wiki workflows resolve `{wiki_root}` from `sb-os.json` at runtime — never hardcoded. The `wiki/`, `raw/`, and `log.md` paths are derived as `{wiki_root}/wiki/`, `{wiki_root}/raw/`, and `{wiki_root}/log.md`. Per architecture doc §3, the user-context root for any YAML companions used by wiki workflows resolves through `sb-os.json` → `user_context_root` (default `.user/context/`).
+> **Configurability.** Wiki workflows resolve `{wiki_root}` from `sb-os.json` at runtime — never hardcoded. The `wiki/`, `raw/`, and `logs/` paths are derived as `{wiki_root}/wiki/`, `{wiki_root}/raw/`, and `{wiki_root}/logs/`. Per architecture doc §3, the user-context root for any YAML companions used by wiki workflows resolves through `sb-os.json` → `user_context_root` (default `.user/context/`).
 
 ## Deferred / open
 

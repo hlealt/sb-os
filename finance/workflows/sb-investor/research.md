@@ -29,7 +29,7 @@ Tie the research to its subject before discovering anything:
 |--------|------|--------|
 | Existing thesis (preferred) | The ask names or implies a thesis already in the wiki | Discovery, ranking, and the "relation to the thesis" column are scoped to that thesis's claim and entities |
 | Nascent thesis | The user is forming a belief not yet persisted | Anchor to the in-progress claim; the captured evidence later feeds `thesis` (B1) |
-| Exploratory research question | A bare topic with no thesis ("dig into `<topic>`") | Register the question; exploratory findings MAY later fire a `candidate-thesis` trigger (Step 8) that feeds B1 |
+| Exploratory research question | A bare topic with no thesis ("dig into `<topic>`") | Register the question; exploratory findings MAY later fire a thesis-log trigger (Step 8) that writes a `logs/theses.md` entry feeding B1 |
 
 Identify the entity(ies) the research touches — they scope discovery and become the `--thesis` / origin context passed to capture.
 
@@ -192,7 +192,7 @@ Wait for the user's choice — this is a mode checkpoint per `./investor-loop.md
 
 After the gate clears (`[S]`, or `[E]`'s adjusted list), file each `captured_to_raw` source into the wiki by dispatching **one sub-agent per source, ONE AT A TIME — never in parallel**. Full text still stays in each sub-agent's context, so this mode and `sb-investor.md` stay clean (anti-context-rot holds). The agent invokes the real ingest command via the sub-agent; it NEVER reimplements ingest.
 
-**Why sequential (BINDING).** Ingest sub-agents write SHARED wiki surfaces — topic hubs, concept/entity stubs, leaf indexes, `log.md` — and parallel ingests race on them (observed 2026-06-03: a lost-then-restored section and four duplicate-stub clusters from a 16-agent fan-out). Dispatch sub-agent N+1 only after sub-agent N returns its summary. Parallel ingest dispatch returns ONLY if `sb-wiki-ingest` ever gains page-level write locking.
+**Why sequential (BINDING).** Ingest sub-agents write SHARED wiki surfaces — topic hubs, concept/entity stubs, leaf indexes, the `logs/` queues — and parallel ingests race on them (observed 2026-06-03: a lost-then-restored section and four duplicate-stub clusters from a 16-agent fan-out). Dispatch sub-agent N+1 only after sub-agent N returns its summary. Parallel ingest dispatch returns ONLY if `sb-wiki-ingest` ever gains page-level write locking.
 
 **Commit policy (BINDING).** NO git command runs during ingestion — ingest sub-agents NEVER git-commit, and this mode NEVER commits per source, per batch, or per wave (mirrors `sb-wiki-ingest-all` § single git commit). A sub-agent's per-file status `committed` means staged FILE changes written to disk, NEVER git. The run produces EXACTLY ONE git commit at the very end — after ALL ingests, Step 7b extractions, and any chained `thesis`/`review` authoring finish — covering every change the run produced, made via the workspace commit path (`rbtv-commit`). Skip when the vault root is not a git repository.
 
@@ -310,7 +310,7 @@ Ingested sources are now evidence available to other modes:
 
 - They feed `thesis` (B1) authoring as sourced evidence-for / evidence-against.
 - They feed `review` (B3) when an existing thesis is re-evaluated against fresh sources.
-- A `candidate-thesis` trigger (Recurring Claim / Mispricing Signal / Thesis Invalidation / Thesis-Shaped Page Created, per the finance module's `candidate-thesis-triggers.md`) MAY fire from the new evidence — surface it; a `Thesis Invalidation` fire suggests `review` (B3), the other three suggest `thesis` (B1). Surfacing a candidate-thesis is a proposal, never an auto-author — the agent NEVER writes a thesis page from this mode.
+- A thesis-log trigger (Recurring Claim / Mispricing Signal / Thesis Invalidation / Thesis-Shaped Page Created, per the finance module's `candidate-thesis-triggers.md`) MAY fire from the new evidence — it writes a `logs/theses.md` entry of the mapped type (`Thesis Invalidation` → `speculative-thesis-update`; the other three → `proposed-new-thesis`) and surfaces it; a `Thesis Invalidation` fire suggests `review` (B3), the other three suggest `thesis` (B1). Surfacing a thesis-log entry is a proposal, never an auto-author — the agent NEVER writes a thesis page from this mode.
 
 State the chain options to the user; do NOT auto-chain without the routing the user confirms (`./capability-manifest.md` § Multi-mode chaining).
 

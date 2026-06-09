@@ -14,7 +14,7 @@ The `/sb-investor` reasoning mode that turns an informal investment idea into a 
 | Layer | Owns |
 |-------|------|
 | This mode (the thinker) | reasoning: claim, hypotheses, causal mechanism, evidence-for AND evidence-against, risks, invalidation criteria; entity selection + position mapping; the present-and-confirm checkpoint |
-| `sb-fin-create-thesis` (the scribe) | persistence: slug + collision check, scope-overlap (`extend`/`new`/`abort`), frontmatter, the eight required sections, citation discipline, entity cross-linking, candidate-thesis log resolution, theses index update, `status: active` gating. The agent NEVER re-implements these checks |
+| `sb-fin-create-thesis` (the scribe) | persistence: slug + collision check, scope-overlap (`extend`/`new`/`abort`), frontmatter, the eight required sections, citation discipline, entity cross-linking, thesis-log resolution (deletes the promoted `proposed-new-thesis` from `logs/theses.md`), theses index update, `status: active` gating. The agent NEVER re-implements these checks |
 
 ---
 
@@ -169,7 +169,7 @@ On `[S]`, invoke `sb-fin-create-thesis` in its **investor-orchestrated mode** (S
 | Input | Source |
 |-------|--------|
 | Proposed thesis slug | derived from the claim per the scribe's naming convention |
-| Candidate-thesis timestamp | the `candidate-thesis` log entry's timestamp if this thesis promotes one; omit for a fresh proposal |
+| Candidate-thesis timestamp | the `proposed-new-thesis` entry's timestamp in `logs/theses.md` if this thesis promotes one; omit for a fresh proposal |
 | The claim | the falsifiable Claim reasoned in Step 2 |
 | Source filenames | the captured-source filenames cited as evidence |
 | Related entities | the entity(ies) selected in Step 3 |

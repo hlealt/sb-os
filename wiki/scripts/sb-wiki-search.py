@@ -182,8 +182,9 @@ def chunk_page(text: str, rel_path: str, max_chars: int = MAX_CHUNK_CHARS) -> li
 def walk_wiki(wiki_root: Path) -> list[str]:
     """Indexable pages under `{wiki_root}/wiki/` as sorted wiki_root-relative posix paths.
 
-    Excludes leaf/origin indexes (`{dir}/{dir}.md`) and non-page files; `raw/`
-    and root-level queues (`log.md`, `questions.md`, ...) are outside `wiki/`.
+    Excludes leaf/origin indexes (`{dir}/{dir}.md`) and non-page files; `raw/`,
+    the `logs/` queue folder, and root-level queues (`questions.md`, ...) are
+    outside `wiki/`.
     """
     pages_root = wiki_root / "wiki"
     if not pages_root.is_dir():

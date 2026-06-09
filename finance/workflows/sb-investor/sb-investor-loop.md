@@ -133,9 +133,9 @@ When in doubt, classify as **blocking** — surfacing too much beats shipping a 
 
 ### Deferrable → recorded
 
-1. **Record the issue** to `.user/finance/investor/log.md` (one line: what, where, why deferred).
+1. **Record the issue** to `.user/finance/investor/log.md` as an actionable entry in the schema defined in `./log.md` § Entry schema — `why` (what surfaced it), `action` (the exact next step an agent or the owner would take), `deferred` (why it wasn't done on the spot). The log is an actionable queue: resolution = the entry is DELETED when its action is done (no resolved history; NEVER a `RESOLVED (…)` note). Entries are read and resolved ONLY by the `log` capability (`./log.md`) on a bare invocation or explicit request — never by a reasoning mode.
 2. **Do not block the current step.** Continue.
-3. **At the end of the interaction, surface the deferred list to the user** so nothing dies silently; the user decides whether to act now or later.
+3. **At the end of the interaction, surface the deferred list to the user** so nothing dies silently; the user decides whether to act now (route to the `log` capability) or later.
 
 ### Manual-bridge handoff (blocked / gated sources)
 
@@ -205,8 +205,8 @@ The user-facing `policy` capability is thin — it lives here, not in a separate
 
 3. **STOP. Wait for the user's choice.** Do not proceed on any branch without it.
 4. **Route:**
-   - `[A]` → record the pending item in `.user/finance/investor/log.md` and tell the user the correct owner (e.g. route a ledger fix to `sb-bookkeeper`; flag a missing read tool for the build). The investor NEVER mutates a data store and NEVER builds a tool at runtime to route around the gap.
-   - `[B]` → record the dropped item (one line in `log.md`) and resume the current step. Nothing is changed.
+   - `[A]` → record the pending item in `.user/finance/investor/log.md` in the `./log.md` § Entry schema (why / action / deferred) and tell the user the correct owner (e.g. route a ledger fix to `sb-bookkeeper`; flag a missing read tool for the build). The investor NEVER mutates a data store and NEVER builds a tool at runtime to route around the gap.
+   - `[B]` → record the dropped item in `.user/finance/investor/log.md` in the `./log.md` § Entry schema (why / action / deferred) and resume the current step. Nothing is changed.
    - `[C]` → run the `policy` thin mode (present-and-confirm) to update scope, then resume.
 
 **Refusal is not a dead end.** Every refusal offers a legitimate path forward (redirect, defer, or adjust policy) — never a silent workaround and never a boundary breach.

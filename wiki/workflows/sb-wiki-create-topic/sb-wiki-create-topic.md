@@ -23,7 +23,7 @@ Read `3-resources/tools/sb-os/wiki/docs/wiki-schema.md` — Operations § "sb-wi
 | `{sb_os_path}` | Read from `sb-os.json` → `sb_os_path` field. Never hardcode. |
 | `{wiki_root}/wiki/topics/` | Topic page tree. |
 | `{wiki_root}/wiki/topics/topics.md` | Topics leaf index. |
-| `{wiki_root}/log.md` | Actionable queue — `candidate-topic` + `candidate-mention` entries only. |
+| `{wiki_root}/logs/topics.md` | Actionable queue holding `candidate-topic` entries — the source of the candidate this workflow resolves. |
 
 ## Shared Data Files
 
@@ -45,7 +45,7 @@ These files codify rules referenced across multiple `sb-wiki-*` workflows. Load 
 | Mode | Caller | Inputs passed in |
 |------|--------|------------------|
 | Mid-ingest | `/sb-wiki-ingest` Stage 1 | Proposed topic slug, trigger type, source filenames, claim A + claim B (Contradiction only), parent ingest timestamp |
-| User-intent | Claude Code auto-fire | Topic slug or user phrasing ("create a topic for X" / "promote the {candidate} topic"). Workflow resolves the candidate from `log.md` if user references one. |
+| User-intent | Claude Code auto-fire | Topic slug or user phrasing ("create a topic for X" / "promote the {candidate} topic"). Workflow resolves the candidate from `logs/topics.md` if user references one. |
 
 ## Flow
 
@@ -60,7 +60,7 @@ These files codify rules referenced across multiple `sb-wiki-*` workflows. Load 
    - `abort` — no writes.
    This check fires for BOTH invocation modes. Mid-ingest: surface as a Stage 1 inline prompt before commit. User-intent: surface before the user-intent confirmation checkpoint. Skipping this check is a workflow violation.
 5. Determine if invocation is from a candidate or fresh:
-   - **From candidate** — caller provides the parent ingest timestamp OR the user references an existing `candidate-topic` log entry. Read `{wiki_root}/log.md`, locate the `candidate-topic` entry by timestamp + slug. Extract: trigger type, source filenames, claim A + claim B (Contradiction only), parent ingest timestamp.
+   - **From candidate** — caller provides the parent ingest timestamp OR the user references an existing `candidate-topic` log entry. Read `{wiki_root}/logs/topics.md`, locate the `candidate-topic` entry by timestamp + slug. Extract: trigger type, source filenames, claim A + claim B (Contradiction only), parent ingest timestamp.
    - **Fresh proposal** — no candidate exists. Caller (or user) supplies trigger type and source filenames directly. No claim A / claim B unless explicitly provided.
 6. Classify the topic shape per `../shared/page-types.md` Topic discriminator: `debate` | `comparison` | `landscape` | `decision-frame` | `evolution`. Drives optional section selection in step 2.
 
@@ -106,7 +106,7 @@ If a triggering page does not exist (rare — usually the topic emerges from exi
 
 The log is an actionable queue; resolution = the topic page now exists. Do NOT write a `topic-created` entry.
 
-- **Promoted from a candidate** — DELETE the matching `candidate-topic` H2 entry (header + body) from `{wiki_root}/log.md`. Locate it by the slug and timestamp resolved in step 1. The newly created topic page is now the record.
+- **Promoted from a candidate** — DELETE the matching `candidate-topic` H2 entry (header + body) from `{wiki_root}/logs/topics.md`. Locate it by the slug and timestamp resolved in step 1. The newly created topic page is now the record.
 - **Fresh proposal (no candidate)** — nothing to remove; the log is untouched.
 
 Never write any other entry type. Per `../shared/log-entry-shapes.md`, only `candidate-topic` and `candidate-mention` are active types.
@@ -170,7 +170,7 @@ User response handling:
 | `{wiki_root}` cannot be resolved from `sb-os.json` | Halt before step 1; surface error. No writes. |
 | Topic slug already exists at `{wiki_root}/wiki/topics/{slug}.md` | Halt at step 1; surface conflict. No writes. |
 | Topic slug collides with an existing `concepts/{slug}.md` or `entities/{slug}.md` | Halt at step 1; surface forbidden collision. No writes. |
-| Candidate timestamp referenced but not found in `log.md` | Halt at step 1; surface to user — the candidate may have been pruned or never logged. No writes. |
+| Candidate timestamp referenced but not found in `logs/topics.md` | Halt at step 1; surface to user — the candidate may have been pruned or never logged. No writes. |
 | Triggering page named in user intent does not exist | Skip cross-link for that page silently in step 3; continue with other pages. |
 | `{wiki_root}/wiki/topics/topics.md` index file exists with non-standard columns | Preserve user's columns at step 5; append row matching existing format with `File` and closest-equivalent `Scope` filled. |
 | User aborts at user-intent confirmation checkpoint | Halt before step 2. No writes. End run. |

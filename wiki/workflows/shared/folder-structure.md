@@ -7,7 +7,10 @@ Directory layout for `{wiki_root}/`. All paths are relative to `{wiki_root}`. Re
 ```
 {wiki_root}/
 ├── purpose.md                          OPTIONAL regulatory file — ingest focus lens (not a page; lint skips it)
-├── log.md                              actionable queue (candidate-topic + candidate-mention)
+├── logs/                               actionable queue folder — split by entry type (lint excludes it from the wiki walk)
+│   ├── topics.md                       candidate-topic queue
+│   ├── mentions.md                     candidate-mention queue (concept + entity, classification inline)
+│   └── theses.md                       proposed-new-thesis + speculative-thesis-update queue
 ├── questions.md                        OPTIONAL user open-questions queue (not a page; lint OWNS maintenance; skip-if-absent)
 ├── open-gaps.md                        lint-generated cross-wiki aggregate of all open questions (not a page; read-only; skipped from orphan/stub checks)
 ├── raw/
@@ -49,7 +52,8 @@ Directory layout for `{wiki_root}/`. All paths are relative to `{wiki_root}`. Re
 
 | Item | Created by | When |
 |------|-----------|------|
-| `{wiki_root}/log.md` | Ingest (first run) or user | Before first ingest |
+| `{wiki_root}/logs/topics.md`, `logs/mentions.md` | Ingest (first run) or user | Before first ingest |
+| `{wiki_root}/logs/theses.md` | The investor path (`sb-fin-create-thesis` / `sb-investor`) or user | On first thesis candidate |
 | `raw/{origin}/` and `raw/{origin}/{origin}.md` | Lint | On first lint sweep that finds a missing raw index |
 | `raw/_assets/` | The user (via Obsidian) | First time Obsidian's "Download attachments for current file" runs against the configured `raw/_assets` destination. Agents NEVER create or write to this folder. |
 | `wiki/concepts/`, `wiki/entities/`, `wiki/topics/`, `wiki/sources/` | Ingest | Lazily on first page creation in each folder |
@@ -75,7 +79,7 @@ Subdivision relies on Obsidian filename-based wikilink resolution. Required sett
 
 ## Regulatory File
 
-`{wiki_root}/purpose.md` is the **optional** ingest focus lens — a root-level sibling of `raw/`, `wiki/`, and `log.md`. It is **NOT a wiki page and NOT raw**; it carries `type: purpose` (non-page regulatory value, see `frontmatter-schemas.md`).
+`{wiki_root}/purpose.md` is the **optional** ingest focus lens — a root-level sibling of `raw/`, `wiki/`, and `logs/`. It is **NOT a wiki page and NOT raw**; it carries `type: purpose` (non-page regulatory value, see `frontmatter-schemas.md`).
 
 | Aspect | Rule |
 |--------|------|
@@ -106,7 +110,7 @@ Pattern source: Karpathy-style workflow. Full schema: `3-resources/tools/sb-os/w
 
 ## Questions Layer Files
 
-`{wiki_root}/questions.md` is the **optional** user open-questions queue and `{wiki_root}/open-gaps.md` is its **lint-generated, read-only** cross-wiki aggregate. Both are root-level siblings of `raw/`, `wiki/`, `log.md`, and `purpose.md`; lint skips them from page/orphan/stub checks.
+`{wiki_root}/questions.md` is the **optional** user open-questions queue and `{wiki_root}/open-gaps.md` is its **lint-generated, read-only** cross-wiki aggregate. Both are root-level siblings of `raw/`, `wiki/`, `logs/`, and `purpose.md`; lint skips them from page/orphan/stub checks.
 
 ### `questions.md`
 
