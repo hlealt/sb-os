@@ -185,7 +185,7 @@ Detail and design rationale: [`docs/architecture.md`](./docs/architecture.md).
 
 ## Repository layout
 
-Shippable components live under per-module folders at the repo root: `para/` (PARA-aligned components) and `wiki/` (knowledge-base layer). Each module folder follows the same internal layout.
+Shippable components live under per-module folders at the repo root: `para/` (PARA-aligned components), `wiki/` (knowledge-base layer), and `finance/` (personal-finance system). Each module folder follows the same internal layout.
 
 | Path | Contents |
 |---|---|
@@ -199,7 +199,11 @@ Shippable components live under per-module folders at the repo root: `para/` (PA
 | `wiki/commands/`, `wiki/skills/`, `wiki/workflows/` | Wiki module sources for `sb-wiki-*` components |
 | `wiki/workflows/shared/` | Cross-workflow conventions (folder structure, frontmatter schemas, citation format, etc.) |
 | `wiki/claude-mds/wiki.md` | Managed CLAUDE.md source for `{wiki_root}/CLAUDE.md` |
+| `wiki/scripts/` | Wiki tool layer (`sb-wiki-search.py`, lint + capture scripts) |
 | `wiki/docs/wiki-schema.md` | Wiki schema reference |
+| `finance/commands/`, `finance/skills/`, `finance/rules/`, `finance/workflows/` | Finance module sources for the bookkeeper/investor agents and companion workflows |
+| `finance/scripts/`, `finance/dashboard/`, `finance/templates/` | Finance tool layer (+ registry `tools-index.md`), dashboard assets, install-if-missing policy templates |
+| `finance/wiki-ext/` | Investment wiki extension data files (page types, schemas, lint rules) merged into the wiki when `finance` is registered |
 | `docs/` | Repo-level architecture and conventions |
 
 ## License

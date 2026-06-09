@@ -105,20 +105,27 @@ What a vault looks like after a fresh `python install.py`:
 ```
 sb-os/
 ├── install.py              [entry point]
-├── admin/
-│   └── install/            [installer internals: cli.py, manifest.py, markers.py, ...]
-├── workflows/              [source of truth for sb-* workflows]
-│   └── sb-{name}/
-│       ├── sb-{name}.md
-│       ├── step-NN-*.md
-│       └── data/, scripts/, templates/
-├── templates/              [source of truth for templates]
-├── skills/                 [source files for sb-* skill loaders]
-├── commands/               [source files for sb-* command loaders]
-├── rules/                  [sb-* rule files, copied verbatim into .claude/rules/]
-├── claude-mds/             [source files for managed CLAUDE.mds; filename encodes install destination]
-├── docs/                   [architecture, conventions, user-facing docs]
-├── ideas/                  [user-facing intent docs (e.g., home-dashboard.md); not installed]
+├── install/                [installer internals: cli.py, manifest.py, markers.py, module-manifest.json, mode handlers]
+├── para/                   [PARA module — vault structure, periodic notes, life planner]
+│   ├── commands/           [sb-* command loader sources]
+│   ├── rules/              [sb-* rule files, copied verbatim into .claude/rules/]
+│   ├── skills/             [sb-* skill loader sources]
+│   ├── workflows/          [sb-{name}/ step files + data, scripts, templates]
+│   ├── claude-mds/         [managed CLAUDE.md sources for PARA structure]
+│   ├── templates/          [periodic-notes, work-log, context, subfolder seeds]
+│   ├── ideas/              [user-facing intent docs (e.g., home-dashboard.md); not installed]
+│   └── docs/               [PARA-scoped reference docs, e.g. obsidian-markdown/]
+├── wiki/                   [wiki module — ingest/query/lint/tutor; mirrors the module layout]
+│   ├── claude-mds/wiki.md  [managed CLAUDE.md source for {wiki_root}/CLAUDE.md]
+│   ├── scripts/            [wiki tool layer: sb-wiki-search.py, lint + capture scripts]
+│   └── docs/wiki-schema.md [wiki schema reference]
+├── finance/                [finance module — bookkeeper/investor agents, companions, dashboard]
+│   ├── scripts/            [finance tool layer + registry tools-index.md]
+│   ├── wiki-ext/           [investment wiki extension data files]
+│   ├── dashboard/          [finance dashboard assets]
+│   └── ...                 [commands/, rules/, skills/, workflows/, templates/, docs/ mirror the module layout]
+├── docs/                   [repo-level architecture, conventions, hooks reference]
+├── hooks/                  [git hooks shipped for manual activation (pre-commit-doc-currency)]
 ├── CLAUDE.md               [repo's own agent context]
 ├── README.md
 ├── LICENSE                 [MIT]
