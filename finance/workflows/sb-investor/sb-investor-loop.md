@@ -30,7 +30,7 @@ The investor writes ONLY to:
 | `.user/finance/investor/` (its own workspace, incl. `research-policy.md`, `source-policy.md`, `log.md`) | Directly, present-and-confirm for policy content (see § B6 Policy thin mode) |
 | Wiki thesis pages | ONLY by invoking `sb-fin-create-thesis` (the sole authority on thesis-page structure) — the agent NEVER hand-writes a thesis page |
 | Wiki decision pages | ONLY by invoking `sb-fin-create-decision` — the agent NEVER hand-writes a decision page |
-| Wiki `raw/` captures | ONLY through the `investment_source_capture` tool — the agent NEVER hand-writes a raw source file |
+| Wiki `raw/` captures | ONLY through the `sb-wiki-capture-source` tool — the agent NEVER hand-writes a raw source file |
 
 Any write outside this table is out-of-structure → run Rule A. The agent reasons; scribes and tools persist (delegate-not-replace).
 
@@ -147,7 +147,7 @@ Fires whenever THIS session registers a `blocked` or `gated_pending_access` sour
 format: PDF expected → lands as raw/{origin}/{title-slug}.pdf (--title required; --pdf-text adds a text companion)
         page/text  → lands date-prefixed in raw/{origin}/
 → Save it anywhere and give me the path. I re-run:
-  investment_source_capture --mode manual --manual-file <path> --origin {origin} --title "{title}" [--pdf-text]
+  sb-wiki-capture-source --mode manual --manual-file <path> --origin {origin} --title "{title}" [--pdf-text]
 ```
 
 Render the `format:` line for the source's expected format only. A session that ends with an in-session `blocked`/`gated_pending_access` row presented WITHOUT this block has violated this rule. `{wiki_root}/source-queue.md` remains the durable record (its `required_user_action` field carries the same how-to); this block is the CHAT-time surfacing that stops the user having to ask "give me the links to capture manually".

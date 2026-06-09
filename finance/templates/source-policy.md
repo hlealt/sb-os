@@ -22,7 +22,7 @@ The agent operates under these constraints regardless of any user configuration:
 
 ## Capture User-Agent
 
-The `investment_source_capture` tool sends this UA on every fetch (`--user-agent`). Fair-access endpoints (SEC EDGAR) 403 non-contact UAs — keep this contact-bearing (name + email).
+The `sb-wiki-capture-source` tool sends this UA on every fetch (`--user-agent`). Fair-access endpoints (SEC EDGAR) 403 non-contact UAs — keep this contact-bearing (name + email).
 
 ```
 _Fill in: Your Name your-email@example.com_

@@ -502,7 +502,7 @@ expected_inputs: --entity wiki entity page path (must exist; kind company|asset|
 outputs: Metadata JSON only to stdout (entity, kind, dry_run, written {xbrl/structured/llm}, upgraded, skipped, rejected + reasons, conflicts, vocab_proposals, lane1_mode) — never page or raw content. Writes ONLY the ## Financials table block of the target entity page (creates the section at the deterministic position when absent; canonical row sort; upsert key metric+period_type+period_end+source; same key+value with stronger method upgrades in place xbrl>structured>llm>manual; value conflicts surfaced, NEVER written; values re-parsed from the cited raw with scale/sign resolution, ROUND_HALF_UP). Exit 0 = success (rejects/conflicts are surfaced state); exit 1 = usage/validation error.
 canonical_reader_writer: writes the ## Financials section of {wiki_root}/wiki/entities/** pages; reads {wiki_root}/raw/{origin}/** (incl. *-xbrl-companyfacts.json data artifacts)
 dry_run: available
-last_validated: 2026-06-04
+last_validated: 2026-06-09
 ```
 
 ```yaml

@@ -60,7 +60,7 @@ Every PARA folder has a managed `CLAUDE.md` your agent reads to route content. M
 
 ### Finance module optional dependencies
 
-The finance module's `investment_source_capture` tool uses lazy optional dependencies for article extraction. Install these in the vault's Python environment for best results:
+The `sb-wiki-capture-source` tool (in the wiki module) uses lazy optional dependencies for article extraction. Install these in the vault's Python environment for best results:
 
 | Package | Role |
 |---|---|

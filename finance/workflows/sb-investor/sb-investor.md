@@ -52,4 +52,4 @@ WORKFLOW_DIR = 3-resources/tools/sb-os/finance/workflows/sb-investor
 - Infer intent — NEVER present a numbered "which mode?" menu.
 - The `sb-investor-loop.md` invariants and per-step Investor Checkpoint apply on EVERY turn — never skip the checkpoint, never silently execute an out-of-structure request (Rule A), never skip a required policy load.
 - NEVER mutate ledgers, `portfolio.json`, or the dashboard, and NEVER read position data outside a registered read tool — both are out-of-structure (run Rule A in `sb-investor-loop.md`).
-- The agent reasons; scribes (`sb-fin-create-thesis`, `sb-fin-create-decision`) and tools (`investment_source_capture`, the read tools) persist — the agent NEVER hand-writes a thesis, decision, or raw source file.
+- The agent reasons; scribes (`sb-fin-create-thesis`, `sb-fin-create-decision`) and tools (`sb-wiki-capture-source`, the read tools) persist — the agent NEVER hand-writes a thesis, decision, or raw source file.

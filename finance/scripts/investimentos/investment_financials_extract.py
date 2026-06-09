@@ -72,7 +72,7 @@ from typing import Optional
 
 
 # ---------------------------------------------------------------------------
-# Vault-root / wiki-root resolution (mirrors investment_source_capture.py)
+# Vault-root / wiki-root resolution (mirrors sb-wiki-capture-source.py)
 # ---------------------------------------------------------------------------
 
 def _find_vault_root(start: Path) -> Path:

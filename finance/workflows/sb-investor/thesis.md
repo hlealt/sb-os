@@ -161,7 +161,7 @@ The refuter returns its § Output schema verbatim — one `overturned | weakened
 
 | Item | Rule |
 |------|------|
-| File not yet in `raw/{origin}/` | Route via `investment_source_capture --mode manual --manual-file <path>` — the SOLE raw writer. When origin is ambiguous, CONFIRM with the user before calling the tool. |
+| File not yet in `raw/{origin}/` | Route via `sb-wiki-capture-source --mode manual --manual-file <path>` — the SOLE raw writer. When origin is ambiguous, CONFIRM with the user before calling the tool. |
 | Image at a local path | Move it into `{wiki_root}/raw/_assets/` with a descriptive slug (e.g. `{entity}-{topic}-{date}.png`). Embed as `![[slug.png]]` in place of the original path reference. Flag uncertain placement explicitly. |
 
 On `[S]`, invoke `sb-fin-create-thesis` in its **investor-orchestrated mode** (Skill tool). Pass these inputs; the scribe runs its steps without re-prompting:

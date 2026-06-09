@@ -74,7 +74,7 @@ Captured XBRL companyfacts JSONs (`YYYY-MM-DD-{entity}-xbrl-companyfacts.json`, 
 
 ## Source-Lifecycle Rules (`source-queue.md`)
 
-Scope: `{wiki_root}/source-queue.md` — the investment source queue, a root-level sibling of `log.md` (frontmatter `type: source-queue` per `./frontmatter-schemas.ext.md`). It holds the open lifecycle states of investment sources that could not complete the capture→ingest path: `gated_pending_access` (paywalled/login — awaits user action) and `blocked` (fetch failed after both tool methods — retry candidate). The `investment_source_capture` tool is the SOLE writer of entries; lint's only write is the rule-3 prune; the user retires a source by deleting its entry.
+Scope: `{wiki_root}/source-queue.md` — the investment source queue, a root-level sibling of `log.md` (frontmatter `type: source-queue` per `./frontmatter-schemas.ext.md`). It holds the open lifecycle states of investment sources that could not complete the capture→ingest path: `gated_pending_access` (paywalled/login — awaits user action) and `blocked` (fetch failed after both tool methods — retry candidate). The `sb-wiki-capture-source` tool is the SOLE writer of entries; lint's only write is the rule-3 prune; the user retires a source by deleting its entry.
 
 File absent → no sources are queued; skip these rules silently. Present but malformed (unreadable, or no parseable H2 entries) → WARN, skip these rules, NEVER abort the lint. Mirrors the `questions.md` skip-if-absent contract.
 
