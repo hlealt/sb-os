@@ -51,7 +51,7 @@ The resolution treats both workflow roots identically: only the path relative to
 
 | Workflow file | Path relative to root | Resolved YAML (assuming `user_context_root: .user/context/`) |
 |---------------|----------------------|---------------------------------------------------------------|
-| `{sb_os_path}/para/workflows/sb-tutor/sb-tutor.md` | `sb-tutor/sb-tutor.md` | `.user/context/sb-tutor/sb-tutor.yaml` |
+| `{sb_os_path}/wiki/workflows/sb-tutor/sb-tutor.md` | `sb-tutor/sb-tutor.md` | `.user/context/sb-tutor/sb-tutor.yaml` |
 | `.user/workflows/accountant/accountant.md` | `accountant/accountant.md` | `.user/context/accountant/accountant.yaml` |
 | `.user/workflows/sb-life-planner/weekly-review/step-04-calendar.md` | `sb-life-planner/weekly-review/step-04-calendar.md` | `.user/context/sb-life-planner/weekly-review/step-04-calendar.yaml` |
 

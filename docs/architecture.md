@@ -135,7 +135,7 @@ Rules are **copied** from a module's `rules/` folder (`sb-os/{module}/rules/` �
 
 ### Module Layout
 
-Shippable components live under module folders at the repo root: `para/` (PARA-aligned components — vault structure, periodic-notes templates, life planner, tutor), `wiki/` (knowledge-base layer), and `finance/` (personal-finance system — bookkeeper/investor agents, companion workflows, tool scripts, dashboard). Each module folder follows the same internal layout (`commands/`, `rules/`, `skills/`, `workflows/`, plus module-specific folders such as `claude-mds/`, `docs/`, `templates/`, `scripts/`). The manifest's `module` field on each component encodes which folder owns its source.
+Shippable components live under module folders at the repo root: `para/` (PARA-aligned components — vault structure, periodic-notes templates, life planner), `wiki/` (knowledge-base layer — wiki ingest/query/lint, tutor), and `finance/` (personal-finance system — bookkeeper/investor agents, companion workflows, tool scripts, dashboard). Each module folder follows the same internal layout (`commands/`, `rules/`, `skills/`, `workflows/`, plus module-specific folders such as `claude-mds/`, `docs/`, `templates/`, `scripts/`). The manifest's `module` field on each component encodes which folder owns its source.
 
 ### Managed CLAUDE.md sources
 

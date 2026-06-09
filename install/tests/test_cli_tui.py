@@ -28,24 +28,20 @@ class TestCliTuiSelection(unittest.TestCase):
                 "description": "Base system",
                 "always_installed": True,
             },
-            "learning": {
-                "description": "Learning workflows",
-            },
             "wiki": {
-                "description": "Knowledge base",
+                "description": "Knowledge base (includes tutor)",
                 "atomic": True,
             },
         }
 
-        with patch("install.tui.checkbox", return_value=[0, 2]) as checkbox:
+        with patch("install.tui.checkbox", return_value=[0, 1]) as checkbox:
             selected = cli.prompt_modules(modules, previously_selected=["wiki"])
 
         self.assertEqual(selected, ["core", "wiki"])
         _, items = checkbox.call_args.args
         self.assertTrue(items[0]["disabled"])
         self.assertTrue(items[0]["selected"])
-        self.assertFalse(items[1]["selected"])
-        self.assertTrue(items[2]["selected"])
+        self.assertTrue(items[1]["selected"])
 
     def test_prompt_module_components_returns_unchecked_targets(self) -> None:
         modules = {

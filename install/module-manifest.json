@@ -152,6 +152,12 @@
           "module": "wiki",
           "source_template": "wiki/commands/sb-wiki-query.md",
           "target": ".claude/commands/sb-wiki-query.md"
+        },
+        {
+          "name": "sb-tutor",
+          "module": "wiki",
+          "source_template": "wiki/commands/sb-tutor.md",
+          "target": ".claude/commands/sb-tutor.md"
         }
       ],
       "rules": []
@@ -169,21 +175,6 @@
         }
       ],
       "commands": [],
-      "rules": []
-    },
-    "learning": {
-      "description": "Tutor persona for guided learning sessions.",
-      "always_installed": false,
-      "atomic": false,
-      "skills": [],
-      "commands": [
-        {
-          "name": "sb-tutor",
-          "module": "para",
-          "source_template": "para/commands/sb-tutor.md",
-          "target": ".claude/commands/sb-tutor.md"
-        }
-      ],
       "rules": []
     },
     "finance": {

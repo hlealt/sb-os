@@ -19,7 +19,7 @@ If no row matches, the handler falls back to: read `{sb_os_path}/CLAUDE.md`, `{s
 | `routing`, `capture`, `where does X go` | `{sb_os_path}/para/claude-mds/root.md` |
 | `agents`, `claude code`, `commands`, `skills`, `workflows` | `{sb_os_path}/docs/architecture.md`, `{sb_os_path}/CLAUDE.md` |
 | `life-planner`, `sb-life-planner`, `weekly review`, `monthly review`, `quarterly review`, `objectives`, `goals`, `traps`, `intentions`, `review tier` | `{sb_os_path}/para/workflows/sb-life-planner/sb-life-planner.md`, `{sb_os_path}/para/workflows/sb-life-planner/monthly-review.md`, `{sb_os_path}/para/workflows/sb-life-planner/quarterly-review.md`, `{sb_os_path}/para/workflows/sb-onboarder/data/concept-primer.md` (Life planner section) |
-| `tutor`, `learning sessions` | `{sb_os_path}/para/workflows/sb-tutor/sb-tutor.md` |
+| `tutor`, `learning sessions` | `{sb_os_path}/wiki/workflows/sb-tutor/sb-tutor.md` |
 | `archivist`, `work-log` | `{sb_os_path}/para/workflows/sb-archivist/sb-archivist.md` |
 | `rbtv`, `business plugin`, `coaching` | `{sb_os_path}/README.md` (RBTV section, if present) — fallback: tell user to visit RBTV repo |
 | `marker block`, `managed claude.md` | `{sb_os_path}/docs/architecture.md` |
