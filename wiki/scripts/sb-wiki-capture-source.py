@@ -1,7 +1,7 @@
-"""investment_source_capture.py — Save an approved URL to {wiki_root}/raw/{origin}/.
+"""sb-wiki-capture-source.py — Save an approved URL to {wiki_root}/raw/{origin}/.
 
 CLI:
-    python investment_source_capture.py --url URL --origin ORIGIN
+    python sb-wiki-capture-source.py --url URL --origin ORIGIN
         [--mode markdown|html-archive|both|browser|manual]
         [--title TITLE]
         [--thesis THESIS_SLUG]
@@ -11,7 +11,14 @@ CLI:
         [--no-curl-fallback]
         [--ext md|html|json]
         [--pdf-text]
+        [--queue-file NAME]
         [--dry-run]
+
+--queue-file NAME selects the source-lifecycle queue file (under {wiki_root}/)
+that gated/blocked rows are appended to. Default is source-queue.md — the
+byte-identical legacy queue (finance callers omit the flag and behave exactly as
+before). A separate value (e.g. study-queue.md) routes lifecycle rows to a
+distinct queue without changing any other capture behavior or output path.
 
 --ext overrides the saved-file extension for markdown mode and manual/browser
 saves (default md). Use --ext json to capture XBRL companyfacts JSON data
@@ -864,16 +871,25 @@ def capture(
     curl_fallback: bool = True,
     ext: str = "md",
     pdf_text: bool = False,
+    queue_filename: str = QUEUE_FILENAME,
 ) -> dict:
     """Capture a source and return a metadata summary dict.
 
     ``ext`` overrides the saved-file extension for the markdown-mode save and the
     manual/browser save (default "md" — byte-identical to legacy behavior).
     Used to capture XBRL companyfacts JSON data artifacts as ``.json``.
-    The html-archive ``.html`` save is unaffected by ``ext`` (by design)."""
+    The html-archive ``.html`` save is unaffected by ``ext`` (by design).
+
+    ``queue_filename`` names the source-lifecycle queue file (under
+    ``{wiki_root}/``) that gated/blocked rows are appended to. It defaults to
+    ``QUEUE_FILENAME`` ("source-queue.md") — the byte-identical legacy default —
+    so a caller that does not override it writes the exact same queue path and
+    format as before. A non-default value (e.g. "study-queue.md") routes the
+    lifecycle row to a SEPARATE queue file without otherwise changing the
+    capture path or output; only the queue destination differs."""
     wiki = _wiki_root(vault_root)
     raw_dir = wiki / "raw" / origin
-    queue_path = wiki / QUEUE_FILENAME
+    queue_path = wiki / queue_filename
 
     # Gated path — register only, no fetch
     if gated:
@@ -1141,7 +1157,16 @@ def _build_parser() -> argparse.ArgumentParser:
              "grep-based ingest verification. Ignored for non-PDF captures.",
     )
     p.add_argument("--gated", action="store_true", help="Declare source gated (no fetch; register only)")
-    p.add_argument("--gated-why", default="(not specified)", help="Why this source matters (for source-queue.md)")
+    p.add_argument("--gated-why", default="(not specified)", help="Why this source matters (for the source-lifecycle queue)")
+    p.add_argument(
+        "--queue-file",
+        default=QUEUE_FILENAME,
+        help="Filename (under {wiki_root}/) of the source-lifecycle queue that "
+             "gated/blocked rows are appended to (default source-queue.md — the "
+             "byte-identical legacy queue; finance callers omit this flag). Pass "
+             "a separate name (e.g. study-queue.md) to route lifecycle rows to a "
+             "distinct queue without changing any other capture behavior.",
+    )
     return p
 
 
@@ -1197,6 +1222,7 @@ def main(argv: list[str] | None = None) -> int:
         curl_fallback=not args.no_curl_fallback,
         ext=args.ext,
         pdf_text=args.pdf_text,
+        queue_filename=args.queue_file,
     )
 
     # Clean up stdin temp file if used.
