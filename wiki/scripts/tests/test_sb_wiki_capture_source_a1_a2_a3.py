@@ -36,17 +36,15 @@ import pytest
 # ---------------------------------------------------------------------------
 _TESTS_DIR = Path(__file__).resolve().parent
 _SCRIPTS_DIR = _TESTS_DIR.parent
-_INVESTIMENTOS_DIR = _SCRIPTS_DIR.parent / "investimentos"
 
-for _p in (_SCRIPTS_DIR, _INVESTIMENTOS_DIR):
-    if str(_p) not in sys.path:
-        sys.path.insert(0, str(_p))
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
 
-_MOD_KEY = "investment_source_capture"
+_MOD_KEY = "sb_wiki_capture_source"
 if _MOD_KEY in sys.modules:
     _mod = sys.modules[_MOD_KEY]
 else:
-    _MOD_PATH = _INVESTIMENTOS_DIR / "investment_source_capture.py"
+    _MOD_PATH = _SCRIPTS_DIR / "sb-wiki-capture-source.py"
     _spec = importlib.util.spec_from_file_location(_MOD_KEY, _MOD_PATH)
     _mod = importlib.util.module_from_spec(_spec)
     sys.modules[_MOD_KEY] = _mod

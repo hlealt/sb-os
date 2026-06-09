@@ -20,7 +20,7 @@ Coverage (TDD — written before the implementation):
   - dry-run writes nothing byte-for-byte;
   - 7-column schema conformance of the written table.
 
-Import-by-file-path pattern mirrors test_investment_source_capture.py.
+Import-by-file-path pattern mirrors test_sb_wiki_capture_source.py.
 """
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ from pathlib import Path
 import pytest
 
 # ---------------------------------------------------------------------------
-# Import the tool by file path (matches test_investment_source_capture.py)
+# Import the tool by file path (matches test_sb_wiki_capture_source.py)
 # ---------------------------------------------------------------------------
 _TESTS_DIR = Path(__file__).resolve().parent
 _SCRIPTS_DIR = _TESTS_DIR.parent

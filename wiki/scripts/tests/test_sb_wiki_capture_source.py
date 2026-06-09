@@ -32,20 +32,18 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # ---------------------------------------------------------------------------
-# Import the tool by file path (matches pattern of other investimentos tests)
+# Import the tool by file path (tool is one directory up in wiki/scripts/)
 # ---------------------------------------------------------------------------
 _TESTS_DIR = Path(__file__).resolve().parent
 _SCRIPTS_DIR = _TESTS_DIR.parent
-_INVESTIMENTOS_DIR = _SCRIPTS_DIR.parent / "investimentos"
 
-for _p in (_SCRIPTS_DIR, _INVESTIMENTOS_DIR):
-    if str(_p) not in sys.path:
-        sys.path.insert(0, str(_p))
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
 
-_MOD_PATH = _INVESTIMENTOS_DIR / "investment_source_capture.py"
-_spec = importlib.util.spec_from_file_location("investment_source_capture", _MOD_PATH)
+_MOD_PATH = _SCRIPTS_DIR / "sb-wiki-capture-source.py"
+_spec = importlib.util.spec_from_file_location("sb_wiki_capture_source", _MOD_PATH)
 _mod = importlib.util.module_from_spec(_spec)
-sys.modules["investment_source_capture"] = _mod
+sys.modules["sb_wiki_capture_source"] = _mod
 _spec.loader.exec_module(_mod)  # type: ignore
 
 capture = _mod.capture
@@ -538,8 +536,8 @@ def test_httpx_fails_curl_fallback_succeeds(tmp_path):
     sentinel = "CURL_FETCHED_BODY_MUST_NOT_APPEAR_IN_SUMMARY"
 
     with patch("httpx.get", side_effect=Exception("403 Forbidden")), \
-         patch("investment_source_capture.shutil.which", return_value=_CURL_BIN), \
-         patch("investment_source_capture.subprocess.run",
+         patch("sb_wiki_capture_source.shutil.which", return_value=_CURL_BIN), \
+         patch("sb_wiki_capture_source.subprocess.run",
                return_value=_mock_curl_success(sentinel, title_tag="Curl Rescue")) as mock_run:
         result = capture(
             url="https://bot-walled.example.com/report",
@@ -573,8 +571,8 @@ def test_curl_fallback_uses_override_user_agent(tmp_path):
     contact_ua = "Henri Example contact@example.com"
 
     with patch("httpx.get", side_effect=Exception("connection reset")), \
-         patch("investment_source_capture.shutil.which", return_value=_CURL_BIN), \
-         patch("investment_source_capture.subprocess.run",
+         patch("sb_wiki_capture_source.shutil.which", return_value=_CURL_BIN), \
+         patch("sb_wiki_capture_source.subprocess.run",
                return_value=_mock_curl_success("Body", title_tag="UA Carry")) as mock_run:
         result = capture(
             url="https://www.sec.gov/some-filing",
@@ -598,8 +596,8 @@ def test_httpx_and_curl_both_fail_returns_blocked(tmp_path):
     vault = _make_vault(tmp_path)
 
     with patch("httpx.get", side_effect=Exception("403 Forbidden")), \
-         patch("investment_source_capture.shutil.which", return_value=_CURL_BIN), \
-         patch("investment_source_capture.subprocess.run",
+         patch("sb_wiki_capture_source.shutil.which", return_value=_CURL_BIN), \
+         patch("sb_wiki_capture_source.subprocess.run",
                return_value=_mock_curl_failure()):
         result = capture(
             url="https://hard-wall.example.com/report",
@@ -623,8 +621,8 @@ def test_curl_binary_missing_degrades_to_blocked(tmp_path):
     vault = _make_vault(tmp_path)
 
     with patch("httpx.get", side_effect=Exception("403 Forbidden")), \
-         patch("investment_source_capture.shutil.which", return_value=None), \
-         patch("investment_source_capture.subprocess.run") as mock_run:
+         patch("sb_wiki_capture_source.shutil.which", return_value=None), \
+         patch("sb_wiki_capture_source.subprocess.run") as mock_run:
         result = capture(
             url="https://example.com/x",
             origin="example",
@@ -646,7 +644,7 @@ def test_curl_fallback_disabled_is_honored(tmp_path):
     vault = _make_vault(tmp_path)
 
     with patch("httpx.get", side_effect=Exception("403 Forbidden")), \
-         patch("investment_source_capture.subprocess.run") as mock_run:
+         patch("sb_wiki_capture_source.subprocess.run") as mock_run:
         result = capture(
             url="https://example.com/x",
             origin="example",
@@ -669,7 +667,7 @@ def test_cli_no_curl_fallback_flag(tmp_path):
     vault = _make_vault(tmp_path)
 
     with patch("httpx.get", side_effect=Exception("403 Forbidden")), \
-         patch("investment_source_capture.subprocess.run") as mock_run:
+         patch("sb_wiki_capture_source.subprocess.run") as mock_run:
         exit_code = main([
             "--url", "https://example.com/x",
             "--origin", "example",
@@ -710,8 +708,8 @@ def test_blocked_both_fail_registers_in_queue(tmp_path):
     vault = _make_vault(tmp_path)
 
     with patch("httpx.get", side_effect=Exception("403 Forbidden")), \
-         patch("investment_source_capture.shutil.which", return_value=_CURL_BIN), \
-         patch("investment_source_capture.subprocess.run",
+         patch("sb_wiki_capture_source.shutil.which", return_value=_CURL_BIN), \
+         patch("sb_wiki_capture_source.subprocess.run",
                return_value=_mock_curl_failure()):
         result = capture(
             url="https://hard-wall.example.com/report",
@@ -767,8 +765,8 @@ def test_blocked_same_url_never_duplicates(tmp_path):
 
     for _ in range(2):
         with patch("httpx.get", side_effect=Exception("403 Forbidden")), \
-             patch("investment_source_capture.shutil.which", return_value=_CURL_BIN), \
-             patch("investment_source_capture.subprocess.run",
+             patch("sb_wiki_capture_source.shutil.which", return_value=_CURL_BIN), \
+             patch("sb_wiki_capture_source.subprocess.run",
                    return_value=_mock_curl_failure()):
             result = capture(
                 url="https://hard-wall.example.com/report",
@@ -798,8 +796,8 @@ def test_gated_then_blocked_same_url_both_register(tmp_path):
         vault_root=vault, dry_run=False, gated=True, gated_why="test",
     )
     with patch("httpx.get", side_effect=Exception("403 Forbidden")), \
-         patch("investment_source_capture.shutil.which", return_value=_CURL_BIN), \
-         patch("investment_source_capture.subprocess.run",
+         patch("sb_wiki_capture_source.shutil.which", return_value=_CURL_BIN), \
+         patch("sb_wiki_capture_source.subprocess.run",
                return_value=_mock_curl_failure()):
         result = capture(
             url=url, origin="example", mode="markdown", title="", thesis=None,
@@ -837,8 +835,8 @@ def test_blocked_dry_run_does_not_register(tmp_path):
     vault = _make_vault(tmp_path)
 
     with patch("httpx.get", side_effect=Exception("403 Forbidden")), \
-         patch("investment_source_capture.shutil.which", return_value=_CURL_BIN), \
-         patch("investment_source_capture.subprocess.run",
+         patch("sb_wiki_capture_source.shutil.which", return_value=_CURL_BIN), \
+         patch("sb_wiki_capture_source.subprocess.run",
                return_value=_mock_curl_failure()):
         result = capture(
             url="https://hard-wall.example.com/report",
@@ -861,7 +859,7 @@ def test_gated_never_invokes_curl(tmp_path):
     vault = _make_vault(tmp_path)
 
     with patch("httpx.get") as mock_get, \
-         patch("investment_source_capture.subprocess.run") as mock_run:
+         patch("sb_wiki_capture_source.subprocess.run") as mock_run:
         result = capture(
             url="https://paywalled-site.com/report",
             origin="paywalled",
@@ -1203,7 +1201,7 @@ def test_manual_pdf_text_companion_written(tmp_path):
     pdf = _make_pdf(tmp_path)
     body = "Health spending by age group. " * 20  # > _PDF_TEXT_MIN_CHARS
 
-    with patch("investment_source_capture._extract_pdf_text", return_value=(body, "")):
+    with patch("sb_wiki_capture_source._extract_pdf_text", return_value=(body, "")):
         result = capture(
             url="https://example.com/report.pdf",
             origin="example",
@@ -1233,7 +1231,7 @@ def test_manual_pdf_text_near_empty_warns_no_companion(tmp_path):
     vault = _make_vault(tmp_path)
     pdf = _make_pdf(tmp_path)
 
-    with patch("investment_source_capture._extract_pdf_text", return_value=("scan", "")):
+    with patch("sb_wiki_capture_source._extract_pdf_text", return_value=("scan", "")):
         result = capture(
             url="https://example.com/report.pdf",
             origin="example",
@@ -1259,7 +1257,7 @@ def test_manual_pdf_text_extraction_failure_never_blocks_capture(tmp_path):
     vault = _make_vault(tmp_path)
     pdf = _make_pdf(tmp_path)
 
-    with patch("investment_source_capture._extract_pdf_text",
+    with patch("sb_wiki_capture_source._extract_pdf_text",
                return_value=("", "pypdf extraction failed: boom")):
         result = capture(
             url="https://example.com/report.pdf",
@@ -1365,7 +1363,7 @@ def test_manual_md_legacy_json_shape_unchanged(tmp_path):
 
 def test_title_slug_conformance_examples():
     # The four documented examples from naming-convention.md § Title-slug algorithm.
-    _title_slug = sys.modules["investment_source_capture"]._title_slug
+    _title_slug = sys.modules["sb_wiki_capture_source"]._title_slug
     assert _title_slug("International AI Safety Report 2026") == \
         "international-ai-safety-report-2026"
     assert _title_slug("You Only Look Once: Unified, Real-Time Object Detection") == \
@@ -1381,7 +1379,7 @@ def test_cli_pdf_text_flag_end_to_end(tmp_path):
     pdf = _make_pdf(tmp_path)
     body = "Extracted body text. " * 20
 
-    with patch("investment_source_capture._extract_pdf_text", return_value=(body, "")):
+    with patch("sb_wiki_capture_source._extract_pdf_text", return_value=(body, "")):
         exit_code = main([
             "--url", "https://www.cms.gov/files/highlights.pdf",
             "--origin", "cms",
@@ -1411,3 +1409,88 @@ def test_cli_pdf_missing_title_exits_one(tmp_path):
     ])
 
     assert exit_code == 1
+
+
+# ---------------------------------------------------------------------------
+# (k) --queue-file / queue_filename: source-lifecycle row routes to the named
+#     queue file — DEFAULT writes source-queue.md; override writes a different
+#     file (e.g. study-queue.md) without affecting anything else.
+# ---------------------------------------------------------------------------
+
+def test_queue_filename_default_writes_source_queue(tmp_path):
+    """Default (no queue_filename kwarg) → lifecycle row written to source-queue.md."""
+    vault = _make_vault(tmp_path)
+
+    result = capture(
+        url="https://paywalled-site.com/default-queue",
+        origin="paywalled",
+        mode="markdown",
+        title="Default Queue Test",
+        thesis=None,
+        vault_root=vault,
+        dry_run=False,
+        gated=True,
+        gated_why="behind paywall",
+    )
+
+    assert result["state"] == "gated_pending_access"
+    assert result["queue"] == "registered"
+    queue_path = Path(result["queue_path"])
+    assert queue_path.name == "source-queue.md"
+    assert queue_path == vault / "knowledge-base" / "source-queue.md"
+    assert queue_path.exists()
+    # The alternate queue file must NOT have been created
+    assert not (vault / "knowledge-base" / "study-queue.md").exists()
+
+
+def test_queue_filename_override_writes_named_file(tmp_path):
+    """queue_filename='study-queue.md' → lifecycle row written to study-queue.md, not source-queue.md."""
+    vault = _make_vault(tmp_path)
+
+    result = capture(
+        url="https://paywalled-site.com/study-queue",
+        origin="paywalled",
+        mode="markdown",
+        title="Study Queue Test",
+        thesis=None,
+        vault_root=vault,
+        dry_run=False,
+        gated=True,
+        gated_why="study resource behind paywall",
+        queue_filename="study-queue.md",
+    )
+
+    assert result["state"] == "gated_pending_access"
+    assert result["queue"] == "registered"
+    queue_path = Path(result["queue_path"])
+    assert queue_path.name == "study-queue.md"
+    assert queue_path == vault / "knowledge-base" / "study-queue.md"
+    assert queue_path.exists()
+    content = queue_path.read_text(encoding="utf-8")
+    assert "## gated_pending_access — " in content
+    assert "- url: https://paywalled-site.com/study-queue" in content
+    # The default source-queue.md must NOT have been created
+    assert not (vault / "knowledge-base" / "source-queue.md").exists()
+
+
+def test_queue_filename_override_cli_flag(tmp_path):
+    """--queue-file study-queue.md routes the queue entry to study-queue.md."""
+    vault = _make_vault(tmp_path)
+
+    exit_code = main([
+        "--url", "https://paywalled-site.com/cli-study-queue",
+        "--origin", "paywalled",
+        "--mode", "markdown",
+        "--title", "CLI Study Queue",
+        "--gated",
+        "--gated-why", "cli study resource",
+        "--queue-file", "study-queue.md",
+        "--vault-root", str(vault),
+    ])
+
+    assert exit_code == 0
+    study_queue = vault / "knowledge-base" / "study-queue.md"
+    assert study_queue.exists()
+    assert "## gated_pending_access — " in study_queue.read_text(encoding="utf-8")
+    # The default queue file must NOT have been created
+    assert not (vault / "knowledge-base" / "source-queue.md").exists()
