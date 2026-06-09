@@ -42,6 +42,20 @@ After both gates: continue to the standard flow.
 | C3 — Generic questions | General topics not covered by any context file → answer from own knowledge. Never force-fit files |
 | C4 — File-grounded | When a file IS relevant, ground teaching in its content. Cite specific concepts. If file contradicts general knowledge, prefer the file and flag the discrepancy |
 | C5 — Transparency | When using a context file, state once at start: "I'm using [brief description] as reference." Do not repeat in subsequent pills for same topic. Never cite filenames — refer to content by subject |
+| C6 — Wiki is a context source | The student's wiki is a first-class context source under C1–C5. The student's pages take the place of a "file" in C4/C5: when grounded teaching draws on a wiki page, ground in and cite it BY SUBJECT (C5), NEVER its filename. Apply the Wiki Grounding Procedure below whenever a subject is picked (after the R3 diagnosis) or brought mid-lesson, BEFORE composing the grounded pill |
+| C7 — Threshold-gated grounding | Ground the lesson in a wiki page ONLY when the top hit's relevance score clears the grounding bar. Default bar: ground when the top hit scores at or above the helper's mid-range. The bar is empirical and tunable — state once to the student that grounding strength can be tuned, never expose raw scores in chat |
+| C8 — Below-threshold / miss path | When the search returns only hits below the bar, or no hit, teach from general knowledge with NO fabricated citation. NEVER invent a page or attribute content to the wiki that the search did not return. A miss is a normal outcome, not an error |
+| C9 — Multiple strong hits | When more than one hit clears the bar, ground in the single most relevant page; other clearing pages MAY be referenced by subject (C5) but MUST NOT be cited as the grounding source |
+
+### Wiki Grounding Procedure
+
+Apply when C6 fires (subject picked after R3, or brought mid-lesson), BEFORE composing the grounded pill.
+
+1. **Detect finance extension.** Read `sb-os.json` at the vault root. Take `{sb_os_path}` from its `sb_os_path` field and `wiki_extensions` from its `wiki_extensions` field — never hardcode either result. If `wiki_extensions` contains `finance`, set `{types}` = `concept,entity,topic,source,thesis,decision`. Otherwise set `{types}` = `concept,entity,topic,source`. Behavior is identical either way — finance absent simply omits the two extra types.
+2. **Query the wiki.** Run `python {sb_os_path}/wiki/scripts/sb-wiki-search.py search "<subject>" --k 5 --type {types} --json`, passing the picked subject as the query string (the helper REQUIRES a query — it is NOT a no-query enumerator). The helper self-selects its search ladder (Voyage key → hybrid; absent → keyword FTS5).
+3. **Degrade on helper failure.** If the helper is missing or errors, degrade down the ladder to a grep over the wiki for the subject. NEVER hard-fail the lesson on a search problem — treat an unrecoverable search as a miss (C8).
+4. **Apply the threshold (C7).** Read the top hit's score. Top hit clears the bar ⇒ ground (step 5). Below the bar, or no hit ⇒ teach from general knowledge with no fabricated citation (C8). A below-threshold/miss outcome is the gap signal a later behavior consumes — do nothing further with it here.
+5. **Ground and cite by subject.** Ground the lesson in the clearing page's content, blended with R7 (simple language) and the injected learning profile. Cite it BY SUBJECT only (C5) — state once "I'm using [brief subject description] from your notes as reference." Apply C4: if the page contradicts general knowledge, prefer the page and flag the discrepancy. On multiple clearing hits, follow C9.
 
 ## Behavior Rules
 
