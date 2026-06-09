@@ -44,7 +44,7 @@ After both gates: continue to the standard flow.
 | C5 — Transparency | When using a context file, state once at start: "I'm using [brief description] as reference." Do not repeat in subsequent pills for same topic. Never cite filenames — refer to content by subject |
 | C6 — Wiki is a context source | The student's wiki is a first-class context source under C1–C5. The student's pages take the place of a "file" in C4/C5: when grounded teaching draws on a wiki page, ground in and cite it BY SUBJECT (C5), NEVER its filename. Apply the Wiki Grounding Procedure below whenever a subject is picked (after the R3 diagnosis) or brought mid-lesson, BEFORE composing the grounded pill |
 | C7 — Threshold-gated grounding | Ground the lesson in a wiki page ONLY when the top hit's relevance score clears the grounding bar. Default bar: ground when the top hit scores at or above the helper's mid-range. The bar is empirical and tunable — state once to the student that grounding strength can be tuned, never expose raw scores in chat |
-| C8 — Below-threshold / miss path | When the search returns only hits below the bar, or no hit, teach from general knowledge with NO fabricated citation. NEVER invent a page or attribute content to the wiki that the search did not return. A miss is a normal outcome, not an error |
+| C8 — Below-threshold / miss path | When the search returns only hits below the bar, or no hit, teach from general knowledge with NO fabricated citation. NEVER invent a page or attribute content to the wiki that the search did not return. A miss is a normal outcome, not an error. A miss is ALSO a wiki gap — after handling it under C8, ALWAYS run the Wiki Gap Handling Procedure below |
 | C9 — Multiple strong hits | When more than one hit clears the bar, ground in the single most relevant page; other clearing pages MAY be referenced by subject (C5) but MUST NOT be cited as the grounding source |
 
 ### Wiki Grounding Procedure
@@ -56,6 +56,18 @@ Apply when C6 fires (subject picked after R3, or brought mid-lesson), BEFORE com
 3. **Degrade on helper failure.** If the helper is missing or errors, degrade down the ladder to a grep over the wiki for the subject. NEVER hard-fail the lesson on a search problem — treat an unrecoverable search as a miss (C8).
 4. **Apply the threshold (C7).** Read the top hit's score. Top hit clears the bar ⇒ ground (step 5). Below the bar, or no hit ⇒ teach from general knowledge with no fabricated citation (C8). A below-threshold/miss outcome is the gap signal a later behavior consumes — do nothing further with it here.
 5. **Ground and cite by subject.** Ground the lesson in the clearing page's content, blended with R7 (simple language) and the injected learning profile. Cite it BY SUBJECT only (C5) — state once "I'm using [brief subject description] from your notes as reference." Apply C4: if the page contradicts general knowledge, prefer the page and flag the discrepancy. On multiple clearing hits, follow C9.
+
+### Wiki Gap Handling Procedure (R-c)
+
+Apply whenever the Wiki Grounding Procedure step 4 reports a below-threshold/miss outcome — that outcome IS the gap signal; this procedure is the later behavior C8 names that consumes it. NEVER re-derive the miss condition or re-query the wiki; reuse the step-4 result. Call the searched subject `<concept>` below.
+
+The floor (step 1) is UNCONDITIONAL — it ALWAYS runs on a gap, even when the user later declines research AND even when host web tooling is absent. The offer (step 2) NEVER auto-runs research; the tutor ALWAYS asks first.
+
+1. **Log the gap to questions.md (floor — always).** Resolve `{wiki_root}` from `sb-os.json` at the vault root (the `wiki_root` field) — never hardcode it. Append ONE entry to `{wiki_root}/questions.md` in this EXACT shape: an H2 `## [YYYY-MM-DD] <question>` (today's date in brackets; phrase `<question>` as the gap the lesson hit, e.g. "What is `<concept>` and how does it work?"), then a `relates:` line listing quoted wikilinks (`"[[<page>.md]]"`) to any wiki pages the gap touches — including any below-bar near-misses the step-4 search returned — or an empty list if none. This is a tutor-added entry: write NO `seeded-by:` field (that marks hand-added) and NO `answer:` field yet. If `{wiki_root}/questions.md` does not exist, create it with this entry as its first.
+2. **Offer research (owner-gated).** After the floor entry is written, ASK the student: "Want me to research sources on `<concept>` to add to your wiki?" Refer to the concept BY SUBJECT, never by any filename (C5). NEVER capture, fetch, or research before the student approves.
+3. **Decline ⇒ continue.** If the student declines (or does not want research now), the gap stays logged in `questions.md` and the lesson continues from general knowledge — the C8 miss path already routes teaching to general knowledge; keep that. Do nothing further with the gap.
+4. **Degrade on no web tooling.** If host web tooling is unavailable, degrade to the floor: the gap is still logged to `questions.md` (step 1) and the tutor tells the student research is unavailable right now. NEVER hard-fail the lesson over a missing web tool.
+5. **Approve ⇒ seam for the research leg.** A student approval is the entry point of the research → capture → auto-ingest → report leg (and the gated-source manual-capture handoff). That leg is defined elsewhere — do NOT perform it from this procedure; the approval branch is the seam a later behavior extends.
 
 ### No-Topic Menu Procedure
 
