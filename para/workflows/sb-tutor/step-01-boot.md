@@ -9,17 +9,29 @@ stepId: boot
 
 ## Bootstrap (first-run companion check)
 
-On invocation, before applying any other rule:
+On invocation, before applying any other rule. Resolve the profile YAML path the SAME way `.claude/rules/sb-workflow-context.md` resolves it — read `user_context_root` from `sb-os.json` at the vault root, then append this step file's workflow-relative path with `.md` swapped to `.yaml`: `{user_context_root}/sb-tutor/step-01-boot.yaml`. NEVER hardcode the `.user/context/...` literal — always resolve through `sb-os.json`. Call the resolved file `{profile_yaml}` below.
 
-1. Resolve `{user_context_root}` from `sb-os.json` at the vault root. Check if `{user_context_root}/sb-tutor/step-01-boot.yaml` exists.
-2. If it EXISTS: skip this section entirely. Do not read it here (the workflow-context rule loads it). Do not modify it under any circumstance.
-3. If it does NOT exist:
+This bootstrap has TWO independent first-run gates against `{profile_yaml}`. Run both, in order. Each writes a DISTINCT entry and is keyed on the PRESENCE OF ITS OWN ENTRY — never on mere file existence, because `{profile_yaml}` may already exist (carrying other entries) while this step's own entry is still absent.
+
+**Gate A — companion paths.** Keyed on the `Study topics fallback` / `Session summary destination` entries:
+
+1. If `{profile_yaml}` exists AND already contains a `Study topics fallback` or `Session summary destination` entry: Gate A is satisfied — skip to Gate B. Do not modify those entries under any circumstance.
+2. Otherwise (file absent, or present without either companion-path entry):
    a. Greet the student briefly and explain: "Before we start, I need to know two paths. These are saved once and reused on every future tutoring session."
    b. Ask: "Where should I look for study topics when you don't bring one? (Path to a markdown file, e.g., `2-areas/{your-area}/learning-topics.md`. If you don't have one yet, type `none` and I'll just ask you for the topic each time.)"
    c. Ask: "Where should I write session summaries when a learning agenda completes? (Path to a directory inside your vault. If you'd rather see summaries only in chat, type `none`.)"
-   d. CREATE `{user_context_root}/sb-tutor/step-01-boot.yaml` with the user's two answers, using the schema from `.claude/rules/sb-workflow-context.md` (entries: `Study topics fallback` (read), `Session summary destination` (write)). If the user typed `none` for either, omit that entry entirely.
-   e. Confirm to the student: "Saved. We can change these anytime by editing the YAML file at the configured user-context path. Now, let's start."
-   f. Continue to the standard flow.
+   d. APPEND to `{profile_yaml}` (create the file with a top-level `context:` list if it does not yet exist) the user's two answers, using the schema from `.claude/rules/sb-workflow-context.md` (entries: `Study topics fallback` (read), `Session summary destination` (write)). If the user typed `none` for either, omit that entry entirely. NEVER rewrite or remove any pre-existing entry while appending.
+
+**Gate B — learning-style profile.** Keyed on the step's OWN `pref.learning.profile` entry:
+
+1. If `{profile_yaml}` already contains a `pref.learning.profile` entry: Gate B is satisfied — skip elicitation. The `sb-workflow-context` mechanism injects it on every future run. Do NOT re-run the diagnostic. Do NOT read or modify any existing entry here.
+2. If no `pref.learning.profile` entry is present (first profiling run — independent of whether other entries exist):
+   a. Tell the student: "One more first-run setup — a quick learning-style check so I can adapt how I teach you. Saved once, reused every session."
+   b. Run the diagnostic from `3-resources/tools/prompts/learning-style-assessor.md`: present its 10 scenario-based questions to identify the student's primary and secondary learning modalities and environment needs. Keep it brief — gather answers, then synthesize.
+   c. APPEND a NEW `pref.learning.profile` entry to `{profile_yaml}` (type `text`) capturing the diagnosed primary/secondary modality and environment needs, with an `instruction` telling future runs to adapt pacing, examples, and explanation style to this profile. This is a DISTINCT entry — NEVER overwrite, merge into, or delete any existing `pref.learning.style` (or any other) entry; both coexist.
+   d. Confirm to the student: "Saved your learning profile. We can change any of this anytime by editing the YAML at the configured user-context path. Now, let's start."
+
+After both gates: continue to the standard flow.
 
 ## Context File Rules
 
