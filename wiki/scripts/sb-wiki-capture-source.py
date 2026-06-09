@@ -708,7 +708,7 @@ type: source-queue
 # Source queue
 
 > Open investment source-lifecycle states (`gated_pending_access`, `blocked`).
-> Written by `sb-wiki-capture-source` only; surfaced and pruned by
+> Written by `investment_source_capture` only; surfaced and pruned by
 > `sb-wiki-lint` (finance extension) — an entry is spent once its wiki source
 > page exists. Delete an entry to retire the source.
 """
