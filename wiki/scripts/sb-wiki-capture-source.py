@@ -713,6 +713,18 @@ type: source-queue
 > page exists. Delete an entry to retire the source.
 """
 
+_STUDY_QUEUE_HEADER = """---
+type: study-queue
+---
+
+# Study queue
+
+> Open study source-lifecycle states (`gated_pending_access`, `blocked`) captured
+> during a `/sb-tutor` session. Written by the tutor's research-and-enrich capture
+> only; the tutor retires an entry once it re-captures the user-supplied source and
+> ingests it (no lint steward scans this file). Delete an entry to retire the source.
+"""
+
 
 def _queue_has_open_entry(text: str, state: str, url: str) -> bool:
     """True if an entry with this (state, url) pair already exists."""
@@ -762,9 +774,10 @@ def _register_queue_entry(
             queue_status = "already-registered"
         else:
             queue_path.parent.mkdir(parents=True, exist_ok=True)
+            header = _QUEUE_HEADER if queue_path.name == QUEUE_FILENAME else _STUDY_QUEUE_HEADER
             with queue_path.open("a", encoding="utf-8") as fh:
                 if not existing:
-                    fh.write(_QUEUE_HEADER)
+                    fh.write(header)
                 fh.write("".join(lines))
             queue_status = "registered"
     return {
