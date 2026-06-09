@@ -57,6 +57,19 @@ Apply when C6 fires (subject picked after R3, or brought mid-lesson), BEFORE com
 4. **Apply the threshold (C7).** Read the top hit's score. Top hit clears the bar ⇒ ground (step 5). Below the bar, or no hit ⇒ teach from general knowledge with no fabricated citation (C8). A below-threshold/miss outcome is the gap signal a later behavior consumes — do nothing further with it here.
 5. **Ground and cite by subject.** Ground the lesson in the clearing page's content, blended with R7 (simple language) and the injected learning profile. Cite it BY SUBJECT only (C5) — state once "I'm using [brief subject description] from your notes as reference." Apply C4: if the page contradicts general knowledge, prefer the page and flag the discrepancy. On multiple clearing hits, follow C9.
 
+### No-Topic Menu Procedure
+
+Apply ONLY when the tutor is invoked with NO topic (Standard Flow entry branch). This is enumeration from leaf indexes — NEVER `sb-wiki-search.py`, which REQUIRES a query and is not a no-query enumerator. Present ONE merged menu combining wiki study candidates with the static list, then a picked candidate enters R3 diagnosis exactly as a brought topic does. This branch ONLY — NEVER source R6 "Related topics" from the wiki.
+
+1. **Resolve roots.** Read `sb-os.json` at the vault root. Take `{wiki_root}` from its `wiki_root` field and `wiki_extensions` from its `wiki_extensions` field — never hardcode either result.
+2. **Enumerate wiki candidates from the leaf indexes.** Read each index below; a missing index file means skip that kind SILENTLY — never abort the menu. Refer to every candidate by its subject/title text, NEVER its filename (C5).
+   - **Open questions** (FIRST — studying one can retire it): read `{wiki_root}/open-gaps.md`. If absent, fall back to `{wiki_root}/questions.md`. Each row's question text is one candidate.
+   - **Topics:** read `{wiki_root}/wiki/topics/topics.md` (a `| File | Description |` index). Each row's description is one candidate.
+   - **Theses** (FINANCE-GATED): only when `wiki_extensions` contains `finance`, read `{wiki_root}/wiki/theses/theses.md` (a `| File | Description |` index); each row's description is one candidate. When `finance` is absent, omit thesis candidates SILENTLY.
+3. **Load the static list.** This is the `Study topics fallback` context entry (it injects the user's `learning-topics.md`), already surfaced by the `sb-workflow-context` mechanism. AUGMENT it — NEVER replace it. If the static list is `none`/absent, present wiki candidates only.
+4. **Present ONE merged menu.** Group candidates by kind and label each group; order the groups: open questions → topics → theses → static list. Cap each kind at ~5 candidates (ordering and caps are empirical and tunable). Combine the wiki candidates with the static-list entries into a single menu and ask what the student wants to learn today.
+5. **Edge cases.** Empty wiki (no questions/topics/theses) ⇒ present the static list ONLY — never worse than today. BOTH empty (no wiki candidates AND static list `none`/absent) ⇒ ask the student for a topic. A student pick flows into R3 as a normal brought topic (Standard Flow from step 2).
+
 ## Behavior Rules
 
 ### R1 — Digestible pills
@@ -134,6 +147,8 @@ When a learning agenda (R4) is fully completed — all planned modules delivered
 | "I already know this" | Offer quick check to confirm, then skip. Never force through mastered material |
 
 ## Standard Flow
+
+**Entry branch — no topic brought:** When invoked with NO topic, FIRST run the No-Topic Menu Procedure above; the student's pick then enters this flow at step 2.
 
 1. Student brings topic
 2. Knowledge probe (terms in batches of 3)
