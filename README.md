@@ -53,23 +53,50 @@ Every PARA folder has a managed `CLAUDE.md` your agent reads to route content. M
 
 | Requirement | Detail |
 |---|---|
-| Python | 3.9+ (stdlib only — no `pip install` step) |
+| Python | 3.9+ — the installer and the **core** module use the standard library only (no `pip install`). The optional **wiki** and **finance** modules ship Python tools that need the libraries under [Python dependencies](#python-dependencies) below |
 | Obsidian | Any recent version |
 | Claude Code | Required for the agent layer; the directory convention works without it |
 | Git on the target vault | Strongly recommended before install — gives you a rollback tag |
 
-### Finance module optional dependencies
+## Python dependencies
 
-The `sb-wiki-capture-source` tool (in the wiki module) uses lazy optional dependencies for article extraction. Install these in the vault's Python environment for best results:
+Core and the installer are standard-library only. The **wiki** and **finance** modules call Python tools that depend on third-party libraries. Imports are lazy — a missing library disables or degrades a single tool rather than breaking the module — so install only what the tools you use need.
+
+### Wiki module
+
+Used by `sb-wiki-capture-source` (article + PDF capture) and `sb-wiki-search` (semantic search). No `requirements.txt` ships for these — install as needed:
+
+| Package | Tool | Role |
+|---|---|---|
+| `trafilatura` | capture | **Primary** article extractor — purpose-built readability library for diverse sites |
+| `beautifulsoup4` | capture | **Fallback** article extractor — richest-container `bs4` logic runs when trafilatura is unavailable or returns near-empty output |
+| `httpx` | capture | HTTP fetch — required for the URL / fetch capture modes |
+| `pypdf` | capture, ingest | PDF text extraction for `--pdf-text` and PDF ingest (`PyPDF2` is accepted as a fallback) |
+| `numpy` | search | Vector math for the semantic-search tier — imported only when a Voyage API key is configured (see below) |
+
+The capture tool degrades gracefully `trafilatura → bs4 → regex tag-strip`; a missing extractor is recorded in `extraction_note` in the result JSON. Semantic search needs both `numpy` and a Voyage API key — `VOYAGE_API_KEY` as an environment variable, or a `VOYAGE_API_KEY=...` line in `.user/config/env/.env` at the vault root (gitignored; a tracked `.env.example` documents it). Without the key, search runs keyword-only with zero API calls and `numpy` is never imported. The Voyage call uses the standard library — there is no `voyageai` package to install.
+
+### Finance module
+
+Used by the bookkeeper statement parsers, investment calculations, and price/market-data tools:
 
 | Package | Role |
 |---|---|
-| `trafilatura` | **Primary** article extractor — purpose-built readability library for diverse sites. `pip install trafilatura` |
-| `beautifulsoup4` | **Fallback** article extractor — richest-container bs4 logic runs when trafilatura is unavailable or returns near-empty output |
-| `httpx` | HTTP fetch (required for fetch modes) |
-| `pypdf` | PDF text extraction for `--pdf-text` (optional) |
+| `pdfplumber` | Text & table extraction from bank and broker statement PDFs |
+| `pikepdf` | Decrypt / repair password-protected statement PDFs before parsing |
+| `openpyxl` | Read `.xlsx` broker exports (B3, fixed-income products) |
+| `scipy` | XIRR root-finding (`scipy.optimize.brentq`) in the IRR calculator |
+| `yfinance` | Live market quotes in the price fetcher (lazy — only when live pricing is requested) |
+| `requests` | HTTP for the price fetcher and the SEC filing-finder tool |
+| `PyYAML` | Reads finance config — standing rules, field-ownership, and the doc-currency manifest |
 
-Both `trafilatura` and `beautifulsoup4` are optional: the capture tool degrades gracefully through trafilatura → bs4 → regex tag-strip. A missing extractor is recorded in `extraction_note` in the result JSON.
+Install both manifests from the repo root:
+
+```bash
+pip install -r finance/scripts/shared/requirements.txt -r finance/scripts/investimentos/requirements.txt
+```
+
+`finance/scripts/investimentos/requirements.txt` also lists `httpx` and `trafilatura` — the investor research flow shells out to the wiki capture tool above, so its environment needs that tool's libraries too.
 
 ## Install
 
