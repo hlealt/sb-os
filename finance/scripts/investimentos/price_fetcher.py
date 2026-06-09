@@ -22,18 +22,27 @@ D13 alerts (per-ticker, `materiality=high`):
   or returned no data for the requested date).
 - Console warning to stderr + audit event (best-effort, never raises).
 
+Delisted signal (E28, additive):
+- When a yfinance ticker has historically traded but returns no recent data,
+  the result carries `price_source='missing'` (dashboard contract unchanged)
+  PLUS an additive `delisted: True` flag. The dashboard ignores unknown keys
+  so this is safe. The market_price CLI surfaces it as status='DELISTED'.
+
 Returns, per ticker:
     {
         'current_price': float (in native currency — BRL for B3, USD for Avenue, BRL for crypto),
         'price_source':  'api' | 'missing',
         'price_date':    'YYYY-MM-DD',
         'price_changes': { '1d','30d','90d','180d','365d','ytd': float (fractional) },
+        # additive, optional, never present unless True:
+        'delisted':      True   # only set when likely-delisted; dashboard ignores it
     }
 """
 
 from __future__ import annotations
 
 import json
+import os
 import sys
 from datetime import datetime, date, timedelta
 from pathlib import Path
@@ -59,8 +68,45 @@ except ImportError:
     yf = None
 
 
+# ---------------------------------------------------------------------------
+# BRAPI token loader
+# ---------------------------------------------------------------------------
+
+def _load_brapi_token() -> str | None:
+    """Resolve BRAPI_TOKEN: OS env first, then vault .user/config/env/.env.
+
+    Returns the token string if found, or None if absent. Never raises.
+    """
+    # 1. OS environment
+    token = os.environ.get('BRAPI_TOKEN')
+    if token:
+        return token.strip() or None
+
+    # 2. .user/config/env/.env at vault root
+    env_path = VAULT_ROOT / '.user' / 'config' / 'env' / '.env'
+    try:
+        with open(env_path, encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith('BRAPI_TOKEN='):
+                    value = line[len('BRAPI_TOKEN='):]
+                    return value.strip() or None
+    except (OSError, IOError):
+        pass
+    return None
+
+
 # Asset types with no reliable free-tier price source. Always 'missing'.
 _UNPRICEABLE_TYPES = {'opcao', 'direito_subscricao'}
+
+# ---------------------------------------------------------------------------
+# Delisted detection threshold (E28, additive signal)
+# ---------------------------------------------------------------------------
+# A ticker is "likely delisted" when yfinance returns historical data (it
+# existed) but no trade within the last _DELISTED_STALE_DAYS calendar days.
+# This is heuristic — it catches CYBR (acquired/delisted) without false-
+# positives on thinly-traded small-caps that still trade.
+_DELISTED_STALE_DAYS = 90
 
 
 # ---------------------------------------------------------------------------
@@ -199,9 +245,22 @@ def _fetch_yfinance(
         return {}
 
     # yfinance normalizes multi-class US tickers with '-' (e.g., BRK.B → BRK-B).
+    # Skip the dot→dash transform for tickers that are already yfinance-native
+    # format: those starting with '^' (index), those with '=' (FX/futures),
+    # or those with a dot followed by a 2+-character uppercase market suffix
+    # like '.SA', '.NYB', '.IL' (exchange codes).  Single-letter share-class
+    # suffixes like '.B' in BRK.B are NOT exchange codes — they must be
+    # converted to '-' (BRK.B → BRK-B) per yfinance convention.
+    import re as _re
+    _YF_NATIVE_PATTERN = _re.compile(r'[\^=]|\.(?=[A-Z]{2,})')
+
     def _to_yf(t: str) -> str:
-        base = t.replace('.', '-') if not suffix else t
-        return base + suffix
+        if suffix:
+            return t + suffix
+        # Preserve yfinance-native symbols (indices, FX, exchange-suffixed).
+        if _YF_NATIVE_PATTERN.search(t):
+            return t
+        return t.replace('.', '-')
 
     yf_syms = [_to_yf(t) for t in tickers]
     sym_to_id = dict(zip(yf_syms, tickers))
@@ -232,35 +291,82 @@ def _fetch_yfinance(
     except Exception:
         return {}
 
-    if data is None or data.empty:
-        return {}
-
-    # Normalize: multi-ticker batch returns multi-level cols; single ticker flat.
-    # Use 'Close' (auto_adjust=True already adjusts for splits/dividends).
     import pandas as pd  # noqa: local import — yfinance pulls pandas in anyway
-    if isinstance(data.columns, pd.MultiIndex):
-        closes = data['Close']
-    else:
-        closes = data[['Close']].rename(columns={'Close': yf_syms[0]})
 
     results: dict = {}
+    today = date.today()
 
-    for yf_sym in yf_syms:
-        tid = sym_to_id[yf_sym]
-        if yf_sym not in closes.columns:
-            continue
-        series = closes[yf_sym].dropna()
-        if series.empty:
-            continue
-        last_price = float(series.iloc[-1])
-        last_date = series.index[-1].strftime('%Y-%m-%d')
+    # Track which yf symbols had NO data (may be delisted).
+    no_data_syms: list[str] = list(yf_syms)  # start with all; remove those with data
 
-        results[tid] = {
-            'current_price': round(last_price, 4),
-            'price_source': 'api',
-            'price_date': last_date,
-            'price_changes': _compute_changes(series),
-        }
+    if data is not None and not data.empty:
+        # Normalize: multi-ticker batch returns multi-level cols; single ticker flat.
+        # Use 'Close' (auto_adjust=True already adjusts for splits/dividends).
+        if isinstance(data.columns, pd.MultiIndex):
+            closes = data['Close']
+        else:
+            closes = data[['Close']].rename(columns={'Close': yf_syms[0]})
+
+        for yf_sym in yf_syms:
+            tid = sym_to_id[yf_sym]
+            if yf_sym not in closes.columns:
+                continue
+            series = closes[yf_sym].dropna()
+            if series.empty:
+                continue
+            # Has data — remove from no_data_syms
+            no_data_syms.remove(yf_sym)
+
+            last_price = float(series.iloc[-1])
+            last_date_obj = series.index[-1].to_pydatetime().date()
+            last_date = last_date_obj.strftime('%Y-%m-%d')
+
+            # E28 delisted detection — stale last-trade path (additive, live mode).
+            # If last trade is older than _DELISTED_STALE_DAYS in live mode, flag
+            # as delisted (e.g. a ticker that stopped trading but isn't 404 yet).
+            result: dict = {
+                'current_price': round(last_price, 4),
+                'price_source': 'api',
+                'price_date': last_date,
+                'price_changes': _compute_changes(series),
+            }
+            if as_of_date is None and (today - last_date_obj).days > _DELISTED_STALE_DAYS:
+                result['delisted'] = True
+
+            results[tid] = result
+
+    # E28 delisted detection — no-history path (live mode only).
+    # For tickers with NO price history from yfinance (batch returned empty or
+    # ticker column was all-NaN), check if yfinance fast_info metadata indicates
+    # the ticker existed (shares != 0). If so, it's likely delisted (acquired /
+    # taken private), not merely unknown. Emit a missing result + delisted flag.
+    #
+    # RESTRICTION (E28-fix): this heuristic applies ONLY to US (bare) tickers —
+    # never to B3 (.SA-suffixed) tickers. A B3 ticker that yfinance cannot price
+    # falls through to the brapi.dev fallback (_fetch_brapi). If brapi also
+    # can't price it, the result stays plain MISSING (no delisted flag). The
+    # stale-last-trade path above (had data, last trade too old) is unchanged
+    # and still flags delisted for any market — it is reliable evidence.
+    if as_of_date is None and no_data_syms and yf is not None:
+        for yf_sym in no_data_syms:
+            tid = sym_to_id[yf_sym]
+            if tid in results:
+                continue
+            # Skip the delisted heuristic for B3 tickers — they fall through
+            # to brapi.dev instead; brapi is the correct rescue path for .SA.
+            if yf_sym.endswith('.SA'):
+                continue
+            try:
+                fast = yf.Ticker(yf_sym).fast_info
+                shares = getattr(fast, 'shares', None)
+                if shares and float(shares) > 0:
+                    # Has metadata but no price → likely delisted.
+                    mr = _missing_result()
+                    mr['delisted'] = True
+                    results[tid] = mr
+            except Exception:
+                pass  # Silently skip — caller will mark as missing
+
     return results
 
 
@@ -330,9 +436,16 @@ def _fetch_brapi(
     if as_of_date is not None:
         return _fetch_brapi_historical(tickers, as_of_date)
 
-    # --- Live mode (unchanged behavior) ---
+    # --- Live mode ---
     ticker_str = ','.join(tickers)
     url = f'https://brapi.dev/api/quote/{ticker_str}'
+
+    # A1: authenticate with BRAPI_TOKEN when available (OS env → .env fallback).
+    # brapi.dev accepts the token as ?token=<TOKEN>. Degrade gracefully if absent.
+    brapi_token = _load_brapi_token()
+    if brapi_token:
+        url = f'{url}?token={brapi_token}'
+
     results: dict = {}
 
     try:
@@ -364,10 +477,14 @@ def _fetch_brapi_historical(tickers: list[str], as_of_date: str) -> dict:
     start_str = (cut - timedelta(days=5)).strftime('%Y-%m-%d')
     end_str = as_of_date
 
+    # A1: load token once for all tickers in this batch.
+    brapi_token = _load_brapi_token()
+    token_param = f'&token={brapi_token}' if brapi_token else ''
+
     for ticker in tickers:
         url = (
             f'https://brapi.dev/api/quote/{ticker}/history'
-            f'?interval=1d&start={start_str}&end={end_str}'
+            f'?interval=1d&start={start_str}&end={end_str}{token_param}'
         )
         try:
             resp = requests.get(url, timeout=15)
@@ -441,34 +558,121 @@ def _fetch_coingecko(
     if as_of_date is not None:
         return _fetch_coingecko_historical(tickers, as_of_date, cg_map)
 
-    # --- Live mode (unchanged behavior) ---
-    cg_ids = [cg_map.get(t, t.lower()) for t in tickers]
-    ids_str = ','.join(cg_ids)
+    # --- Live mode (E28-fix: simple/price for current_price/price_date/1d;
+    #     market_chart ONLY for longer windows 30d/90d/180d/365d/ytd) ---
+    #
+    # Pre-E28 behavior restored: current_price is live spot from simple/price
+    # (the dashboard relied on this). market_chart supplies the period windows.
+    # If simple/price fails per-ticker, fall back to market_chart last value
+    # so we don't lose the price entirely.
     results: dict = {}
+    today_str = datetime.now().strftime('%Y-%m-%d')
 
+    # Step 1: batch-fetch live spot prices + 24h change from simple/price.
+    spot_data: dict = {}  # cg_id → {price, change_1d}
+    all_ids = [cg_map.get(t, t.lower()) for t in tickers]
+    ids_str = ','.join(all_ids)
     try:
         url = (f'https://api.coingecko.com/api/v3/simple/price'
                f'?ids={ids_str}&vs_currencies=brl&include_24hr_change=true')
         resp = requests.get(url, timeout=15)
         resp.raise_for_status()
         data = resp.json()
+        for cg_id in all_ids:
+            if cg_id in data:
+                spot_data[cg_id] = {
+                    'price': data[cg_id].get('brl', 0),
+                    'change_1d': data[cg_id].get('brl_24h_change', 0) or 0,
+                }
     except Exception:
-        return {}
+        pass  # Step 2 market_chart will supply the price as fallback
 
-    today_str = datetime.now().strftime('%Y-%m-%d')
+    # Step 2: per-ticker, fetch market_chart for the longer windows.
+    # Merge: current_price/price_date = simple/price (live spot);
+    #        price_changes = {1d} from simple/price + {30d,90d,180d,365d,ytd}
+    #        from market_chart series.
     for ticker in tickers:
         cg_id = cg_map.get(ticker, ticker.lower())
-        if cg_id not in data:
-            continue
-        price = data[cg_id].get('brl', 0)
-        change = data[cg_id].get('brl_24h_change', 0) or 0
-        results[ticker] = {
-            'current_price': round(float(price), 4),
-            'price_source': 'api',
-            'price_date': today_str,
-            'price_changes': {'1d': round(change / 100, 4)} if change else {},
-        }
+        spot = spot_data.get(cg_id)
+
+        # Fetch market_chart series for period window computation.
+        chart_result = _fetch_coingecko_market_chart(cg_id, ticker, today_str)
+
+        if spot and spot['price']:
+            # Primary path: simple/price supplies current_price + 1d.
+            price = round(float(spot['price']), 4)
+            change_1d = spot['change_1d']
+            price_changes: dict = {}
+            if change_1d:
+                price_changes['1d'] = round(change_1d / 100, 4)
+            # Overlay longer windows from market_chart (30d/90d/180d/365d/ytd).
+            if chart_result:
+                for window in ('30d', '90d', '180d', '365d', 'ytd'):
+                    v = chart_result.get('price_changes', {}).get(window)
+                    if v is not None:
+                        price_changes[window] = v
+            results[ticker] = {
+                'current_price': price,
+                'price_source': 'api',
+                'price_date': today_str,
+                'price_changes': price_changes,
+            }
+        elif chart_result:
+            # Fallback: simple/price failed; use market_chart last value.
+            # Keep all windows that market_chart computed (includes 1d from series).
+            results[ticker] = chart_result
+
     return results
+
+
+def _fetch_coingecko_market_chart(
+    cg_id: str,
+    ticker: str,
+    today_str: str,
+) -> dict | None:
+    """Fetch 400-day daily closes via CoinGecko market_chart endpoint.
+
+    Returns a price result with full period_changes, or None on failure
+    (caller falls back to simple/price).
+    """
+    if not requests:
+        return None
+    try:
+        # CoinGecko free tier allows up to 365 days on market_chart.
+        # 365 days provides enough history for all standard windows
+        # (1d/30d/90d/180d/365d/ytd) via _compute_changes().
+        url = (
+            f'https://api.coingecko.com/api/v3/coins/{cg_id}/market_chart'
+            f'?vs_currency=brl&days=365'
+        )
+        resp = requests.get(url, timeout=20)
+        resp.raise_for_status()
+        data = resp.json()
+        prices_raw = data.get('prices', [])  # [[timestamp_ms, price], ...]
+        if not prices_raw:
+            return None
+
+        # Build a pandas Series with DatetimeIndex from the raw timestamps.
+        import pandas as pd
+        ts = [p[0] for p in prices_raw]
+        vals = [float(p[1]) for p in prices_raw]
+        idx = pd.to_datetime(ts, unit='ms', utc=True).tz_localize(None)
+        series = pd.Series(vals, index=idx)
+        series = series[~series.index.duplicated(keep='last')].sort_index()
+        series = series.dropna()
+        if series.empty:
+            return None
+
+        last_price = float(series.iloc[-1])
+        last_date = series.index[-1].strftime('%Y-%m-%d')
+        return {
+            'current_price': round(last_price, 4),
+            'price_source': 'api',
+            'price_date': last_date,
+            'price_changes': _compute_changes(series),
+        }
+    except Exception:
+        return None
 
 
 def _fetch_coingecko_historical(

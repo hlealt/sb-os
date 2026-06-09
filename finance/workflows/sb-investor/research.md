@@ -98,7 +98,11 @@ Run `./investor-loop.md` § Present-and-confirm. Default behavior is propose-bef
 
 Tag every Step 7a Disconfirm-wave candidate in its `relation to the thesis` cell as **disconfirming (evidence-against)** so the user sees, in one table, both the sources that support the anchor and the source(s) that would overturn it — never an undifferentiated list. (Step 7a defines the disconfirming wave; its candidates arrive here pre-tagged.)
 
-**Below-bar flag (trust gate).** A candidate below the `source-policy` trust bar (tier 4 / unclassifiable) arrives with its `trust class` cell flagged `4 — below evidence bar`. This flag IS the Step 3 issue-surfacing for discovery candidates — the user approves or rejects it eyes-open at this checkpoint; NEVER add a separate inline stop per flagged row, and NEVER drop a flagged candidate silently.
+**Below-bar flag (trust gate).** A candidate below the `source-policy` trust bar (tier 4 / unclassifiable) arrives with its `trust class` cell flagged `4 — below evidence bar`. This flag IS the Step 3 issue-surfacing for discovery candidates — the user approves or rejects it eyes-open at this checkpoint; NEVER add a separate inline stop per flagged row, and NEVER drop a flagged candidate silently. **Pre-table exclusion is NOT permitted:** a below-bar candidate MUST appear as a flagged row in this Propose table — never struck or dropped before presentation behind a summary note. The flagged in-table row is the contracted discovery surface; striking below-bar candidates pre-table defeats the eyes-open election.
+
+**Sponsored / advertorial flag.** When a candidate's discovery metadata (title, source, `why it matters`) suggests sponsored or advertorial content, flag its row `sponsored?` so the user weighs it eyes-open. Discovery metadata cannot always reveal sponsorship — this is a HINT surfaced when the signal is present, never a guarantee and never a gate; a candidate discovered clean may still prove sponsored at ingest.
+
+**Known-blocked flag (capture routing).** When a candidate's origin matches `source-policy.md` § Known-Blocked Origins (a tool-confirmed repeat-blocker), flag its row `known-blocked → manual bridge` so the user elects it eyes-open knowing its capture will route to the manual bridge, not a fetch (Step 5 skips the doomed fetch for these). The flag NEVER drops the candidate — the user may still elect it for manual bridging.
 
 **Coverage gaps (from Step 2.5).** Cross-check the merged candidates against the Step 2.5 coverage matrix and surface, beneath the table, any **sub-question with no candidate** — an explicit "coverage gaps" note so the user sees what the sweep did not cover before approving:
 
@@ -123,6 +127,8 @@ The user approves a SUBSET (supporting and/or disconfirming candidates alike). A
 For EACH `approved_for_capture` OPEN source, call the registered `investment_source_capture` tool (`../../scripts/tools-index.md`) — the SOLE writer of `raw/` files; the agent NEVER hand-writes a raw source file (`./investor-loop.md` § Own-workspace-writes boundary). Pass the url, the origin folder, the fetch mode, and the anchoring thesis slug per the tool's `expected_inputs`.
 
 **User-Agent.** If `source-policy.md` (loaded in Step 1) declares a `Capture User-Agent`, pass it via `--user-agent` on EVERY capture call. Fair-access endpoints (e.g. SEC EDGAR) 403 non-contact UAs — the tool's default UA is NOT sufficient there; the contact-bearing UA from `source-policy.md` is.
+
+**Known-blocked pre-check (skip the doomed fetch).** Before calling the capture tool to FETCH an `approved_for_capture` OPEN source, check its origin against `source-policy.md` § Known-Blocked Origins (loaded in Step 1). On a match — a curated, user-approved tool-confirmed repeat-blocker — SKIP the fetch attempt entirely: emit the source's ready-to-act block per `./investor-loop.md` § Manual-bridge handoff and register it as pending via the capture tool's no-fetch path (`--gated`) so `{wiki_root}/source-queue.md` tracks it. This applies ONLY to origins on the curated Known-Blocked list — NEVER to a Step-3 / D25 wave-side reachability hint (counter-lesson: wave-side failure does NOT predict tool-side capturability; only a tool-confirmed repeat pattern lists an origin). An origin that later captures cleanly leaves the list via the policy mode.
 
 **Worked examples (B11).**
 

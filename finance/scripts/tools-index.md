@@ -578,16 +578,22 @@ last_validated: 2026-06-03
 ```
 
 ```yaml
-tool: market_price (python investimentos/market_price.py TICKER [TICKER ...] [--as-of YYYY-MM-DD] [--market us|br|crypto])
-purpose: Quote live or historical market prices for arbitrary tickers (US equities, B3 stocks, crypto) to resolve disputed market figures per thesis.md's Market-figure range rule — the tools-only invariant for all numeric evidence.
+tool: market_price (python investimentos/market_price.py TICKER [TICKER ...] [--as-of YYYY-MM-DD] [--market us|br|crypto|index])
+purpose: Quote live or historical market prices for arbitrary tickers (US equities, B3 stocks, crypto, market indices, BR↔ADR cross-listings) to resolve disputed market figures per thesis.md's Market-figure range rule — the tools-only invariant for all numeric evidence.
 owner_script: investimentos/market_price.py
 class: read
 use: audit-diagnostic
-expected_inputs: one or more TICKER symbols (e.g. TEAM PETR4 BTC); optional --as-of YYYY-MM-DD for historical end-of-day price; optional --market us|br|crypto to override per-ticker market inference (B3 pattern → br, known CoinGecko symbol → crypto, all others → us); reads live market APIs via price_fetcher (yfinance for US/B3, brapi.dev fallback for B3, CoinGecko for crypto)
-outputs: Human-readable table — one row per ticker with columns ticker, market, currency, price, price_date, source, 1d/30d/90d/180d/365d/ytd change percentages (absent windows render as n/a), status (OK|MISSING); summary footer "{N} ticker(s) queried — {ok} OK, {miss} MISSING"; MISSING tickers listed by name. Writes nothing.
+expected_inputs: |
+  one or more TICKER symbols (e.g. TEAM PETR4 BTC DXY ELET3); optional --as-of YYYY-MM-DD for historical end-of-day price; optional --market us|br|crypto|index to override per-ticker market inference (B3 pattern → br, known CoinGecko symbol → crypto, known index token → index, all others → us); reads live market APIs via price_fetcher (yfinance for US/B3/index, brapi.dev fallback for B3 with optional BRAPI_TOKEN auth, CoinGecko simple/price for crypto live-spot + market_chart for period windows).
+  Index token map (auto-detected or via --market index): DXY→DX-Y.NYB, SPX/SP500→^GSPC, NDX/NASDAQ→^NDX, DJIA/DOW→^DJI, VIX→^VIX, IBOV/IBOVESPA→^BVSP, RUT→^RUT.
+  BR↔ADR auto-expansion (no flag needed): when a B3 ticker with a known ADR mapping (e.g. PETR4↔PBR, VALE3↔VALE, ITUB4↔ITUB, CPLE6↔ELP, ELET3↔EBR, ABEV3↔ABEV, BBDC4↔BBD, BRAP4↔EB) is requested without its paired leg, both legs are auto-expanded and surfaced in the output table.
+  BRAPI_TOKEN (optional): when set as OS env var or in .user/config/env/.env, authenticates brapi.dev requests via ?token= param; degrades gracefully if absent.
+outputs: Human-readable table — one row per ticker with columns ticker, market, currency, price, price_date, source, 1d/30d/90d/180d/365d/ytd change percentages (absent windows render as n/a), status (OK|MISSING|DELISTED); summary footer "{N} ticker(s) queried — {ok} OK[, {d} DELISTED][, {m} MISSING]"; DELISTED tickers listed separately from MISSING; auto-expanded ADR/BR legs noted in footer. Writes nothing.
+  DELISTED status: set ONLY for US (bare) tickers — when yfinance returns no recent price data but its metadata (share count) indicates the ticker existed — distinct from MISSING. B3 (.SA) tickers with no yfinance data fall through to brapi.dev and end as MISSING (not DELISTED) if brapi also cannot price them. The stale-last-trade delisted path (had data, last trade >90 days ago) fires for any market. price_source stays 'missing' so the dashboard contract is unchanged; DELISTED is an additive field.
+  Crypto current_price: live spot from CoinGecko simple/price (price_date = today). Period windows (30d/90d/180d/365d/ytd) sourced from market_chart series via _compute_changes. 365d may be n/a on free tier. Falls back to market_chart last value if simple/price is unavailable.
 canonical_reader_writer: reads live market APIs (yfinance / brapi.dev / CoinGecko) via price_fetcher — no local store read, no write
 dry_run: not-applicable
-last_validated: 2026-06-04
+last_validated: 2026-06-08
 ```
 
 ```yaml
@@ -679,4 +685,27 @@ outputs: Fix-impact preview with per-month matched-row counts BEFORE any write; 
 canonical_reader_writer: overwrites .user/finance/bookkeeper/ledgers/fechamento/{YYYY-MM}/transactions.csv (supplier_canonical column only)
 dry_run: default
 last_validated: 2026-06-07
+```
+
+```yaml
+tool: sec_filing_finder (python investimentos/sec_filing_finder.py --ticker TICKER --form FORM --latest [--market us|br] [--cvm-code N] [--cnpj "NN.NNN.NNN/NNNN-NN"] [--company "Name fragment"] [--count N] [--json] [--user-agent UA])
+purpose: Resolve a company + filing type to the exhibit-direct document URL(s) + metadata for US (SEC EDGAR) and BR (CVM dados-abertos) — returns URLs and filing metadata only; NEVER fetches or writes the document body. Enables the resolve→capture chain: feed the resolved primary_url to investment_source_capture.
+owner_script: investimentos/sec_filing_finder.py
+class: read
+use: audit-diagnostic
+expected_inputs: |
+  US arm (--market us or --ticker present):
+    --ticker TICKER (e.g. AMZN, MSFT); --form FORM (10-K, 10-Q, 8-K, 6-K, etc.); --latest (default on); --count N (number of filings, overridden to 1 by --latest); --cik N (override ticker→CIK lookup); --json (machine-readable output); --user-agent UA (default: contact-bearing UA from source-policy.md — SEC 403s non-contact UAs).
+  BR arm (--market br or --cvm-code/--cnpj/--company present):
+    one of --cvm-code N (CD_CVM numeric), --cnpj "NN.NNN.NNN/NNNN-NN", --company "fragment" (case-insensitive partial match against DENOM_SOCIAL); --form FORM: DFP (annual), ITR (quarterly), IPE (periodic/eventual, direct PDF links); --latest; --count N; --json.
+  Resolution path:
+    US: ticker→CIK via https://www.sec.gov/files/company_tickers.json; submissions JSON via https://data.sec.gov/submissions/CIK{cik:010d}.json; primary_url = filing folder + primaryDocument; 8-K exhibit list parsed from index for EX-99.1 targeting.
+    BR: company→CD_CVM via https://dados.cvm.gov.br/dados/CIA_ABERTA/CAD/DADOS/cad_cia_aberta.csv; filing index ZIP via https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC/{TYPE}/DADOS/{type}_cia_aberta_{year}.zip (DFP/ITR base CSV or IPE CSV); Link_Download / LINK_DOC field is the document URL. IPE Link_Download URLs are direct PDFs on rad.cvm.gov.br/ENET/. DFP/ITR LINK_DOC URLs are ENETCONSULTA download-trigger pages (ZIP packages — see concerns).
+outputs: |
+  Human-readable metadata table (or JSON with --json) per resolved filing. US fields: market, company_name, ticker, cik, form, filing_date, accession_number, primary_document, primary_url (exhibit-direct), filing_folder_url, index_url, exhibit_list (8-K only: [{doc, type, description, url}]). BR fields: market, company_name, cd_cvm, form, doc_type_used (DFP|ITR|IPE), categoria, tipo, reference_date, filing_date, protocol, version, primary_url (= link_download), assunto (IPE only).
+  Exit 0 = at least one filing resolved; exit 1 = not found / resolution failed; exit 2 = usage error.
+  Writes nothing.
+canonical_reader_writer: reads SEC EDGAR APIs (company_tickers.json, data.sec.gov submissions) and CVM open-data APIs (cad_cia_aberta.csv, IPE/DFP/ITR ZIP CSVs) — no local store read, no write
+dry_run: not-applicable
+last_validated: 2026-06-08
 ```

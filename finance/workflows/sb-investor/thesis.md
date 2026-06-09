@@ -110,6 +110,8 @@ Save it anywhere and give me the path — I will re-run capture with --mode manu
 
 **Close-time ready-to-act blocks.** At mode close, emit the same block for any source still in `blocked` / `gated` state — these complement the mid-run blocks and MUST NOT be removed.
 
+**Growth prompt (A9 — origin-allowlist growth, criterion-4 analog).** A thesis-mode capture-election that captures a source whose origin is NOT in `source-policy.md` § Auto-Capture Pre-Approved Origins and NOT on its declined line MUST fire the origin-allowlist growth prompt — follow `./research.md` Step 7 Ingest gate item 2 (offer once, batched, each origin with a proposed host pattern from the captured URL host; append on approval; record on the declined line on decline; non-blocking; skip silently when `source-policy.md` has no such table). This closes the gap where only the research Ingest gate carried the prompt, so thesis-mode elections grow the allowlist too.
+
 ## Step 3 — Select related entities + position mapping
 
 1. Identify the investment entity(ies) the thesis touches (companies, assets, sectors, countries). These become the scribe's `related_companies` / `related_assets` / `related_sectors` / `related_countries` cross-links.
