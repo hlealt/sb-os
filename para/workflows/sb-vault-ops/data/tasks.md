@@ -25,7 +25,7 @@ Completion: `- [x] 📅 2026-03-31 Close design partner ✅ 2026-04-01` — keep
 |--------|---------|
 | `_Why:_` | Justification for MoSCoW priority — when classification is not obvious |
 | `_Goal:_` | Why this task exists — when objective is not obvious from the action |
-| `_Context:_` | Execution-relevant knowledge gathered, discovered, or available at creation time — facts, exact paths, root causes, prior attempts, related artifacts. Always include at creation |
+| `_Context:_` | Execution-relevant knowledge gathered, discovered, or available at creation time — facts, exact paths, root causes, prior attempts, related artifacts. Always include at creation; must satisfy Cold-Start Sufficiency below |
 | `_Criteria:_` | Concrete completion criteria — always include |
 | `_Ref:_` | External references (links, IDs, contacts) — each in own sub-bullet |
 | `_Review:_` | Weekly review observations |
@@ -40,6 +40,12 @@ Completion: `- [x] 📅 2026-03-31 Close design partner ✅ 2026-04-01` — keep
 ### Order
 
 Why → Goal → Context → Criteria → Ref → Review → Reschedule → Subtasks
+
+## Cold-Start Sufficiency
+
+Every task MUST be executable cold: an agent with **zero memory of the session that created it** can carry it out correctly without re-deriving what the author already knew. The sub-bullets above are the vehicle — encode the goal, the execution-relevant facts (including the state work was left in, the decisions made and why, and what was tried and ruled out), concrete criteria, links to the artifacts, and known next steps.
+
+**Self-check before filing:** _"Could a stranger agent execute this from the task text alone?"_ No → the task is incomplete; add what is missing. The bar scales to the task — a trivial reminder needs little; a handed-off job needs everything the author knew.
 
 ## Example
 

@@ -76,6 +76,14 @@
           "target": ".claude/rules/sb-source-of-truth.md",
           "mode": "copy",
           "description": "Warns that sb-os components in .claude/ are overwritten on re-install."
+        },
+        {
+          "name": "sb-no-task-forgotten",
+          "module": "para",
+          "source": "para/rules/sb-no-task-forgotten.md",
+          "target": ".claude/rules/sb-no-task-forgotten.md",
+          "mode": "copy",
+          "description": "Job-end gate: capture deferred loose ends as cold-start-sufficient vault tasks before declaring a job done."
         }
       ],
       "templates": [
