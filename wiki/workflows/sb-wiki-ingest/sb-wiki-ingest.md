@@ -290,7 +290,7 @@ For EACH open question (either home) fire a candidate answer when EITHER signal 
 
 | Condition | Detection |
 |-----------|-----------|
-| Token overlap (floor — always runs) | The question text shares ≥2 substantive tokens with this source's `Substance` section text (use the topic-home question's `Open questions` line text, or the `questions.md` entry's H2 question text). **Tokenize both with the EXACT rule defined at Step 3·7b** (lowercase; strip the stopword list; preserve kebab-case as a single token AND its hyphen-split parts). Threshold: ≥2 distinct substantive tokens shared. |
+| Token overlap (floor — always runs) | The question text shares ≥2 substantive tokens with this source's `Substance` section text (use the topic-home question's `Open questions` line text, or the `questions.md` entry's H2 question text). **Tokenize via `token_overlap(question_text, substance_text)` in `sb-wiki-lint-deterministic.py`** — Step 3·7b is the EXACT-rule authority. Threshold: ≥2 distinct substantive tokens shared. |
 | Semantic membership (additive; tier-gated) | When the semantic tier is available: query the helper with the open question text — `search "<question text>" --k 5` (`--no-sync` after the run's first call) — and fire when THIS ingest's source page (written at step 2, synced into the index by the run's first helper call) appears among the results. Tier unavailable → token overlap only. |
 
 For each fire, capture into `candidate-answers`: the home (`topic` or `questions.md`); the question identity (topic page path + the verbatim `Open questions` line for a topic-home fire; the `questions.md` entry's H2 heading for a `questions.md` fire); the firing signal (matched tokens, or `semantic (top-5)`); and the proposed `answer:` claim — a 1-sentence claim derived from this source's `Substance` that addresses the question, carrying the source citation `[^N]: [[<raw-filename>]]`.
@@ -299,7 +299,7 @@ For each fire, capture into `candidate-answers`: the home (`topic` or `questions
 
 This step prepares but does NOT write. Apply happens at Step 10 commit, only for accepted rows.
 
-> **Validation window — ON (§13 fuzzy thresholds).** The token-overlap threshold for firing a `PROPOSED ANSWER` (mirrored from the Step 3·7b speculative tier, ≥2 shared substantive tokens) AND the semantic membership check's `--k 5` cutoff are run ON for an initial validation window before their wording is frozen, exactly as the `purpose.md` design did. Tune in the window, then freeze. Per `../../docs/wiki-schema.md` § "Questions layer — questions.md" → "The answer-scan" validation-window note.
+> **Thresholds frozen (§13).** The token-overlap threshold (≥2 shared substantive tokens, mirrored from Step 3·7b) and the semantic membership `--k 5` cutoff are validated after 13 ingest runs with the questions layer active and 10 accepted answer fires — no false positives or false negatives surfaced. Thresholds are frozen at their current values.
 
 ### Step 4 — Update existing entity/concept pages
 
