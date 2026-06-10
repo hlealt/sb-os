@@ -75,6 +75,7 @@ Run both, in order — the first owns the deterministic index-row + footnote wor
 
 | Report key | Feeds step | Content |
 |------------|-----------|---------|
+| `dirty_set` | 6, 7, 7.7 | Wiki-root-relative paths of pages changed since the last run (all pages on `--full` or first-run/state-fallback). LLM read passes are scoped to this set. |
 | `writes`, `judgment_needed` | 6, 7 | Auto-applied index writes; queue of judgment-bearing cells (incl. `row-shape` malformed rows) |
 | `detected.stubs_aged_gt30`, `stubs_fresh_count`, `stubs_no_created` | 1 | Stub state + age (user-half exemption applied) |
 | `detected.orphans` | 2 | STRICT-scope orphans (concept/entity/topic inbound only) |
@@ -98,6 +99,13 @@ Execution flags — the helper also owns the mechanical halves of the write path
 | `--execute-link-fixes <plan.json>` | USER-GATED executor | Step 9, on LINK-FIX PROPOSAL accept — plan rows `{file, old, new}` (`file` wiki-root-relative, `old`/`new` exact filenames); rewrites `[[old…]]`→`[[new…]]` preserving any `#anchor`/`\|alias` tail, scoped to `wiki/**` only (rows pointing outside `wiki/` are rejected, never written) |
 
 NEVER run an executor flag without an explicit user accept at step 9. After any executor run, apply every `claude_md_pending` row and resolve every error surfaced in `detected.renames` / `detected.subdivision`.
+
+**State-file lifecycle.** The report JSON written to `{wiki_root}/lint-deterministic-report.json` IS the incremental-lint state file — it persists between runs and carries the per-page content stamps from the previous run. Key behaviors:
+
+- **Never manually delete it.** Deleting the file forces the next run to behave as `--full` (all pages dirty), silently discarding accumulated incremental state. If a run produced a bad state, re-run with `--full` rather than deleting.
+- **`--full` flag.** Passing `--full` to the helper treats every tracked page as dirty regardless of stored stamps; the report carries `"full_mode": true`. Use it when you want guaranteed full coverage (e.g., after an interrupted lint run where LLM passes did not complete — the `stamp_commit_policy` field in the report explains when this is advisable).
+- **First run / state absent or corrupt.** The helper falls back automatically to full-mode and records `"state_fallback_reason"` in the report (values: `"first-run"`, `"corrupt-state"`, or `"schema-mismatch (…)"`). The lint never crashes on a missing or unparseable state file.
+- **Executor runs do NOT update state.** Executor flags (`--execute-renames`, `--execute-subdivision`, `--execute-link-fixes`) compute no stamps; the helper guards against writing an executor-mode report over the state file, so running an executor with `--report` is safe and NEVER clobbers accumulated stamps.
 
 The helper MUST NOT fill judgment-bearing cells. `Description`, `Scope`, and `What it says` require LLM judgment. After the helper runs, read the JSON report and resolve every `judgment_needed` item by reading the referenced file and writing the required semantic cell before Step 8.
 
@@ -169,10 +177,12 @@ Consume `detected.broken_wikilinks` from the helper — do NOT re-walk pages by 
 
 ### Step 6 — Re-sync wiki sources `My take` column; renumber footnotes; remove stale footnote definitions
 
+**Dirty-set gate:** read `dirty_set` from the helper report. For `My take` resync, process ONLY source pages whose wiki-root-relative path is in `dirty_set`. Source pages absent from `dirty_set` are unchanged since the last run — skip their `My take` re-sync entirely. (`dirty_set` is every-page on `--full` runs and on first-run / state-fallback, so full coverage is preserved.)
+
 For each `{wiki_root}/wiki/sources/{origin}/` directory (including `studies/`):
 
 1. Read `{origin}.md` (or `studies.md`). Header format per `../shared/index-formats.md` "Wiki Sources Index" section: `| File | What it says | My take |`.
-2. For each row, locate the source page at `{wiki_root}/wiki/sources/{origin}/{filename}`. Read the page's `My take` section.
+2. For each row, locate the source page at `{wiki_root}/wiki/sources/{origin}/{filename}`. **Skip rows whose source page is NOT in `dirty_set`.** For rows in `dirty_set`, read the page's `My take` section.
 3. Apply the three-state re-sync rule per `../shared/index-formats.md` "`My take` Cell — Three States (NEVER blank)" section — the four lint-step-6 re-sync rows of its **Write rules** table are the sole authority for which value to write given the source page's `My take` body and the current cell value (table-safety for reflected previews per the same section). **NEVER leave the cell blank** — every row carries `pending`, `—`, or a 1-sentence reflected preview.
 4. The source page is canonical. NEVER modify the source page's `My take` content.
 5. Capture `sources-resynced` count for the LINT REPORT.
@@ -210,7 +220,7 @@ For each wiki leaf folder (`{wiki_root}/wiki/concepts/`, `entities/`, `topics/`)
 
 **Type-tag sync (deterministic, auto-applied by the helper):** every page under `{wiki_root}/wiki/` MUST carry its `type:` frontmatter value as an entry in `tags:` (per `../shared/frontmatter-schemas.md` — Obsidian graph groups color by `tag:`, not frontmatter fields). The helper appends the missing tag (append-only — existing user tags are NEVER removed or reordered); index files (filename stem = parent directory name) missing `type:` get `type: index` + `tags: [index]`, creating the frontmatter block when absent. Non-index pages whose `type:` cannot be derived deterministically are reported in `detected.type_tags.unresolved` — surfaced in the LINT REPORT, never guessed. Capture `tags_added` and `type_index_added` for the LINT REPORT.
 
-**Judgment-bearing cell rule:** Steps above never authorize blank semantic cells. Concept/entity `Description` cells are auto-filled by `sb-wiki-fill-index-descriptions.py` from the page's lead definition sentence; the agent fills ONLY the pages that helper reports as `weak` (no clean lead sentence) by reading the page and writing the cell. `Scope` (topics) and `What it says` (sources) remain fully LLM-owned — if the deterministic helper reports a missing row for those cells, the agent MUST read the referenced page and write the semantic cell before Step 8 (the log-prune pass).
+**Judgment-bearing cell rule:** Steps above never authorize blank semantic cells. Concept/entity `Description` cells are auto-filled by `sb-wiki-fill-index-descriptions.py` from the page's lead definition sentence; the agent fills ONLY the pages that helper reports as `weak` (no clean lead sentence) AND whose path is in `dirty_set` — skip weak pages absent from `dirty_set` (unchanged since last run). `Scope` (topics) and `What it says` (sources) remain fully LLM-owned — if the deterministic helper reports a missing row for those cells, the agent MUST read the referenced page and write the semantic cell before Step 8 (the log-prune pass). The dirty-set gate does NOT apply to missing-row fills: the helper detects a missing index row full-corpus, so the agent fills any reported missing cell regardless of whether the page is in `dirty_set` (the index has a hole; skipping the fill leaves it corrupt until a `--full` run).
 
 ### Step 7.5 — Folder-subdivision detection
 
@@ -297,12 +307,21 @@ Detection ONLY — this step NEVER writes. It builds two proposal sets that the 
 
 #### 7.7a — Answer-sweep (both homes → `questions-answer-proposals`)
 
-Sweep every **open** question in BOTH homes against the EXISTING wiki for now-available answers:
+**Dirty-set scoping (spec rule 5):** read `dirty_set` from the helper report. Apply per home:
+
+| Home | Dirty-set gate |
+|------|----------------|
+| **Topic-home** | Sweep open questions ONLY from topic pages whose wiki-root-relative path is in `dirty_set`. Topic pages absent from `dirty_set` are unchanged — skip their `Open questions` lines. |
+| **`questions.md`** | Sweep open entries ONLY when `questions.md` itself is in `dirty_set` (whole-file signal — the helper tracks `questions.md` as a single entry; when it is NOT dirty, no entry was added or edited, and the entire `questions.md`-home sweep is skipped). When `questions.md` IS dirty, sweep all its open entries. |
+
+On `--full` runs and first-run / state-fallback, `dirty_set` contains every tracked page, so both homes are swept in full.
+
+Sweep every **open** question from the scoped set against the EXISTING wiki for now-available answers:
 
 | Home | Open-question source |
 |------|----------------------|
-| **Topic-home** | Each non-struck `Open questions` line on each `{wiki_root}/wiki/topics/*.md` page (walked at Step 1). |
-| **`questions.md`** | Each open entry (no `answer:` block or zero `answer:` bullets). |
+| **Topic-home** | Each non-struck `Open questions` line on each **dirty** `{wiki_root}/wiki/topics/*.md` page (from the scoped set above). |
+| **`questions.md`** | Each open entry (no `answer:` block or zero `answer:` bullets) — only when `questions.md ∈ dirty_set`. |
 
 For each open question, scan the existing wiki — concept/entity/topic page bodies plus source-page `Substance` sections — for content that answers it. This sweep is OFF the ingest hot-path, so it MAY be MORE THOROUGH than ingest's ≥2-shared-substantive-token mechanical match (Step 3·7b/3·7c of `sb-wiki-ingest.md`): the floor is the same ≥2-token signal, and the sweep MAY additionally fire on a lightly-semantic read (a page that materially addresses the question without sharing 2 surface tokens). It remains a PROPOSAL surface — it NEVER auto-applies.
 

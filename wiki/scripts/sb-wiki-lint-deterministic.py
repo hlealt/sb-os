@@ -4,6 +4,16 @@
 This script handles only mechanical wiki maintenance. It never writes
 judgment-bearing index cells such as Description, Scope, or What it says.
 Those gaps are emitted as a JSON queue for the LLM lint workflow.
+
+Incremental lint state spine
+----------------------------
+The helper computes a dirty set of pages whose content changed since the
+last run. Stamps are persisted in the report JSON (reused as state file).
+Run with ``--full`` to treat every page as dirty. A missing, corrupt, or
+schema-mismatched state file triggers automatic full-mode fallback.
+Stamps reflect the helper-run snapshot; if the overall lint workflow is
+interrupted after the helper but before LLM passes complete, re-run with
+``--full`` to force re-reading.
 """
 
 from __future__ import annotations
@@ -13,6 +23,7 @@ import datetime
 import json
 import os
 import re
+import hashlib
 import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -23,8 +34,61 @@ CONCEPT_HEADER = "| File | Description |\n|------|-------------|\n"
 ENTITY_HEADER = "| File | Description |\n|------|-------------|\n"
 TOPIC_HEADER = "| File | Scope |\n|------|-------|\n"
 LEAF_INDEX_FRONTMATTER = "---\ntype: index\n---\n\n"
+STATE_SCHEMA_VERSION = "1.0"
+
+
+def compute_stamp(path: Path) -> str:
+    """Return a SHA256 hex digest of the file content as a content stamp."""
+    return hashlib.sha256(read_text(path).encode("utf-8")).hexdigest()
+
+
+def load_state(state_path: Path) -> tuple[dict[str, str], str | None]:
+    """Load previous stamps from the state file.
+
+    Returns (stamps, fallback_reason).  fallback_reason is None on success,
+    or a string explaining why full-mode fallback was triggered.
+    """
+    if not state_path.exists():
+        return {}, "first-run"
+    try:
+        data = json.loads(read_text(state_path))
+        version = data.get("state_schema_version", "")
+        if version != STATE_SCHEMA_VERSION:
+            return {}, f"schema-mismatch (expected {STATE_SCHEMA_VERSION}, got {version!r})"
+        stamps = data.get("stamps", {})
+        if not isinstance(stamps, dict):
+            return {}, "corrupt-state"
+        return stamps, None
+    except Exception:
+        return {}, "corrupt-state"
+
+
+def collect_tracked_pages(wiki_root: Path) -> list[Path]:
+    """Collect pages tracked for incremental dirty-set computation.
+
+    Scope = CET pages + source pages + the root questions.md queue (when the
+    questions layer is ON), matching the LLM-read passes in the lint workflow
+    (Step 6 My-take resync, Step 7 judgment fills, Step 7.7 answer-sweep). Raw
+    pages and other wiki pages are excluded — they are handled by deterministic
+    checks which remain full-corpus.
+
+    questions.md is the questions-layer queue (its open entries are one of the
+    two answer-sweep homes at Step 7.7a). It is a single multi-entry file, so
+    its stamp is a whole-file "changed since last run" signal: when questions.md
+    is NOT in the dirty set, no entry was added/edited and the entire
+    questions.md-home sweep is skippable; when it IS dirty, re-sweep its open
+    entries. This is the helper signal Step 7.7a needs for the "open questions
+    added since last run" scoping (spec rule 5). Topic-home open questions ride
+    on their own topic-page stamps (topics are CET, already tracked).
+    """
+    cet, sources = collect_wiki_pages(wiki_root)
+    tracked = cet + sources
+    questions = wiki_root / "questions.md"
+    if questions.exists():
+        tracked.append(questions)
+    return tracked
 DASH = "\u2014"
-NON_SOURCE_FILES = {"AGENTS.md", "CLAUDE.md", "README.md"}
+NON_SOURCE_FILES = {"AGENTS.md", "CLAUDE.md", "QWEN.md", "README.md"}
 ACTIVE_LOG_TYPES = {
     "candidate-topic",
     "candidate-mention",
@@ -61,6 +125,16 @@ class Report:
     writes: list[str] = field(default_factory=list)
     judgment_needed: list[dict[str, str]] = field(default_factory=list)
     detected: dict[str, object] = field(default_factory=dict)
+    dirty_set: list[str] = field(default_factory=list)
+    stamps: dict[str, str] = field(default_factory=dict)
+    state_schema_version: str = STATE_SCHEMA_VERSION
+    full_mode: bool = False
+    state_fallback_reason: str | None = None
+    stamp_commit_policy: str = (
+        "stamps reflect helper-run snapshot; LLM-pass interruption is not "
+        "detected by the helper. If a lint run was interrupted after the helper "
+        "but before LLM passes completed, re-run with --full to force re-reading."
+    )
 
 
 def today() -> datetime.date:
@@ -419,7 +493,7 @@ SUBDIVISION_NAMING_POLICY: dict[str, tuple[str, bool]] = {
     "cognitive-displacement": ("cognitive-displacements", False),
     "ai-collaboration-model": ("ai-collaboration-models", False),
 }
-SUBDIVISION_PROPOSE_FLOOR = 5
+SUBDIVISION_PROPOSE_FLOOR = 10  # authority: wiki/workflows/shared/folder-structure.md (≥10)
 SUBDIVISION_TYPE_FOLDERS = ("concepts", "entities")
 
 # Irregular and uncountable kind -> subfolder mappings for kinds NOT in the
@@ -1348,9 +1422,19 @@ def main() -> int:
         metavar="PLAN_JSON",
         help="USER-GATED: apply accepted bucket-A broken-link fixes from a step-9 plan",
     )
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        help="force full-corpus dirty set (all pages treated as changed)",
+    )
     args = parser.parse_args()
 
     wiki_root = resolve_wiki_root(args.vault_root.resolve())
+
+    # State file resolution: explicit --report flag takes precedence; otherwise
+    # fall back to the canonical path under wiki_root.
+    state_path = args.report if args.report else wiki_root / "lint-deterministic-report.json"
+    prev_stamps, fallback_reason = load_state(state_path)
 
     if args.execute_renames or args.execute_subdivision or args.execute_link_fixes:
         # Executor mode: run ONLY the requested user-gated executor(s).
@@ -1362,7 +1446,12 @@ def main() -> int:
         if args.execute_link_fixes:
             execute_link_fixes(wiki_root, args.execute_link_fixes, report)
     else:
-        report = Report(mode="apply" if args.apply else "check")
+        full_mode = args.full or fallback_reason is not None
+        report = Report(
+            mode="apply" if args.apply else "check",
+            full_mode=full_mode,
+            state_fallback_reason=fallback_reason,
+        )
         sync_raw_indexes(wiki_root, report, args.apply)
         sync_wiki_leaf_headers_and_queue(wiki_root, report, args.apply)
         sync_type_tags(wiki_root, report, args.apply)
@@ -1375,14 +1464,38 @@ def main() -> int:
         structural_walk(wiki_root, report, args.apply)
         detect_pdf_title_conformance(wiki_root, report)
 
+        # --- Dirty-set computation (incremental lint state spine) ---
+        tracked = collect_tracked_pages(wiki_root)
+        current_stamps: dict[str, str] = {}
+        dirty: list[str] = []
+        for page in tracked:
+            rel = str(page.relative_to(wiki_root)).replace("\\", "/")
+            stamp = compute_stamp(page)
+            current_stamps[rel] = stamp
+            if full_mode or prev_stamps.get(rel) != stamp:
+                dirty.append(rel)
+        report.stamps = current_stamps
+        report.dirty_set = dirty
+
     payload = {
         "mode": report.mode,
         "writes": report.writes,
         "judgment_needed": report.judgment_needed,
         "detected": report.detected,
+        "dirty_set": report.dirty_set,
+        "stamps": report.stamps,
+        "state_schema_version": report.state_schema_version,
+        "full_mode": report.full_mode,
+        "state_fallback_reason": report.state_fallback_reason,
+        "stamp_commit_policy": report.stamp_commit_policy,
     }
     output = json.dumps(payload, indent=2, ensure_ascii=False)
-    if args.report and (args.apply or report.mode == "execute"):
+    # Executor mode computes no stamps; writing its report would CLOBBER the
+    # state file (the report IS the state file) with empty stamps, silently
+    # forcing the next run into a full sweep. Executor detail (detected.renames
+    # / .subdivision / .link_fixes, claude_md_pending) is consumed from stdout,
+    # which is always printed below — so never persist an execute-mode report.
+    if args.report and report.mode != "execute":
         args.report.parent.mkdir(parents=True, exist_ok=True)
         args.report.write_text(output + "\n", encoding="utf-8")
     print(output)
