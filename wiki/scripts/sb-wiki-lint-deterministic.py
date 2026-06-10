@@ -36,6 +36,53 @@ TOPIC_HEADER = "| File | Scope |\n|------|-------|\n"
 LEAF_INDEX_FRONTMATTER = "---\ntype: index\n---\n\n"
 STATE_SCHEMA_VERSION = "1.0"
 
+# ---------------------------------------------------------------------------
+# Token-overlap algorithm (Step 3·7b spec)
+# ---------------------------------------------------------------------------
+
+_STOPWORDS = {
+    "the", "a", "an", "of", "for", "in", "on", "and", "or", "to",
+    "is", "are", "with", "by", "that", "this", "it", "as",
+}
+
+
+def tokenize(text: str) -> set[str]:
+    """Return the set of substantive tokens for *text*.
+
+    Tokenize both: lowercase, strip stopwords
+    (`the/a/an/of/for/in/on/and/or/to/is/are/with/by/that/this/it/as`),
+    preserve kebab-case as a single token AND its hyphen-split parts
+    (e.g. `marginal-returns-to-intelligence` contributes
+    `marginal-returns-to-intelligence`, `marginal`, `returns`,
+    `intelligence`).
+
+    Non-ASCII / accented tokens are handled consistently via
+    `str.casefold()` rather than `str.lower()`.
+    """
+    text = text.casefold()
+    tokens: set[str] = set()
+    for match in re.finditer(r"[a-z0-9]+(?:-[a-z0-9]+)*", text):
+        token = match.group(0)
+        if token in _STOPWORDS:
+            continue
+        tokens.add(token)
+        if "-" in token:
+            for part in token.split("-"):
+                if part and part not in _STOPWORDS:
+                    tokens.add(part)
+    return tokens
+
+
+def token_overlap(text_a: str, text_b: str) -> tuple[set[str], str]:
+    """Compare two texts and return (shared_tokens, verdict).
+
+    Threshold: ≥2 distinct substantive tokens shared → ``"fire"``,
+    otherwise ``"no-fire"``.
+    """
+    shared = tokenize(text_a) & tokenize(text_b)
+    verdict = "fire" if len(shared) >= 2 else "no-fire"
+    return shared, verdict
+
 
 def compute_stamp(path: Path) -> str:
     """Return a SHA256 hex digest of the file content as a content stamp."""
@@ -1427,7 +1474,29 @@ def main() -> int:
         action="store_true",
         help="force full-corpus dirty set (all pages treated as changed)",
     )
+    parser.add_argument(
+        "--token-overlap-a",
+        metavar="TEXT",
+        help="first text for token-overlap check",
+    )
+    parser.add_argument(
+        "--token-overlap-b",
+        metavar="TEXT",
+        help="second text for token-overlap check",
+    )
     args = parser.parse_args()
+
+    if args.token_overlap_a is not None and args.token_overlap_b is not None:
+        shared, verdict = token_overlap(args.token_overlap_a, args.token_overlap_b)
+        payload = {
+            "tokens_a": sorted(tokenize(args.token_overlap_a)),
+            "tokens_b": sorted(tokenize(args.token_overlap_b)),
+            "shared_tokens": sorted(shared),
+            "shared_count": len(shared),
+            "verdict": verdict,
+        }
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        return 0
 
     wiki_root = resolve_wiki_root(args.vault_root.resolve())
 
