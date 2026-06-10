@@ -134,7 +134,7 @@ def run_upgrade(
     try:
         _clear_orphans(target_root, selected, set(excluded))
         _prune_orphaned_loaders(target_root, orphaned_loaders)
-        _execute_upgrade(
+        changed = _execute_upgrade(
             target_root=target_root,
             sb_os_root=sb_os_root,
             sb_os_loader_path=sb_os_loader_path,
@@ -165,7 +165,17 @@ def run_upgrade(
     )
     manifest.write(target_root, updated)
 
-    print(f"\n{cli.green('Upgrade complete.')}")
+    # No-op signal: report how many installed files actually changed this run,
+    # so a true no-op is self-evident from a single run rather than requiring a
+    # cross-run diff. ``changed`` excludes the manifest timestamp refresh.
+    print()
+    if not changed:
+        print(cli.green("Upgrade complete — already up to date (0 files changed)."))
+    else:
+        n = len(changed)
+        print(cli.green(f"Upgrade complete — {n} file{'s' if n != 1 else ''} changed."))
+        for rel in changed:
+            print(f"  {cli.green('~')} {rel}")
     print(f"  Vault root: {target_root}")
     print(f"  Manifest:   {target_root / manifest.MANIFEST_FILENAME}")
     return 0
@@ -442,73 +452,100 @@ def _execute_upgrade(
     excluded_components: set[str],
     install_wiki: bool = True,
     finance_dashboard_html_path: str = cli.DEFAULT_FINANCE_DASHBOARD_HTML_PATH,
-) -> None:
+) -> list[str]:
+    """Run the upgrade writes; return the vault-relative paths whose on-disk
+    content actually changed.
+
+    Every managed write is wrapped in ``_track`` so a write that produces
+    byte-identical content is NOT reported as a change. The returned list
+    drives the caller's no-op signal: an empty list means the run was a true
+    no-op (every installed file already up to date). The ``sb-os.json``
+    manifest refresh happens in ``run_upgrade`` and is deliberately excluded —
+    its ``installed_at`` timestamp churns every run and is bookkeeping, not an
+    installed-content change.
+    """
     modules_scoped = loaders.select_modules(selected_modules)
+    changed: list[str] = []
+
+    def _track(dest: Path, write) -> None:
+        """Run ``write`` (which writes ``dest``) and record ``dest`` as changed
+        only when its content differs from before the write."""
+        before = dest.read_text(encoding="utf-8") if dest.is_file() else None
+        write()
+        after = dest.read_text(encoding="utf-8") if dest.is_file() else None
+        if after != before:
+            changed.append(dest.relative_to(target_root).as_posix())
 
     # Marker-block replacements.
     for source_rel, dest_rel in CLAUDE_MD_MAP:
         inside = markers.extract_inside(_read_source(sb_os_root, source_rel))
-        markers.replace_managed(target_root / dest_rel, inside)
+        dest = target_root / dest_rel
+        _track(dest, lambda dest=dest, inside=inside: markers.replace_managed(dest, inside))
     if install_wiki:
         wiki_claude_inside = markers.extract_inside(
             _read_source(sb_os_root, WIKI_CLAUDE_MD_SOURCE)
         )
-        markers.replace_managed(
-            target_root / (wiki_root.rstrip("/") + "/CLAUDE.md"),
-            wiki_claude_inside,
-        )
+        dest = target_root / (wiki_root.rstrip("/") + "/CLAUDE.md")
+        _track(dest, lambda dest=dest, c=wiki_claude_inside: markers.replace_managed(dest, c))
 
     # Loaders — always rewritten (§8)
     for name, desc, module in loaders.manifest_skills(modules_scoped, excluded_components):
-        loaders.install_skill_loader(
+        dest = target_root / ".claude" / "skills" / name / "SKILL.md"
+        _track(dest, lambda name=name, desc=desc, module=module: loaders.install_skill_loader(
             target_root=target_root,
             name=name,
             sb_os_path=sb_os_loader_path,
             module=module,
             description=desc,
-        )
+        ))
     for name, desc, module in loaders.manifest_commands(modules_scoped, excluded_components):
-        loaders.install_command_loader(
+        dest = target_root / ".claude" / "commands" / f"{name}.md"
+        _track(dest, lambda name=name, desc=desc, module=module: loaders.install_command_loader(
             target_root=target_root,
             name=name,
             sb_os_path=sb_os_loader_path,
             module=module,
             description=desc,
-        )
+        ))
 
     # Rules — copies with placeholder substitution (§8: always rewritten)
     for filename, source_rel, _module in loaders.manifest_rule_sources(
         modules_scoped, excluded_components
     ):
-        loaders.install_rule(
+        dest = target_root / ".claude" / "rules" / filename
+        _track(dest, lambda filename=filename, source_rel=source_rel: loaders.install_rule(
             target_root=target_root,
             sb_os_root=sb_os_root,
             source_rel=source_rel,
             rule_filename=filename,
             sb_os_path=sb_os_loader_path,
-        )
+        ))
 
     # Templates — install-if-missing (preserve user customizations)
     for source_rel, target_rel in loaders.manifest_templates(
         modules_scoped, excluded_components
     ):
-        loaders.install_template_if_missing(
+        dest = target_root / target_rel
+        _track(dest, lambda source_rel=source_rel, target_rel=target_rel: loaders.install_template_if_missing(
             target_root=target_root,
             sb_os_root=sb_os_root,
             source_rel=source_rel,
             target_rel=target_rel,
-        )
+        ))
 
     # Finance dashboard entry HTML — rendered with vault-root-absolute asset
     # paths derived from sb_os_path; install-if-missing (never clobbers a
     # user-placed/edited entry HTML). See install/finance.py.
     if FINANCE_MODULE_NAME in selected_modules:
-        finance.install_dashboard_if_missing(
+        dest = target_root / finance_dashboard_html_path
+        _track(dest, lambda: finance.install_dashboard_if_missing(
             target_root=target_root,
             sb_os_root=sb_os_root,
             sb_os_path=sb_os_loader_path,
             html_path=finance_dashboard_html_path,
-        )
+        ))
+
+    return changed
 
 
 __all__ = ["run_upgrade", "build_upgrade_plan"]

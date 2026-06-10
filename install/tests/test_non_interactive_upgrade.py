@@ -78,7 +78,7 @@ class TestUpgradeConfirmGate(unittest.TestCase):
         self._orig_execute = upgrade._execute_upgrade
         self._orig_confirm = cli.confirm
         upgrade._preflight_markers = lambda *a, **k: True
-        upgrade._execute_upgrade = lambda **k: None
+        upgrade._execute_upgrade = lambda **k: []
 
     def tearDown(self) -> None:
         upgrade._preflight_markers = self._orig_preflight
