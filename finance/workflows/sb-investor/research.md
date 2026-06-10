@@ -7,7 +7,7 @@ runtime: agent-loop
 
 The `/sb-investor` reasoning mode that discovers, proposes, captures, and auto-files OPEN-web sources in service of a thesis or research question, so research stops dying in chat. **This mode NEVER hand-writes a raw source file or a wiki page** — it reasons and proposes; the `sb-wiki-capture-source` tool persists to `raw/`, and `sb-wiki-ingest` (run via sub-agents) files into the wiki (delegate-not-replace).
 
-**Loaded by:** `./investor.md` reads-and-follows this file when `./capability-manifest.md` routes the `research` (B2) intent. The invariants, policy read-rules wiring, present-and-confirm pattern, issue-surfacing, Rule A, and the per-step Investor Checkpoint in `./investor-loop.md` are already in force when this file runs — this file does NOT restate them. Read `./investor-loop.md` before acting on any step below.
+**Loaded by:** `./investor.md` reads-and-follows this file when `./capability-manifest.md` routes the `research` (B2) intent. Read `./investor-loop.md` before acting on any step below.
 
 **Access mechanisms (this mode):** discovery = web-search sub-agent (plugin-agnostic) · capture = `sb-wiki-capture-source` registered tool (`../../scripts/tools-index.md`) · auto-ingest = `/sb-wiki-ingest silent <slug>` run via one sub-agent per source · extract = scan sub-agent + `investment_financials_extract` registered tool (Step 7b). All are declared in `./capability-manifest.md` § `research`.
 
@@ -19,7 +19,7 @@ The `/sb-investor` reasoning mode that discovers, proposes, captures, and auto-f
 
 Before ANY web work, load the policy file(s) `../../CLAUDE.md` § Policy Read-Rules requires — per `./investor-loop.md` § Policy read-rules wiring. Researching sources for an investment is such an action: `research-policy.md` is required (scope / priorities / exclusions / horizon); load `source-policy.md` too (it weighs and trusts the sources this mode discovers). NEVER restate the read-rules table — read it.
 
-If `research-policy.md` marks the research topic out-of-scope or excluded, say so and STOP, or offer to widen scope via the `policy` thin mode — do NOT reason past an exclusion (`./investor-loop.md` § Policy read-rules wiring; Rule A). This gate runs before Step 2 every time; no discovery dispatches before it clears.
+If `research-policy.md` marks the research topic out-of-scope or excluded, say so and STOP, or offer to widen scope via the `policy` thin mode — do NOT reason past an exclusion (`./investor-loop.md` § Policy read-rules wiring; Rule A).
 
 ## Step 2 — Anchor
 
@@ -65,7 +65,7 @@ Each discovery sub-agent's prompt MUST:
 1. **Invoke the `rbtv-web-searching` skill before any web work and follow it exactly** (per the sub-agents rule — a sub-agent does not inherit this requirement; the parent states it explicitly and imperatively).
 2. Carry its assigned sub-question, the anchor (thesis claim / research question), the entity(ies), and the `research-policy` scope and exclusions so the sub-agent does not surface excluded topics.
 3. **Verify every candidate URL is live before returning it** — the wave's own fetch of the page, or a HEAD-level liveness check when the page was not fetched, MUST confirm the URL resolves. A dead, 404, or unresolvable URL is dropped, NEVER returned as a candidate.
-4. **Assign each candidate's trust class against the rubric carried in the prompt.** The parent passes the `source-policy.md` trust tiers (loaded in Step 1) into the wave prompt; while those tiers are unfilled, pass the seed rubric: `1 = primary (filings, regulator/company official) · 2 = trusted analysis (named research firm/analyst with a track record) · 3 = established press · 4 = unverified (blog / UGC / aggregator)`. When in doubt between two classes, assign the LOWER trust (the higher number) — never inflate.
+4. **Assign each candidate's trust class against the rubric carried in the prompt.** The parent passes the `source-policy.md` trust tiers (loaded in Step 1) into the wave prompt; while those tiers are unfilled, pass the seed rubric from `./disconfirm-wave.md` § B10 (the canonical home). When in doubt between two classes, assign the LOWER trust (the higher number) — never inflate.
 5. **Return ONLY ranked candidates + metadata** — `| title | url | source | trust class | why it matters | relation to the thesis |`. The **full source text MUST stay inside the sub-agent** and NEVER returns to this mode or `sb-investor.md` (anti-context-rot — the parent context stays clean; only ranked candidates + metadata cross back). **Wave-figure status (BINDING):** any figure a wave sub-agent cites in its metadata is UNVERIFIED by default and is NEVER citable until an ingest confirms it in the captured source (Step 7 item 3 figures-to-verify RETURN). Wave rankers MUST watch for the correction classes catalogued in `./data/correction-classes.md` — these are the named failure modes a figure can carry before ingest verification.
 
 Merge the waves' returned candidates and rank them by relevance to the anchor AND by `source-policy` trust class (loaded in Step 1). A candidate that fails the `source-policy` trust bar is surfaced per `./investor-loop.md` § Issue-surfacing — never silently dropped or silently kept. Discovery writes NOTHING; it only returns ranked candidates with metadata. The merged candidate set (plus the Step 7a disconfirming candidates) is what Step 4 Propose presents.
@@ -154,7 +154,7 @@ sb-wiki-capture-source --pdf-text --url https://example.com/doc.pdf --origin imf
 
 The tool saves to `{wiki_root}/raw/{origin}/` and returns a **metadata summary only** (state, saved path, title, origin, related thesis, byte count) — full source text NEVER enters this mode's context. On success → state `captured_to_raw`; capture the returned raw filename for Step 7. A tool result of `state=blocked` (unreachable / fetch failed) → surface it per `./investor-loop.md` § Issue-surfacing; that source stops at `blocked` and is NOT ingested.
 
-**Blocked-fetch recovery (manual path).** The tool itself transparently retries a transport-level fetch failure (403 / bot-fingerprint rejection / connection reset) via an in-tool subprocess-curl fallback with the same UA BEFORE returning `state=blocked` — the metadata return records which method fetched (`fetch_method: httpx | curl-fallback`), so a returned `blocked` already means BOTH methods failed. The tool also registers the blocked source in `{wiki_root}/source-queue.md` (dedup by state+url), so an unrecovered block survives the session and `sb-wiki-lint` surfaces it as a retry candidate. When an approved source (user-approved or standing-policy AUTO) still returns `state=blocked`, offer the manual path at the checkpoint instead of escalating an unstructured doubt: the USER fetches the page by their own means and provides a local file path; the agent re-runs the tool with `--mode manual --manual-file <path>` — the tool (still the SOLE writer) saves it into `raw/{origin}/` with standard naming and the source resumes the normal lifecycle (`captured_to_raw` → Step 7). The agent NEVER fetches outside the tool, NEVER stores files outside `raw/`, and NEVER hand-places the content itself.
+**Blocked-fetch recovery (manual path).** On a `state=blocked` return (the tool already retried via its curl fallback per B11/A10 — both methods failed), offer the manual path: the USER fetches the page and provides a local file path; re-run the tool with `--mode manual --manual-file <path>` — it saves to `raw/{origin}/` and the source resumes the normal lifecycle (`captured_to_raw` → Step 7). The agent NEVER fetches outside the tool, NEVER stores files outside `raw/`, and NEVER hand-places the content itself.
 
 ## Step 6 — Gated sources register (NOT fetched)
 
@@ -174,7 +174,14 @@ Fires on EVERY run that captured at least one source — even when every capture
    | source (slug) | origin | approved_by (user/policy) | state | saved path | extract? |
    ```
 
-   A `blocked` row names its error; the Step 5 manual path is its recovery. `extract?` defaults ON for fundamentals-bearing primary sources (filings, IR documents, macro releases) and OFF otherwise; the user may toggle any row at this gate. `[S]` authorizes the ingest dispatch AND Step 7b extraction for the `extract? = yes` rows, including the lane-1 companion companyfacts capture (Step 7b.1).
+   A `blocked` row names its error; the Step 5 manual path is its recovery. `extract?` defaults per source type:
+
+   | `extract?` | Source type |
+   |-----------|-------------|
+   | yes | Fundamentals-bearing primary sources (filings, IR documents, macro releases) |
+   | no | Everything else |
+
+   The user may toggle any row at this gate. `[S]` authorizes the ingest dispatch AND Step 7b extraction for the `extract? = yes` rows, including the lane-1 companion companyfacts capture (Step 7b.1).
 
 2. **Growth prompt (batched, non-blocking).** If this run captured sources whose origins are NOT in `source-policy.md` § Auto-Capture Pre-Approved Origins and NOT on its declined line, offer ONCE — every such origin in one prompt, each with a proposed host pattern derived from the captured URL host. Approval → append the row(s) to that table; decline → record the origin on the table's declined line and never re-offer it. Both are user-approved policy edits inside the own-workspace boundary (this exchange IS their present-and-confirm). The answers never block ingest. Skip silently when `source-policy.md` has no such table.
 
@@ -255,8 +262,7 @@ State the chain options to the user; do NOT auto-chain without the routing the u
 
 ## Boundaries (this mode)
 
-- Read-only on portfolio/ledger data; position data ONLY through registered read tools (`./investor-loop.md` § Tools-only data access). This mode reads no position data directly.
-- Writes ONLY to `raw/` via the `sb-wiki-capture-source` tool (which also registers gated/blocked entries in `{wiki_root}/source-queue.md`), to `.user/finance/investor/` own-workspace files (deferred-issue records per § Issue-surfacing; Step 7b extraction-target JSONs), to entity `## Financials` ONLY via the registered `investment_financials_extract` tool (Step 7b — the sole writer of that section), to `metric-vocab.md` ONLY as a user-approved vocab-proposal application (Step 7b.3), to `source-policy.md` § Auto-Capture Pre-Approved Origins ONLY via the Ingest-gate growth prompt (a user-approved policy edit), and to the wiki via `sb-wiki-ingest` run through sub-agents — the agent NEVER hand-writes a raw source file or a wiki page (`./investor-loop.md` § Own-workspace-writes boundary).
-- NEVER bypasses a paywall and NEVER uses bank/brokerage credentials — gated sources register `gated_pending_access` only (permanent source boundary in `./investor-loop.md`).
-- Never mutates ledgers, `portfolio.json`, or the dashboard. A request to do so, to bypass a paywall, or to hand-write a raw/wiki file is out-of-structure → Rule A in `./investor-loop.md`.
-- Every user-facing turn ends at an Investor Checkpoint (`./investor-loop.md` § Per-Step Checkpoint).
+The loop invariants (`./sb-investor-loop.md` § Read-only invariant, § Tools-only data access, § Own-workspace-writes boundary, § Per-Step Checkpoint) are in force. This mode reads no position data directly.
+
+- Writes ONLY to `raw/` via the `sb-wiki-capture-source` tool (which also registers gated/blocked entries in `{wiki_root}/source-queue.md`), to `.user/finance/investor/` own-workspace files (deferred-issue records per § Issue-surfacing; Step 7b extraction-target JSONs), to entity `## Financials` ONLY via the registered `investment_financials_extract` tool (Step 7b — the sole writer of that section), to `metric-vocab.md` ONLY as a user-approved vocab-proposal application (Step 7b.3), to `source-policy.md` § Auto-Capture Pre-Approved Origins ONLY via the Ingest-gate growth prompt (a user-approved policy edit), and to the wiki via `sb-wiki-ingest` run through sub-agents — the agent NEVER hand-writes a raw source file or a wiki page (`./sb-investor-loop.md` § Own-workspace-writes boundary).
+- NEVER bypasses a paywall and NEVER uses bank/brokerage credentials — gated sources register `gated_pending_access` only (permanent source boundary in `./sb-investor-loop.md`).

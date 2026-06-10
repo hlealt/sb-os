@@ -7,7 +7,7 @@ runtime: agent-loop
 
 The `/sb-investor` reasoning mode that maps the user's real exposure against his theses — surfacing positions held without a thesis, theses with no matching exposure, and concentration — so belief and portfolio stay coherent. **This mode is read-only and builds NO coherence tool.** It composes the existing registered position read tools, reads theses' `related_positions` frontmatter, and performs the position↔thesis join itself in reasoning (D3 Option A). No `portfolio-view` tool exists, and no thin `thesis-map` / `unmapped` tool is built in v1 (build-on-demand only — see § Build-on-demand trigger).
 
-**Loaded by:** `./investor.md` reads-and-follows this file when `./capability-manifest.md` routes the `portfolio` (B4) intent. The invariants (read-only, tools-only, own-workspace-writes, watchlist), policy read-rules wiring, present-and-confirm pattern, issue-surfacing, Rule A, and the per-step Investor Checkpoint in `./investor-loop.md` are already in force when this file runs — this file does NOT restate them. Read `./investor-loop.md` before acting on any step below.
+**Loaded by:** `./investor.md` reads-and-follows this file when `./capability-manifest.md` routes the `portfolio` (B4) intent. Read `./investor-loop.md` before acting on any step below.
 
 **Division of labour (read once, then act):**
 
@@ -25,7 +25,7 @@ This mode persists NOTHING and writes NO wiki page, ledger, or position store. I
 
 Before ANY reasoning, load the policy file(s) `../../CLAUDE.md` § Policy Read-Rules requires — per `./investor-loop.md` § Policy read-rules wiring. Mapping exposure and proposing any watchlist change are such actions: `research-policy.md` is required (scope / priorities / exclusions / watchlist-approval / horizon). NEVER restate the read-rules table — read it.
 
-If `research-policy.md` marks an entity or position in scope's reasoning out-of-scope or excluded, say so for that item and STOP on it, or offer to widen scope via the `policy` thin mode — do NOT reason past an exclusion (`./investor-loop.md` § Policy read-rules wiring; Rule A). This gate runs before Step 2 every time; no coherence reasoning begins before it clears.
+If `research-policy.md` marks an entity or position in scope's reasoning out-of-scope or excluded, say so for that item and STOP on it, or offer to widen scope via the `policy` thin mode — do NOT reason past an exclusion (`./investor-loop.md` § Policy read-rules wiring; Rule A).
 
 ## Step 2 — Read exposure (tools-only)
 
@@ -102,10 +102,9 @@ The agent-performed join is v1's coherence engine; no `thesis-map` / `unmapped` 
 
 ## Boundaries (this mode)
 
-- Read-only on ALL data; position data ONLY through the registered `class: read` tools (`./investor-loop.md` § Tools-only data access). The mode NEVER reads `portfolio.json`, a ledger, or a snapshot directly, and NEVER writes one.
+The loop invariants (`./sb-investor-loop.md` § Read-only invariant, § Tools-only data access, § Own-workspace-writes boundary, § Watchlist invariant, § Per-Step Checkpoint) are in force. Theses / entity / source pages are markdown the agent reads directly — they are not position data.
+
+- Position data ONLY through the registered `class: read` tools — the mode NEVER reads `portfolio.json`, a ledger, or a snapshot directly, and NEVER writes one.
 - The position↔thesis join is agent-performed in reasoning (Option A); no tool performs it and none is built at runtime (§ Build-on-demand trigger).
-- Theses / entity / source pages are markdown the agent reads directly — they are not position data.
 - Persists NOTHING: the coherence map is read-only output. No wiki page, no policy file, no ledger, no `portfolio.json` is written by this mode.
-- `watchlist: true` is set ONLY after explicit user approval, routed through the `policy` thin mode — NEVER auto-set to clear a coherence gap (`./investor-loop.md` § Watchlist invariant).
-- Never mutates ledgers, `portfolio.json`, or the dashboard. A request to do so, to read position data off a non-tool path, or to set `watchlist` without approval is out-of-structure → Rule A in `./investor-loop.md`. A suspected data problem is recorded and routed to `sb-bookkeeper`, never fixed here.
-- Every user-facing turn ends at an Investor Checkpoint (`./investor-loop.md` § Per-Step Checkpoint).
+- `watchlist: true` is set ONLY after explicit user approval, routed through the `policy` thin mode — NEVER auto-set to clear a coherence gap.

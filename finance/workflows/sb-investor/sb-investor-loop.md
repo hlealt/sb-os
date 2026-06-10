@@ -81,11 +81,7 @@ A second carve-out — standing capture pre-approval: a source whose URL matches
 
 ### Optional adversarial refuter (`[R]`) — refuter-enabled modes only
 
-`thesis` / `review` / `decision` (the refuter-enabled modes) offer ONE additional option at their checkpoint, ADDED to the `[S]/[E]/[N]` set above — never replacing it: `[R] Refute — run a second-model refutation before deciding`. `research` / `portfolio` / `policy` NEVER offer it. On `[R]`, the mode reads-and-follows `./adversarial-refuter.md` (the shared refuter-dispatch workflow; the manifest registers it as a cross-mode mechanism), then RE-PRESENTS the SAME checkpoint with the critique added:
-
-- The refutation is shown **RAW + flagged** as a distinct "Adversarial critique" block beside the draft; the agent may add a one-line agree/disagree per item but NEVER edits or suppresses it.
-- The existing `[S]/[E]/[N]` choices then follow unchanged — the user still decides. Accepted points fold into the draft via the existing `[E]` edit path.
-- The refuter is single-pass and read-only: it NEVER persists, calls a tool, fetches the web, loops, or auto-acts on its verdict. It feeds this checkpoint; it never replaces, collapses, or gates it. If the refuter is unavailable or fails, the mode re-presents the draft UNCHANGED — `[R]` never blocks the checkpoint.
+`thesis` / `review` / `decision` (the refuter-enabled modes) offer ONE additional option at their checkpoint, ADDED to the `[S]/[E]/[N]` set above — never replacing it: `[R] Refute — run a second-model refutation before deciding`. `research` / `portfolio` / `policy` NEVER offer it. On `[R]`, the mode reads-and-follows `./adversarial-refuter.md` (the shared refuter-dispatch workflow; the manifest registers it as a cross-mode mechanism), dispatches with the mode-specific closed input set, and displays the returned critique per `./adversarial-refuter.md` § Step 4, then RE-PRESENTS the SAME checkpoint with the critique added.
 
 **Optional always-on key (`research-policy.md`).** `.user/finance/investor/research-policy.md` MAY carry an `adversarial_refuter` key (user content, inside the own-workspace boundary — see § B6 Policy thin mode) that flips specific modes to always-on: a mode flipped on SKIPS the `[R]` offer and runs the refuter automatically before presenting, surfacing the critique the same RAW + flagged way. Schema (resolved in `p4-2`):
 
@@ -224,6 +220,7 @@ Each capability ends its user-facing turn at a STOP. That STOP is an Investor Ch
 3. **Data read directly?** Did any inspection of position data bypass a registered read tool? → that is a violation; re-route through a `tools-index.md` tool (no tool exists → Rule A `[A]`).
 4. **Persisting or acting?** Is the step about to write a page/source/policy file or act on a buy/sell/hold verdict? → run § Present-and-confirm first; a wiki page persists ONLY via its scribe, a source ONLY via the capture tool.
 5. **Issue detected?** Did reasoning surface a stale thesis, a failing source, an unresolved position, or a coherence gap? → § Issue-surfacing (classify blocking vs deferrable).
-6. **All clear** → advance.
+6. **Deferred items logged this session?** Surface the list now.
+7. **All clear** → advance.
 
 The checkpoint is the loop's heartbeat: every capability boundary re-checks the invariants. A step never advances with an unresolved blocking issue, a silently-executed out-of-structure action, a skipped policy load, or an unconfirmed write.

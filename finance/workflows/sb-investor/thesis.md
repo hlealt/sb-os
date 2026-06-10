@@ -7,7 +7,7 @@ runtime: agent-loop
 
 The `/sb-investor` reasoning mode that turns an informal investment idea into a structured, falsifiable thesis, then delegates persistence to `sb-fin-create-thesis`. **This mode NEVER writes a thesis page** — it reasons; the scribe persists (delegate-not-replace).
 
-**Loaded by:** `./investor.md` reads-and-follows this file when `./capability-manifest.md` routes the `thesis` (B1) intent. The invariants, policy read-rules wiring, present-and-confirm pattern, issue-surfacing, Rule A, and the per-step Investor Checkpoint in `./investor-loop.md` are already in force when this file runs — this file does NOT restate them. Read `./investor-loop.md` before acting on any step below.
+**Loaded by:** `./investor.md` reads-and-follows this file when `./capability-manifest.md` routes the `thesis` (B1) intent. Read `./investor-loop.md` before acting on any step below.
 
 **Division of labour (read once, then act):**
 
@@ -133,14 +133,7 @@ This is the mode's single user-facing checkpoint. Per the handoff contract there
 
 ### Adversarial refuter (`[R]`) — dispatch with the thesis rubric
 
-On `[R]`, read-and-follow `./adversarial-refuter.md` (the shared refuter-dispatch workflow; registered as a cross-mode mechanism). This mode DISPATCHES it — it adds NO discovery engine, NEVER re-runs the Step 2b Disconfirm, and NEVER re-implements the refutation logic; `./adversarial-refuter.md` owns the backend, single-pass, read-only, and no-generation mechanics. Hand it the CLOSED input set its § Step 1 requires:
-
-| Input | What this mode passes |
-|-------|------------------------|
-| Drafted artifact | the Step 4 proposed-thesis block above — the Claim, Hypotheses, Causal mechanism, Evidence for, Evidence against, Risks, and Invalidation criteria exactly as drafted, plus the proposed `status`/`conviction`/`time_horizon` |
-| Cited sources | every source the thesis cites (the Step 2–2b evidence already in hand) — passed per `./adversarial-refuter.md` § Step 1: inline for small payloads, or as the closed read-set of cited file paths for large ones; full text never re-enters this mode (anti-context-rot) |
-| The thesis rubric | the ordered attack questions below — this mode OWNS its rubric; `./adversarial-refuter.md` never hard-codes it |
-| `research-policy` scope | the scope / exclusions loaded at Step 1 |
+On `[R]`, read-and-follow `./adversarial-refuter.md` and dispatch it with the closed input set its § Step 1 requires: **Drafted artifact** = the Step 4 proposed-thesis block (Claim, Hypotheses, Causal mechanism, Evidence for, Evidence against, Risks, Invalidation criteria, plus proposed `status`/`conviction`/`time_horizon`); **Cited sources** = every source the thesis cites (the Step 2–2b evidence), inline for small payloads or as the closed read-set of cited file paths for large ones (full text never re-enters this mode — anti-context-rot); **rubric** = the ordered attack questions below; **policy scope** = the scope/exclusions loaded at Step 1. Display the returned critique per `./adversarial-refuter.md` § Step 4; re-present this SAME checkpoint with the critique added.
 
 **Thesis rubric (the attack questions the refuter tests this proposed thesis against):**
 
@@ -148,12 +141,6 @@ On `[R]`, read-and-follow `./adversarial-refuter.md` (the shared refuter-dispatc
 2. Are the `Invalidation criteria` observable conditions — specific and checkable — rather than hedged or unfalsifiable restatements of the Claim?
 3. Did the Step 2a Assumption Audit miss an assumption the Claim or Causal mechanism silently rests on?
 4. Is EACH `Evidence for` item actually supported by its cited source, or does a citation overstate or misread what the source shows?
-
-The refuter returns its § Output schema verbatim — one `overturned | weakened | survives` verdict per rubric item. Render that returned block RAW + flagged as a distinct **"Adversarial critique"** block beside the proposed thesis, then RE-PRESENT this SAME checkpoint with the critique added:
-
-- The critique is shown intact; this mode may add a one-line agree/disagree per item but NEVER edits or suppresses it.
-- It is single-pass — the refuter runs ONCE and never loops. Points the user accepts fold into the thesis via the existing `[E]` path, NOT by re-running the refuter.
-- The `[S]/[E]/[N]` choice then follows unchanged — the critique informs the decision; the user still decides. A failed or unavailable refuter NEVER blocks this checkpoint: present the proposed thesis unchanged and proceed (`./adversarial-refuter.md` § Step 2).
 
 ## Step 5 — Delegate persistence to `sb-fin-create-thesis`
 
@@ -192,7 +179,6 @@ Do not pre-empt this prompt and do not suppress it — it is the scribe's struct
 
 ## Boundaries (this mode)
 
-- Read-only on portfolio/ledger data; position data ONLY through registered read tools (`./investor-loop.md` § Tools-only data access).
-- Writes ONLY by invoking `sb-fin-create-thesis` — the agent NEVER hand-writes a thesis page (`./investor-loop.md` § Own-workspace-writes boundary).
-- Never mutates ledgers, `portfolio.json`, or the dashboard. A request to do so, or to author the page by hand, is out-of-structure → Rule A in `./investor-loop.md`.
-- Every user-facing turn ends at an Investor Checkpoint (`./investor-loop.md` § Per-Step Checkpoint).
+The loop invariants (`./sb-investor-loop.md` § Read-only invariant, § Tools-only data access, § Own-workspace-writes boundary, § Per-Step Checkpoint) are in force.
+
+- Writes ONLY by invoking `sb-fin-create-thesis` — the agent NEVER hand-writes a thesis page (`./sb-investor-loop.md` § Own-workspace-writes boundary).

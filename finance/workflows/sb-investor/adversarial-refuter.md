@@ -7,7 +7,7 @@ runtime: agent-loop
 
 The `/sb-investor` shared refuter-dispatch workflow. An **independent second model** that can ONLY refute the drafted argument the calling mode is about to present — it never generates its own findings. `review` / `thesis` / `decision` read-and-follow this file at their present-and-confirm checkpoint when the user elects `[R]`; the refutation is surfaced beside the draft as a distinct critique block, and the user still decides `[S] / [E] / [N]`. This file owns the CONTRACT, the DISPATCH MECHANISM, the BACKENDS, and the INVARIANTS. Each calling mode owns its own rubric and passes it in.
 
-**Loaded by:** a calling mode reads-and-follows this file ONLY after the user elects `[R]` at that mode's checkpoint. The invariants, policy read-rules wiring, present-and-confirm pattern, issue-surfacing, Rule A, and the per-step Investor Checkpoint in `./investor-loop.md` are already in force — this file does NOT restate them. Read `./investor-loop.md` before acting.
+**Loaded by:** a calling mode reads-and-follows this file ONLY after the user elects `[R]` at that mode's checkpoint. Read `./investor-loop.md` before acting.
 
 **Opt-in, never auto-fires.** This workflow runs ONLY on an explicit `[R]` election (or an always-on `research-policy.md` key, schema settled in `p4-2` — until then `[R]` is the sole trigger). It is never the default path and never blocks the checkpoint: if the refuter is not elected, or fails, the mode presents its draft unchanged.
 

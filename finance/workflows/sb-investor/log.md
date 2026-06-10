@@ -7,7 +7,7 @@ runtime: agent-loop
 
 The `/sb-investor` capability that reads the investor's actionable log, resolves each entry WITH the user, and DELETES it on resolution. The investor log is a self-executing queue: every entry states why it is there, the exact next action, and why it wasn't done on the spot — a reader works the entry, then the entry is gone (resolution = entry deleted; no resolved history is retained).
 
-**Loaded by:** `./investor.md` reads-and-follows this file when `./capability-manifest.md` routes the `log` intent (an explicit "resolve my log" request) OR when a BARE `/sb-investor` invocation accepts the proactive offer (`./investor.md` § Activation). The invariants, own-workspace-writes boundary, present-and-confirm pattern, issue-surfacing, Rule A, and the per-step Investor Checkpoint in `./investor-loop.md` are already in force when this file runs — this file does NOT restate them. Read `./investor-loop.md` before acting on any step below.
+**Loaded by:** `./investor.md` reads-and-follows this file when `./capability-manifest.md` routes the `log` intent (an explicit "resolve my log" request) OR when a BARE `/sb-investor` invocation accepts the proactive offer (`./investor.md` § Activation). Read `./investor-loop.md` before acting on any step below.
 
 **Target file:** `.user/finance/investor/log.md` — the investor's own-workspace actionable log (the cross-mode writers append to it via `./investor-loop.md` § Issue-surfacing and § Rule A).
 
@@ -79,7 +79,6 @@ When every entry the user chose to work is resolved (deleted), report what was r
 
 ## Boundaries (this mode)
 
-- Read-only on portfolio/ledger data; this mode reads no position data directly.
-- Writes ONLY to `.user/finance/investor/log.md` (deleting resolved entries) inside the own-workspace boundary (`./investor-loop.md` § Own-workspace-writes boundary). Any in-scope action that persists routes through the owning capability's scribe/tool — this mode never hand-writes a thesis, decision, or raw source.
-- Never mutates ledgers, `portfolio.json`, or the dashboard. An out-of-structure `action` is routed via Rule A, never executed here.
-- Every user-facing turn ends at an Investor Checkpoint (`./investor-loop.md` § Per-Step Checkpoint).
+The loop invariants (`./sb-investor-loop.md` § Read-only invariant, § Tools-only data access, § Own-workspace-writes boundary, § Per-Step Checkpoint) are in force.
+
+- Writes ONLY to `.user/finance/investor/log.md` (deleting resolved entries) inside the own-workspace boundary (`./sb-investor-loop.md` § Own-workspace-writes boundary). Any in-scope action that persists routes through the owning capability's scribe/tool — this mode never hand-writes a thesis, decision, or raw source.

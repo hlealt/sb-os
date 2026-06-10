@@ -12,28 +12,25 @@ Author a single `thesis` page — a falsifiable investment argument with explici
 
 This workflow loads only when `finance` is registered in `sb-os.json` → `wiki_extensions`. It mirrors the `sb-wiki-create-topic` 5-step flow, adapted to the `thesis` page type defined in the finance wiki extension.
 
-## Path Resolution
+## Path Symbols, Extension Files, Cross-Link and Leaf-Index Procedures
+
+Read and follow `../shared/scribe-shared.md` for: path-symbol resolution (`{wiki_root}`, `{sb_os_path}`), extension data files (the three `wiki-ext/` files + base wiki conventions), the Step 3 cross-link procedure, and the Step 5 leaf-index procedure.
+
+This scribe's parameters for the shared procedures:
+
+| Parameter | Value |
+|-----------|-------|
+| Page tree | `{wiki_root}/wiki/theses/` |
+| Leaf index | `{wiki_root}/wiki/theses/theses.md` |
+| Cross-link targets (Step 3) | `{wiki_root}/wiki/entities/organizations/`, `.../assets/`, `.../countries/`, `.../sectors/` |
+| Extension files step map | `page-types.ext.md` → steps 1, 2; `frontmatter-schemas.ext.md` → step 2; `section-menus.ext.md` → step 2 |
+| Leaf-index Description | One-line summary of the `Claim` (≤280 chars; truncate with ellipsis if longer) |
+
+Additional path local to this scribe (not in `scribe-shared.md`):
 
 | Symbol | Resolution |
 |--------|------------|
-| `{wiki_root}` | Read from `sb-os.json` at vault root → `wiki_root` field. Never hardcode. |
-| `{sb_os_path}` | Read from `sb-os.json` → `sb_os_path` field. Never hardcode. |
-| `{wiki_root}/wiki/theses/` | Thesis page tree. |
-| `{wiki_root}/wiki/theses/theses.md` | Theses leaf index. |
-| `{wiki_root}/wiki/entities/` | Entity pages cross-linked via `related_*` (companies under `organizations/`; assets, countries, sectors under their lazy subkind folders). |
 | `{wiki_root}/logs/theses.md` | Thesis-log actionable queue — holds `proposed-new-thesis` and `speculative-thesis-update` entries (investor path). Sibling logs `logs/topics.md` / `logs/mentions.md` hold the base `candidate-topic` / `candidate-mention` entries. |
-
-## Extension Data Files
-
-These finance-extension files codify the thesis frontmatter and sections. Load only the file relevant to the active step.
-
-| File | Used by step |
-|------|--------------|
-| `{sb_os_path}/finance/wiki-ext/page-types.ext.md` | 1, 2 |
-| `{sb_os_path}/finance/wiki-ext/frontmatter-schemas.ext.md` | 2 |
-| `{sb_os_path}/finance/wiki-ext/section-menus.ext.md` | 2 |
-
-The base wiki conventions still apply: read `{sb_os_path}/wiki/workflows/shared/naming-convention.md` (slug), `{sb_os_path}/wiki/workflows/shared/citation-format.md` (footnotes), and `{sb_os_path}/wiki/workflows/shared/folder-structure.md` (lazy folder creation) for the conventions shared with the base wiki.
 
 ## Invocation Inputs
 
@@ -106,14 +103,7 @@ Body composition rules:
 
 ### Step 3 — Cross-link related entity pages
 
-For each entity wikilink placed in `related_companies` / `related_assets` / `related_sectors` / `related_countries`:
-
-1. Read the entity page in full at `{wiki_root}/wiki/entities/organizations/{slug}.md` (companies) or `{wiki_root}/wiki/entities/{assets|countries|sectors}/{slug}.md` (assets / countries / sectors).
-2. Locate or create a `Related` section on that page.
-3. Append the new thesis wikilink: `- [[<thesis-slug>.md]]`.
-4. Update `last-touched: <today>` in the entity page's frontmatter.
-
-If a related entity page does not exist, skip the cross-link silently for that entity. Do NOT create the missing entity page from this workflow — entity-page creation is `/sb-wiki-ingest`'s responsibility.
+Follow the Cross-Link Procedure in `../shared/scribe-shared.md` for each entity wikilink placed in `related_companies` / `related_assets` / `related_sectors` / `related_countries`. The link to append is `- [[<thesis-slug>.md]]`.
 
 **(extend)** Cross-link ONLY entities newly introduced by the update payload; the page's pre-existing entities are already linked. Before appending a thesis wikilink to an entity's `Related` section, verify it is not already present — never duplicate an existing cross-link.
 
@@ -129,16 +119,9 @@ Never write any other entry type.
 
 ### Step 5 — Update theses leaf index
 
-Update `{wiki_root}/wiki/theses/theses.md`:
+Follow the Leaf-Index Procedure in `../shared/scribe-shared.md`. This scribe's index is `{wiki_root}/wiki/theses/theses.md`; the `Description` is a one-line summary of the `Claim` written in step 2.
 
-1. The index already exists with a `| File | Description |` header. If it is missing, create it with that header and the standard `type: index` frontmatter (lint owns full leaf-index maintenance; this workflow defensively creates the index if absent).
-2. Append a row for the new thesis:
-   - `File`: `[[<slug>.md]]`
-   - `Description`: a one-line summary of the `Claim` written in step 2 (≤280 chars; truncate with ellipsis if longer).
-
-If the index exists with a user-customized column layout, preserve the user's columns and append the new row matching the existing format — fill `File` and the closest equivalent of `Description`; leave other columns blank for lint to populate.
-
-**(extend)** Do NOT append a new row — the thesis already has one. Update the existing `[[<slug>.md]]` row's `Description` ONLY if the extend sharpened the `Claim`; otherwise leave the index untouched.
+**(extend)** Follow the extend clause in the Leaf-Index Procedure in `../shared/scribe-shared.md` — update the existing row's `Description` ONLY if the extend sharpened the `Claim`; never append a new row for an extend.
 
 ## User Checkpoint
 

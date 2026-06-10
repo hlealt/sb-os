@@ -17,28 +17,19 @@ A decision page differs from a thesis page in two ways that this workflow MUST h
 
 This workflow loads only when `finance` is registered in `sb-os.json` → `wiki_extensions`. It mirrors the `sb-fin-create-thesis` 5-step flow, adapted to the `decision` page type defined in the finance wiki extension.
 
-## Path Resolution
+## Path Symbols, Extension Files, Cross-Link and Leaf-Index Procedures
 
-| Symbol | Resolution |
-|--------|------------|
-| `{wiki_root}` | Read from `sb-os.json` at vault root → `wiki_root` field. Never hardcode. |
-| `{sb_os_path}` | Read from `sb-os.json` → `sb_os_path` field. Never hardcode. |
-| `{wiki_root}/wiki/decisions/` | Decision page tree. |
-| `{wiki_root}/wiki/decisions/decisions.md` | Decisions leaf index. |
-| `{wiki_root}/wiki/theses/` | Thesis pages cross-linked via `related_thesis`. |
-| `{wiki_root}/wiki/entities/` | Entity pages cross-linked via `related_asset` / `related_company` (companies under `organizations/`; assets under the lazy `assets/` subkind folder). |
+Read and follow `../shared/scribe-shared.md` for: path-symbol resolution (`{wiki_root}`, `{sb_os_path}`), extension data files (the three `wiki-ext/` files + base wiki conventions), the Step 3 cross-link procedure, and the Step 5 leaf-index procedure.
 
-## Extension Data Files
+This scribe's parameters for the shared procedures:
 
-These finance-extension files codify the decision frontmatter and sections. Load only the file relevant to the active step.
-
-| File | Used by step |
-|------|--------------|
-| `{sb_os_path}/finance/wiki-ext/page-types.ext.md` | 1, 2 |
-| `{sb_os_path}/finance/wiki-ext/frontmatter-schemas.ext.md` | 1, 2 |
-| `{sb_os_path}/finance/wiki-ext/section-menus.ext.md` | 2 |
-
-The base wiki conventions still apply: read `{sb_os_path}/wiki/workflows/shared/naming-convention.md` (slug), `{sb_os_path}/wiki/workflows/shared/citation-format.md` (footnotes), and `{sb_os_path}/wiki/workflows/shared/folder-structure.md` (lazy folder creation) for the conventions shared with the base wiki.
+| Parameter | Value |
+|-----------|-------|
+| Page tree | `{wiki_root}/wiki/decisions/` |
+| Leaf index | `{wiki_root}/wiki/decisions/decisions.md` |
+| Cross-link targets (Step 3) | `{wiki_root}/wiki/theses/`, `{wiki_root}/wiki/entities/organizations/`, `.../assets/` |
+| Extension files step map | `page-types.ext.md` → steps 1, 2; `frontmatter-schemas.ext.md` → steps 1, 2; `section-menus.ext.md` → step 2 |
+| Leaf-index Description | One-line summary combining the action and subject (≤280 chars; e.g., `Sell Petrobras — dividend thesis weakened by reinvestment shift`) |
 
 ## Invocation Inputs
 
@@ -98,14 +89,7 @@ Body composition rules:
 
 ### Step 3 — Cross-link related entity and thesis pages
 
-For each wikilink placed in `related_thesis` / `related_asset` / `related_company`:
-
-1. Read the target page in full — the thesis at `{wiki_root}/wiki/theses/{slug}.md`, the company at `{wiki_root}/wiki/entities/organizations/{slug}.md`, or the asset at `{wiki_root}/wiki/entities/assets/{slug}.md`.
-2. Locate or create a `Related` section on that page.
-3. Append the new decision wikilink: `- [[<decision-filename-without-.md>.md]]`.
-4. Update `last-touched: <today>` in the target page's frontmatter.
-
-If a related page does not exist, skip the cross-link silently for that link and continue with the others. Do NOT create the missing entity or thesis page from this workflow — entity-page creation is `/sb-wiki-ingest`'s responsibility and thesis-page creation is `sb-fin-create-thesis`'s.
+Follow the Cross-Link Procedure in `../shared/scribe-shared.md` for each wikilink placed in `related_thesis` / `related_asset` / `related_company`. The link to append is `- [[<decision-filename-without-.md>.md]]`. Do NOT create the missing entity or thesis page from this workflow — entity-page creation is `/sb-wiki-ingest`'s responsibility and thesis-page creation is `sb-fin-create-thesis`'s.
 
 ### Step 4 — Resolve any source signals in the log
 
@@ -118,14 +102,7 @@ Never write any other entry type.
 
 ### Step 5 — Update decisions leaf index
 
-Update `{wiki_root}/wiki/decisions/decisions.md`:
-
-1. If the index does not exist, create it with the standard `type: index` frontmatter and a `| File | Description |` header (lint owns full leaf-index maintenance; this workflow defensively creates the index if absent).
-2. Append a row for the new decision:
-   - `File`: `[[<decision-filename-without-.md>.md]]`
-   - `Description`: a one-line summary combining the action and subject (≤280 chars; truncate with ellipsis if longer), e.g., `Sell Petrobras — dividend thesis weakened by reinvestment shift`.
-
-If the index exists with a user-customized column layout, preserve the user's columns and append the new row matching the existing format — fill `File` and the closest equivalent of `Description`; leave other columns blank for lint to populate.
+Follow the Leaf-Index Procedure in `../shared/scribe-shared.md`. This scribe's index is `{wiki_root}/wiki/decisions/decisions.md`; the `Description` is a one-line summary combining the action and subject (≤280 chars; e.g., `Sell Petrobras — dividend thesis weakened by reinvestment shift`).
 
 ## User Checkpoint
 

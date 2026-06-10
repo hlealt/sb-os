@@ -7,7 +7,7 @@ runtime: agent-loop
 
 The `/sb-investor` reasoning mode that re-evaluates an EXISTING thesis against new information — surfacing staleness, new evidence-against, and tripped / near invalidation criteria — so the thesis base stays falsifiable over time. **This mode NEVER hand-writes a thesis page** — it reasons and proposes; `sb-fin-create-thesis` (its named `extend` entry point, targeting the existing thesis by slug) persists every update (delegate-not-replace).
 
-**Loaded by:** `./investor.md` reads-and-follows this file when `./capability-manifest.md` routes the `review` (B3) intent. The invariants, policy read-rules wiring, present-and-confirm pattern, issue-surfacing, Rule A, and the per-step Investor Checkpoint in `./investor-loop.md` are already in force when this file runs — this file does NOT restate them. Read `./investor-loop.md` before acting on any step below.
+**Loaded by:** `./investor.md` reads-and-follows this file when `./capability-manifest.md` routes the `review` (B3) intent. Read `./investor-loop.md` before acting on any step below.
 
 **Division of labour (read once, then act):**
 
@@ -24,7 +24,7 @@ The `/sb-investor` reasoning mode that re-evaluates an EXISTING thesis against n
 
 Before ANY reasoning, load the policy file(s) `../../CLAUDE.md` § Policy Read-Rules requires — per `./investor-loop.md` § Policy read-rules wiring. Reviewing or invalidating a thesis is such an action: `research-policy.md` is required (scope / priorities / exclusions / horizon); load `source-policy.md` too — this mode weighs and trusts the sources it evaluates. NEVER restate the read-rules table — read it.
 
-If `research-policy.md` marks the thesis's topic out-of-scope or excluded, say so and STOP, or offer to widen scope via the `policy` thin mode — do NOT reason past an exclusion (`./investor-loop.md` § Policy read-rules wiring; Rule A). This gate runs before Step 2 every time; no review reasoning begins before it clears.
+If `research-policy.md` marks the thesis's topic out-of-scope or excluded, say so and STOP, or offer to widen scope via the `policy` thin mode — do NOT reason past an exclusion (`./investor-loop.md` § Policy read-rules wiring; Rule A).
 
 ## Step 2 — Load the target thesis
 
@@ -109,26 +109,13 @@ A `status` downgrade (e.g. `active` → `developing`, or → `rejected` / `archi
 
 ### Adversarial refuter (`[R]`) — dispatch with the review rubric
 
-On `[R]`, read-and-follow `./adversarial-refuter.md` (the shared refuter-dispatch workflow; registered as a cross-mode mechanism). This mode DISPATCHES it — it adds NO discovery engine, NEVER re-runs the Step 3b Disconfirm, and NEVER re-implements the refutation logic; `./adversarial-refuter.md` owns the backend, single-pass, read-only, and no-generation mechanics. Hand it the CLOSED input set its § Step 1 requires:
-
-| Input | What this mode passes |
-|-------|------------------------|
-| Drafted artifact | the Step 5 verdict block above — the verdict, decayed assumptions, new evidence-against, source tensions, per-criterion status, and recommended change exactly as drafted |
-| Cited sources | every source the verdict cites (the Step 3–4 evidence already in hand) — passed per `./adversarial-refuter.md` § Step 1: inline for small payloads, or as the closed read-set of cited file paths for large ones; full text never re-enters this mode (anti-context-rot) |
-| The review rubric | the ordered attack questions below — this mode OWNS its rubric; `./adversarial-refuter.md` never hard-codes it |
-| `research-policy` scope | the scope / exclusions loaded at Step 1 |
+On `[R]`, read-and-follow `./adversarial-refuter.md` and dispatch it with the closed input set its § Step 1 requires: **Drafted artifact** = the Step 5 verdict block (verdict, decayed assumptions, new evidence-against, source tensions, per-criterion status, and recommended change); **Cited sources** = every source the verdict cites (the Step 3–4 evidence), inline for small payloads or as the closed read-set of cited file paths for large ones (full text never re-enters this mode — anti-context-rot); **rubric** = the ordered attack questions below; **policy scope** = the scope/exclusions loaded at Step 1. Display the returned critique per `./adversarial-refuter.md` § Step 4; re-present this SAME checkpoint with the critique added.
 
 **Review rubric (the attack questions the refuter tests this verdict against):**
 
 1. Is EACH invalidation criterion tested against the BEST available disconfirming evidence — including the criterion's targeted Step 3b Disconfirm result — or does a stronger disconfirmer in the cited sources go unaddressed?
 2. Is the verdict (**holding** / **weakening** / **invalidated**) consistent with the per-criterion statuses — does any tripped/near criterion contradict the stated verdict?
 3. Does any criterion marked **clear** sit on sources that actually show it as **near** or **tripped** (incl. internally-contradicted evidence the Step 4 tension flags expose)?
-
-The refuter returns its § Output schema verbatim — one `overturned | weakened | survives` verdict per rubric item. Render that returned block RAW + flagged as a distinct **"Adversarial critique"** block beside the verdict, then RE-PRESENT this SAME checkpoint with the critique added:
-
-- The critique is shown intact; this mode may add a one-line agree/disagree per item but NEVER edits or suppresses it.
-- It is single-pass — the refuter runs ONCE and never loops. Points the user accepts fold into the verdict via the existing `[E]` path, NOT by re-running the refuter.
-- The `[S]/[E]/[N]` choice then follows unchanged — the critique informs the decision; the user still decides. A failed or unavailable refuter NEVER blocks this checkpoint: present the verdict unchanged and proceed (`./adversarial-refuter.md` § Step 2).
 
 ## Step 6 — Persist via the scribe (`extend` path)
 
@@ -156,8 +143,7 @@ After persistence, route any implied next step — surface it, never auto-chain 
 
 ## Boundaries (this mode)
 
-- Read-only on portfolio/ledger data; position data ONLY through registered read tools (`./investor-loop.md` § Tools-only data access). Thesis / source / entity pages are markdown the agent reads directly — they are not position data.
-- Writes ONLY by invoking `sb-fin-create-thesis` in its named investor-orchestrated `extend` entry point (thesis-page updates) and by dispatching `./research.md` (which persists `raw/` + wiki only through its own tool and ingest sub-agents). The agent NEVER hand-writes a thesis page or a raw/wiki file (`./investor-loop.md` § Own-workspace-writes boundary).
+The loop invariants (`./sb-investor-loop.md` § Read-only invariant, § Tools-only data access, § Own-workspace-writes boundary, § Per-Step Checkpoint) are in force. Thesis / source / entity pages are markdown the agent reads directly — they are not position data.
+
+- Writes ONLY by invoking `sb-fin-create-thesis` in its named investor-orchestrated `extend` entry point (thesis-page updates) and by dispatching `./research.md` (which persists `raw/` + wiki only through its own tool and ingest sub-agents). The agent NEVER hand-writes a thesis page or a raw/wiki file (`./sb-investor-loop.md` § Own-workspace-writes boundary).
 - `status` downgrades are ALWAYS surfaced for approval, NEVER applied silently.
-- Never mutates ledgers, `portfolio.json`, or the dashboard. A request to do so, or to hand-write the thesis page instead of delegating to the scribe, is out-of-structure → Rule A in `./investor-loop.md`.
-- Every user-facing turn ends at an Investor Checkpoint (`./investor-loop.md` § Per-Step Checkpoint).
