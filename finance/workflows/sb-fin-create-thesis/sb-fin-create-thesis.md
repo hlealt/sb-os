@@ -101,27 +101,60 @@ Body composition rules:
 4. For a `speculative-thesis-update` derived from the **Thesis Invalidation** trigger (the **(extend)** path), frame `Evidence against` around the contradicting source the entry recorded.
 5. If the optional `Related companies/assets/sectors/countries` section is included, its wikilinks MUST mirror the `related_*` frontmatter exactly.
 
-### Step 3 — Cross-link related entity pages
+### Step 3 — Run the transition script (bookkeeping)
 
-Follow the Cross-Link Procedure in `../shared/scribe-shared.md` for each entity wikilink placed in `related_companies` / `related_assets` / `related_sectors` / `related_countries`. The link to append is `- [[<thesis-slug>.md]]`.
+The mechanical bookkeeping from the previous Steps 3–5 (cross-links + `last-touched` bumps, log-entry resolution, leaf-index row) is performed by a single atomic script call. For the behavioral semantics of each operation, read `../shared/scribe-shared.md`.
 
-**(extend)** Cross-link ONLY entities newly introduced by the update payload; the page's pre-existing entities are already linked. Before appending a thesis wikilink to an entity's `Related` section, verify it is not already present — never duplicate an existing cross-link.
+**Assemble the payload JSON file** (write to a temp file, e.g. `/tmp/scribe_payload.json`):
 
-### Step 4 — Resolve the thesis-log entry
+For **`thesis-new`** (authoring path):
 
-The thesis-log (`{wiki_root}/logs/theses.md`) is an actionable queue. Do NOT write a `thesis-created` entry.
+```json
+{
+  "mode": "thesis-new",
+  "slug": "<thesis-slug>",
+  "entities": [
+    {"kind": "<organizations|assets|countries|sectors>", "slug": "<entity-slug>"},
+    ...
+  ],
+  "log_ref": {"timestamp": "<timestamp>", "slug": "<slug>"},
+  "description": "<one-line Claim summary ≤280 chars>"
+}
+```
 
-- **Promoted from a `proposed-new-thesis`** — DELETE the matching `proposed-new-thesis` entry (header + body) from `{wiki_root}/logs/theses.md`. Locate it by the timestamp + slug resolved in step 1 (its H2 `<brief>` is the slug). Resolution = the thesis page now exists; the newly created page is the record (lint also auto-prunes a `proposed-new-thesis` by filename against `wiki/theses/` pages).
-- **Fresh proposal (no candidate)** — nothing to remove; the log is untouched.
-- **(extend)** — applies a `speculative-thesis-update`. If the caller referenced a specific `speculative-thesis-update` entry the update closes (identified by its `- target thesis:` wikilink), DELETE only that one referenced entry from `{wiki_root}/logs/theses.md` on the user action. A `speculative-thesis-update` is NEVER auto-pruned by lint (its page already exists) — it leaves the queue ONLY by this explicit resolution or user dismissal. Otherwise the log is untouched.
+- `entities`: one entry per wikilink in `related_companies` / `related_assets` / `related_sectors` / `related_countries`. Omit the array (or pass `[]`) when there are none.
+- `log_ref`: include ONLY when promoted from a `proposed-new-thesis` entry; omit for fresh proposals.
+- `description`: the one-line summary of the `Claim` for the leaf index row.
 
-Never write any other entry type.
+For **`thesis-extend`** (extend path):
 
-### Step 5 — Update theses leaf index
+```json
+{
+  "mode": "thesis-extend",
+  "slug": "<thesis-slug>",
+  "new_entities": [
+    {"kind": "<organizations|assets|countries|sectors>", "slug": "<entity-slug>"},
+    ...
+  ],
+  "log_ref": {"target_thesis": "<thesis-slug>"},
+  "updated_description": "<updated Claim summary ≤280 chars>"
+}
+```
 
-Follow the Leaf-Index Procedure in `../shared/scribe-shared.md`. This scribe's index is `{wiki_root}/wiki/theses/theses.md`; the `Description` is a one-line summary of the `Claim` written in step 2.
+- `new_entities`: ONLY entities newly introduced by this update payload; omit (or pass `[]`) if none.
+- `log_ref`: include ONLY when closing a specific `speculative-thesis-update` entry (identified by its `- target thesis:` wikilink); omit otherwise.
+- `updated_description`: include ONLY if the extend sharpened the `Claim`; omit otherwise (index row stays unchanged).
 
-**(extend)** Follow the extend clause in the Leaf-Index Procedure in `../shared/scribe-shared.md` — update the existing row's `Description` ONLY if the extend sharpened the `Claim`; never append a new row for an extend.
+**Run the script** (from the vault root — no `--vault-root` flag needed):
+
+```
+python {sb_os_path}/finance/scripts/investimentos/scribe_transition.py --payload /tmp/scribe_payload.json
+```
+
+**Read the UN-PIPED exit code.** Do NOT pipe the output (e.g., `… | tee log`) — piping masks the real exit code. Capture stdout separately if needed.
+
+- **Exit 0** — success. Relay the script's report to the user (edits performed + any skips).
+- **Exit nonzero** — HALT immediately. Surface the script's error report to the user. NEVER hand-perform the bookkeeping steps silently as a fallback. The user decides how to proceed.
 
 ## User Checkpoint
 
@@ -139,4 +172,5 @@ Both entry points are investor-orchestrated: NO separate checkpoint at the scrib
 | Caller attempts `status: active` without `Evidence against` or `Invalidation criteria` | Halt at step 2; require both sections before writing an active thesis (per `page-types.ext.md`). |
 | Related entity page named does not exist | Skip cross-link for that entity silently in step 3; continue with the others. |
 | `{wiki_root}/wiki/theses/theses.md` index exists with non-standard columns | Preserve user's columns at step 5; append row matching existing format with `File` and closest-equivalent `Description` filled. |
+| Script exits nonzero at step 3 | Halt immediately; surface the script's error report to the user. NEVER hand-perform the bookkeeping (cross-links, log resolution, index row) as a silent fallback. The user decides how to proceed. |
 | User rejects at the investor's present-and-confirm step | The investor halts before invoking the scribe. No writes. End run. |

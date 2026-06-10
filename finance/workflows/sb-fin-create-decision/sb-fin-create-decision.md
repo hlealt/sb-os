@@ -87,22 +87,42 @@ Body composition rules:
 5. Cite every factual claim with inline `[^N]` markers per `{sb_os_path}/wiki/workflows/shared/citation-format.md`. Append matching `[^N]: [[<source-filename>.md]]` definitions in the `Data and sources used` section. A decision cites the same source pages and entity `## Financials` rows the reasoning rested on.
 6. `Review trigger` states the event or date that should reopen this decision (e.g., next earnings, a price level, a thesis-invalidation criterion tripping).
 
-### Step 3 — Cross-link related entity and thesis pages
+### Step 3 — Run the transition script (bookkeeping)
 
-Follow the Cross-Link Procedure in `../shared/scribe-shared.md` for each wikilink placed in `related_thesis` / `related_asset` / `related_company`. The link to append is `- [[<decision-filename-without-.md>.md]]`. Do NOT create the missing entity or thesis page from this workflow — entity-page creation is `/sb-wiki-ingest`'s responsibility and thesis-page creation is `sb-fin-create-thesis`'s.
+The mechanical bookkeeping from the previous Steps 3–5 (cross-links + `last-touched` bumps, log-entry resolution, leaf-index row) is performed by a single atomic script call. For the behavioral semantics of each operation, read `../shared/scribe-shared.md`.
 
-### Step 4 — Resolve any source signals in the log
+**Resolve source-queue entries (agent-side, before calling the script):** If the user or investor referenced a `{wiki_root}/source-queue.md` entry (e.g., a `gated_pending_access` source the user finally read and acted on), resolve that entry NOW — agent-side, per that file's own resolution rule — before building the payload. The script resolves ONLY `{wiki_root}/logs/theses.md` entries; `source-queue.md` resolution stays here, never delegated to the script.
 
-A decision page is the durable record of the action. There is no `candidate-decision` trigger type in the logs to resolve (unlike the thesis-log's `proposed-new-thesis` / `speculative-thesis-update`). Do NOT write a `decision-created` entry and do NOT remove unrelated log entries.
+**Assemble the payload JSON file** (write to a temp file, e.g. `/tmp/scribe_payload.json`):
 
-- If the user or investor referenced a specific actionable queue entry the decision closes — a `{wiki_root}/logs/theses.md` thesis entry, or a `{wiki_root}/source-queue.md` source entry (e.g., a `gated_pending_access` source the user finally read and acted on) — resolve only that one referenced entry per its own file/type's resolution rule. This workflow has no entry type of its own; it never invents one.
-- Otherwise the logs are untouched.
+```json
+{
+  "mode": "decision",
+  "filename": "<YYYY-MM-DD-action-subject.md>",
+  "links": [
+    {"kind": "theses", "slug": "<thesis-slug>"},
+    {"kind": "organizations", "slug": "<company-slug>"},
+    {"kind": "assets", "slug": "<asset-slug>"}
+  ],
+  "log_ref": {"timestamp": "<timestamp>", "slug": "<slug>"},
+  "description": "<action + subject summary ≤280 chars>"
+}
+```
 
-Never write any other entry type.
+- `links`: one entry per wikilink in `related_thesis` / `related_asset` / `related_company`. Use `kind: "theses"` for thesis cross-links; `kind: "organizations"` or `kind: "assets"` for entity cross-links. Omit the array (or pass `[]`) when there are none.
+- `log_ref`: include ONLY when closing a referenced `{wiki_root}/logs/theses.md` thesis entry; omit otherwise. Supported shapes: `{"timestamp": "...", "slug": "..."}` for a `proposed-new-thesis` / thesis-queue entry, or `{"target_thesis": "..."}` for a `speculative-thesis-update`.
+- `description`: the one-line action + subject summary (≤280 chars; e.g., `Sell Petrobras — dividend thesis weakened by reinvestment shift`).
 
-### Step 5 — Update decisions leaf index
+**Run the script** (from the vault root — no `--vault-root` flag needed):
 
-Follow the Leaf-Index Procedure in `../shared/scribe-shared.md`. This scribe's index is `{wiki_root}/wiki/decisions/decisions.md`; the `Description` is a one-line summary combining the action and subject (≤280 chars; e.g., `Sell Petrobras — dividend thesis weakened by reinvestment shift`).
+```
+python {sb_os_path}/finance/scripts/investimentos/scribe_transition.py --payload /tmp/scribe_payload.json
+```
+
+**Read the UN-PIPED exit code.** Do NOT pipe the output (e.g., `… | tee log`) — piping masks the real exit code. Capture stdout separately if needed.
+
+- **Exit 0** — success. Relay the script's report to the user (edits performed + any skips).
+- **Exit nonzero** — HALT immediately. Surface the script's error report to the user. NEVER hand-perform the bookkeeping steps silently as a fallback. The user decides how to proceed.
 
 ## User Checkpoint
 
@@ -166,4 +186,5 @@ User response handling:
 | Caller attempts to record price / qty / fees / position size | Reject the transaction data at step 2; record reasoning only — transaction data lives in the bookkeeper ledger. |
 | Related entity or thesis page named does not exist | Skip cross-link for that link silently in step 3; continue with the others. |
 | `{wiki_root}/wiki/decisions/decisions.md` index exists with non-standard columns | Preserve user's columns at step 5; append row matching existing format with `File` and closest-equivalent `Description` filled. |
+| Script exits nonzero at step 3 | Halt immediately; surface the script's error report to the user. NEVER hand-perform the bookkeeping (cross-links, log resolution, index row) as a silent fallback. The user decides how to proceed. |
 | User aborts at user-intent confirmation checkpoint | Halt before step 2. No writes. End run. |

@@ -224,3 +224,28 @@ Each capability ends its user-facing turn at a STOP. That STOP is an Investor Ch
 7. **All clear** → advance.
 
 The checkpoint is the loop's heartbeat: every capability boundary re-checks the invariants. A step never advances with an unresolved blocking issue, a silently-executed out-of-structure action, a skipped policy load, or an unconfirmed write.
+
+### Read-only single-fact fast lane
+
+**Qualification gate — evaluate at the START of the turn, before capability routing.** A turn qualifies for the fast lane ONLY when ALL THREE criteria are satisfied simultaneously:
+
+| Criterion | Passes when |
+|-----------|-------------|
+| (i) Read-only, no persistence intent | The turn has no intent to write a page, source, policy file, or log entry — and no intent to invoke a scribe or capture dispatch |
+| (ii) No new web research | The turn requires no open-web discovery, no new source fetching, no disconfirm-wave dispatch |
+| (iii) Single-fact from already-persisted data | The question is answerable from wiki pages, policy files, read-only portfolio tool output, or the investor log already in the vault — no new evidence required |
+
+If ALL THREE pass, the turn runs in fast-lane mode. If ANY criterion fails, the full per-step checkpoint cadence applies (items 1–7 above, after every capability step).
+
+**Fast-lane effect — checkpoint cadence only.** The Step-1 policy gate is UNCHANGED: it runs in full exactly as it would on any turn. The ONLY change is that the seven-item per-step checkpoint collapses to ONE end-of-answer checkpoint (items 1–7 run ONCE, at the end of the turn's answer, not after each intermediate step).
+
+**Disqualification tripwire — hard rule.** If ANY write intent, persistence intent, or web-research intent arises mid-turn (discovered after qualification, not stated upfront), the fast lane is IMMEDIATELY abandoned. The full per-step checkpoint cadence resumes from that point: items 1–7 apply to all steps completed since the last checkpoint as well as all steps going forward. There is no recovery to fast-lane mode within the same turn.
+
+**2026-06-06 incident guard — explicit exclusions.** The fast lane NEVER applies to a turn that:
+
+- Touches a data file (ledger CSV, `portfolio.json`, dashboard, or any bookkeeper store), whether reading through a registered tool or otherwise
+- Uses a tool that has a write mode (even if the write mode is not invoked in this specific call)
+- Invokes or prepares a scribe (`sb-fin-create-thesis`, `sb-fin-create-decision`) or the capture tool (`sb-wiki-capture-source`)
+- Dispatches any sub-agent with write capability
+
+These turns are ALWAYS subject to the full per-step checkpoint (items 1–7) with no exception.
