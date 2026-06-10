@@ -296,6 +296,119 @@ def sync_raw_indexes(wiki_root: Path, report: Report, apply_changes: bool) -> No
             write_text(index_path, "\n".join(lines) + "\n", report, apply_changes)
 
 
+def ingested_raw_filenames(wiki_root: Path) -> tuple[set[str], dict[str, set[str]]]:
+    """Inventory which raws have a 1:1 source page, by two union signals.
+
+    A raw is "ingested" when EITHER signal fires — both keyed on the raw
+    FILENAME / stem so .md and .pdf raws are handled uniformly:
+
+      - ``raw:`` backlink — the source page's ``raw:`` frontmatter wikilinks
+        the raw filename (the canonical 1:1 link per the wiki schema). Returned
+        as a set of raw filenames across ALL source pages, any origin.
+      - filename mirror — a source page ``wiki/sources/{origin}/{stem}.md``
+        whose stem equals the raw's stem (a .md raw mirrors 1:1; a .pdf raw's
+        source page is the title-slug ``.md``, same stem). Returned per origin.
+
+    Returns ``(backlink_targets, mirror_stems_by_origin)`` so the caller can
+    record WHICH signal healed each row.
+    """
+    sources_root = wiki_root / "wiki" / "sources"
+    backlink_targets: set[str] = set()
+    mirror_stems_by_origin: dict[str, set[str]] = {}
+    if not sources_root.exists():
+        return backlink_targets, mirror_stems_by_origin
+    for origin_dir in sorted(p for p in sources_root.iterdir() if p.is_dir()):
+        index_name = f"{origin_dir.name}.md"
+        stems: set[str] = set()
+        for page in sorted(origin_dir.glob("*.md")):
+            if page.name == index_name or page.name in NON_SOURCE_FILES:
+                continue
+            stems.add(page.stem)
+            raw_val = frontmatter(read_text(page)).get("raw", "")
+            for target in re.findall(r"\[\[([^\]|#]+?)\]\]", raw_val):
+                backlink_targets.add(Path(target).name)
+        mirror_stems_by_origin[origin_dir.name] = stems
+    return backlink_targets, mirror_stems_by_origin
+
+
+def heal_raw_wiki_cells(wiki_root: Path, report: Report, apply_changes: bool) -> None:
+    """Flip stale ``Wiki = No`` raw-index rows to ``Yes`` when the raw's 1:1
+    source page exists; report dangling rows (File cell → missing raw file).
+
+    A raw counts as ingested when EITHER signal from ``ingested_raw_filenames``
+    fires (the source page's ``raw:`` backlink names it, OR a same-stem source
+    page exists in the origin). ONLY an exact ``No`` cell is flipped — ``Partial``,
+    ``Duplicate (…)``, and ``Yes`` are never touched. A row whose raw FILE is
+    absent on disk is DANGLING: reported, never auto-flipped and never deleted
+    (a raw may have been moved — same policy as step 7 missing-raw rows; the user
+    disposes phantoms manually). Closes the Step-1.7 stale-``No`` masking class:
+    the ingest content-duplicate gate keys its comparison set on source-page
+    existence, so healing the cell removes the data inconsistency itself.
+    """
+    raw_root = wiki_root / "raw"
+    healed: list[dict[str, str]] = []
+    dangling: list[dict[str, str]] = []
+    if not raw_root.exists():
+        report.detected["raw_wiki_healed"] = healed
+        report.detected["raw_wiki_dangling"] = dangling
+        return
+    backlink_targets, mirror_stems = ingested_raw_filenames(wiki_root)
+    for origin_dir in sorted(
+        p for p in raw_root.iterdir()
+        if p.is_dir() and p.name != "assets" and not excluded_dir(p.relative_to(wiki_root))
+    ):
+        index_path = origin_dir / f"{origin_dir.name}.md"
+        if not index_path.exists():
+            continue
+        lines = read_text(index_path).splitlines()
+        origin_stems = mirror_stems.get(origin_dir.name, set())
+        modified_rows: list[int] = []
+        for idx, line in enumerate(lines):
+            if not line.strip().startswith("|") or re.match(r"^\s*\|\s*-+", line):
+                continue
+            cells = split_row_cells(line)
+            if not cells or cells[0] == "File" or len(cells) != 4:
+                continue
+            match = re.search(r"\[\[([^\]|#]+?)\]\]", cells[0])
+            if not match:
+                continue
+            raw_filename = Path(match.group(1)).name
+            if not os.path.exists(_fspath(origin_dir / raw_filename)):
+                # Dangling: File cell points at a raw file not on disk. Never
+                # heal (no real raw) and never delete (may be a moved raw).
+                dangling.append({"origin": origin_dir.name, "file": raw_filename})
+                continue
+            if cells[3].strip() != "No":
+                continue
+            backlink_hit = raw_filename in backlink_targets
+            mirror_hit = Path(raw_filename).stem in origin_stems
+            if backlink_hit or mirror_hit:
+                cells[3] = "Yes"
+                lines[idx] = make_row(cells)
+                modified_rows.append(idx)
+                healed.append(
+                    {
+                        "origin": origin_dir.name,
+                        "file": raw_filename,
+                        "from": "No",
+                        "to": "Yes",
+                        "signal": "raw-backlink" if backlink_hit else "filename-mirror",
+                    }
+                )
+        if modified_rows:
+            # Post-rewrite shape guard: every modified row must still split into
+            # exactly 4 cells. A violation is a script bug — refuse the write.
+            broken = [lines[i] for i in modified_rows if len(split_row_cells(lines[i])) != 4]
+            if broken:
+                report.detected.setdefault("row_shape_errors", []).extend(
+                    f"{index_path}: {row}" for row in broken
+                )
+            else:
+                write_text(index_path, "\n".join(lines) + "\n", report, apply_changes)
+    report.detected["raw_wiki_healed"] = healed
+    report.detected["raw_wiki_dangling"] = dangling
+
+
 def sync_wiki_leaf_headers_and_queue(wiki_root: Path, report: Report, apply_changes: bool) -> None:
     specs = [
         ("concepts", "concepts.md", CONCEPT_HEADER, "Description"),
@@ -2156,6 +2269,7 @@ def main() -> int:
             state_fallback_reason=fallback_reason,
         )
         sync_raw_indexes(wiki_root, report, args.apply)
+        heal_raw_wiki_cells(wiki_root, report, args.apply)
         sync_wiki_leaf_headers_and_queue(wiki_root, report, args.apply)
         sync_type_tags(wiki_root, report, args.apply)
         sync_source_my_take_and_queue(wiki_root, report, args.apply)

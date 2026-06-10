@@ -102,6 +102,7 @@ Run both, in order — the first owns the deterministic index-row + footnote wor
 | `detected.type_tags` | 7 | Type-tag sync results — `tags_added` / `type_index_added` counts (auto-applied under `--apply`) + `unresolved` pages whose `type:` cannot be derived deterministically (surface in the LINT REPORT for the user) |
 | `detected.rename_proposals`, `duplicate_raws`, `title_disambiguation_needed` | 7.6 | PDF title-conformance detection; same-title collisions surface as disambiguation, never proposals |
 | `detected.subdivision_proposals`, `subdivision_stragglers`, `kind_missing`, `generic_kind_flags` | 7.5 | Folder-subdivision detection |
+| `detected.raw_wiki_healed`, `raw_wiki_dangling` | 7 | Stale `Wiki=No`→`Yes` heals (rows whose 1:1 source page exists — auto-applied under `--apply`) + dangling rows (File cell → missing raw file — report-only, never auto-deleted) |
 
 Execution flags — the helper also owns the mechanical halves of the write paths:
 
@@ -222,8 +223,9 @@ For each `{wiki_root}/raw/{origin}/` directory (including `studies/`), **EXCLUDI
 1. Verify `{origin}.md` (or `studies.md`) exists. If missing, CREATE it with the standard raw index header per `../shared/index-formats.md` "Raw Index" section: `| File | Title | Date | Wiki |`.
 2. For each raw file in the directory, ensure a row exists in the index. If missing, add the row only when `Title` and `Date` are deterministic from frontmatter, an H1, or the filename date.
 3. Index creation and maintenance is the agent's job, not the user's (per schema § "/sb-wiki-lint" step 7 and `../shared/folder-structure.md` "Creation Rules" table).
-4. If a row already exists, preserve its `Wiki` value (`Yes`, `Partial`, `No`, or `Duplicate (…)`).
+4. If a row already exists, preserve its `Wiki` value (`Yes`, `Partial`, `No`, or `Duplicate (…)`) — EXCEPT the stale-`No` heal in item 6.
 5. Capture `raw-indexes-created` count, `raw-rows-added` total, and unresolved raw rows from `judgment_needed` for the LINT REPORT.
+6. **Stale-`Wiki=No` heal + dangling report (deterministic, auto-applied by the helper).** The helper flips a row's `Wiki` cell `No`→`Yes` when the raw's 1:1 source page exists — EITHER the source page's `raw:` frontmatter names this raw OR a same-stem source page exists under `wiki/sources/{origin}/`. ONLY an exact `No` is flipped (`Partial` / `Duplicate (…)` / `Yes` are NEVER touched); this closes the Step-1.7 content-duplicate gate's stale-`No` masking class (the gate keys its comparison set on source-page existence, so a stale `No` once hid a real duplicate). A row whose File-cell raw file is ABSENT on disk is reported as `raw_wiki_dangling` — NEVER auto-flipped, NEVER auto-deleted (a raw may have been moved; the user disposes phantoms manually). Consume `detected.raw_wiki_healed` and `detected.raw_wiki_dangling` for the LINT REPORT.
 
 For each wiki leaf folder (`{wiki_root}/wiki/concepts/`, `entities/`, `topics/`):
 
@@ -359,6 +361,8 @@ Thesis updates awaiting investor decision (N): "<slug>" — logged YYYY-MM-DD (n
 Broken wikilinks (N): A=<n> auto-fixable | B=<m> need a page | C=<k> unresolvable; questions.md broken (J): <target>, … (omit the questions.md clause when zero or layer OFF)
 Index sync — wiki/sources My take refreshed: <N> source pages
 Index sync — raw indexes: <N> created (raw/<origin>/<origin>.md), <M> rows added across raw/{origins}
+Raw index — stale Wiki=No healed (<N>): raw/<origin>/<file> (1:1 source page exists) (omit when zero)
+Raw index — dangling rows (<N>): raw/<origin>/<file> (File cell → missing raw file; dispose manually) (omit when zero)
 Index sync — wiki leaf indexes: <N> created (wiki/<type>/<type>.md), <M> rows added across wiki/{concepts,entities,topics}
 Type tags synced: <N> pages (type appended to tags), <M> indexes given type: index (omit when both zero); unresolved type (K): <file> — <reason>
 Footnotes renumbered: <N> source pages
