@@ -24,6 +24,7 @@ import json
 import os
 import re
 import hashlib
+import subprocess
 import sys
 import unicodedata
 from dataclasses import dataclass, field
@@ -1659,12 +1660,418 @@ def cmd_sweep_gather(args_list: list[str]) -> int:
     return 0
 
 
+def cmd_update_backfill_gather(args_list: list[str]) -> int:
+    """Retroactive backfill gather — firm sweep + tier-gated semantic probe loop.
+
+    Read-only, stateless subcommand (mirrors open-gaps / sweep-gather).
+    Evaluates every source page against current topic pages:
+    (a) firm-mechanical corpus sweep (slug match + grep wikilink overlap),
+    (b) per-source semantic probes via the search helper (--type topic --k 5),
+    (c) citation-dedupe + rejected-ledger suppression.
+
+    Emits JSON: candidate pairs + signals + counts + tier availability.
+    Writes nothing — the LLM confirmation bar and proposal-set drafting
+    happen in the /sb-wiki-update-backfill command (scan mode).
+    """
+    parser = argparse.ArgumentParser(
+        description="Retroactive backfill gather — firm + semantic candidate pairs."
+    )
+    parser.add_argument("--vault-root", type=Path, default=Path.cwd())
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Write JSON to this file instead of stdout.",
+    )
+    parser.add_argument(
+        "--skip-semantic",
+        action="store_true",
+        help="Firm-only gather — skip the per-source semantic probe loop. Use for "
+             "cheap incremental testing or when Voyage is intentionally not consulted.",
+    )
+    args = parser.parse_args(args_list)
+    wiki_root = resolve_wiki_root(args.vault_root.resolve())
+
+    # --- Check semantic tier availability ---
+    # --skip-semantic forces the firm-only path regardless of tier readiness.
+    tier_available = False if args.skip_semantic else _check_search_tier(wiki_root)
+
+    # --- Load rejected ledger ---
+    rejected_pairs: set[tuple[str, str]] = set()
+    pending_file = wiki_root / "pending-topic-updates.md"
+    if pending_file.exists():
+        rejected_pairs = _parse_rejected_ledger(read_text(pending_file))
+
+    # --- Load citation map (topic -> set of cited source filenames) ---
+    citation_map: dict[str, set[str]] = _build_topic_citation_map(wiki_root)
+
+    # --- Enumerate topic pages (the firm sweep reads each matched page on demand;
+    #     the semantic confirmation bar is the LLM's job in scan mode, so the
+    #     gather needs no Scope cache here) ---
+    topics_dir = wiki_root / "wiki" / "topics"
+    topic_pages: list[Path] = []
+    if topics_dir.exists():
+        for page in sorted(topics_dir.glob("*.md")):
+            if page.name == "topics.md":
+                continue
+            topic_pages.append(page)
+
+    # --- Build source pages list ---
+    sources_root = wiki_root / "wiki" / "sources"
+    source_pages: list[Path] = []
+    if sources_root.exists():
+        for origin_dir in sorted(p for p in sources_root.iterdir() if p.is_dir()):
+            for src in sorted(origin_dir.glob("*.md")):
+                if src.name == f"{origin_dir.name}.md":
+                    continue
+                source_pages.append(src)
+
+    # --- Firm-mechanical sweep ---
+    # Detection matches the forward firm-tier authority EXACTLY (schema §
+    # "Existing topic updates" Firm tier; ingest Step 3·7 match table) — the
+    # backfill never forks a second confidence bar. The three (and only three)
+    # firm match types:
+    #   (1) slug-match              — topic slug in the source title OR a Substance bullet
+    #   (2) key-concept-overlap     — Substance wikilink ∩ topic's Key concepts/Key entities links
+    #   (3) related-frontmatter-overlap — Substance wikilink ∩ topic's related: frontmatter links
+    # Wikilinks anywhere ELSE on the topic page (Sources, Timeline, prose) are
+    # grep false-positives the forward authority DROPS — there is no bare
+    # "wikilink-overlap" arm. Iterate sorted slugs for deterministic row order.
+    firm_candidates: list[dict] = []
+    topic_slugs_sorted: list[str] = sorted(p.stem for p in topic_pages)
+
+    for src_page in source_pages:
+        src_text = read_text(src_page)
+        src_fm = frontmatter(src_text)
+        src_title = src_fm.get("title", "") or first_h1(src_text)
+        src_rel = str(src_page.relative_to(wiki_root)).replace("\\", "/")
+        src_filename = src_page.name
+
+        substance = section_body(src_text, "Substance")
+        substance_links = set(re.findall(r"\[\[([^\]|]+?\.md)\]\]", substance)) if substance else set()
+        substance_text_lower = substance.lower() if substance else ""
+        src_title_lower = src_title.lower()
+
+        for topic_stem in topic_slugs_sorted:
+            # Citation-dedupe applies to ALL tiers (spec row 6 names it in the
+            # gather chain): if the topic page already cites this source, the
+            # information is already there — suppress before any match work.
+            if src_filename in citation_map.get(topic_stem, set()):
+                continue
+
+            match_types: list[str] = []
+            # (1) Slug match
+            if topic_stem.lower() in src_title_lower or topic_stem.lower() in substance_text_lower:
+                match_types.append("slug-match")
+
+            # (2)/(3) Wikilink overlap — ONLY against qualifying locations
+            # (Key concepts/Key entities sections and related: frontmatter),
+            # never the whole page body. Mirrors the forward authority's
+            # "drop wikilink hits outside the qualifying locations".
+            if substance_links:
+                topic_path = topics_dir / f"{topic_stem}.md"
+                if topic_path.exists():
+                    topic_text = read_text(topic_path)
+                    topic_fm = frontmatter(topic_text)
+                    related_links = _parse_related_frontmatter(topic_fm)
+                    key_sections = _extract_key_section_links(topic_text)
+                    if substance_links & key_sections:
+                        match_types.append("key-concept-overlap")
+                    if substance_links & related_links:
+                        match_types.append("related-frontmatter-overlap")
+
+            if match_types:
+                firm_candidates.append({
+                    "source": src_rel,
+                    "source_title": src_title,
+                    "topic": f"{topic_stem}.md",
+                    "signal": "firm:" + ",".join(match_types),
+                    "match_types": match_types,
+                })
+
+    # --- Semantic probe loop (tier-gated) ---
+    semantic_candidates: list[dict] = []
+    firm_pairs = {(c["source"], c["topic"]) for c in firm_candidates}
+
+    if tier_available:
+        for src_page in source_pages:
+            src_text = read_text(src_page)
+            src_fm = frontmatter(src_text)
+            src_title = src_fm.get("title", "") or first_h1(src_text)
+            src_rel = str(src_page.relative_to(wiki_root)).replace("\\", "/")
+            substance = section_body(src_text, "Substance")
+
+            # Build substance digest (≤2 sentences)
+            digest = _make_substance_digest(substance)
+            query = f"{src_title} — {digest}" if digest else src_title
+
+            # Call search helper
+            search_result = _call_search_helper(wiki_root, query, k=5, topic_only=True)
+            if search_result is None:
+                continue
+
+            # Per-source semantic candidates AFTER the dedupe chain. The gather
+            # applies NO confirmation bar and NO token pre-filter (D11 + design
+            # Q1: the semantic arm carries no token-overlap signal; a deterministic
+            # pre-filter would both reintroduce the banned signal and silently drop
+            # candidates the LLM never sees). The authorized narrowing here is ONLY
+            # the dedupe chain: firm-wins -> rejected-ledger -> citation-dedupe.
+            # The LLM confirmation bar (citable factual claim extending topic scope)
+            # runs in /sb-wiki-update-backfill scan mode, not here.
+            src_filename = src_page.name
+            # One probe can return the same topic page multiple times (different
+            # chunk anchors). Collapse to one entry per topic, keeping the highest
+            # score, BEFORE the cap — so a (source, topic) pair is never emitted
+            # twice and the cap counts distinct topics.
+            best_by_topic: dict[str, dict] = {}
+            for hit in search_result.get("results", []):
+                hit_rel = hit.get("path", "")
+                hit_stem = Path(hit_rel).stem
+                hit_score = hit.get("score", 0)
+                topic_key = f"{hit_stem}.md"
+                pair = (src_rel, topic_key)
+
+                # Dedupe chain (the only authorized narrowing)
+                if pair in firm_pairs:
+                    continue  # firm wins
+                if pair in rejected_pairs:
+                    continue  # rejected ledger
+                if src_filename in citation_map.get(hit_stem, set()):
+                    continue  # citation-dedupe
+                # The topic must still exist as a page (defensive — k-hits should
+                # already be topic pages under --type topic).
+                if not (topics_dir / f"{hit_stem}.md").exists():
+                    continue
+
+                prev = best_by_topic.get(topic_key)
+                if prev is None or hit_score > prev["score"]:
+                    best_by_topic[topic_key] = {
+                        "source": src_rel,
+                        "source_title": src_title,
+                        "topic": topic_key,
+                        "signal": f"semantic:{hit_score}",
+                        "score": hit_score,
+                    }
+
+            # Cap 2 PER SOURCE, ranked by helper score (descending), tie-broken by
+            # topic key for determinism — mirrors the forward per-ingest cap
+            # (design Q1 / schema "Semantic tier"): each source's probe is the
+            # ingest-equivalent unit, so the per-ingest cap of 2 applies per source
+            # here, never a single global cap. Overflow drops silently (re-detected
+            # by future ingests or a later backfill).
+            src_hits = sorted(
+                best_by_topic.values(),
+                key=lambda c: (-c["score"], c["topic"]),
+            )
+            semantic_candidates.extend(src_hits[:2])
+
+    # --- Build output ---
+    result = {
+        "firm_candidates": firm_candidates,
+        "semantic_candidates": semantic_candidates,
+        "firm_count": len(firm_candidates),
+        "semantic_count": len(semantic_candidates),
+        "total_sources_scanned": len(source_pages),
+        "total_topics_evaluated": len(topic_pages),
+        "tier_available": tier_available,
+        "semantic_skipped": bool(args.skip_semantic),
+        "rejected_pairs_suppressed": len(rejected_pairs),
+        "note": _gather_note(tier_available, args.skip_semantic),
+    }
+
+    output = json.dumps(result, indent=2, ensure_ascii=False)
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(output + "\n", encoding="utf-8")
+    else:
+        print(output)
+    return 0
+
+
+def _gather_note(tier_available: bool, skip_semantic: bool) -> str:
+    """Honest one-line note for the gather output — never claims a confirmation
+    bar ran (the LLM applies that in scan mode, not the gather)."""
+    base = "Propose-only — no wiki writes. Run /sb-wiki-update-backfill scan for the LLM confirmation bar and proposal-set drafting."
+    if skip_semantic:
+        return base + " Semantic arm SKIPPED (--skip-semantic): firm-only gather."
+    if tier_available:
+        return base + " Semantic tier available; candidates emitted post-dedupe, UNconfirmed (LLM confirms in scan mode)."
+    return base + " Semantic tier unavailable: firm-only gather (no token fallback, per D11)."
+
+
+def _check_search_tier(wiki_root: Path) -> bool:
+    """Check if the search helper is available and can run.
+
+    `--vault-root` is a GLOBAL option on sb-wiki-search.py — it MUST precede the
+    `status` subcommand (argparse rejects it after the subcommand with exit 2).
+    The search script resolves wiki_root internally from the VAULT root, so pass
+    the vault root, never the wiki root.
+    """
+    vault_root = wiki_root.parent.parent
+    sb_os_path = _resolve_sb_os_path(wiki_root)
+    search_script = sb_os_path / "wiki" / "scripts" / "sb-wiki-search.py"
+    if not search_script.exists():
+        return False
+    try:
+        result = subprocess.run(
+            [sys.executable, str(search_script), "--vault-root", str(vault_root), "status"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=15,
+        )
+        if result.returncode != 0:
+            print(
+                f"[update-backfill] search-tier probe exited {result.returncode}: "
+                f"{result.stderr.strip()}",
+                file=sys.stderr,
+            )
+            return False
+        status = json.loads(result.stdout)
+        # status emits {"ready": bool, "mode": "hybrid"|"fts-only", ...}.
+        # The semantic (vector) tier is ON only in hybrid mode; fts-only means
+        # no Voyage embedder — the backfill must run firm-only (D11: no token
+        # fallback). "unavailable" is not a real mode value; ready=False covers
+        # the no-index case.
+        return bool(status.get("ready")) and status.get("mode") == "hybrid"
+    except (subprocess.SubprocessError, json.JSONDecodeError, OSError) as err:
+        print(f"[update-backfill] search-tier probe failed: {err}", file=sys.stderr)
+        return False
+
+
+def _resolve_sb_os_path(wiki_root: Path) -> Path:
+    """Resolve sb_os_path from sb-os.json at vault root."""
+    vault_root = wiki_root.parent.parent  # wiki_root is under vault root
+    manifest = json.loads(read_text(vault_root / "sb-os.json"))
+    return vault_root / manifest.get("sb_os_path", "3-resources/tools/sb-os")
+
+
+def _parse_rejected_ledger(text: str) -> set[tuple[str, str]]:
+    """Parse the rejected ledger section from pending-topic-updates.md."""
+    pairs: set[tuple[str, str]] = set()
+    in_ledger = False
+    for line in text.splitlines():
+        if line.startswith("## Rejected") or line.startswith("## rejected"):
+            in_ledger = True
+            continue
+        if in_ledger and line.startswith("## "):
+            in_ledger = False
+            continue
+        if in_ledger and line.strip().startswith("|") and not line.strip().startswith("|-"):
+            cells = split_row_cells(line)
+            if len(cells) >= 2:
+                source = cells[0].strip().strip("[]")
+                topic = cells[1].strip().strip("[]")
+                if source and topic:
+                    pairs.add((source, topic))
+    return pairs
+
+
+def _build_topic_citation_map(wiki_root: Path) -> dict[str, set[str]]:
+    """Build a map of topic stem -> set of cited source filenames."""
+    citation_map: dict[str, set[str]] = {}
+    topics_dir = wiki_root / "wiki" / "topics"
+    if not topics_dir.exists():
+        return citation_map
+    for page in sorted(topics_dir.glob("*.md")):
+        if page.name == "topics.md":
+            continue
+        text = read_text(page)
+        sources_section = section_body(text, "Sources")
+        cited: set[str] = set()
+        for match in re.findall(r"\[\[([^\]|]+?\.md)\]\]", sources_section):
+            cited.add(match)
+        # Also scan full text for footnote definitions
+        for match in re.findall(r"\[\^\d+\]:\s*\[\[([^\]|]+?\.md)\]\]", text):
+            cited.add(match)
+        citation_map[page.stem] = cited
+    return citation_map
+
+
+def _parse_related_frontmatter(fm: dict) -> set[str]:
+    """Parse related: frontmatter into a set of linked filenames."""
+    raw = fm.get("related", "")
+    if not raw:
+        return set()
+    # related: can be a YAML list or inline [...]
+    if raw.startswith("["):
+        return set(re.findall(r"\[\[([^\]|]+?\.md)\]\]", raw))
+    return set()
+
+
+def _extract_key_section_links(text: str) -> set[str]:
+    """Extract wikilinks from a topic's Key concepts / Key entities sections.
+
+    These are the ONLY qualifying locations for the forward firm-tier
+    "key-concept/entity overlap" match (schema § "Existing topic updates" Firm
+    tier; ingest Step 3·7 match table). `Key positions / Angles` and `Timeline`
+    are apply-ROUTING targets in the Update-behavior table, NOT firm-detection
+    locations — including them here would fork a looser bar than the forward
+    authority, so they are excluded.
+    """
+    links: set[str] = set()
+    for heading in ["Key concepts", "Key entities"]:
+        body = section_body(text, heading)
+        if body:
+            links.update(re.findall(r"\[\[([^\]|]+?\.md)\]\]", body))
+    return links
+
+
+def _make_substance_digest(substance: str | None) -> str:
+    """Extract ≤2 sentences from substance as a search digest."""
+    if not substance:
+        return ""
+    sentences = re.split(r"(?<=[.!?])\s+", substance.strip())
+    return " ".join(sentences[:2])
+
+
+def _call_search_helper(wiki_root: Path, query: str, k: int = 5, topic_only: bool = False) -> dict | None:
+    """Call the search helper for a semantic probe.
+
+    `--vault-root` is a GLOBAL option — it MUST precede the `search` subcommand
+    (argparse rejects it after the subcommand). `--k`, `--type`, and `--json` are
+    subcommand options and follow the query.
+    """
+    vault_root = wiki_root.parent.parent
+    sb_os_path = _resolve_sb_os_path(wiki_root)
+    search_script = sb_os_path / "wiki" / "scripts" / "sb-wiki-search.py"
+    if not search_script.exists():
+        return None
+    cmd = [
+        sys.executable, str(search_script),
+        "--vault-root", str(vault_root),
+        "search", query,
+        "--k", str(k), "--json", "--no-sync",
+    ]
+    if topic_only:
+        cmd.extend(["--type", "topic"])
+    try:
+        # Force UTF-8 decode: the search script emits UTF-8 (ensure_ascii=False),
+        # but subprocess defaults to the locale codec (cp1252 on Windows), which
+        # crashes the stdout reader on smart quotes / accented chars.
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=30,
+        )
+        if result.returncode != 0:
+            print(
+                f"[update-backfill] semantic probe exited {result.returncode}: "
+                f"{result.stderr.strip()}",
+                file=sys.stderr,
+            )
+            return None
+        return json.loads(result.stdout)
+    except (subprocess.SubprocessError, json.JSONDecodeError, OSError) as err:
+        print(f"[update-backfill] semantic probe failed: {err}", file=sys.stderr)
+        return None
+
+
 def resolve_wiki_root(vault_root: Path) -> Path:
     manifest = json.loads(read_text(vault_root / "sb-os.json"))
     return vault_root / manifest["wiki_root"]
 
 
 def main() -> int:
+    if len(sys.argv) > 1 and sys.argv[1] == "update-backfill-gather":
+        return cmd_update_backfill_gather(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "open-gaps":
         return cmd_open_gaps(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "sweep-gather":

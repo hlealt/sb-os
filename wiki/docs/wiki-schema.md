@@ -891,6 +891,7 @@ Four operations covering the wiki lifecycle:
 | `sb-wiki-create-topic` | Skill (auto-discovered) | Agent mid-ingest, OR auto-fired when the user expresses intent | Create a topic page from a candidate or freshly-proposed topic |
 | `/sb-wiki-lint` | Slash command | The user | Health check + index maintenance for `raw/` and `wiki/` |
 | `/sb-wiki-query <question>` | Slash command | The user | Synthesize an answer from wiki + optionally file the result back |
+| `/sb-wiki-update-backfill <mode>` | Slash command | The user | Retroactive backfill — scan all sources for missed topic updates (propose-only) or apply owner-accepted rows |
 
 ### `/sb-wiki-ingest`
 

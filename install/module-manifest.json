@@ -162,6 +162,12 @@
           "target": ".claude/commands/sb-wiki-query.md"
         },
         {
+          "name": "sb-wiki-update-backfill",
+          "module": "wiki",
+          "source_template": "wiki/commands/sb-wiki-update-backfill.md",
+          "target": ".claude/commands/sb-wiki-update-backfill.md"
+        },
+        {
           "name": "sb-tutor",
           "module": "wiki",
           "source_template": "wiki/commands/sb-tutor.md",
