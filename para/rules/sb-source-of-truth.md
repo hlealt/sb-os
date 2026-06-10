@@ -51,7 +51,7 @@ If the temptation is "let me bake my preference into the sb-os rule/workflow," t
 
 ## Why
 
-Edits in `.claude/` are overwritten on every install run — they vanish silently. Edits to sb-os source that encode personalization leak into every other user's vault on the next git pull. The gate exists to prevent both failure modes.
+The gate prevents two failure modes: edits in `.claude/` are overwritten on every install run and vanish silently; personalization baked into sb-os source leaks into every other user's vault on the next git pull.
 
 For managed CLAUDE.mds: content INSIDE marker blocks (`<!-- sb:start v=1 -->...<!-- sb:end -->`) is overwritten on every install run; content OUTSIDE markers is preserved.
 
@@ -68,38 +68,6 @@ If you catch ANY of these thoughts, you are about to violate this rule.
 | "I'll edit sb-os now and port to `.user/` later" | STOP. "Later" means "never." Reroute now. |
 | "The install hasn't run yet, so editing `.claude/` is safe this once" | STOP. The next install will run. Reroute now. |
 | "There's no matching `.user/context/` directory yet" | STOP. Create it. The graceful-skip semantics in `sb-workflow-context` mean an empty path is fine; what is NOT fine is leaking personalization upstream. |
-
-## After Editing
-
-For content changes (workflows, skill bodies referenced by loaders, templates), just `git pull` in the sb-os source — changes are live immediately for files referenced via loaders.
-
-When a skill, command, rule, or subagent is created, deleted, or renamed, update `install/module-manifest.json` to reflect the change, then re-run the installer:
-
-```bash
-python install.py
-```
-
-## Canonical Locations
-
-The canonical source is the sb-os repo. Its path in the target vault is recorded in `sb-os.json` (`sb_os_path` field) at the vault root.
-
-Sources live under per-module folders at the sb-os repo root: `{module}` is `para` or `wiki` depending on which module owns the component.
-
-| What | Edit in sb-os source | Never in target |
-|------|----------------------|------------------|
-| Rules (`sb-*.md`) | `{sb_os_path}/{module}/rules/<name>.md` | `.claude/rules/sb-*.md` |
-| Skills (`sb-*/SKILL.md` and refs) | `{sb_os_path}/{module}/skills/<name>/` | `.claude/skills/sb-*/` |
-| Commands (`sb-*.md`) | `{sb_os_path}/{module}/commands/<name>.md` | `.claude/commands/sb-*.md` |
-| Workflows | `{sb_os_path}/{module}/workflows/` | *(not installed — referenced via loaders)* |
-| Templates | `{sb_os_path}/para/templates/` | `.user/config/templates/` (installed copies) |
-| Managed CLAUDE.mds (PARA) | `{sb_os_path}/para/claude-mds/` | Marker-block content in target vault CLAUDE.mds |
-| Managed CLAUDE.md (wiki) | `{sb_os_path}/wiki/claude-mds/wiki.md` | Marker-block content in `{wiki_root}/CLAUDE.md` |
-
-## Why
-
-Skills, commands, rules, and subagents are thin loaders or copies in `.claude/` that point back to the sb-os source at `{sb_os_path}`. Edits in `.claude/` are lost on the next re-install. The sb-os source is the only durable location.
-
-For managed CLAUDE.mds: content INSIDE marker blocks (`<!-- sb:start v=1 -->...<!-- sb:end -->`) is overwritten on every install run; content OUTSIDE markers is preserved.
 
 ## After Editing
 
