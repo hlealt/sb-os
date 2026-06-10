@@ -1,6 +1,6 @@
-# Ingest extension — Silent mode (contract + Step 1/1.5/10/11 overrides)
+# Ingest extension — Silent mode (contract + Step 1/1.5/1.7/10/11 overrides)
 
-JIT extension loaded by `sb-wiki-ingest.md` ONLY when the `silent` keyword is present at invocation. The main flow loads this file AT BOOT — before Step 1 — so every silent-override clause below is in context BEFORE any halt-capable step (Steps 1, 1.5, 10, 11) is reached; a silent-mode subagent never halts mid-batch for lack of an override. When the `silent` keyword is ABSENT, the main flow never reads this file and NONE of these clauses apply — the workflow behaves EXACTLY as the default-mode body specifies.
+JIT extension loaded by `sb-wiki-ingest.md` ONLY when the `silent` keyword is present at invocation. The main flow loads this file AT BOOT — before Step 1 — so every silent-override clause below is in context BEFORE any halt-capable step (Steps 1, 1.5, 1.7, 10, 11) is reached; a silent-mode subagent never halts mid-batch for lack of an override. When the `silent` keyword is ABSENT, the main flow never reads this file and NONE of these clauses apply — the workflow behaves EXACTLY as the default-mode body specifies.
 
 ## Silent Mode contract
 
@@ -12,6 +12,7 @@ The mode changes ONLY four things; everything else (clustering, stub rules, appe
 |--------------|-----------------|
 | Step 1 — slug resolution | A multi-match `<slug>` ERRORS — NEVER prompts. See step 1 silent clause. |
 | Step 1.5 — title-conformance collision | A `{title-slug}.pdf` collision ERRORS — `failed (duplicate raw)`. NEVER prompts. See step 1.5 silent clause. |
+| Step 1.7 — content-duplicate fire | A URL/title match against an already-ingested source ERRORS — `failed (content-duplicate)` + raw index row set to `Duplicate (…)`. NEVER prompts. See step 1.7 silent clause. |
 | Step 10 — Stage 1 commit gate | Auto-resolve every decision to a fixed default; emit the structured summary; NO prompt, NO mid-flow HALT. See step 10 silent clause. |
 | Step 11 — Stage 2 reflection | SKIPPED entirely — never presented, never awaited. See step 11 silent clause. |
 
@@ -22,6 +23,10 @@ The mode changes ONLY four things; everything else (clustering, stub rules, appe
 ## Step 1.5 silent override
 
 Collision — `raw/{origin}/{title-slug}.pdf` already exists → this raw duplicates an already-ingested paper. **Silent mode:** do NOT halt — RETURN `failed (duplicate raw: {title-slug}.pdf exists)` and ingest nothing.
+
+## Step 1.7 silent override
+
+Content-duplicate fire (URL or title matches an already-ingested source) → do NOT halt — RETURN `failed (content-duplicate: duplicate of <existing-raw>)` and ingest nothing, with EXACTLY ONE permitted write: set THIS raw's index row (`raw/{origin}/{origin}.md`) to `Wiki = Duplicate (of [[<existing-raw>]])` so re-runs and `/sb-wiki-ingest-all` discovery skip it durably (row missing → create it; index file missing → log a warning, skip the write). NEVER create a source page, stub, or "anchor" page for a duplicate. NEVER delete the duplicate raw — disposition is the user's call, surfaced via the caller's report.
 
 ## Step 10 silent override
 

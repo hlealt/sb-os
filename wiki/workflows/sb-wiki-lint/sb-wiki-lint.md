@@ -222,7 +222,7 @@ For each `{wiki_root}/raw/{origin}/` directory (including `studies/`), **EXCLUDI
 1. Verify `{origin}.md` (or `studies.md`) exists. If missing, CREATE it with the standard raw index header per `../shared/index-formats.md` "Raw Index" section: `| File | Title | Date | Wiki |`.
 2. For each raw file in the directory, ensure a row exists in the index. If missing, add the row only when `Title` and `Date` are deterministic from frontmatter, an H1, or the filename date.
 3. Index creation and maintenance is the agent's job, not the user's (per schema § "/sb-wiki-lint" step 7 and `../shared/folder-structure.md` "Creation Rules" table).
-4. If a row already exists, preserve its `Wiki` value (`Yes`, `Partial`, or `No`).
+4. If a row already exists, preserve its `Wiki` value (`Yes`, `Partial`, `No`, or `Duplicate (…)`).
 5. Capture `raw-indexes-created` count, `raw-rows-added` total, and unresolved raw rows from `judgment_needed` for the LINT REPORT.
 
 For each wiki leaf folder (`{wiki_root}/wiki/concepts/`, `entities/`, `topics/`):

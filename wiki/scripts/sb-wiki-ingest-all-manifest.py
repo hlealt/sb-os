@@ -1,13 +1,24 @@
 #!/usr/bin/env python3
-"""Discovery manifest for sb-wiki-ingest-all.
+"""Discovery manifest + dispatch plan for sb-wiki-ingest-all.
 
 Lists every raw source that has NOT been ingested yet, with an approximate
-token count so the orchestrator can pack files into per-subagent batches.
+token count, and (with --plan, the default) packs them into per-subagent
+batches, schedules waves, and assigns each batch a model:
+
+- Batches: per origin, greedy consecutive packing <= BATCH_TOKEN_CAP source
+  tokens; a lone file above the cap (or with a null estimate) is its own
+  batch — a source is never split across subagents.
+- Waves: wave K holds batch index K of every origin (distinct origins are
+  parallel-safe; same-origin batches serialize across waves), split into
+  sub-waves of <= WAVE_CONCURRENCY batches.
+- Model: "sonnet" when the batch's token sum <= SONNET_MAX_BATCH_TOKENS and
+  every file in it has a non-null estimate; "opus" otherwise.
 
 A raw file is "ingested" when its source page exists at
-`wiki/sources/{origin}/{stem}.md`. This script only reads — it never writes
-wiki content. Judgment (topical relevance, batching) is the orchestrator's job;
-this script supplies the mechanical inputs.
+`wiki/sources/{origin}/{stem}.md`. Files whose raw-index row marks
+`Wiki = Duplicate (…)` are confirmed content-duplicates and are SKIPPED
+(reported under `duplicates`, never targeted). This script only reads — it
+never writes wiki content.
 """
 
 from __future__ import annotations
@@ -25,6 +36,9 @@ logging.getLogger("PyPDF2").setLevel(logging.ERROR)
 CHARS_PER_TOKEN = 4
 DEFAULT_EXCLUDE = {"assets", "_assets"}
 NON_SOURCE_FILES = {"AGENTS.md", "CLAUDE.md", "README.md"}
+BATCH_TOKEN_CAP = 50_000
+SONNET_MAX_BATCH_TOKENS = 25_000
+WAVE_CONCURRENCY = 5
 
 
 def _fspath(path: Path) -> str:
@@ -96,12 +110,92 @@ def resolve_wiki_root(vault_root: Path) -> Path:
     return vault_root / manifest["wiki_root"]
 
 
+def duplicate_rows(origin_dir: Path) -> set[str]:
+    """Filenames whose raw-index row marks `Wiki = Duplicate (…)` (case-insensitive)."""
+    index_path = origin_dir / f"{origin_dir.name}.md"
+    if not index_path.is_file():
+        return set()
+    marked: set[str] = set()
+    for line in read_text(index_path).splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) < 4 or not cells[-1].lower().startswith("duplicate"):
+            continue
+        link = re.search(r"\[\[([^\]|]+?)\]\]", cells[0])
+        if link:
+            marked.add(link.group(1).strip())
+    return marked
+
+
+def build_batches(items: list[dict]) -> dict[str, list[dict]]:
+    """Per origin: greedy consecutive packing by filename order, <= BATCH_TOKEN_CAP."""
+    by_origin: dict[str, list[dict]] = {}
+    for item in items:
+        by_origin.setdefault(item["origin"], []).append(item)
+
+    batches: dict[str, list[dict]] = {}
+    for origin, origin_items in by_origin.items():
+        origin_items.sort(key=lambda i: i["filename"])
+        packed: list[list[dict]] = []
+        current: list[dict] = []
+        current_sum = 0
+        for item in origin_items:
+            tokens = item["token_estimate"]
+            if tokens is None or tokens > BATCH_TOKEN_CAP:
+                if current:
+                    packed.append(current)
+                    current, current_sum = [], 0
+                packed.append([item])
+                continue
+            if current and current_sum + tokens > BATCH_TOKEN_CAP:
+                packed.append(current)
+                current, current_sum = [], 0
+            current.append(item)
+            current_sum += tokens
+        if current:
+            packed.append(current)
+
+        batches[origin] = []
+        for index, batch_items in enumerate(packed):
+            has_null = any(i["token_estimate"] is None for i in batch_items)
+            token_sum = sum(i["token_estimate"] or 0 for i in batch_items)
+            model = (
+                "sonnet"
+                if not has_null and token_sum <= SONNET_MAX_BATCH_TOKENS
+                else "opus"
+            )
+            batches[origin].append({
+                "origin": origin,
+                "index": index,
+                "files": [i["filename"] for i in batch_items],
+                "token_sum": token_sum,
+                "has_null_estimate": has_null,
+                "model": model,
+            })
+    return batches
+
+
+def build_waves(batches: dict[str, list[dict]]) -> list[list[dict]]:
+    """Wave K = batch index K of each origin, split into sub-waves of <= WAVE_CONCURRENCY."""
+    waves: list[list[dict]] = []
+    deepest = max((len(b) for b in batches.values()), default=0)
+    for k in range(deepest):
+        tier = [
+            {"origin": origin, "index": k}
+            for origin in sorted(batches)
+            if len(batches[origin]) > k
+        ]
+        for start in range(0, len(tier), WAVE_CONCURRENCY):
+            waves.append(tier[start:start + WAVE_CONCURRENCY])
+    return waves
+
+
 def collect(wiki_root: Path, exclude: set[str], only_origin: str | None) -> dict:
     raw_root = wiki_root / "raw"
     sources_root = wiki_root / "wiki" / "sources"
     items: list[dict] = []
     origins: dict[str, dict[str, int]] = {}
-    raw_total = ingested = 0
+    raw_total = ingested = duplicates = 0
+    duplicate_files: list[str] = []
 
     origin_dirs = sorted(
         p for p in raw_root.iterdir()
@@ -116,11 +210,16 @@ def collect(wiki_root: Path, exclude: set[str], only_origin: str | None) -> dict
             if f.is_file() and f.suffix in (".md", ".pdf")
             and f.name != index_name and f.name not in NON_SOURCE_FILES
         )
+        marked_duplicate = duplicate_rows(origin_dir)
         for raw_file in raw_files:
             raw_total += 1
             source_page = sources_root / origin / f"{raw_file.stem}.md"
             if source_page.exists():
                 ingested += 1
+                continue
+            if raw_file.name in marked_duplicate:
+                duplicates += 1
+                duplicate_files.append(f"{origin}/{raw_file.name}")
                 continue
             is_pdf = raw_file.suffix == ".pdf"
             title, date, tokens = describe_pdf(raw_file) if is_pdf else describe_md(raw_file)
@@ -143,8 +242,10 @@ def collect(wiki_root: Path, exclude: set[str], only_origin: str | None) -> dict
             "origins_with_missing": len(origins),
             "raw_total": raw_total,
             "ingested": ingested,
+            "duplicates": duplicates,
             "missing": len(items),
         },
+        "duplicate_files": duplicate_files,
         "origins": origins,
         "items": items,
     }
@@ -160,11 +261,34 @@ def main() -> int:
         help="comma-separated raw subfolders to skip (asset folders)",
     )
     parser.add_argument("--origin", help="scope the scan to a single origin")
+    parser.add_argument(
+        "--no-plan",
+        action="store_true",
+        help="omit the batch/wave/model dispatch plan (manifest only)",
+    )
     args = parser.parse_args()
 
     wiki_root = resolve_wiki_root(args.vault_root.resolve())
     exclude = {o.strip() for o in args.exclude_origins.split(",") if o.strip()}
     payload = collect(wiki_root, exclude, args.origin)
+
+    if not args.no_plan:
+        batches = build_batches(payload["items"])
+        payload["plan"] = {
+            "constants": {
+                "batch_token_cap": BATCH_TOKEN_CAP,
+                "sonnet_max_batch_tokens": SONNET_MAX_BATCH_TOKENS,
+                "wave_concurrency": WAVE_CONCURRENCY,
+            },
+            "batches": batches,
+            "waves": build_waves(batches),
+            "model_counts": {
+                model: sum(
+                    1 for bs in batches.values() for b in bs if b["model"] == model
+                )
+                for model in ("sonnet", "opus")
+            },
+        }
 
     output = json.dumps(payload, indent=2, ensure_ascii=False)
     if args.report:

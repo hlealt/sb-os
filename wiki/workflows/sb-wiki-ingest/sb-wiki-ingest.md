@@ -58,7 +58,7 @@ Optional-feature machinery lives in `extensions/` and loads ONLY when its featur
 
 | Extension | Load when | Loaded at | Applies at |
 |-----------|-----------|-----------|------------|
-| `extensions/silent-mode.md` | `silent` keyword present at invocation | Boot (before Step 1) | Silent Mode gate + Step 1, 1.5, 10, 11 silent overrides |
+| `extensions/silent-mode.md` | `silent` keyword present at invocation | Boot (before Step 1) | Silent Mode gate + Step 1, 1.5, 1.7, 10, 11 silent overrides |
 | `extensions/questions-layer.md` | `{wiki_root}/questions.md` present and parseable | Step 0.6 gate | Step 0.6 (load questions) + Step 3·7c (answer-scan) |
 | `extensions/purpose-lens.md` | `{wiki_root}/purpose.md` present and parseable (lens ON, decided at Step 0.5) | Step 0.5 (lens ON) | Step 2 (classify + depth dial), Step 3 clause 5b, Step 3·7b (ranking), Step 10 (Stage 1 presentation) |
 
@@ -75,7 +75,7 @@ Extension file missing on disk when its gate fires → HALT naming the missing p
 
 ## Silent Mode
 
-**Gate (load at boot).** When the `silent` keyword is present at invocation, READ `extensions/silent-mode.md` NOW — before Step 1 — and apply its contract + every per-step override (Steps 1, 1.5, 10, 11). Loading at boot guarantees each silent-override clause is in context BEFORE any halt-capable step is reached, so a silent-mode subagent never halts mid-batch. When the `silent` keyword is ABSENT, do NOT read that file: the run is interactive and NONE of the silent clauses apply — the workflow behaves EXACTLY as the default-mode body specifies.
+**Gate (load at boot).** When the `silent` keyword is present at invocation, READ `extensions/silent-mode.md` NOW — before Step 1 — and apply its contract + every per-step override (Steps 1, 1.5, 1.7, 10, 11). Loading at boot guarantees each silent-override clause is in context BEFORE any halt-capable step is reached, so a silent-mode subagent never halts mid-batch. When the `silent` keyword is ABSENT, do NOT read that file: the run is interactive and NONE of the silent clauses apply — the workflow behaves EXACTLY as the default-mode body specifies.
 
 ## Write-Surface Contract
 
@@ -163,6 +163,24 @@ Markdown raw sources SKIP this step. For a PDF raw source:
      - body line `Original PDF: [[{title-slug}.pdf]]` immediately after the frontmatter block (the preserved PDF) — NOT a frontmatter key
 
 The rename changes the FILENAME only — raw content is never edited (immutability governs content, per `../shared/folder-structure.md`). The text-twin extraction writes a NEW file; the PDF is preserved.
+
+### Step 1.7 — Content-duplicate check (all sources)
+
+Runs for EVERY source — markdown AND PDF — after step 1 (and after step 1.5 for PDFs). Detects that this raw duplicates an ALREADY-INGESTED source BEFORE any wiki write. Step 1.5 catches only PDF filename collisions; this step catches re-clips, dated twins, and cross-origin duplicates regardless of filename.
+
+Two deterministic signals — EITHER fires:
+
+| Signal | Detection |
+|--------|-----------|
+| URL match | Normalize this raw's frontmatter `url`/`source` value: lowercase the host, strip scheme, leading `www.`, query string, fragment, and trailing slash. Run ONE `ripgrep`/`grep` pass over `url:` lines in `{wiki_root}/wiki/sources/**` and compare normalized values. Equal → fire. Raw has no URL → signal skipped. |
+| Title match | Normalize this raw's title (frontmatter `title`, else first H1): lowercase, collapse every non-alphanumeric run to a single space, trim. Compare against the same-normalized titles of already-ingested raws (raws whose source page exists) in ANY origin — use the raw indexes' `Title` column for `Wiki = Yes`/`Partial` rows; confirm a hit against the matched raw's frontmatter before firing. Equal → fire. |
+
+On fire:
+
+- **Interactive:** ERROR-halt and ask the user — `abort` (skip the duplicate; raw index `Wiki` stays `No`) or `proceed` (ingest anyway — e.g. the new clip genuinely supersedes the old one). Name the existing raw and its source page in the prompt.
+- **Silent mode** (keyword present) → apply the Step 1.7 silent override from `extensions/silent-mode.md` (loaded at boot): do NOT halt — RETURN `failed (content-duplicate: duplicate of <existing-raw>)`.
+
+No fire → proceed to step 2. A fire NEVER deletes the duplicate raw file — disposition (delete vs. re-point) is the user's call.
 
 ### Step 2 — Write source page
 
@@ -464,6 +482,7 @@ End of flow.
 |---------|----------|
 | `<slug>` resolves to multiple raw files | Halt at step 1; ask user to disambiguate. No writes. |
 | PDF `{title-slug}.pdf` already exists at step 1.5 (duplicate raw) | Error-halt; ask abort / proceed-without-rename. Silent: RETURN `failed (duplicate raw: {title-slug}.pdf exists)`. No writes. |
+| Content-duplicate fires at step 1.7 (URL or title matches an already-ingested source) | Error-halt; ask abort / proceed. Silent: RETURN `failed (content-duplicate: duplicate of <existing-raw>)` — sole permitted write: raw index row → `Wiki = Duplicate (of [[<existing-raw>]])`. Never delete the raw. |
 | `pypdf` extraction fails at step 1.5 (text-twin write error) | LOG A WARNING; proceed with native PDF read from step 1 as source text; write the `Original PDF: [[{title-slug}.pdf]]` body line but omit the `raw:` twin link in the source page (no twin was produced). Do NOT abort the ingest. |
 | `<slug>` resolves to multiple raw files (silent mode) | No halt. RETURN summary `failed (slug ambiguous: N matches)`. No writes. |
 | `<slug>` resolves to zero raw files (silent mode) | RETURN summary `failed (slug not found)`. No writes. |

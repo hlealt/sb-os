@@ -31,13 +31,13 @@ Each subagent runs the unmodified `sb-wiki-ingest` workflow per source. This orc
 | Same-origin serialization | Batches of the SAME origin run STRICTLY sequentially — never two at once. Same-source files reuse the same entities/concepts; concurrent ingestion would create duplicate stubs. |
 | Cross-origin parallelism | Batches of DIFFERENT origins MAY run in parallel, capped at **5** concurrent subagents per wave. |
 | Non-interactive ingest | Subagents invoke `/sb-wiki-ingest silent <slug>` per file; that mode owns every checkpoint auto-resolution. NO subagent ever pauses for user input. |
-| Model | Subagents run on **opus** (user-requested for ingest quality). |
+| Model | Per batch, from the manifest plan: **sonnet** when the batch's source-token sum ≤ 25,000 and every file has a non-null estimate; **opus** otherwise. The script computes this — NEVER override it by judgment. |
 | No mid-run topic pages | Subagents NEVER create topic pages mid-run — every proposed topic is deferred (the `candidate-topic` persists for the final lint pass). Topic-UPDATE resolution is owned by `/sb-wiki-ingest silent` (firm updates auto-apply append-only; speculative updates and proposed answers reject — see that mode's silent override); this caller NEVER re-states or overrides those defaults. Topic-page creation and cross-origin duplicate healing happen after, via the final lint pass. |
 | Single git commit | NO git command runs during ingestion — subagents NEVER git-commit, and the orchestrator NEVER commits per source, per batch, or per wave. The orchestrator creates EXACTLY ONE git commit at the end of the run (step 6). Per-file status `committed` means staged FILE changes written to disk, never git. |
 
 ## Flow
 
-### Step 1 — Discover non-ingested sources
+### Step 1 — Discover non-ingested sources + dispatch plan
 
 Run from the vault root with the active Python interpreter:
 
@@ -45,32 +45,23 @@ Run from the vault root with the active Python interpreter:
 python {sb_os_path}/wiki/scripts/sb-wiki-ingest-all-manifest.py --report {wiki_root}/ingest-all-manifest.json
 ```
 
-Append `--origin <origin>` when the user scoped the run. Read the JSON: `items[]` (each with `path`, `origin`, `filename`, `is_pdf`, `title`, `token_estimate`) and `origins{}` (per-origin `missing` + `token_sum`). A `token_estimate` of `null` means the PDF text could not be extracted — treat such a file as its own batch. If `totals.missing` is 0, report "wiki fully ingested" and STOP.
+Append `--origin <origin>` when the user scoped the run. Read the JSON:
 
-### Step 2 — Build batches per origin
+- `totals` + `origins{}` — discovery counts. If `totals.missing` is 0, report "wiki fully ingested" (note `totals.duplicates` if non-zero) and STOP. Raw files whose index row is `Wiki = Duplicate (…)` are already excluded by the script (`duplicate_files[]` lists them — surface the list in the final report).
+- `plan.batches{origin: [batch…]}` — each batch carries `origin`, `index`, `files[]`, `token_sum`, and `model` (`sonnet` | `opus`, per the script's threshold). Same-origin batches packed by filename order, ≤50,000 tokens; a lone file over the cap (or `null` estimate) is its own batch.
+- `plan.waves[]` — ordered list of waves, each a list of `{origin, index}` refs (≤5 per wave, distinct origins within a wave, same-origin batches serialized across waves).
 
-For each origin independently:
+### Step 2 — Adopt the plan
 
-1. Order the origin's `items` by filename.
-2. Greedily pack consecutive items into batches whose cumulative `token_estimate` ≤ 50,000.
-3. Any single item with `token_estimate` > 50,000 (or `null`) is its own batch.
-4. Number the origin's batches `0, 1, 2, …`.
+Use `plan.batches` and `plan.waves` VERBATIM — batching, wave scheduling, and per-batch model are the script's mechanical outputs; the orchestrator re-packs or re-schedules NOTHING.
 
-A batch is a list of source filenames plus its origin. Batching is purely mechanical packing — no topical judgment.
+### Step 3 — (folded into the plan)
 
-### Step 3 — Schedule waves
-
-Build waves so that same-origin batches are serialized and different-origin batches parallelize:
-
-1. **Wave K** collects batch index `K` from every origin that has one. All batches in a wave are from distinct origins → safe to run together.
-2. If a wave holds more than 5 batches, split it into consecutive sub-waves of ≤5 batches each (still all distinct origins).
-3. Waves run in order; within a wave, batches run in parallel.
-
-This guarantees: no two batches of the same origin ever run concurrently, and no wave exceeds the concurrency cap.
+Wave scheduling is computed by the script (see Step 1). Nothing to do here.
 
 ### Step 4 — Dispatch subagents
 
-For each wave, dispatch one Opus subagent per batch IN PARALLEL (multiple Agent calls in a single message), using the dispatch prompt below. Wait for every subagent in the wave to finish before starting the next wave. Collect each subagent's per-file status and the slugs it created.
+For each wave, dispatch one subagent per batch IN PARALLEL (multiple Agent calls in a single message), using the dispatch prompt below with the batch's planned `model` (`sonnet` or `opus`). Wait for every subagent in the wave to finish before starting the next wave. Collect each subagent's per-file status and the slugs it created. A `failed (content-duplicate: …)` status is EXPECTED behavior, not an error — the source's raw-index row is now `Duplicate (…)` and re-runs skip it; carry it into the final report's duplicates line.
 
 ### Step 5 — Heal with lint
 
@@ -88,6 +79,7 @@ INGEST-ALL COMPLETE
 Sources ingested: <N> committed | <P> partial | <F> failed (of <missing> targeted)
 Origins: <list with per-origin committed/total>
 Failures (if any): <origin>/<filename> — <reason>
+Duplicates (skipped or newly detected, if any): <origin>/<filename> — duplicate of <existing-raw>; awaiting user disposition
 Cross-origin duplicate slugs created by ≥2 batches: <slug list, or "none">
 Questions layer: <U> firm topic-updates applied | <S> speculative updates rejected | <A> proposed answers rejected | <G> graduations (lint)
 Lint: <one-line outcome — see LINT REPORT above>
@@ -101,7 +93,7 @@ Then create the run's SINGLE git commit, covering every change this run produced
 
 ## Subagent dispatch prompt
 
-Fill `<files>` with the batch's source filenames and dispatch with `subagent_type: general-purpose`, `model: opus`:
+Fill `<files>` with the batch's source filenames and dispatch with `subagent_type: general-purpose`, `model:` the batch's planned model (`sonnet` | `opus`):
 
 ```
 Ingest these raw wiki sources, one at a time, in this exact order:
@@ -124,5 +116,6 @@ Report back, per file, the FULL structured summary silent mode returns: per-file
 | `{wiki_root}` or `{sb_os_path}` unresolvable from `sb-os.json` | Halt before step 1; surface error. No dispatch. |
 | Manifest script reports `missing = 0` | Report "wiki fully ingested"; STOP. |
 | A subagent fails on a file | Record the failure; continue the batch's remaining files and the run. Surface all failures in step 6. The source's raw-index `Wiki` stays `No`, so a re-run retries it. |
+| A subagent returns `failed (content-duplicate: …)` | NOT an error — the silent step-1.7 fire marked the raw-index row `Duplicate (…)`; re-runs skip it. List it on the report's Duplicates line for user disposition (delete the raw vs. re-point). |
 | A whole batch's subagent errors out | Mark every file in that batch `failed`; continue other waves. Re-running the command re-targets only the still-missing sources. |
 | User scoped to an `[origin]` with no missing sources | Report "nothing to ingest for `<origin>`"; STOP. |

@@ -73,10 +73,10 @@ The `My take` cell encodes one of three explicit states. **Blank is BANNED** as 
 | `File` | Lint (creates rows) — ingest may add defensively | Lint sweep; ingest may add missing rows |
 | `Title` | Lint | On index creation when deterministic from frontmatter or H1; otherwise LLM judgment pass |
 | `Date` | Lint | On index creation — ALWAYS the capture date (the filename's `YYYY-MM-DD` prefix), NEVER the source's publication date; LLM judgment pass only when no filename date exists |
-| `Wiki` | Agent (ingest sets `Yes`; rollback sets `No`) | Updated during ingest step 7; downgraded to `Partial` if downstream pages are rejected at Stage 1 |
+| `Wiki` | Agent (ingest sets `Yes`; rollback sets `No`; silent content-duplicate fire sets `Duplicate (of [[<existing-raw>]])`) | Updated during ingest step 7; downgraded to `Partial` if downstream pages are rejected at Stage 1; set to `Duplicate (…)` at step 1.7 (silent) |
 
 - Raw index creation and maintenance is lint's job. Ingest defensively adds a missing row but does NOT create the index file if it is absent (logs a warning for lint).
-- `Wiki` values: `No` (default), `Yes` (source page created), `Partial` (source page created but some downstream pages rejected).
+- `Wiki` values: `No` (default), `Yes` (source page created), `Partial` (source page created but some downstream pages rejected), `Duplicate (of [[<existing-raw>]])` (confirmed content-duplicate of an already-ingested raw — never ingested, skipped by `/sb-wiki-ingest-all` discovery; disposition of the file is the user's call).
 - Missing rows are script-safe only when `Title` and `Date` are deterministic. Scripts MUST NOT fill `Title` from a slug guess. Non-deterministic rows are reported as `judgment_needed` for the LLM.
 
 ## Wiki Leaf Indexes
