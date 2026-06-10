@@ -230,7 +230,7 @@ If target type is `concept` or `entity`:
 4. Frontmatter per `../shared/frontmatter-schemas.md`:
    - Common block (`type`, `created`, `last-touched`, `related` populated with the `picks` set wikilinks, `tags: []`).
    - Concept adds `kind:` (free-form string derived from the answer; e.g., `methodology`, `pattern`, `principle`).
-   - Entity adds `kind:` from the enum `tool | person | company | product | model`.
+   - Entity adds `kind:` — read the canonical enum from `../shared/frontmatter-schemas.md` § "Entity — adds `kind`" at use time; `kind:` MUST be one of the values listed there.
 5. Section structure per `../shared/section-menus.md`:
    - Concept required sections: `Definition` (1–2 sentences, factual, derived from the synthesized answer) + `Sources` (footnote definitions for every source cited in step 5).
    - Entity required sections: `What it is` (1 factual sentence, derived from the synthesized answer) + `Sources`.

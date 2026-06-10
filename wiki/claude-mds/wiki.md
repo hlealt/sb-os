@@ -105,12 +105,17 @@ The helper is read-only and self-syncs before answering (changed pages re-indexe
 
 ## Stub Policy
 
-Agent auto-creates a stub Concept or Entity page ONLY when the entity/concept name appears in EITHER:
+Agent auto-creates a stub Concept or Entity page when the entity/concept name fires a **mechanical** or **discretionary** branch:
 
-1. **Source title/headline**, OR
-2. **An extracted Notable Quote OR a `Substance` bullet** (the agent's own output from ingest step 2)
+**Mechanical (auto-stub):**
+- **A `Substance` bullet** (the agent's own output from ingest step 2) — always fires on the cluster representative.
+- **Source title/headline** — ONLY when the title name ALSO appears in a `Substance` bullet; the bullet branch carries it.
 
-Deterministic — tied to artifacts the agent has already produced, not to recounting the source. If the rule does NOT fire, the agent logs a `candidate-mention` entry in `logs/mentions.md` for periodic review by lint — never creates a page.
+**Discretionary (apply relevance heuristic before creating):**
+- **Source title/headline — title-only** (NOT in any `Substance` bullet): ask "would this stub plausibly become a real concept/entity page given the source's actual content?" If YES → stub; if NO → log `candidate-mention`.
+- **An extracted Notable Quote** — same relevance heuristic.
+
+If no branch fires, the agent logs a `candidate-mention` entry in `logs/mentions.md` for periodic review by lint — never creates a page.
 
 Lint detects stub-state structurally (frontmatter + ≤2-sentence preamble + Sources section, with main content sections empty or absent) and flags stubs aged >30 days. Empty user-half sections on Source pages do NOT count toward stub-state.
 

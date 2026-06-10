@@ -233,9 +233,9 @@ Detect kinds within `wiki/concepts/` and `wiki/entities/` that have grown large 
    1. Walk all pages (skip leaf indexes and any existing per-kind subfolder indexes — those pages have already graduated).
    2. Group pages by `kind:` frontmatter value. Pages without a `kind:` value are tracked separately as `kind-missing` and surface in the LINT REPORT for the user to address.
    3. For each `kind:` value, count pages.
-   4. Mark counts:
-      - <5 pages → silent.
-      - ≥5 pages → `subdivision-proposal` (kind name + count + suggested subfolder name per the naming policy in schema § "Folder subdivision" → "Naming policy"; sample first 5 page filenames).
+   4. Mark counts (threshold authority: `../shared/folder-structure.md` § "Stability Rules"):
+      - <10 pages → silent.
+      - ≥10 pages → `subdivision-proposal` (kind name + count + suggested subfolder name per the naming policy in schema § "Folder subdivision" → "Naming policy"; sample first 5 page filenames).
 2. Build `subdivision-proposals` set for the LINT REPORT and step 8 log entry.
 3. **Subdivision execution gate.** Subdivision proposals are EXECUTED only on explicit user accept at step 9. Pre-step-9 lint runs silently in the background; step 7.5 only DETECTS — it never moves files. Execution at step 9 follows the procedure in "Subdivision execution" below.
 
@@ -516,7 +516,7 @@ User response handling for SUBDIVISION PROPOSAL:
 | `accept all` | Execute every proposed subdivision per the procedure in step 7.5 § "Subdivision execution". No log entry — the new folder structure and indexes are the record. |
 | `accept N` (e.g. `accept 1,2`) | Execute the listed proposals only. Other proposals defer. |
 | `reject` | All proposals defer; surface as warnings in the next lint run. |
-| `defer` (default) | Same as `reject` for this run; proposals re-surface in subsequent runs as long as the kind remains ≥10 pages. |
+| `defer` (default) | Same as `reject` for this run; proposals re-surface in subsequent runs as long as the kind remains ≥10 pages (threshold: `../shared/folder-structure.md` § "Stability Rules"). |
 
 User response handling for RENAME PROPOSAL:
 
