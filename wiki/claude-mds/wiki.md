@@ -63,7 +63,7 @@ Canonical spec (artifact, format, parsing contract, classification bands, discre
 
 It is a root-level sibling of `raw/`, `wiki/`, `logs/`, and `purpose.md` — NOT a wiki page, NOT raw. It carries `type: questions` (a non-page value excluded from page-type checks, indexes, and orphan detection). **Lint OWNS** its maintenance — sweep, graduation proposals, prune, and regenerating the read-only cross-wiki aggregate `{wiki_root}/open-gaps.md` (`type: questions-index`).
 
-**Two homes.** Topic `Open questions` stay on the topic page (menu UNCHANGED) and resolve in place — strike the line + fold the answer into the topic body via the existing `PROPOSED TOPIC UPDATES` append-only machinery. `questions.md` holds the user's registered questions (including cross-cutting ones tied to no page) and accretes an inline `answer:` until it graduates or is retired (entry then REMOVED). `open-gaps.md` recovers the single-pane view across both homes.
+**Two homes.** Topic `Open questions` stay on the topic page (menu UNCHANGED) and resolve in place — strike the line + fold the answer into the topic body via the existing firm `TOPIC UPDATES` append-only machinery. `questions.md` holds the user's registered questions (including cross-cutting ones tied to no page) and accretes an inline `answer:` until it graduates or is retired (entry then REMOVED). `open-gaps.md` recovers the single-pane view across both homes.
 
 **Optionality (no-op contract).** Absent → questions layer OFF → ingest/lint behave exactly as today; malformed → warn and proceed as if absent, NEVER aborting ingest or lint. Mirrors the `purpose.md` no-op contract.
 

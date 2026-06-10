@@ -13,7 +13,7 @@ Read `3-resources/tools/sb-os/wiki/docs/wiki-schema.md` — Operations § "/sb-w
 
 ## Retrieval Tiers
 
-Schema § "Retrieval tiers — hybrid search" governs every semantic-tier touchpoint in this flow (Steps 3·5c, 3·7b, 3·7c). Probe the tier by invoking the helper once; degrade gracefully:
+Schema § "Retrieval tiers — hybrid search" governs every semantic-tier touchpoint in this flow (Steps 3·5c, 3·7b, 3·7c, 3·7d). Probe the tier by invoking the helper once; degrade gracefully:
 
 | Tier | Behavior |
 |------|----------|
@@ -233,12 +233,13 @@ Citations: emit inline `[^N]` markers at every claim derived from the raw, then 
    1. **Cross-kind + theses-namespace check (always runs).** The planned slug MUST NOT already exist in ANY kind folder under `wiki/` — `concepts/`, `entities/`, `topics/` — OR as a filename in `wiki/theses/` (vault-wide filename uniqueness). A `concepts/` vs `entities/` collision is allowed per the naming convention; `concepts/` vs `topics/` and any `wiki/theses/` collision are FORBIDDEN. A collision routes the candidate to the `existing-pages` set (step-4 update path) or halts to ask.
    2. **Stub routing validation (always runs).** The planned path MUST match the kind-routing table (schema § "Folder subdivision" naming policy). A `kind: tool` MUST NOT land in `organizations/`; a financial benchmark MUST land in `ai-benchmarks/`; etc. Misrouting is caught HERE, not at lint time.
    3. **Semantic same-referent check (tier-gated; SKIP only when the tier is unavailable).** For EACH candidate that cleared gates 1–2, run ONE helper call: `search "<candidate name> — <planned preamble>" --type concept,entity,topic --k 8` (first call of the run syncs; later calls `--no-sync`). Apply the same-referent test per the schema (Stub policy § "Near-duplicate probe") to concept/entity hits: a hit denoting the SAME referent under a different slug (synonym, alias, spelling/formatting variant — NOT merely related) reroutes the candidate to `existing-pages` instead of stub creation; merely-related or UNCERTAIN → keep the stub (when in doubt, create). HOLD each call's topic-page hits for clause 7b's semantic fires — do NOT re-call the helper there. Tier unavailable → skip gate 3 only; gates 1–2 ALWAYS run.
-6. Build five working sets for downstream steps:
+6. Build six working sets for downstream steps:
    - `existing-pages` — concept/entity pages that already exist (handled in step 4)
    - `stub-candidates` — new concept/entity pages whose stub-creation rule fires (handled in step 5)
    - `mention-only` — names that did NOT clear the stub rule, including Title-only and Notable-Quote-only mentions that the discretion heuristic demoted (logged as `candidate-mention` in step 9)
    - `candidate-topic-updates` — FIRM tier: existing topic pages whose relevance to this source matches per the mechanical rule below (proposed at Stage 1; applied in step 4.5 only on user accept)
    - `candidate-topic-updates-speculative` — SPECULATIVE tier: NEW stubs from this ingest paired with existing topic pages by token overlap or tier-gated semantic fire (proposed at Stage 1 in a separate block; applied in step 4.5 only on user accept; capped at 2)
+   - `candidate-topic-updates-semantic` — SEMANTIC tier (source-level): existing topic pages a tier-gated source-level probe surfaces and the confirmation bar confirms (clause 7d; proposed at Stage 1 in a separate block; applied in step 4.5 only on user accept; capped at 2; arm OFF when the semantic tier is unavailable)
 7. **Firm tier.** Detection semantics per the schema (§ "Existing topic updates") — the read-path is a deterministic shortlist; NEVER read every topic page, and NEVER use the semantic tier to shortlist this tier (mechanical-fire invariant):
 
    1. List topic page filenames under `{wiki_root}/wiki/topics/` (directory listing; exclude `topics.md`) — evaluate the slug-match condition against names alone.
@@ -265,6 +266,15 @@ Citations: emit inline `[^N]` markers at every claim derived from the raw, then 
 
    **Gate (purpose lens — speculative ranking).** Lens ON (Step 0.5) → apply the "Step 3·7b — speculative ranking" block from `extensions/purpose-lens.md`: re-rank the qualifying candidates by focus overlap WITHIN the existing TOP-2 cap (reorder only — firing rules, cap, and silent-drop UNCHANGED). Lens OFF → rank exactly as above (token fires first by count, semantic-only fires by score).
 
+7d. **Semantic tier (source-level topic updates).** Detection semantics per the schema (§ "Existing topic updates" → "Semantic tier (source-level)"). This is an ADDITIVE arm catching a source whose substance extends an EXISTING topic with NO firm trigger and no new stub to pair against. It populates `candidate-topic-updates-semantic` only — NEVER applies here. (Clause 7c below is the separate answer-scan step against open questions — a different subject; do NOT conflate.)
+
+   - **Tier-gated — arm OFF when unavailable.** Semantic tier available (§ "Retrieval tiers" — helper runs, exit 0) → arm ON. Unavailable → this arm is OFF entirely; hold an EMPTY `candidate-topic-updates-semantic` set and the run is today's mechanical baseline. There is NO degrade signal — the arm simply does not fire when the tier is down.
+   - **One probe per ingest.** After the run's first syncing helper call, run ONE call: `search "<source title> — <substance digest (≤2 sentences)>" --type topic --k 5 --no-sync`. No per-topic loop, no full topic walk.
+   - **Confirmation bar (fire condition).** For each returned topic page, READ its `Scope` + section headings (≤5 bounded partial reads) and fire ONLY when the source's `Substance` carries a **citable factual claim that extends that topic's scope**. Thematic resemblance with NO citable claim → NO fire (nothing to propose). A semantic hit is NEVER promoted to firm.
+   - **Dedupe (apply in order):** (1) firm wins — suppress any topic already in this run's `candidate-topic-updates`; (2) no double-presentation — suppress any topic already in this run's `candidate-topic-updates-speculative`; (3) citation-dedupe — suppress when the topic's `Sources` already cites this source (raw or source-page wikilink): the mechanical "already contains the information" proxy; (4) artifact/ledger-dedupe — suppress (source, topic) pairs already pending in, or rejected-ledgered by, `{wiki_root}/pending-topic-updates.md` (read it if present; absent → no suppression).
+   - **Cap 2 per ingest**, ranked by helper score (descending). Overflow drops silently — re-detected by future ingests or the backfill.
+   - For each kept entry, capture: topic page path, the firing signal (`semantic: <score>`), and the topic-shape-appropriate proposed body bullet (same routing as firm-tier in step 4.5).
+
 ### Step 3·7c — Answer-scan (match new source against open questions, BOTH homes)
 
 **Gate (questions layer).** Questions layer OFF (Step 0.6: `questions.md` absent or malformed) → SKIP this step entirely; hold an EMPTY `candidate-answers` set; the Step 10 `PROPOSED ANSWERS` block is omitted and the run is identical to today. Questions layer ON → execute the Step 3·7c answer-scan from `extensions/questions-layer.md` HERE (loaded at the Step 0.6 gate). It prepares but does NOT write — apply happens at Step 10 commit, only for accepted rows.
@@ -281,9 +291,9 @@ For each page in `existing-pages`:
 
 ### Step 4.5 — Stage existing topic-update proposals
 
-Process BOTH tiers built at step 3: `candidate-topic-updates` (firm) and `candidate-topic-updates-speculative` (speculative). The staging logic is identical — both produce staged proposals applied only on user accept at step 10. The two tiers are surfaced in SEPARATE blocks at Stage 1 (`PROPOSED TOPIC UPDATES` for firm, `SPECULATIVE TOPIC UPDATES` for speculative).
+Process ALL THREE tiers built at step 3: `candidate-topic-updates` (firm), `candidate-topic-updates-speculative` (speculative), and `candidate-topic-updates-semantic` (semantic source-level, clause 7d). The staging logic is identical for all three — each produces staged proposals applied through the SAME apply-semantics (sub-step 3 below — the sole authority; never fork a second apply path). The tiers are surfaced in SEPARATE blocks at Stage 1 (`TOPIC UPDATES (firm — applied on commit; reject N to skip)` for firm, `SEMANTIC TOPIC UPDATES (source-level, default reject)` for semantic, `SPECULATIVE TOPIC UPDATES` for speculative).
 
-For each entry in EITHER tier:
+For each entry in ANY tier:
 
 1. Read the topic page in full.
 2. Determine the topic shape from its sections (debate / comparison / landscape / decision-frame / evolution / cross-application). Use existing section presence as the signal: `Key positions / Angles` → debate; `Timeline` → evolution; `Key concepts` / `Key entities` only → landscape; etc.
@@ -296,7 +306,11 @@ For each entry in EITHER tier:
      - other shapes → `Key concepts` / `Key entities` if the source introduces a new wikilinkable page; otherwise no body bullet (citation-only update)
    - Frontmatter: `last-touched: <today>`.
    - **Apply-semantics (sole authority — Step 10 accept rows point here).** On user accept, apply the three staged changes above as APPEND-ONLY edits: append the footnote `[^N]: [[<raw-filename>]]` to `Sources`; append the staged body bullet under its section with an inline `[^N]` marker; bump `last-touched: <today>`. Append-only protection per `../shared/stub-policy.md` "Append-Only Protection" applies — NEVER overwrite existing prose. No log entry — the topic page records its own updated content.
-4. Surface the staged proposal at Stage 1 (step 10) as a row in PROPOSED TOPIC UPDATES. Default user behavior is reject — the user must explicitly `accept N` to apply. **EXCEPTION — answer-origin firm entries:** a firm `candidate-topic-updates` entry staged by Step 3·7c (an answer to a topic's `Open questions` line) is surfaced in the `PROPOSED ANSWERS` block at Step 10 instead — SUPPRESS it from `PROPOSED TOPIC UPDATES` so the same resolution is never presented twice. Its staged change additionally includes the strike of the matched `Open questions` line, and accepting its `PROPOSED ANSWERS` row applies this same staged update.
+4. Surface the staged proposal at Stage 1 (step 10) in the block matching its tier, each with its posture:
+   - **Firm** (`candidate-topic-updates`) → `TOPIC UPDATES (firm — applied on commit; reject N to skip)` — GENUINE firm rows apply on the Stage-1 commit; the user vetoes a row with explicit `reject N`.
+   - **Semantic** (`candidate-topic-updates-semantic`) → `SEMANTIC TOPIC UPDATES (source-level, default reject)` — default reject; the user must explicitly `accept N` to apply.
+   - **Speculative** (`candidate-topic-updates-speculative`) → `SPECULATIVE TOPIC UPDATES` — default reject; explicit `accept N` to apply.
+   **EXCEPTION — answer-origin firm entries:** a firm `candidate-topic-updates` entry staged by Step 3·7c (an answer to a topic's `Open questions` line) is surfaced in the `PROPOSED ANSWERS` block at Step 10 instead — SUPPRESS it from the firm `TOPIC UPDATES` block so the same resolution is never presented twice, and it keeps the PROPOSED ANSWERS default-reject posture (NEVER applies on commit). Its staged change additionally includes the strike of the matched `Open questions` line, and accepting its `PROPOSED ANSWERS` row applies this same staged update.
 
 This step prepares but does NOT write. Apply happens at step 10 commit, only for accepted rows.
 
@@ -381,10 +395,15 @@ PROPOSED TOPICS:
 |---|------|---------|---------|
 | 1 | <topic-slug> | <contradiction (same-scope-opposing) | evolution | cross-application> | [[<src1>]], [[<src2>]] |
 
-PROPOSED TOPIC UPDATES:
+TOPIC UPDATES (firm — applied on commit; reject N to skip):
 | # | topic | match | proposed change |
 |---|-------|-------|-----------------|
 | 1 | [[<topic-slug>.md]] | <key-concept overlap | related overlap | slug match> ([[<matched-page>]]) | + bullet under "<section-name>" + citation |
+
+SEMANTIC TOPIC UPDATES (source-level, default reject):
+| # | topic | signal | proposed change |
+|---|-------|--------|-----------------|
+| 1 | [[<topic-slug>.md]] | semantic: <score> | + bullet under "<section-name>" + citation |
 
 SPECULATIVE TOPIC UPDATES (low-confidence, default reject):
 | # | topic | overlap | proposed change |
@@ -400,12 +419,13 @@ PROPOSED ANSWERS (default reject):
 
 File changes: accept-all | reject N (e.g. "reject 3,4") | abort
 Topic decisions: accept N (creates now) | defer N (logs as candidate) | (default: defer all)
-Topic updates: accept N (applies append-only update) | reject N (skip) | (default: reject all)
+Firm topic updates: applied on commit | reject N (skip — ledgers the pair) | (default: apply all)
+Semantic topic updates: accept N (applies append-only update) | reject N (skip — ledgers the pair) | (default: reject all)
 Speculative updates: accept N (applies append-only update) | reject N (skip) | (default: reject all)
 Proposed answers: accept N (applies answer) | reject N (skip) | (default: reject all)
 ```
 
-Omit the PROPOSED TOPICS block entirely if no triggers fired in step 6. Omit the PROPOSED TOPIC UPDATES block entirely if `candidate-topic-updates` has no non-answer-origin entries after step 3 (answer-origin entries surface in PROPOSED ANSWERS, not here). Omit the SPECULATIVE TOPIC UPDATES block entirely if `candidate-topic-updates-speculative` is empty after step 3. Omit the PROPOSED ANSWERS block entirely if `candidate-answers` is empty after step 3·7c (questions layer OFF, or no question matched).
+Omit the PROPOSED TOPICS block entirely if no triggers fired in step 6. Omit the firm `TOPIC UPDATES` block entirely if `candidate-topic-updates` has no non-answer-origin entries after step 3 (answer-origin entries surface in PROPOSED ANSWERS, not here). Omit the SEMANTIC TOPIC UPDATES block entirely if `candidate-topic-updates-semantic` is empty after step 3 (arm OFF, or no fire confirmed). Omit the SPECULATIVE TOPIC UPDATES block entirely if `candidate-topic-updates-speculative` is empty after step 3. Omit the PROPOSED ANSWERS block entirely if `candidate-answers` is empty after step 3·7c (questions layer OFF, or no question matched).
 
 User response handling:
 
@@ -416,15 +436,17 @@ User response handling:
 | `abort` | Roll back EVERYTHING. Raw index `Wiki` stays `No`. Source page is not created. Log entries removed. Skip step 11. |
 | Topic `accept N` (per topic row) | Invoke the `sb-wiki-create-topic` skill mid-run with the proposed topic name. The skill writes the topic page, updates `wiki/topics/topics.md`, cross-links from triggering concept/entity pages, and REMOVES the promoted `candidate-topic` log entry (the topic page is now the record — no `topic-created` entry). |
 | Topic `defer N` (per topic row, default if user omits a topic decision) | The `candidate-topic` log entry persists. The user may promote later by expressing intent — Claude Code auto-fires the `sb-wiki-create-topic` skill. |
-| Topic update `accept N` (per firm topic-update row) | Apply the staged Step 4.5 update (Step 4.5 owns the apply-semantics — sole authority). No log entry — the topic page records its own updated content. |
-| Topic update `reject N` (per firm topic-update row, default if user omits) | No change to the topic page. No log entry. The detection is not preserved as a candidate — re-detected on future ingests if relevance recurs. |
+| Firm topic update — APPLIED ON COMMIT (genuine firm rows in the `TOPIC UPDATES (firm …)` block) | Any committing response (`accept-all`, or `reject N` of other rows) APPLIES every genuine firm topic-update row via the staged Step 4.5 update (Step 4.5 owns the apply-semantics — sole authority), minus rows the user explicitly `reject N`s. `abort` rolls back everything (no firm update applies). No log entry — the topic page records its own updated content. (Answer-origin firm entries are excluded — they live in PROPOSED ANSWERS, default-reject.) |
+| Firm topic update `reject N` (per firm topic-update row) | No change to the topic page. APPEND the (source, topic) pair to the rejected ledger in `{wiki_root}/pending-topic-updates.md` (no-renag — the backfill never re-proposes it; create the file with a minimal header if absent). No log entry. |
+| Semantic update `accept N` (per semantic topic-update row) | Apply the staged Step 4.5 update (same apply-semantics — sole authority; no log entry). |
+| Semantic update `reject N` (per semantic topic-update row, default if user omits) | No change to the topic page. APPEND the (source, topic) pair to the rejected ledger in `{wiki_root}/pending-topic-updates.md` (no-renag; create the file with a minimal header if absent). No log entry. An OMISSION-default reject (user never reviewed the row) does NOT ledger — only an EXPLICIT `reject N` ledgers. |
 | Speculative update `accept N` (per speculative topic-update row) | Apply the staged Step 4.5 update (same apply-semantics as firm; no log entry). ALSO append the new stub's wikilink to the topic's `related:` frontmatter (so future firm-tier detection picks up the connection mechanically). |
 | Speculative update `reject N` (per speculative topic-update row, default if user omits) | No change to the topic page. No log entry. The detection is not preserved — re-detected on future ingests of related sources if token overlap recurs. |
 | Proposed answer `accept N` — **topic-home** row (home = `[[<topic>.md]]`) | Apply the staged Step 4.5 update from Step 3·7c (Step 4.5 owns the apply-semantics — sole authority), PLUS strike the matched `Open questions` line in place (`~~…~~`) — never delete it. NEVER auto-authors a page. No log entry — the topic page records its own content. |
 | Proposed answer `accept N` — **questions.md** row (home = `questions.md`) | Accrete the 1-sentence claim onto that `questions.md` entry's `answer:` field per the answer-write procedure in `../shared/question-entry-shapes.md` (`answer:` field rule + State rule), citing `[[<raw-filename>]]`. |
 | Proposed answer `reject N` (per row, default if user omits) | No change to the topic page or `questions.md` entry; for a topic-home row, discard the staged step-4.5 topic-update too. No log entry. The detection is not preserved — re-detected on future ingests (or by the lint sweep) if overlap recurs. |
 
-Default behavior when the user omits per-topic decisions: defer all topics, reject all topic updates (firm AND speculative), reject all proposed answers.
+Default behavior when the user omits per-topic decisions: defer all topics, **apply firm updates** (genuine firm rows apply on commit; an explicit `reject N` ledgers that pair, omission does not), reject semantic, reject speculative, reject all proposed answers. Answer-origin firm entries (in PROPOSED ANSWERS) reject by omission like the other answer rows.
 
 **Silent mode override (step 10) — gate.** Silent mode (keyword present) → apply the "Step 10 silent override" block from `extensions/silent-mode.md` (loaded at boot): do NOT present the preview, do NOT prompt, do NOT HALT; bucket every firm-set entry by origin (genuine firm updates auto-APPLY; answer-origin entries auto-REJECT); auto-resolve every decision point to its fixed default; write the per-record audit `Flags` lines; RETURN the structured summary. The silent-summary purpose-band field (lens ON only) is in that same extension block.
 
@@ -493,6 +515,7 @@ End of flow.
 | Raw-index FILE missing at step 7 | LOG A WARNING; do not create the file (lint owns raw-index files); do not block the ingest. |
 | Wiki sources index file missing at step 8 | Create it with header row; proceed. |
 | `sb-wiki-search.py` unavailable (missing, non-zero exit, runtime error) at any tier-gated touchpoint (3·5c, 3·7b semantic fires, 3·7c semantic membership) | Drop ALL tier-gated augments silently — the run is the mechanical baseline (exact-slug existence, token-overlap fires only). NEVER abort the ingest. |
+| `sb-wiki-search.py` unavailable at the Step 3·7d source-level semantic probe | The semantic source-level arm is OFF for this run — hold an EMPTY `candidate-topic-updates-semantic` set, omit the SEMANTIC TOPIC UPDATES block. NO token fallback (the arm has no degrade signal — it simply does not fire). NEVER abort the ingest. |
 | `{wiki_root}/wiki/topics/topics.md` missing or a topic lacks its index row at step 3·7b | Read the affected topic page(s) directly for `Scope` text; proceed. Never skip a topic for a missing index row. |
 | `{wiki_root}/purpose.md` malformed at step 0.5 (unreadable, invalid frontmatter, or no parseable `## Focus areas`) | WARN and proceed **lens-OFF** — every later step behaves as it does today. NEVER abort the ingest (guarantee #5). (Absent `purpose.md` is NOT a failure — it is the clean no-op lens-OFF path handled at Step 0.5.) |
 | `{wiki_root}/questions.md` malformed at step 0.6 (unreadable, invalid frontmatter, or no parseable H2 entries) | WARN and proceed with an EMPTY question set (questions layer OFF) — the Step 10 `PROPOSED ANSWERS` block is omitted; every other step behaves as it does today. NEVER abort the ingest (guarantee #5). (Absent `questions.md` is NOT a failure — it is the clean no-op layer-OFF path handled at Step 0.6.) |
