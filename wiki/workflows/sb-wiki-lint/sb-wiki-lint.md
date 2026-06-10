@@ -314,7 +314,7 @@ For each fire, capture into `questions-answer-proposals`: the home (`topic` or `
 
 These are surfaced as a USER-GATED `PROPOSED ANSWERS` block at Step 9. Apply happens ONLY on accept, reusing the SAME append-only / inline-`answer:` handling as `sb-wiki-ingest.md` Step 10 (the ingest p3-2 path) — NEVER a parallel write path:
 
-- **`questions.md` row** — append the 1-sentence claim as a new `- <claim> [^N]` bullet under the entry's `answer:` field (create the `answer:` field if absent), with a matching `[^N]: [[<answering-page>.md]]` footnote def, per `../shared/question-entry-shapes.md`. State flips `open → answered` by inference (≥1 bullet) — write NO `status` field. NEVER overwrite an existing bullet; accrete only.
+- **`questions.md` row** — accrete the 1-sentence claim onto the entry's `answer:` field per the answer-write procedure in `../shared/question-entry-shapes.md` (`answer:` field rule + State rule), citing `[[<answering-page>.md]]`.
 - **topic-home row** — STRIKE the matched `Open questions` line in place (`~~…~~`, never delete it) and FOLD the answer into the topic body under the topic-shape-appropriate section, with an inline `[^N]` marker and a matching `[^N]: [[<answering-page>.md]]` def in the topic's `Sources`; bump `last-touched: <today>`. Append-only protection applies — NEVER overwrite existing prose.
 
 Rejecting a row leaves the entry/topic untouched; the match is not preserved — it re-detects on a future sweep if overlap recurs.
@@ -518,7 +518,7 @@ User response handling for PROPOSED ANSWERS (questions answer-sweep, step 7.7a):
 
 | Response | Behavior |
 |----------|----------|
-| `accept N` (e.g. `accept 1,2`) — **`questions.md` row** | Append an inline `answer:` bullet to that `questions.md` entry per `../shared/question-entry-shapes.md`: add the 1-sentence claim as a new `- <claim> [^N]` bullet under the entry's `answer:` field (create the field if absent), with a matching `[^N]: [[<answering-page>.md]]` footnote def. State flips `open → answered` by inference (≥1 bullet) — write NO `status` field. NEVER overwrite an existing bullet; accrete only. No log entry. |
+| `accept N` (e.g. `accept 1,2`) — **`questions.md` row** | Accrete the 1-sentence claim onto that `questions.md` entry's `answer:` field per the answer-write procedure in `../shared/question-entry-shapes.md` (`answer:` field rule + State rule), citing `[[<answering-page>.md]]`. No log entry. |
 | `accept N` (e.g. `accept 1,2`) — **topic-home row** | STRIKE the matched `Open questions` line in place (`~~…~~`, never delete) and FOLD the answer into the topic body under the topic-shape-appropriate section with an inline `[^N]` marker + a matching `[^N]: [[<answering-page>.md]]` def in `Sources`; bump `last-touched: <today>`. Append-only protection per `../shared/stub-policy.md` "Append-Only Protection" applies — NEVER overwrite existing prose. NEVER auto-authors a page. No log entry — the topic page records its own content. |
 | `reject` (default) | No change to any `questions.md` entry or topic page. No log entry. The match is not preserved — re-detected on the next sweep (or at ingest) if overlap recurs. |
 
