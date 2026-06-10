@@ -37,6 +37,21 @@ These files codify rules referenced across multiple `sb-wiki-*` workflows. Load 
 | `../shared/log-entry-shapes.md` | 4, 8 |
 | `../shared/question-entry-shapes.md` | 5, 7.7, 8, 8.5 |
 
+## Extension Files
+
+Optional-feature step bodies and Step 9 response handlers live in `extensions/` and load JIT per the gate at each site — they are NEVER bulk-loaded. A clean lint run with the questions layer OFF reads only `ext-open-gaps.md`.
+
+| File | Loaded by | Load condition |
+|------|-----------|----------------|
+| `extensions/ext-questions-sweep.md` | Step 7.7 | Questions layer ON (`{wiki_root}/questions.md` present + parseable) |
+| `extensions/ext-open-gaps.md` | Step 8.5 | EVERY run (always-emit) |
+| `extensions/handler-link-fix.md` | Step 9 | LINK-FIX set non-empty |
+| `extensions/handler-missing-page.md` | Step 9 | MISSING-PAGE set non-empty |
+| `extensions/handler-subdivision.md` | Step 9 | SUBDIVISION set non-empty |
+| `extensions/handler-rename.md` | Step 9 | RENAME set non-empty |
+| `extensions/handler-proposed-answers.md` | Step 9 | PROPOSED ANSWERS set non-empty (layer ON) |
+| `extensions/handler-graduation.md` | Step 9 | GRADUATION set non-empty (layer ON) |
+
 ## Invocation
 
 `/sb-wiki-lint`. No arguments. Walks the entire wiki and raw trees in one pass.
@@ -302,49 +317,7 @@ Run accepted renames via the deterministic helper: `--execute-renames <plan.json
 
 ### Step 7.7 — Questions answer-sweep + graduation detection (skip-if-absent)
 
-Resolve `{wiki_root}/questions.md`. **Absent → questions layer OFF**: hold EMPTY `questions-answer-proposals` and `graduation-proposals` sets; skip this ENTIRE step; the Step 9 `PROPOSED ANSWERS` and `GRADUATION PROPOSAL` blocks are omitted and the run is identical to today (optionality guarantee #1). **Present but malformed** (unreadable, invalid frontmatter, or no parseable H2 entries): WARN and treat as absent — hold EMPTY sets, skip the step; NEVER abort the lint (guarantee #5). **Present and parseable**: parse every H2 entry per `../shared/question-entry-shapes.md` and proceed. State is INFERRED — an entry is `open` iff it has no `answer:` block or zero `answer:` bullets, else `answered`. Per `../../docs/wiki-schema.md` § "Questions layer — questions.md" → "The answer-scan" (Lint row).
-
-Detection ONLY — this step NEVER writes. It builds two proposal sets that the user gates at Step 9; apply/invoke happens at Step 9 on explicit accept.
-
-#### 7.7a — Answer-sweep (both homes → `questions-answer-proposals`)
-
-**Dirty-set scoping (spec rule 5):** read `dirty_set` from the helper report. Apply per home:
-
-| Home | Dirty-set gate |
-|------|----------------|
-| **Topic-home** | Sweep open questions ONLY from topic pages whose wiki-root-relative path is in `dirty_set`. Topic pages absent from `dirty_set` are unchanged — skip their `Open questions` lines. |
-| **`questions.md`** | Sweep open entries ONLY when `questions.md` itself is in `dirty_set` (whole-file signal — the helper tracks `questions.md` as a single entry; when it is NOT dirty, no entry was added or edited, and the entire `questions.md`-home sweep is skipped). When `questions.md` IS dirty, sweep all its open entries. |
-
-On `--full` runs and first-run / state-fallback, `dirty_set` contains every tracked page, so both homes are swept in full.
-
-Gather the scoped open-question set by invoking the deterministic helper:
-
-```bash
-python {sb_os_path}/wiki/scripts/sb-wiki-lint-deterministic.py sweep-gather
-```
-
-The helper emits a JSON object with a `questions` array. Each element carries `home` (`topic` or `questions.md`), `question` (verbatim text), and `source` (wiki-root-relative path). Filter this array with the dirty-set gate above: keep only `topic` items whose `source` is in `dirty_set`, and keep `questions.md` items only when `questions.md` itself is in `dirty_set`. Then sweep each remaining open question against the EXISTING wiki — concept/entity/topic page bodies plus source-page `Substance` sections — for content that answers it. This sweep is OFF the ingest hot-path, so it MAY be MORE THOROUGH than ingest's ≥2-shared-substantive-token mechanical match (Step 3·7b/3·7c of `sb-wiki-ingest.md`): the floor is the same ≥2-token signal, and the sweep MAY additionally fire on a lightly-semantic read (a page that materially addresses the question without sharing 2 surface tokens). It remains a PROPOSAL surface — it NEVER auto-applies.
-
-When the semantic tier is available (schema § "Retrieval tiers — hybrid search"), run the sweep through the helper — per open question, from the vault root: `python {sb_os_path}/wiki/scripts/sb-wiki-search.py search "<question text>" --k 5 --json` — and treat each hit page as a candidate answering page. The helper widens recall; it NEVER lowers the proposal bar (the match-threshold rules above still decide what fires). Tier unavailable → run the sweep with grep/LLM reads exactly as before; a helper failure NEVER aborts the lint.
-
-> **Validation window — ON (§13 fuzzy thresholds).** The EXACT lint-sweep thoroughness — purely mechanical (≥2 shared substantive tokens, mirrored from `sb-wiki-ingest.md` Step 3·7b) vs. lightly-semantic (also fires when a page materially addresses the question without 2 shared surface tokens) — is deliberately unfrozen while tuning. **Close condition: freeze the wording here after ≥10 complete `sb-wiki-lint` runs with the questions layer active (i.e., `questions.md` present and parseable).** Track count by the `runs_completed` counter in `{wiki_root}/lint-deterministic-report.json` — added by task `p2-gaps` (absent-as-0); the counter increments on every helper non-execute run (check + apply modes) as the proxy for a complete lint run. Current count: 0. Per `../../docs/wiki-schema.md` § "Questions layer — questions.md" → "The answer-scan" validation-window note (heuristic 3, lint sweep thoroughness).
-
-For each fire, capture into `questions-answer-proposals`: the home (`topic` or `questions.md`); the question identity (topic page path + the verbatim `Open questions` line for a topic-home fire; the `questions.md` entry's H2 heading for a `questions.md` fire); the answering page filename; and the proposed `answer:` claim — a 1-sentence claim derived from the answering page that addresses the question, carrying the citation `[^N]: [[<answering-page>.md]]`.
-
-These are surfaced as a USER-GATED `PROPOSED ANSWERS` block at Step 9. Apply happens ONLY on accept, reusing the SAME append-only / inline-`answer:` handling as `sb-wiki-ingest.md` Step 10 (the ingest p3-2 path) — NEVER a parallel write path:
-
-- **`questions.md` row** — accrete the 1-sentence claim onto the entry's `answer:` field per the answer-write procedure in `../shared/question-entry-shapes.md` (`answer:` field rule + State rule), citing `[[<answering-page>.md]]`.
-- **topic-home row** — STRIKE the matched `Open questions` line in place (`~~…~~`, never delete it) and FOLD the answer into the topic body under the topic-shape-appropriate section, with an inline `[^N]` marker and a matching `[^N]: [[<answering-page>.md]]` def in the topic's `Sources`; bump `last-touched: <today>`. Append-only protection applies — NEVER overwrite existing prose.
-
-Rejecting a row leaves the entry/topic untouched; the match is not preserved — it re-detects on a future sweep if overlap recurs.
-
-#### 7.7b — Graduation detection (`questions.md` only → `graduation-proposals`)
-
-Scan every **answered** `questions.md` entry (≥1 `answer:` bullet) for maturity. Topic-home questions never graduate (they resolve in place on the topic page) — graduation is `questions.md`-only. Mark a maturity heuristic for each answered entry; entries that look MATURE feed `graduation-proposals` (the entry H2 + a 1-line answer preview + its `relates:` targets) for the Step 9 GRADUATION PROPOSAL block.
-
-> **Validation window — ON (§13 fuzzy thresholds).** The EXACT graduation maturity heuristic — when an accreted `answer:` is "ripe" for a page (starting point: an entry with ≥2 accreted `answer:` bullets from distinct sources, OR a single bullet the user has marked, surfaces as mature) — is deliberately unfrozen while tuning. **Close condition: freeze the wording here once the `runs_completed` counter in `{wiki_root}/lint-deterministic-report.json` (added by task `p2-gaps`; absent-as-0) reaches ≥10 AND at least one GRADUATION PROPOSAL has been surfaced (i.e., the heuristic has been exercised at real scale).** Graduation proposals are surfaced per-run only and not persisted separately; the run counter is the durable close signal. Per `../../docs/wiki-schema.md` § "Questions layer — questions.md" → "The answer-scan" validation-window note (heuristic 1, graduation maturity).
-
-Detection ONLY. Build `graduation-proposals` for the Step 9 GRADUATION PROPOSAL block. The graduated entry is NOT pruned here — pruning of a promoted entry (page now exists) is owned by Step 8; this step only PROPOSES.
+**Gate — questions layer.** Resolve `{wiki_root}/questions.md`. **Absent or malformed** (unreadable, invalid frontmatter, or no parseable H2 entries) → questions layer OFF: hold EMPTY `questions-answer-proposals` and `graduation-proposals` sets, SKIP this entire step, omit the Step 9 `PROPOSED ANSWERS` and `GRADUATION PROPOSAL` blocks, and do NOT read the extension — the run is identical to today (optionality guarantee #1; malformed-treated-as-absent is guarantee #5, NEVER abort). **Present and parseable** → questions layer ON: READ and execute `{sb_os_path}/wiki/workflows/sb-wiki-lint/extensions/ext-questions-sweep.md` in full (it carries the answer-sweep, the `sweep-gather` helper invocation, the dirty-set scoping, the two validation windows, and the graduation-detection pass). If that file is missing on disk, HALT naming the missing path — never silently skip the feature.
 
 ### Step 8 — Prune the logs
 
@@ -368,51 +341,7 @@ The `logs/` files are actionable queues. Lint NEVER writes a `lint` entry — fi
 
 ### Step 8.5 — Regenerate `open-gaps.md` (cross-wiki open-questions aggregate)
 
-REGENERATE `{wiki_root}/open-gaps.md` wholesale on every lint run — a READ-ONLY aggregate that recovers the single-pane visibility the two-homes model gives up (per `../../docs/wiki-schema.md` § "Questions layer — questions.md" → "`open-gaps.md` — lint-generated aggregate"). This is a VIEW, not a store: lint OVERWRITES the entire file each run; the user never hand-edits it (edits are overwritten). NEVER append; NEVER preserve prior content. Run AFTER Step 8 so the just-pruned `questions.md` state is reflected (promoted/retired entries are already gone and never surface as open gaps).
-
-Collect the open-question set by invoking the deterministic helper:
-
-```bash
-python {sb_os_path}/wiki/scripts/sb-wiki-lint-deterministic.py open-gaps
-```
-
-The helper emits the complete `open-gaps` aggregate (topic-home open-questions + `questions.md` open entries) with the defined empty-state semantics. Capture its stdout and write it to `{wiki_root}/open-gaps.md`.
-
-**Empty-state — ALWAYS emit the file (never skip).** When `questions.md` is absent AND no topic page has an unresolved `Open questions` line, the helper still emits both sections with the per-section empty-state line `_No open questions._` — do NOT skip generation and do NOT leave a stale prior file in place. Rationale: a stale `open-gaps.md` left from a previous run (when questions existed) would misreport the current state; an always-present empty file is self-documenting and keeps the view honest. (Documented as a shape.md Decision.)
-
-The emitted file carries this exact shape (frontmatter `type: questions-index` per `../shared/frontmatter-schemas.md`):
-
-```markdown
----
-type: questions-index
-last-touched: <today YYYY-MM-DD>
----
-
-# Open gaps
-
-> Lint-generated, READ-ONLY — regenerated in full on every `/sb-wiki-lint` run. Do NOT hand-edit; edits are overwritten. Aggregates every OPEN question across both homes (topic pages + `questions.md`). Resolve a question in its home; it drops off this view on the next lint.
-
-## Topic-home open questions (N)
-
-| Question | Topic |
-|----------|-------|
-| <verbatim Open questions line text> | [[<topic-slug>.md]] |
-
-## `questions.md` open questions (N)
-
-| Question | Home | Relates |
-|----------|------|---------|
-| [YYYY-MM-DD] <question text> | [[questions.md]] | [[<page>.md]], … |
-```
-
-Row rules:
-
-1. **Topic-home rows** — one row per non-struck `Open questions` line. `Question` = the verbatim line text (strip the leading list marker). `Topic` = a `[[<topic-slug>.md]]` backlink to the home topic page.
-2. **`questions.md` rows** — one row per open entry. `Question` = the entry's `[YYYY-MM-DD] <question text>` H2 text verbatim, written as PLAIN table text (not inside a wikilink — the `[YYYY-MM-DD]` brackets and `?` in a question break Obsidian's `#`-heading-anchor syntax, so a heading-anchor link is NOT used). `Home` = a plain `[[questions.md]]` file backlink to the queue. `Relates` = the entry's `relates:` targets as `[[<page>.md]]` links joined by `, ` (write `—` when `relates:` is empty/absent).
-3. Section header counts `(N)` reflect the rows in that section. Omit NEITHER section — when a section has zero rows, keep the heading and write the empty-state line `_No open questions._` beneath it.
-4. Capture `open-gaps-regenerated` (total open-question rows written, or `empty` when both sections are empty) for the LINT REPORT.
-
-`open-gaps.md` is EXCLUDED from every validation walk (Steps 1–5, 7): it carries `type: questions-index` (a non-page value) and is a root-level sibling outside `wiki/` and `raw/`, so it is never walked for stub/orphan/index checks (per `../shared/folder-structure.md` "Questions Layer Files" → "`open-gaps.md`" and `../shared/frontmatter-schemas.md` § "`type: questions` / `type: questions-index`"). Lint GENERATES it here; it never participates as a lint target.
+**Gate — always-emit (every run).** READ and execute `{sb_os_path}/wiki/workflows/sb-wiki-lint/extensions/ext-open-gaps.md` on EVERY lint run — `open-gaps.md` is regenerated wholesale every run (it loads whether the questions layer is ON or OFF, not only when proposals exist): when the layer is OFF it aggregates topic-home open questions only, and when nothing is open it still writes the empty-state file. Run it AFTER Step 8 so the just-pruned `questions.md` state is reflected. If that file is missing on disk, HALT naming the missing path — never silently skip the regeneration (a stale `open-gaps.md` misreports state).
 
 ### Step 9 — Present findings to the user
 
@@ -498,60 +427,18 @@ No action required for findings 1-7 (lint is read-mostly; index sync + log prune
 
 Omit any zero-count line with empty list (e.g., `Broken wikilinks (0)` may be elided when the body would be empty). The wiki leaf indexes line is omitted when both counts are 0. The `Disputed callouts needing manual review` line is omitted when zero. The `Questions pruned` line is omitted when the questions layer is OFF (`questions.md` absent or malformed); the `Open gaps regenerated` line is omitted only when the questions layer is OFF AND no topic has an open question (the empty-state file is still written per Step 8.5, but there is nothing to report). The LINK-FIX PROPOSAL block is omitted when no bucket-A link exists; the MISSING-PAGE PROPOSAL block is omitted when no bucket-B target exists. The SUBDIVISION PROPOSAL block is omitted when the proposal set is empty. The PROPOSED ANSWERS block is omitted when `questions-answer-proposals` is empty (or the questions layer is OFF). The GRADUATION PROPOSAL block is omitted when `graduation-proposals` is empty (or the questions layer is OFF). The trailing closing line is REQUIRED.
 
-User response handling for LINK-FIX PROPOSAL (broken-link bucket A, step 5):
+**Step 9 response handlers — per-set JIT load.** Each handler table below is loaded ONLY when its proposal set is non-empty (a clean run loads zero handlers). For each non-empty set, READ and execute the named extension file before applying the user's response; if the set is empty, the block is already omitted from the report (above) and the handler is NOT read. If a needed handler file is missing on disk, HALT naming the missing path.
 
-| Response | Behavior |
-|----------|----------|
-| `accept all` | Build a plan of all bucket-A rows (`{file, old, new}` where `old` = broken target, `new` = `suggestion`) and run `python {sb_os_path}/wiki/scripts/sb-wiki-lint-deterministic.py --execute-link-fixes <plan.json>` from the vault root. Then re-read `detected.link_fixes` and resolve every `skipped`/`errors` entry. No log entry. |
-| `accept N` (e.g. `accept 1,2`) | Plan + execute the listed rows only. Others defer. |
-| `reject` | All fixes defer; broken links persist and re-surface next lint run. |
-| `defer` (default) | Same as `reject` for this run; re-detected next run while the link stays broken. |
+| When this proposal set is non-empty | READ and follow |
+|--------------------------------------|-----------------|
+| LINK-FIX (broken-link bucket A, step 5) | `{sb_os_path}/wiki/workflows/sb-wiki-lint/extensions/handler-link-fix.md` |
+| MISSING-PAGE (broken-link bucket B, step 5) | `{sb_os_path}/wiki/workflows/sb-wiki-lint/extensions/handler-missing-page.md` |
+| SUBDIVISION (step 7.5) | `{sb_os_path}/wiki/workflows/sb-wiki-lint/extensions/handler-subdivision.md` |
+| RENAME (PDF title-conformance, step 7.6) | `{sb_os_path}/wiki/workflows/sb-wiki-lint/extensions/handler-rename.md` |
+| PROPOSED ANSWERS (questions answer-sweep, step 7.7a — questions layer ON) | `{sb_os_path}/wiki/workflows/sb-wiki-lint/extensions/handler-proposed-answers.md` |
+| GRADUATION (mature `questions.md` entries, step 7.7b — questions layer ON) | `{sb_os_path}/wiki/workflows/sb-wiki-lint/extensions/handler-graduation.md` |
 
-User response handling for MISSING-PAGE PROPOSAL (broken-link bucket B, step 5):
-
-| Response | Behavior |
-|----------|----------|
-| `accept all` | For EACH accepted target, invoke `rbtv-web-searching` to verify what the concept/entity actually is (one authoritative source), then author a stub per `../shared/stub-policy.md` + `../shared/frontmatter-schemas.md` at `wiki/concepts/{slug}.md` or `wiki/entities/{slug}.md` (matching `kind:` subfolder per the type folder's `CLAUDE.md` routing). A 1–2 sentence definition lead line + a `## Sources` section with the citation. After authoring, run `python {sb_os_path}/wiki/scripts/sb-wiki-fill-index-descriptions.py --apply` to add each stub's leaf-index Description row. NEVER invent a definition. No log entry — the page is the record. |
-| `accept N` (e.g. `accept 1,2`) | Author the listed stubs only. Others defer. |
-| `reject` | All defer; targets re-surface next lint run. |
-| `defer` (default) | Same as `reject` for this run. |
-
-User response handling for SUBDIVISION PROPOSAL:
-
-| Response | Behavior |
-|----------|----------|
-| `accept all` | Execute every proposed subdivision per the procedure in step 7.5 § "Subdivision execution". No log entry — the new folder structure and indexes are the record. |
-| `accept N` (e.g. `accept 1,2`) | Execute the listed proposals only. Other proposals defer. |
-| `reject` | All proposals defer; surface as warnings in the next lint run. |
-| `defer` (default) | Same as `reject` for this run; proposals re-surface in subsequent runs as long as the kind remains ≥10 pages (threshold: `../shared/folder-structure.md` § "Stability Rules"). |
-
-User response handling for RENAME PROPOSAL:
-
-| Response | Behavior |
-|----------|----------|
-| `accept all` | Execute every proposed rename per step 7.6 § "PDF title-conformance execution" — rename raw + source page and rewrite the full referrer set. No log entry. |
-| `accept N` (e.g. `accept 1,2`) | Execute the listed renames only. Others defer. |
-| `reject` | All renames defer; re-surface next run. |
-| `defer` (default) | Same as `reject` for this run; proposals re-detect next run while the mismatch persists. |
-
-User response handling for PROPOSED ANSWERS (questions answer-sweep, step 7.7a):
-
-| Response | Behavior |
-|----------|----------|
-| `accept N` (e.g. `accept 1,2`) — **`questions.md` row** | Accrete the 1-sentence claim onto that `questions.md` entry's `answer:` field per the answer-write procedure in `../shared/question-entry-shapes.md` (`answer:` field rule + State rule), citing `[[<answering-page>.md]]`. No log entry. |
-| `accept N` (e.g. `accept 1,2`) — **topic-home row** | STRIKE the matched `Open questions` line in place (`~~…~~`, never delete) and FOLD the answer into the topic body under the topic-shape-appropriate section with an inline `[^N]` marker + a matching `[^N]: [[<answering-page>.md]]` def in `Sources`; bump `last-touched: <today>`. Append-only protection per `../shared/stub-policy.md` "Append-Only Protection" applies — NEVER overwrite existing prose. NEVER auto-authors a page. No log entry — the topic page records its own content. |
-| `reject` (default) | No change to any `questions.md` entry or topic page. No log entry. The match is not preserved — re-detected on the next sweep (or at ingest) if overlap recurs. |
-
-User response handling for GRADUATION PROPOSAL (mature `questions.md` entries, step 7.7b):
-
-| Response | Behavior |
-|----------|----------|
-| `accept all` | For EACH proposed entry, **invoke the `sb-wiki-create-topic` skill** with the entry's question + accreted `answer:` content + `relates:` targets as the proposed topic. The skill carries its OWN `extend N` (fold into an existing topic) / `new` (create a new page) overlap check and writes the page — lint NEVER authors a page directly. The graduated entry is NOT removed here; step 8 prunes it on the next lint run once the page exists (resolution = page exists). No log entry. |
-| `accept N` (e.g. `accept 1,2`) | Invoke `sb-wiki-create-topic` for the listed entries only, exactly as `accept all` above. Other entries defer. |
-| `reject` | All entries defer; the answered entries persist in `questions.md` and re-surface as GRADUATION PROPOSAL rows next lint run. |
-| `defer` (default) | Same as `reject` for this run; mature entries re-surface in subsequent runs until graduated or retired. |
-
-**Graduation NEVER auto-authors.** A page is created ONLY by `sb-wiki-create-topic` on explicit user accept. Lint proposes; the skill authors. This preserves the schema rule "Agent NEVER auto-creates topic pages" (`../../docs/wiki-schema.md` § "Topic page" and "Questions layer — questions.md" → Lifecycle).
+**Graduation NEVER auto-authors.** A page is created ONLY by `sb-wiki-create-topic` on explicit user accept (the GRADUATION handler enforces this). Lint proposes; the skill authors. This preserves the schema rule "Agent NEVER auto-creates topic pages" (`../../docs/wiki-schema.md` § "Topic page" and "Questions layer — questions.md" → Lifecycle).
 
 End of flow.
 

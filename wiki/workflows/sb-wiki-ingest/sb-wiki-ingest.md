@@ -52,6 +52,18 @@ These files codify rules referenced across multiple `sb-wiki-*` workflows. Load 
 | `../shared/folder-structure.md` | 1.5, 2, 5 |
 | `./data/candidate-topic-triggers.md` | 6 |
 
+## Event-Scoped Extensions
+
+Optional-feature machinery lives in `extensions/` and loads ONLY when its feature is active (JIT) — an interactive run with no questions layer and no purpose lens reads NONE of these files; the gate lines at each site are the only trace. Each gate states the load condition + path; load at the step named below.
+
+| Extension | Load when | Loaded at | Applies at |
+|-----------|-----------|-----------|------------|
+| `extensions/silent-mode.md` | `silent` keyword present at invocation | Boot (before Step 1) | Silent Mode gate + Step 1, 1.5, 10, 11 silent overrides |
+| `extensions/questions-layer.md` | `{wiki_root}/questions.md` present and parseable | Step 0.6 gate | Step 0.6 (load questions) + Step 3·7c (answer-scan) |
+| `extensions/purpose-lens.md` | `{wiki_root}/purpose.md` present and parseable (lens ON, decided at Step 0.5) | Step 0.5 (lens ON) | Step 2 (classify + depth dial), Step 3 clause 5b, Step 3·7b (ranking), Step 10 (Stage 1 presentation) |
+
+Extension file missing on disk when its gate fires → HALT naming the missing path (never silently skip the feature). A gate that cannot determine feature state (e.g., `sb-os.json` unreadable) → resolve conservatively: load the extension.
+
 ## Invocation
 
 | Form | Behavior |
@@ -63,18 +75,7 @@ These files codify rules referenced across multiple `sb-wiki-*` workflows. Load 
 
 ## Silent Mode
 
-When the `silent` keyword is present, this run is non-interactive — it emits NO checkpoint prompts and NEVER awaits user input. A caller (an orchestrator subagent, the research-mode auto-ingest, or `/sb-wiki-ingest-all`) invokes it to ingest one source end-to-end and parse a machine-readable result. The schema doc § "/sb-wiki-ingest" subsection "Silent (non-interactive) mode" is the canonical spec — follow it.
-
-The mode changes ONLY four things; everything else (clustering, stub rules, append-only protection, citation discipline, candidate-trigger detection) runs EXACTLY as the default flow:
-
-| Branch point | Silent behavior |
-|--------------|-----------------|
-| Step 1 — slug resolution | A multi-match `<slug>` ERRORS — NEVER prompts. See step 1 silent clause. |
-| Step 1.5 — title-conformance collision | A `{title-slug}.pdf` collision ERRORS — `failed (duplicate raw)`. NEVER prompts. See step 1.5 silent clause. |
-| Step 10 — Stage 1 commit gate | Auto-resolve every decision to a fixed default; emit the structured summary; NO prompt, NO mid-flow HALT. See step 10 silent clause. |
-| Step 11 — Stage 2 reflection | SKIPPED entirely — never presented, never awaited. See step 11 silent clause. |
-
-When the `silent` keyword is ABSENT, NONE of the silent clauses below apply — the workflow behaves EXACTLY as the default-mode body specifies.
+**Gate (load at boot).** When the `silent` keyword is present at invocation, READ `extensions/silent-mode.md` NOW — before Step 1 — and apply its contract + every per-step override (Steps 1, 1.5, 10, 11). Loading at boot guarantees each silent-override clause is in context BEFORE any halt-capable step is reached, so a silent-mode subagent never halts mid-batch. When the `silent` keyword is ABSENT, do NOT read that file: the run is interactive and NONE of the silent clauses apply — the workflow behaves EXACTLY as the default-mode body specifies.
 
 ## Write-Surface Contract
 
@@ -130,14 +131,11 @@ Read + parse the OPTIONAL regulatory file `{wiki_root}/purpose.md`. This loads t
 
 Lens ON modulates ONLY discretionary surfaces (Steps 2, 5 Title-only/Notable-Quote branches, 3·7b, 10). It NEVER alters a mechanical branch's logic, NEVER drops content, and NEVER suppresses a detected trigger (guarantees #2/#3). Peripheral treatment is floored at today's baseline including cluster granularity (guarantee #4).
 
+**Gate (purpose lens).** Lens ON → READ `extensions/purpose-lens.md` NOW and apply its per-step modulation blocks at their named sites (Step 2 classify + depth dial, Step 3 clause 5b, Step 3·7b ranking, Step 10 Stage 1 presentation; the silent-summary band is in `extensions/silent-mode.md`). Lens OFF (absent or malformed) → do NOT read it; no classification, no band, no modulation.
+
 ### Step 0.6 — Load questions (answer-scan)
 
-Read + parse the OPTIONAL questions-layer registry `{wiki_root}/questions.md`. This loads the open questions that the answer-scan matches the new source against at the Stage-1 `PROPOSED ANSWERS` block (Step 10). The canonical spec is `../../docs/wiki-schema.md` § "Questions layer — questions.md" — follow it; the entry schema and two-homes contract there are authoritative. The runtime entry shape is `../shared/question-entry-shapes.md`. This step ONLY loads — it NEVER writes (writes happen at Step 10 commit on user accept).
-
-1. Resolve `{wiki_root}/questions.md`.
-2. **Absent** → **questions layer OFF**: hold an EMPTY question set; skip ALL questions behavior for this run; the Step 10 `PROPOSED ANSWERS` block is omitted and every other step behaves EXACTLY as it does today (optionality guarantee #1). Proceed to Step 1.
-3. **Malformed** (unreadable, invalid frontmatter, or no parseable H2 entries) → WARN and proceed as if absent (empty question set, layer OFF). NEVER abort the ingest (guarantee #5). Proceed to Step 1.
-4. **Present and parseable** → parse every H2 entry per the entry schema and hold the **open** ones for the Step 10 scan. State is INFERRED — an entry is `open` iff it has no `answer:` block or zero `answer:` bullets; `answered` entries (≥1 `answer:` bullet) are skipped by the scan. For each open entry hold: the question text, its `relates:` wikilinks, and its `seeded-by:` wikilink (if any). Holding open questions does not gate any Step 1–9 logic — it feeds ONLY the Step 10 block.
+**Gate (questions layer).** Resolve `{wiki_root}/questions.md`. **Absent OR malformed** (unreadable, invalid frontmatter, or no parseable H2 entries) → **questions layer OFF**: hold an EMPTY question set, omit the Step 10 `PROPOSED ANSWERS` block, do NOT read the extension, and behave EXACTLY as today (optionality guarantee #1; never abort — guarantee #5). **Present and parseable** → **questions layer ON**: READ `extensions/questions-layer.md` and execute its Step 0.6 (parse + hold open questions) HERE, then its Step 3·7c (answer-scan) at the Step 3·7c gate.
 
 ### Step 1 — Read raw file
 
@@ -145,7 +143,7 @@ Read + parse the OPTIONAL questions-layer registry `{wiki_root}/questions.md`. T
    - Exact filename match wins (never ambiguous).
    - Otherwise match unique substring across `{wiki_root}/raw/{origin}/*.md`, `{wiki_root}/raw/{origin}/*.pdf`, and `{wiki_root}/raw/studies/*.md`.
    - Multiple matches → halt and ask the user to disambiguate before any other action.
-   - **Silent mode override:** Multiple matches → do NOT prompt. RETURN the structured summary with per-file status `failed (slug ambiguous: N matches)` and ingest nothing. Zero matches → RETURN `failed (slug not found)`. (Both per the schema's silent return contract.)
+   - **Silent mode** (keyword present) → apply the Step 1 silent override from `extensions/silent-mode.md` (loaded at boot): do NOT prompt — multi-match RETURNS `failed (slug ambiguous: N matches)`, zero-match RETURNS `failed (slug not found)`.
 2. Read the raw file in full. For a PDF source, read it natively (the Read tool renders PDF pages); read every page — issue successive page-range requests when the file exceeds the per-request page limit. Capture origin (`{origin}` = parent folder name; `studies` is a valid origin).
 3. Note the source kind from origin and content shape: `article` | `paper` | `podcast` | `study` | `repo` (a PDF source is typically `paper` or `article`).
 
@@ -157,7 +155,7 @@ Markdown raw sources SKIP this step. For a PDF raw source:
 2. Compute `{title-slug}` per `../shared/naming-convention.md` § "Raw PDF Title-Conformance" → "Title-slug algorithm".
 3. Stem already equals `{title-slug}` → do nothing; proceed to sub-step 4 (text-twin check).
 4. Stem differs AND `raw/{origin}/{title-slug}.pdf` does NOT exist → rename `raw/{origin}/{stem}.pdf` → `raw/{origin}/{title-slug}.pdf` NOW, before the source page is created. The source page (step 2), its `raw:` frontmatter, and every downstream footnote are then born title-named — NO referrer propagation is needed because no page cites this source yet. Use `{title-slug}` as the slug for the rest of the flow.
-5. Collision — `raw/{origin}/{title-slug}.pdf` already exists → this raw duplicates an already-ingested paper. ERROR-halt and ask the user: abort (skip the duplicate) or proceed without renaming. **Silent mode:** do NOT halt — RETURN `failed (duplicate raw: {title-slug}.pdf exists)` and ingest nothing.
+5. Collision — `raw/{origin}/{title-slug}.pdf` already exists → this raw duplicates an already-ingested paper. ERROR-halt and ask the user: abort (skip the duplicate) or proceed without renaming. **Silent mode** (keyword present) → apply the Step 1.5 silent override from `extensions/silent-mode.md` (loaded at boot): do NOT halt — RETURN `failed (duplicate raw: {title-slug}.pdf exists)` and ingest nothing.
 6. **Text-twin extraction (non-optional).** After the rename (or no-rename) above, check whether a Markdown twin `raw/{origin}/{title-slug}.md` already exists.
    - **Twin exists** → skip extraction; proceed to step 2 using the existing twin as the source text.
    - **Twin absent** → MUST extract a durable text twin using `pypdf`-extraction: write the extracted text to `raw/{origin}/{title-slug}.md`. NEVER delete or replace the PDF — BOTH files MUST be preserved. The source page (step 2) MUST link both:
@@ -168,25 +166,7 @@ The rename changes the FILENAME only — raw content is never edited (immutabili
 
 ### Step 2 — Write source page
 
-**Lens — classify the source (Step 2 open; lens ON only).** With the raw content (Step 1) and parsed purpose (Step 0.5) both available, classify the source into EXACTLY ONE band, keying off the **primary** subject — not incidental mentions (same discipline as the Tecer-relevance axes). Per the schema § "Regulatory layer — purpose.md" → "Classification model":
-
-| Band | Definition | Effect |
-|------|------------|--------|
-| **in-focus** | Primary subject matches ≥1 `Focus area` | Dial discretionary treatment **UP** (richer) |
-| **peripheral** | Not a focus match, but not noise (or hits a `Down-weight signal`) | Baseline; lean terse on discretionary extras — "down-weight, never below baseline" |
-| **off-purpose** | Matches **no** `Focus area` (or appears in `Out of purpose`) | Baseline treatment **+ Stage-1 flag** (Step 10); if the user proceeds, treat as peripheral |
-
-Registered `wiki_extensions` page types (e.g. `thesis`, `decision`) are classified too (key off primary subject); `purpose.md` SHOULD cover active-extension domains so extension sources are not spuriously flagged off-purpose. Hold the band for Steps 5, 3·7b, and 10. Lens OFF → no classification; skip this block entirely.
-
-**Lens — `Substance` depth dial (discretionary; lens ON only).** Modulate the discretionary depth/granularity of the `Substance` section and optional-section inclusion by band — the mechanical branches downstream are untouched:
-
-| Band | Discretionary treatment |
-|------|-------------------------|
-| **in-focus** | Finer granularity, fuller `Substance`; include warranted optional sections (`Notable quotes` / `Methodology` / `Counterpoints`); apply `Quality bar` editorial preferences |
-| **peripheral** | Baseline granularity; optional sections only if clearly warranted — never coarsen clustering below baseline (guarantee #4) |
-| **off-purpose** | Baseline (becomes peripheral once the user proceeds at Step 10) |
-
-This shapes only the discretionary inputs; the Substance-bullet stub branch (Step 5), trigger detection (Step 6), citations, and indexes are mechanical and untouched (their outputs may shift only as a bounded consequence of these inputs). Lens OFF → write `Substance` and select optional sections exactly as today.
+**Gate (purpose lens).** Lens ON (Step 0.5: `purpose.md` present and parseable) → apply the Step 2 "classify the source" and "`Substance` depth dial" blocks from `extensions/purpose-lens.md` HERE: classify into one band, hold it for Steps 3·7b/5/10, and dial discretionary `Substance` depth by band. Lens OFF → no classification, no band; write `Substance` and select optional sections exactly as today.
 
 Write `{wiki_root}/wiki/sources/{origin}/{date}-{slug}.md`. Filename mirrors the raw counterpart's stem EXACTLY with a `.md` extension — preserve the date format the origin uses (`YYYY-MM-DD-slug.md`, `YYYY_MM_DD-slug.md`, etc.). Do NOT normalize date formats. A PDF raw source keeps the same stem with `.md` (e.g., `Starting-Up-AI.pdf` → `Starting-Up-AI.md`); the `raw:` frontmatter wikilinks the actual raw filename including its real extension (`[[Starting-Up-AI.pdf]]`).
 
@@ -229,15 +209,7 @@ Citations: emit inline `[^N]` markers at every claim derived from the raw, then 
    - The `Substance`-bullet branch is MECHANICAL — fire on match against the cluster representative.
    - The Source-title branch is MECHANICAL ONLY when the title name also appears in a Substance bullet. Title-only names fall under DISCRETION per `../shared/stub-policy.md` § "Title-Branch Rule" — apply the relevance heuristic before firing.
    - The Notable-Quote branch is AGENT DISCRETION per `../shared/stub-policy.md` § "Notable Quote Stub Creation" — apply the relevance heuristic before firing.
-5b. **Lens — discretionary stub branches (lens ON only; these are the "Step 5 — Create stubs" discretionary branches per the schema's per-step table).** Bias ONLY the relevance heuristic of the two DISCRETIONARY branches above (Title-only, Notable-Quote) by the source's band from Step 2 — the MECHANICAL `Substance`-bullet branch is UNTOUCHED and fires exactly as today:
-
-   | Band | Title-only / Notable-Quote heuristic bias |
-   |------|-------------------------------------------|
-   | **in-focus** | Lean **fire** (create the stub); apply finer cluster granularity |
-   | **peripheral** | Lean **demote** to `candidate-mention` |
-   | **off-purpose** | As peripheral |
-
-   The bias only tilts the existing yes/no heuristic — it NEVER fires the mechanical branch differently, NEVER drops a Substance-bullet stub, and NEVER coarsens peripheral clustering below baseline (guarantee #4). A demoted name still lands in `mention-only` (logged `candidate-mention`), so nothing is dropped. Lens OFF → apply the heuristic exactly as clause 5 specifies, no bias.
+5b. **Gate (purpose lens — discretionary stub branches).** Lens ON (Step 0.5) → apply the "Step 3 clause 5b — discretionary stub branches" block from `extensions/purpose-lens.md` HERE: bias ONLY the Title-only / Notable-Quote relevance heuristic by the source's band; the MECHANICAL `Substance`-bullet branch is UNTOUCHED. Lens OFF → apply the heuristic exactly as clause 5 specifies, no bias.
 5c. **Near-duplicate probe (NON-SKIPPABLE gates — run for EVERY candidate regardless of tier availability).** Before creating any stub, EVERY candidate MUST pass ALL of the following gates:
 
    1. **Cross-kind + theses-namespace check (always runs).** The planned slug MUST NOT already exist in ANY kind folder under `wiki/` — `concepts/`, `entities/`, `topics/` — OR as a filename in `wiki/theses/` (vault-wide filename uniqueness). A `concepts/` vs `entities/` collision is allowed per the naming convention; `concepts/` vs `topics/` and any `wiki/theses/` collision are FORBIDDEN. A collision routes the candidate to the `existing-pages` set (step-4 update path) or halts to ask.
@@ -273,33 +245,11 @@ Citations: emit inline `[^N]` markers at every claim derived from the raw, then 
 
    Rank: token fires above semantic-only fires; among token fires by overlap count (descending); among semantic-only fires by helper score (descending). Cap to TOP 2. The remaining candidates are dropped silently (NOT logged — they re-detect on future ingests of related sources). For each kept entry, capture: topic page path, the stub's slug, the firing signal (matched tokens, or helper score), and the topic-shape-appropriate proposed body bullet (per the same routing as firm-tier in step 4.5).
 
-   **Lens — speculative ranking (discretionary; lens ON only).** When the lens is ON, re-rank the qualifying candidates by **focus overlap** (overlap with the source's classified `Focus area`) WITHIN the existing TOP-2 cap: focus overlap orders the list and breaks ties when signal strengths are equal. The firing rules (token overlap ≥2, tier-gated semantic fire, firm-dedupe), the cap of 2, and the silent-drop of overflow are UNCHANGED — the lens only reorders the kept set, never widens it. Lens OFF → rank exactly as above (token fires first by count, semantic-only fires by score).
+   **Gate (purpose lens — speculative ranking).** Lens ON (Step 0.5) → apply the "Step 3·7b — speculative ranking" block from `extensions/purpose-lens.md`: re-rank the qualifying candidates by focus overlap WITHIN the existing TOP-2 cap (reorder only — firing rules, cap, and silent-drop UNCHANGED). Lens OFF → rank exactly as above (token fires first by count, semantic-only fires by score).
 
 ### Step 3·7c — Answer-scan (match new source against open questions, BOTH homes)
 
-SKIP this step entirely if the questions layer is OFF (Step 0.6: `questions.md` absent or malformed). When OFF, hold an EMPTY `candidate-answers` set — the Step 10 `PROPOSED ANSWERS` block is omitted and the run is identical to today.
-
-Match THIS source against every **open** question in **BOTH** homes, using the SAME signals as the speculative-topic-update tier (Step 3·7b) — do NOT invent a new one:
-
-| Home | Open-question source |
-|------|----------------------|
-| **Topic-home** | Each un-struck `Open questions` bullet line on topic pages. Source them WITHOUT walking every topic page: grep `{wiki_root}/wiki/topics/` for the `## Open questions` heading with trailing context lines; extract the bullet lines under each matched heading (stop at the next heading; skip `~~struck~~` lines). Read a topic page itself only when one of its lines fires. |
-| **`questions.md`** | Each open entry held from Step 0.6 (no `answer:` block or zero `answer:` bullets). |
-
-For EACH open question (either home) fire a candidate answer when EITHER signal holds:
-
-| Condition | Detection |
-|-----------|-----------|
-| Token overlap (floor — always runs) | The question text shares ≥2 substantive tokens with this source's `Substance` section text (use the topic-home question's `Open questions` line text, or the `questions.md` entry's H2 question text). **Tokenize via `token_overlap(question_text, substance_text)` in `sb-wiki-lint-deterministic.py`** — Step 3·7b is the EXACT-rule authority. Threshold: ≥2 distinct substantive tokens shared. |
-| Semantic membership (additive; tier-gated) | When the semantic tier is available: query the helper with the open question text — `search "<question text>" --k 5` (`--no-sync` after the run's first call) — and fire when THIS ingest's source page (written at step 2, synced into the index by the run's first helper call) appears among the results. Tier unavailable → token overlap only. |
-
-For each fire, capture into `candidate-answers`: the home (`topic` or `questions.md`); the question identity (topic page path + the verbatim `Open questions` line for a topic-home fire; the `questions.md` entry's H2 heading for a `questions.md` fire); the firing signal (matched tokens, or `semantic (top-5)`); and the proposed `answer:` claim — a 1-sentence claim derived from this source's `Substance` that addresses the question, carrying the source citation `[^N]: [[<raw-filename>]]`.
-
-**Topic-home routing — reuse the existing append-only path (NO parallel path).** For each topic-home fire, stage the corresponding topic update through `candidate-topic-updates` (the firm tier consumed at Step 4.5): the proposed change is the answer claim folded into the topic body under the topic-shape-appropriate section per the Step 4.5 Update-behavior routing, PLUS a strike of the matched `Open questions` line. The topic-home fire is surfaced to the user ONLY in the `PROPOSED ANSWERS` block (Step 10) — SUPPRESS its row from the `PROPOSED TOPIC UPDATES` block so the same resolution is never presented twice. Accepting the `PROPOSED ANSWERS` row applies the staged topic-update through the Step 4.5 machinery (append-only protection applies); rejecting it discards the staged update. Do NOT create a second write path for topic pages.
-
-This step prepares but does NOT write. Apply happens at Step 10 commit, only for accepted rows.
-
-> **Thresholds frozen (§13).** The token-overlap threshold (≥2 shared substantive tokens, mirrored from Step 3·7b) and the semantic membership `--k 5` cutoff are validated after 13 ingest runs with the questions layer active and 10 accepted answer fires — no false positives or false negatives surfaced. Thresholds are frozen at their current values.
+**Gate (questions layer).** Questions layer OFF (Step 0.6: `questions.md` absent or malformed) → SKIP this step entirely; hold an EMPTY `candidate-answers` set; the Step 10 `PROPOSED ANSWERS` block is omitted and the run is identical to today. Questions layer ON → execute the Step 3·7c answer-scan from `extensions/questions-layer.md` HERE (loaded at the Step 0.6 gate). It prepares but does NOT write — apply happens at Step 10 commit, only for accepted rows.
 
 ### Step 4 — Update existing entity/concept pages
 
@@ -388,13 +338,7 @@ Emit NOTHING for the ingest itself, for stubs created in step 5, or for topic up
 
 Present the user with a structured preview of all proposed file changes AND the PROPOSED TOPICS block. No file writes commit until the user responds.
 
-**Lens — Stage 1 presentation (discretionary; lens ON only).** When the lens is ON, the presentation carries the source's band from Step 2 — the controls, the file-changes table, and trigger DETECTION (Step 6) are all UNCHANGED:
-
-1. **Classification line** — append the band to the preview header: `INGEST PREVIEW — <slug>   [purpose: in-focus | peripheral | ⚠ off-purpose]`.
-2. **Off-purpose banner** — when the band is `off-purpose`, prepend the advisory banner below ABOVE the file-changes table. It is ADVISORY only: all standard controls (`accept-all` / `reject N` / `abort`, plus topic decisions) remain available; it NEVER auto-aborts and NEVER suppresses any change.
-3. **Trigger presentation priority** — in the PROPOSED TOPICS block, surface in-focus-overlapping triggers FIRST and tag them `focus`; peripheral/off-purpose triggers are surfaced untagged. NO fire is suppressed or reordered out of the list — priority annotation only (the Step 6 detection set is unchanged).
-
-Lens OFF (no `purpose.md`) → NO classification line, NO banner, NO `focus` tags — the preview is IDENTICAL to today.
+**Gate (purpose lens — Stage 1 presentation).** Lens ON (Step 0.5) → apply the "Step 10 — Stage 1 presentation" block from `extensions/purpose-lens.md`: add the classification line to the preview header, the off-purpose advisory banner, and the `focus` trigger-priority tags (controls, file-changes table, and Step 6 detection all UNCHANGED). Lens OFF → NO classification line, NO banner, NO `focus` tags — the preview is IDENTICAL to today.
 
 Format VERBATIM (lens ON appends ` [purpose: …]` to the header line; lens OFF omits it):
 
@@ -464,39 +408,11 @@ User response handling:
 
 Default behavior when the user omits per-topic decisions: defer all topics, reject all topic updates (firm AND speculative), reject all proposed answers.
 
-**Silent mode override (step 10).** Do NOT present the Stage 1 preview. Do NOT prompt. Do NOT HALT mid-flow. Auto-resolve EVERY decision point to its fixed default, then RETURN the structured summary.
-
-**Bucket by ORIGIN, not by internal set (read before applying).** A firm `candidate-topic-updates` entry staged by Step 3·7c (an answer to a topic's `Open questions` line) lives in the SAME firm set as a genuine firm topic update, but it is an ANSWER. Bucket every firm-set entry by how it was staged: a genuine firm topic update (Step 3 firm-tier detection) auto-APPLIES below; an answer-origin entry (Step 3·7c — surfaced in `PROPOSED ANSWERS`, suppressed from `PROPOSED TOPIC UPDATES` per Step 4.5 EXCEPTION) is a PROPOSED ANSWER and auto-REJECTS below. NEVER auto-apply an answer-origin entry — doing so violates the `PROPOSED ANSWERS → reject` rule and mis-buckets the counts.
-
-| Decision point | Silent resolution |
-|----------------|-------------------|
-| Stage 1 file changes | Commit per `accept-all` — commit every staged file change. NEVER `reject` any row. NEVER `abort`. |
-| Proposed topics (PROPOSED TOPICS) | `defer` ALL — every `candidate-topic` log entry persists. NEVER invoke `sb-wiki-create-topic` mid-run. |
-| Firm topic updates (PROPOSED TOPIC UPDATES — genuine firm-tier entries ONLY, answer-origin entries excluded) | **`accept` ALL — apply each via the staged Step 4.5 update** (Step 4.5 owns the apply-semantics — sole authority). Write ONE audit record per applied update into the summary `Flags` field (see Audit records below). This is the v5 silent-mode change — interactive mode still defaults to reject. |
-| Speculative topic updates (SPECULATIVE TOPIC UPDATES) | `reject` ALL. Write ONE audit record per rejected speculative update into `Flags`. NEVER apply unattended. |
-| Proposed answers (PROPOSED ANSWERS — both homes; INCLUDES answer-origin firm entries) | `reject` ALL. Write ONE audit record per rejected proposed answer into `Flags`. NEVER apply unattended (no `questions.md` `answer:` accretion; no topic-home strike-and-fold). |
-
-Only the FIRM tier of genuine topic updates auto-applies. Speculative updates and proposed answers (including answer-origin firm entries) NEVER auto-apply. For proposed topics and file changes these resolutions are IDENTICAL to the default-omission / `accept-all` behavior above. After committing, RETURN the structured summary the caller parses, per the schema § "/sb-wiki-ingest" subsection "Silent (non-interactive) mode" → "Return — structured summary (silent)". The summary's per-file status MUST be `committed` when all staged changes commit; `partial (<reason>)` ONLY when the source page committed but ≥1 staged change failed mid-commit (`<reason>` names what failed); `failed (<reason>)` when nothing committed (slug-resolution outcome from step 1, or an abort cause). NEVER emit `partial`/`failed` for a skipped step — clustering, trigger detection, and append-only protection all run in full. The mode NEVER writes a topic page and NEVER runs `/sb-wiki-lint`.
-
-**Audit records (silent firm-apply + rejections).** Each applied firm update and each rejected speculative-update / proposed-answer is recorded in the structured summary's `Flags` field (the existing caller-facing channel that already carries `deferred candidate-topic` flags — NO new log entry type, NO parallel log; the `topic-updated` type is retired and the queues hold no accretion/history entries per `../shared/log-entry-shapes.md`). One `Flags` line per record, each naming the topic page (or question), the action, and the citing source:
-
-| Record | `Flags` line shape |
-|--------|--------------------|
-| Firm update applied | `topic-update applied: [[<topic-slug>.md]] ← [[<raw-filename>]] (section "<section-name>")` |
-| Speculative update rejected | `speculative-update rejected: [[<topic-slug>.md]] (tokens: <t1>, <t2>)` — or, for a semantic fire: `speculative-update rejected: [[<topic-slug>.md]] (semantic: <score>)` |
-| Proposed answer rejected | `proposed-answer rejected: <home> — <question brief> ← [[<raw-filename>]]` |
-
-These `Flags` lines are what `/sb-wiki-ingest-all` aggregates into its final-report counts. The applied topic page itself is the durable record of its own updated content (per `../shared/log-entry-shapes.md` — pages record their own updates); `Flags` is the per-run audit trail the caller surfaces.
-
-**Lens — purpose band in the silent summary (lens ON only).** Silent mode shows NO Stage-1 banner. Instead, when the lens is ON, the structured summary INCLUDES the source's purpose band (`in-focus` | `peripheral` | `off-purpose`) from Step 2 — so `/sb-wiki-ingest-all` can list every off-purpose ingest in its final report for human review. The band is INFORMATIONAL: silent mode NEVER auto-aborts on `off-purpose` (per schema § "Off-purpose flag (Step 10)" → "Silent / bulk mode"). Lens OFF → omit the band field (summary identical to today).
-
-| Field | Content (added when lens ON) |
-|-------|------------------------------|
-| Purpose band | EXACTLY ONE of: `in-focus` \| `peripheral` \| `off-purpose`. Informational only — never changes the commit outcome. |
+**Silent mode override (step 10) — gate.** Silent mode (keyword present) → apply the "Step 10 silent override" block from `extensions/silent-mode.md` (loaded at boot): do NOT present the preview, do NOT prompt, do NOT HALT; bucket every firm-set entry by origin (genuine firm updates auto-APPLY; answer-origin entries auto-REJECT); auto-resolve every decision point to its fixed default; write the per-record audit `Flags` lines; RETURN the structured summary. The silent-summary purpose-band field (lens ON only) is in that same extension block.
 
 ### Step 11 — Stage 2 checkpoint
 
-**Silent mode override (step 11).** SKIP this step entirely — never present the prompt, never await a response. The source page user-half stays empty shells; the wiki sources index `My take` cell stays `pending` (set at step 8). The structured summary was already returned at step 10.
+**Silent mode override (step 11) — gate.** Silent mode (keyword present) → apply the "Step 11 silent override" block from `extensions/silent-mode.md` (loaded at boot): SKIP this step entirely — never present the prompt, never await a response. The source page user-half stays empty shells; the wiki sources index `My take` cell stays `pending` (set at step 8). The structured summary was already returned at step 10.
 
 Optional post-commit reflection pass. Skip entirely if Stage 1 was aborted OR the source page was rejected at Stage 1. The ingest is already complete when this prompt appears. If the user ignores the prompt and sends an unrelated next command, do not treat that next command as a reflection response.
 
