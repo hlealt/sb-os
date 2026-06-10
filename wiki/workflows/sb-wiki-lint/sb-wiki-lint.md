@@ -316,14 +316,13 @@ Detection ONLY — this step NEVER writes. It builds two proposal sets that the 
 
 On `--full` runs and first-run / state-fallback, `dirty_set` contains every tracked page, so both homes are swept in full.
 
-Sweep every **open** question from the scoped set against the EXISTING wiki for now-available answers:
+Gather the scoped open-question set by invoking the deterministic helper:
 
-| Home | Open-question source |
-|------|----------------------|
-| **Topic-home** | Each non-struck `Open questions` line on each **dirty** `{wiki_root}/wiki/topics/*.md` page (from the scoped set above). |
-| **`questions.md`** | Each open entry (no `answer:` block or zero `answer:` bullets) — only when `questions.md ∈ dirty_set`. |
+```bash
+python {sb_os_path}/wiki/scripts/sb-wiki-lint-deterministic.py sweep-gather
+```
 
-For each open question, scan the existing wiki — concept/entity/topic page bodies plus source-page `Substance` sections — for content that answers it. This sweep is OFF the ingest hot-path, so it MAY be MORE THOROUGH than ingest's ≥2-shared-substantive-token mechanical match (Step 3·7b/3·7c of `sb-wiki-ingest.md`): the floor is the same ≥2-token signal, and the sweep MAY additionally fire on a lightly-semantic read (a page that materially addresses the question without sharing 2 surface tokens). It remains a PROPOSAL surface — it NEVER auto-applies.
+The helper emits a JSON object with a `questions` array. Each element carries `home` (`topic` or `questions.md`), `question` (verbatim text), and `source` (wiki-root-relative path). Filter this array with the dirty-set gate above: keep only `topic` items whose `source` is in `dirty_set`, and keep `questions.md` items only when `questions.md` itself is in `dirty_set`. Then sweep each remaining open question against the EXISTING wiki — concept/entity/topic page bodies plus source-page `Substance` sections — for content that answers it. This sweep is OFF the ingest hot-path, so it MAY be MORE THOROUGH than ingest's ≥2-shared-substantive-token mechanical match (Step 3·7b/3·7c of `sb-wiki-ingest.md`): the floor is the same ≥2-token signal, and the sweep MAY additionally fire on a lightly-semantic read (a page that materially addresses the question without sharing 2 surface tokens). It remains a PROPOSAL surface — it NEVER auto-applies.
 
 When the semantic tier is available (schema § "Retrieval tiers — hybrid search"), run the sweep through the helper — per open question, from the vault root: `python {sb_os_path}/wiki/scripts/sb-wiki-search.py search "<question text>" --k 5 --json` — and treat each hit page as a candidate answering page. The helper widens recall; it NEVER lowers the proposal bar (the match-threshold rules above still decide what fires). Tier unavailable → run the sweep with grep/LLM reads exactly as before; a helper failure NEVER aborts the lint.
 
@@ -370,16 +369,17 @@ The `logs/` files are actionable queues. Lint NEVER writes a `lint` entry — fi
 
 REGENERATE `{wiki_root}/open-gaps.md` wholesale on every lint run — a READ-ONLY aggregate that recovers the single-pane visibility the two-homes model gives up (per `../../docs/wiki-schema.md` § "Questions layer — questions.md" → "`open-gaps.md` — lint-generated aggregate"). This is a VIEW, not a store: lint OVERWRITES the entire file each run; the user never hand-edits it (edits are overwritten). NEVER append; NEVER preserve prior content. Run AFTER Step 8 so the just-pruned `questions.md` state is reflected (promoted/retired entries are already gone and never surface as open gaps).
 
-Collect the open-question set from BOTH homes:
+Collect the open-question set by invoking the deterministic helper:
 
-| Home | Source | Open test |
-|------|--------|-----------|
-| **Topic-home** | Each `Open questions` line on each `{wiki_root}/wiki/topics/*.md` page (walked at Step 1). | The line is NOT struck (`~~…~~` lines are resolved — EXCLUDE them). |
-| **`questions.md`** | Each entry parsed per `../shared/question-entry-shapes.md` (skip if `questions.md` absent or malformed). | The entry is `open` — no `answer:` block or zero `answer:` bullets. EXCLUDE answered entries (≥1 bullet). |
+```bash
+python {sb_os_path}/wiki/scripts/sb-wiki-lint-deterministic.py open-gaps
+```
 
-**Empty-state — ALWAYS emit the file (never skip).** When `questions.md` is absent AND no topic page has an unresolved `Open questions` line, WRITE `open-gaps.md` with its frontmatter + both headings and the per-section empty-state line (row rule 3) under each — do NOT skip generation and do NOT leave a stale prior file in place. Rationale: a stale `open-gaps.md` left from a previous run (when questions existed) would misreport the current state; an always-present empty file is self-documenting and keeps the view honest. (Documented as a shape.md Decision.)
+The helper emits the complete `open-gaps` aggregate (topic-home open-questions + `questions.md` open entries) with the defined empty-state semantics. Capture its stdout and write it to `{wiki_root}/open-gaps.md`.
 
-Write the file with this exact shape (frontmatter `type: questions-index` per `../shared/frontmatter-schemas.md`):
+**Empty-state — ALWAYS emit the file (never skip).** When `questions.md` is absent AND no topic page has an unresolved `Open questions` line, the helper still emits both sections with the per-section empty-state line `_No open questions._` — do NOT skip generation and do NOT leave a stale prior file in place. Rationale: a stale `open-gaps.md` left from a previous run (when questions existed) would misreport the current state; an always-present empty file is self-documenting and keeps the view honest. (Documented as a shape.md Decision.)
+
+The emitted file carries this exact shape (frontmatter `type: questions-index` per `../shared/frontmatter-schemas.md`):
 
 ```markdown
 ---

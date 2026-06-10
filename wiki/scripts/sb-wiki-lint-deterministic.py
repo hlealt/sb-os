@@ -24,6 +24,7 @@ import json
 import os
 import re
 import hashlib
+import sys
 import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -89,25 +90,29 @@ def compute_stamp(path: Path) -> str:
     return hashlib.sha256(read_text(path).encode("utf-8")).hexdigest()
 
 
-def load_state(state_path: Path) -> tuple[dict[str, str], str | None]:
-    """Load previous stamps from the state file.
+def load_state(state_path: Path) -> tuple[dict[str, str], str | None, int]:
+    """Load previous stamps and run counter from the state file.
 
-    Returns (stamps, fallback_reason).  fallback_reason is None on success,
-    or a string explaining why full-mode fallback was triggered.
+    Returns (stamps, fallback_reason, runs_completed).  fallback_reason is
+    None on success, or a string explaining why full-mode fallback was
+    triggered.  runs_completed defaults to 0 when absent or unreadable.
     """
     if not state_path.exists():
-        return {}, "first-run"
+        return {}, "first-run", 0
     try:
         data = json.loads(read_text(state_path))
         version = data.get("state_schema_version", "")
         if version != STATE_SCHEMA_VERSION:
-            return {}, f"schema-mismatch (expected {STATE_SCHEMA_VERSION}, got {version!r})"
+            return {}, f"schema-mismatch (expected {STATE_SCHEMA_VERSION}, got {version!r})", 0
         stamps = data.get("stamps", {})
         if not isinstance(stamps, dict):
-            return {}, "corrupt-state"
-        return stamps, None
+            return {}, "corrupt-state", 0
+        runs_completed = data.get("runs_completed", 0)
+        if not isinstance(runs_completed, int):
+            runs_completed = 0
+        return stamps, None, runs_completed
     except Exception:
-        return {}, "corrupt-state"
+        return {}, "corrupt-state", 0
 
 
 def collect_tracked_pages(wiki_root: Path) -> list[Path]:
@@ -1436,12 +1441,234 @@ def execute_link_fixes(wiki_root: Path, plan_path: Path, report: Report) -> None
     }
 
 
+def extract_topic_open_questions(text: str) -> list[str]:
+    """Extract non-struck ``Open questions`` lines from a topic page.
+
+    Returns the verbatim question text (list marker stripped) for every
+    line under ``## Open questions`` that starts with ``- `` and does NOT
+    contain struck markers (``~~``).
+    """
+    body = body_after_frontmatter(text)
+    sections = split_h2_sections(body)
+    open_qs_body = sections.get("Open questions", "")
+    questions: list[str] = []
+    for line in open_qs_body.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("- ") and "~~" not in stripped:
+            questions.append(stripped[2:].strip())
+    return questions
+
+
+_QUESTION_H2_RE = re.compile(r"^\[(\d{4}-\d{2}-\d{2})\]\s*(.+)$")
+
+
+def parse_questions_md_entries(text: str) -> tuple[list[dict], list[str]]:
+    """Parse ``questions.md`` into entries and warnings.
+
+    Returns ``(entries, warnings)``.  An entry is ``open`` when it has no
+    ``answer:`` block or zero ``answer:`` bullets.  Warnings name malformed
+    entries (heading without ``[YYYY-MM-DD]`` prefix).
+    """
+    entries: list[dict] = []
+    warnings: list[str] = []
+    h2_pattern = re.compile(r"^##\s+(.+?)\s*$", re.M)
+    matches = list(h2_pattern.finditer(text))
+
+    for i, match in enumerate(matches):
+        heading = match.group(1)
+        start = match.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        body = text[start:end]
+
+        date_match = _QUESTION_H2_RE.match(heading)
+        if not date_match:
+            warnings.append(f"Malformed entry (no [YYYY-MM-DD] prefix): {heading[:120]}")
+            continue
+
+        entry: dict = {
+            "heading": heading,
+            "date": date_match.group(1),
+            "question": date_match.group(2).strip(),
+            "relates": [],
+            "seeded_by": None,
+            "answer_bullets": [],
+            "is_open": True,
+        }
+
+        # relates: block (0..n quoted wikilinks)
+        relates_match = re.search(
+            r"^relates:\s*\n((?:[ \t]*-[ \t]*\"?\[\[.+?\]\]\"?[ \t]*\n?)*)",
+            body, re.M,
+        )
+        if relates_match:
+            for line in relates_match.group(1).splitlines():
+                for link in re.findall(r'\[\[([^\]]+?)\]\]', line):
+                    entry["relates"].append(link)
+
+        # seeded-by: single quoted wikilink
+        seeded_match = re.search(r'^seeded-by:\s*"?\[\[([^\]]+?)\]\]"?', body, re.M)
+        if seeded_match:
+            entry["seeded_by"] = seeded_match.group(1)
+
+        # answer: block — count bullets
+        answer_match = re.search(
+            r"^answer:\s*\n((?:[ \t]*-[ \t]*[^\n]*\n?)*)", body, re.M
+        )
+        if answer_match:
+            bullets: list[str] = []
+            for line in answer_match.group(1).splitlines():
+                bullet_match = re.match(r"^[ \t]*-[ \t]*(.*)$", line)
+                if bullet_match:
+                    bullets.append(bullet_match.group(1).strip())
+            entry["answer_bullets"] = bullets
+            entry["is_open"] = len(bullets) == 0
+        else:
+            entry["is_open"] = True
+
+        entries.append(entry)
+
+    return entries, warnings
+
+
+def cmd_open_gaps(args_list: list[str]) -> int:
+    """Emit the ``open-gaps`` aggregate (Step 8.5).
+
+    Gathers topic-home open-questions plus ``questions.md`` open entries
+    and emits the lint-standard markdown aggregate.  When the questions
+    layer is OFF and no topic has open questions, emits the defined empty
+    state (both sections show ``_No open questions._``).
+    """
+    parser = argparse.ArgumentParser(description="Emit the open-gaps aggregate.")
+    parser.add_argument("--vault-root", type=Path, default=Path.cwd())
+    args = parser.parse_args(args_list)
+    wiki_root = resolve_wiki_root(args.vault_root.resolve())
+
+    topic_rows: list[tuple[str, str]] = []  # (question_text, stem)
+    topics_dir = wiki_root / "wiki" / "topics"
+    if topics_dir.exists():
+        for page in sorted(topics_dir.glob("*.md")):
+            if page.name == "topics.md":
+                continue
+            text = read_text(page)
+            for q in extract_topic_open_questions(text):
+                topic_rows.append((q, page.stem))
+
+    md_entries: list[dict] = []
+    md_warnings: list[str] = []
+    questions_path = wiki_root / "questions.md"
+    questions_layer_on = questions_path.exists()
+    if questions_layer_on:
+        entries, warnings = parse_questions_md_entries(read_text(questions_path))
+        md_warnings.extend(warnings)
+        md_entries = [e for e in entries if e["is_open"]]
+
+    today_str = today().isoformat()
+    lines = [
+        "---",
+        "type: questions-index",
+        f"last-touched: {today_str}",
+        "---",
+        "",
+        "# Open gaps",
+        "",
+        "> Lint-generated, READ-ONLY — regenerated in full on every `/sb-wiki-lint` run. Do NOT hand-edit; edits are overwritten. Aggregates every OPEN question across both homes (topic pages + `questions.md`). Resolve a question in its home; it drops off this view on the next lint.",
+        "",
+        f"## Topic-home open questions ({len(topic_rows)})",
+        "",
+        "| Question | Topic |",
+        "|----------|-------|",
+    ]
+    for q_text, stem in topic_rows:
+        safe = q_text.replace("|", "\\|")
+        lines.append(f"| {safe} | [[{stem}.md]] |")
+    if not topic_rows:
+        lines.append("_No open questions._")
+
+    lines.extend([
+        "",
+        f"## `questions.md` open questions ({len(md_entries)})",
+        "",
+        "| Question | Home | Relates |",
+        "|----------|------|---------|",
+    ])
+    for entry in md_entries:
+        safe_heading = entry["heading"].replace("|", "\\|")
+        relates_str = ", ".join(f"[[{r}]]" for r in entry["relates"]) if entry["relates"] else "—"
+        lines.append(f"| {safe_heading} | [[questions.md]] | {relates_str} |")
+    if not md_entries:
+        lines.append("_No open questions._")
+
+    output = "\n".join(lines) + "\n"
+    print(output, end="")
+    for w in md_warnings:
+        print(f"WARNING: {w}", file=sys.stderr)
+    return 0
+
+
+def cmd_sweep_gather(args_list: list[str]) -> int:
+    """Emit the substantive open-questions collection (Step 7.7a).
+
+    Gathers every open question from both homes and emits a JSON object.
+    The ``questions`` array carries the question text, home, and source
+    path so the sweep's match judgment (LLM or hybrid search) can run
+    over it.
+    """
+    parser = argparse.ArgumentParser(description="Emit the open-questions collection for answer-sweep.")
+    parser.add_argument("--vault-root", type=Path, default=Path.cwd())
+    args = parser.parse_args(args_list)
+    wiki_root = resolve_wiki_root(args.vault_root.resolve())
+
+    results: list[dict] = []
+    warnings: list[str] = []
+
+    topics_dir = wiki_root / "wiki" / "topics"
+    if topics_dir.exists():
+        for page in sorted(topics_dir.glob("*.md")):
+            if page.name == "topics.md":
+                continue
+            text = read_text(page)
+            for q in extract_topic_open_questions(text):
+                rel = str(page.relative_to(wiki_root)).replace("\\", "/")
+                results.append({
+                    "home": "topic",
+                    "question": q,
+                    "source": rel,
+                })
+
+    questions_path = wiki_root / "questions.md"
+    if questions_path.exists():
+        entries, w = parse_questions_md_entries(read_text(questions_path))
+        warnings.extend(w)
+        for entry in entries:
+            if entry["is_open"]:
+                results.append({
+                    "home": "questions.md",
+                    "question": entry["question"],
+                    "heading": entry["heading"],
+                    "source": "questions.md",
+                    "relates": entry["relates"],
+                })
+
+    payload = {
+        "questions": results,
+        "warnings": warnings,
+        "count": len(results),
+    }
+    output = json.dumps(payload, indent=2, ensure_ascii=False)
+    print(output)
+    return 0
+
+
 def resolve_wiki_root(vault_root: Path) -> Path:
     manifest = json.loads(read_text(vault_root / "sb-os.json"))
     return vault_root / manifest["wiki_root"]
 
 
 def main() -> int:
+    if len(sys.argv) > 1 and sys.argv[1] == "open-gaps":
+        return cmd_open_gaps(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "sweep-gather":
+        return cmd_sweep_gather(sys.argv[2:])
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--vault-root", type=Path, default=Path.cwd())
     parser.add_argument("--apply", action="store_true", help="write deterministic changes")
@@ -1503,7 +1730,7 @@ def main() -> int:
     # State file resolution: explicit --report flag takes precedence; otherwise
     # fall back to the canonical path under wiki_root.
     state_path = args.report if args.report else wiki_root / "lint-deterministic-report.json"
-    prev_stamps, fallback_reason = load_state(state_path)
+    prev_stamps, fallback_reason, prev_runs_completed = load_state(state_path)
 
     if args.execute_renames or args.execute_subdivision or args.execute_link_fixes:
         # Executor mode: run ONLY the requested user-gated executor(s).
@@ -1558,6 +1785,8 @@ def main() -> int:
         "state_fallback_reason": report.state_fallback_reason,
         "stamp_commit_policy": report.stamp_commit_policy,
     }
+    if report.mode != "execute":
+        payload["runs_completed"] = prev_runs_completed + 1
     output = json.dumps(payload, indent=2, ensure_ascii=False)
     # Executor mode computes no stamps; writing its report would CLOBBER the
     # state file (the report IS the state file) with empty stamps, silently
