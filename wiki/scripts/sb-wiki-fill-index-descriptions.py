@@ -19,7 +19,7 @@ Usage (from vault root):
 """
 import os, re, glob, json, argparse
 
-NON_PAGE = {'claude.md', 'agents.md', 'readme.md'}
+NON_PAGE = {'claude.md', 'agents.md', 'qwen.md', 'readme.md'}
 MAX_DESC = 230
 
 

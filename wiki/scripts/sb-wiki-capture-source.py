@@ -36,6 +36,15 @@ an extraction failure or near-empty result is surfaced in the JSON
 (transform_error / transform_warning) and never blocks the PDF capture itself.
 --ext does not apply to PDF saves.
 
+URL-fetched PDF handling: a PDF fetched on the URL branch (markdown / html-
+archive / both) — detected by the %PDF- magic header in the response body — is
+routed to the SAME PDF capture as manual mode: saved as raw/{origin}/
+{title-slug}.pdf (NEVER decoded to text and dumped into a .md), --title REQUIRED,
+collision-refused, and --pdf-text honored to write the pypdf {title-slug}.md
+companion. This closes the false-success path where a fetched PDF was decoded to
+text, dumped through the HTML extractor, passed the content-gate as "rich prose",
+and was written verbatim into a .md marked captured_to_raw with zero real prose.
+
 --manual-file path contract: paths with arbitrary Unicode characters (curly
 quotes, accented letters, spaces) MUST be passed as a PowerShell literal
 string to avoid shell interpretation. PowerShell: use single quotes around
@@ -586,6 +595,25 @@ def _is_pdf(path: Path) -> bool:
         return False
 
 
+# Latin typographic ligatures pypdf emits as a single codepoint from academic
+# fonts (the "garble" in the F30 Fed/Wharton papers — "Staﬀ", "Aﬀairs").
+# Expanded to ASCII so the text raw is clean and grep-able for ingest.
+_LIGATURES = {
+    "ﬀ": "ff", "ﬁ": "fi", "ﬂ": "fl",
+    "ﬃ": "ffi", "ﬄ": "ffl", "ﬅ": "st", "ﬆ": "st",
+}
+_LIGATURE_TABLE = {ord(k): v for k, v in _LIGATURES.items()}
+
+
+def _normalize_pdf_text(text: str) -> str:
+    """Expand Latin typographic ligatures (ﬀ ﬁ ﬂ ﬃ ﬄ ﬅ ﬆ) to ASCII.
+
+    Surgical by design — touches ONLY the seven Latin ligature codepoints, never
+    math symbols, accents, or other Unicode (a blanket NFKC would alter those).
+    """
+    return text.translate(_LIGATURE_TABLE)
+
+
 def _extract_pdf_text(src: Path) -> tuple[str, str]:
     """Return (extracted_text, error). pypdf is a lazy optional dependency."""
     try:
@@ -594,7 +622,8 @@ def _extract_pdf_text(src: Path) -> tuple[str, str]:
         return "", "pypdf is required for --pdf-text. Install it: pip install pypdf"
     try:
         reader = PdfReader(str(src))
-        return "\n\n".join(page.extract_text() or "" for page in reader.pages), ""
+        text = "\n\n".join(page.extract_text() or "" for page in reader.pages)
+        return _normalize_pdf_text(text), ""
     except Exception as exc:
         return "", f"pypdf extraction failed: {exc}"
 
@@ -804,8 +833,13 @@ def _extract_title(body: str) -> str:
     return m.group(1).strip() if m else ""
 
 
-def _fetch_text(url: str, user_agent: str = DEFAULT_USER_AGENT) -> tuple[str, str]:
-    """Return (body_text, page_title). Raises on HTTP error."""
+def _fetch_url(url: str, user_agent: str = DEFAULT_USER_AGENT) -> tuple[str, str, bytes]:
+    """Return (body_text, page_title, raw_bytes). Raises on HTTP error.
+
+    ``raw_bytes`` is the UNDECODED response body, kept so a PDF response can be
+    saved byte-identically and text-extracted instead of being lossily decoded
+    to text and dumped into a ``.md`` (the 2026-06-09 false-success defect).
+    """
     try:
         import httpx  # type: ignore
     except ImportError:
@@ -821,16 +855,17 @@ def _fetch_text(url: str, user_agent: str = DEFAULT_USER_AGENT) -> tuple[str, st
     )
     resp.raise_for_status()
     body = resp.text
-    return body, _extract_title(body)
+    raw = resp.content if isinstance(resp.content, (bytes, bytearray)) else body.encode("utf-8", "replace")
+    return body, _extract_title(body), bytes(raw)
 
 
-def _curl_fetch_text(url: str, user_agent: str = DEFAULT_USER_AGENT) -> tuple[str, str]:
+def _curl_fetch_url(url: str, user_agent: str = DEFAULT_USER_AGENT) -> tuple[str, str, bytes]:
     """Fetch URL via subprocess curl with the same User-Agent.
 
     Fallback for transport-level blocks that reject httpx's fingerprint.
     Resolves the curl binary explicitly via shutil.which — never a shell
     alias (PowerShell aliases `curl` to Invoke-WebRequest).
-    Returns (body_text, page_title). Raises RuntimeError on any failure.
+    Returns (body_text, page_title, raw_bytes). Raises RuntimeError on any failure.
     """
     curl_bin = shutil.which("curl")
     if curl_bin is None:
@@ -852,8 +887,9 @@ def _curl_fetch_text(url: str, user_agent: str = DEFAULT_USER_AGENT) -> tuple[st
     if proc.returncode != 0:
         stderr = proc.stderr.decode("utf-8", errors="replace").strip()
         raise RuntimeError(f"curl exit {proc.returncode}: {stderr or 'no stderr'}")
-    body = proc.stdout.decode("utf-8", errors="replace")
-    return body, _extract_title(body)
+    raw = proc.stdout if isinstance(proc.stdout, (bytes, bytearray)) else b""
+    body = bytes(raw).decode("utf-8", errors="replace")
+    return body, _extract_title(body), bytes(raw)
 
 
 def _save(dest: Path, content: str, dry_run: bool) -> int:
@@ -862,6 +898,74 @@ def _save(dest: Path, content: str, dry_run: bool) -> int:
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(content, encoding="utf-8")
     return len(content.encode("utf-8"))
+
+
+# ---------------------------------------------------------------------------
+# URL-fetched PDF detection + capture (false-success fix, 2026-06-09)
+# ---------------------------------------------------------------------------
+
+def _is_pdf_body(body: str, raw: bytes) -> bool:
+    """True when a fetched response body is a PDF.
+
+    Detected by the %PDF- magic header within the first 1 KB (the authoritative
+    signal — strictly more reliable than the Content-Type header, which servers
+    mislabel as application/octet-stream). The decoded-text fallback covers
+    responses where only the decoded body is available (e.g. a mocked .text).
+    Magic-byte detection — not text decoding — is what stops a fetched PDF from
+    being dumped through the HTML extractor and false-succeeding as a .md.
+    """
+    return b"%PDF-" in raw[:1024] or "%PDF-" in body[:1024]
+
+
+def _capture_url_pdf(
+    *,
+    raw: bytes,
+    url: str,
+    origin: str,
+    title: str,
+    thesis: Optional[str],
+    raw_dir: Path,
+    dry_run: bool,
+    pdf_text: bool,
+    fetch_method: str,
+) -> dict:
+    """Save a URL-fetched PDF as raw/{origin}/{title-slug}.pdf — NEVER a .md.
+
+    The fetched bytes are written to a temp file and routed through the SAME
+    manual-PDF capture (binary copy + optional pypdf --pdf-text companion + Raw
+    PDF Title-Conformance --title requirement + collision refusal), so a URL PDF
+    behaves exactly like a manual-bridged PDF instead of false-succeeding as a
+    binary-in-.md. Returns _capture_manual_pdf's result with the temp-file
+    provenance replaced by the real fetch provenance.
+    """
+    import tempfile
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    try:
+        tmp.write(raw)
+        tmp.close()
+        result = _capture_manual_pdf(
+            src=Path(tmp.name),
+            url=url,
+            origin=origin,
+            title=title,
+            thesis=thesis,
+            raw_dir=raw_dir,
+            dry_run=dry_run,
+            pdf_text=pdf_text,
+        )
+    finally:
+        try:
+            Path(tmp.name).unlink()
+        except OSError:
+            pass
+
+    # Replace the temp-file provenance with the real fetch provenance.
+    result.pop("manual_source", None)
+    if result.get("state") in ("captured_to_raw", "approved_for_capture"):
+        result["fetch_method"] = fetch_method
+        result["fetched_pdf"] = True
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -931,7 +1035,7 @@ def capture(
     if mode in ("markdown", "html-archive", "both"):
         fetch_method = "httpx"
         try:
-            body, page_title = _fetch_text(url, user_agent)
+            body, page_title, raw_body = _fetch_url(url, user_agent)
         except Exception as exc:
             if not curl_fallback:
                 queue = _register_queue_entry(
@@ -952,7 +1056,7 @@ def capture(
                     **queue,
                 }
             try:
-                body, page_title = _curl_fetch_text(url, user_agent)
+                body, page_title, raw_body = _curl_fetch_url(url, user_agent)
                 fetch_method = "curl-fallback"
             except Exception as curl_exc:
                 error = f"httpx: {exc}; curl-fallback: {curl_exc}"
@@ -973,6 +1077,26 @@ def capture(
                     "error": error,
                     **queue,
                 }
+        # PDF on the URL branch — a fetched PDF is saved as raw/{origin}/
+        # {title-slug}.pdf (NEVER a .md), with --pdf-text honored, exactly like a
+        # manual-bridged PDF. Closes the 2026-06-09 false-success defect where a
+        # fetched PDF was decoded to text, dumped through the HTML extractor,
+        # passed the content-gate as "rich prose", and was written verbatim into a
+        # .md marked captured_to_raw with zero real prose. Detected by %PDF- magic
+        # bytes, so it overrides the html-archive/both mode (a PDF is not HTML).
+        if _is_pdf_body(body, raw_body):
+            return _capture_url_pdf(
+                raw=raw_body,
+                url=url,
+                origin=origin,
+                title=title,
+                thesis=thesis,
+                raw_dir=raw_dir,
+                dry_run=dry_run,
+                pdf_text=pdf_text,
+                fetch_method=fetch_method,
+            )
+
         resolved_title = title or page_title or url
         saved = []
         total_bytes = 0

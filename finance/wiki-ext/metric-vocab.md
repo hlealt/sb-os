@@ -22,9 +22,13 @@ Valuation point metrics (use `period_type: point`):
 
 `gdp_growth, inflation, policy_rate, unemployment, debt_gdp, fiscal_balance, current_account, fx_rate`
 
-### asset — fixed income
+### asset
 
-`yield, duration, coupon, credit_rating, spread, price`
+Fixed income: `yield, duration, coupon, credit_rating, spread, price`
+
+Commodity (demand-side market metrics, admitted 2026-06-10, governed; WGC gold demand reports — debasement-scarce-assets thesis): `total_demand, cb_net_purchases, etf_net_flow, etf_aum, etf_holdings`
+
+`total_demand` (unit `tonnes`, `period_type: quarterly`) — total demand incl. OTC as printed; `cb_net_purchases` (unit `tonnes`, monthly/quarterly) — official-sector net purchases (net sales = negative); `etf_net_flow` (unit `USD_mn` or `tonnes` as printed, monthly/quarterly) — global ETF net flows (outflows = negative); `etf_aum` (unit `USD_mn`, `period_type: point`) — global ETF assets under management; `etf_holdings` (unit `tonnes`, `period_type: point`) — global ETF collective holdings. NOTE (parser contract): the extraction tool reads ONE `### asset` section — keep all asset-kind metric groups inside this single section.
 
 ### sector
 
@@ -50,7 +54,7 @@ A valid `metric` is a base identifier from the entity-kind's list above, OR a ba
 
 ## Allowed Sets
 
-**units:** `BRL_mn, USD_mn, pct, pct_yoy, pct_mom, x, bps, years, rating, BRL, USD, index`
+**units:** `BRL_mn, USD_mn, pct, pct_yoy, pct_mom, x, bps, years, rating, BRL, USD, index, tonnes`
 
 **period_type:** `annual, quarterly, monthly, ttm, point`
 

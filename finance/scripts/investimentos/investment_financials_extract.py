@@ -244,7 +244,8 @@ def normalize(text: str) -> str:
 # A numeric token: optional ($ R$ -), digits with thousands separators, optional
 # decimals, optional trailing % and scale word.
 _NUMBER_RE = re.compile(
-    r"\(?\s*[-+]?\s*\$?\s*R?\$?\s*\d[\d,]*(?:\.\d+)?\s*\)?"
+    r"\(?\s*[-+]?\s*(?:US)?\$?\s*R?\$?\s*\d[\d,]*(?:\.\d+)?\s*\)?",
+    re.IGNORECASE,
 )
 
 
@@ -253,7 +254,8 @@ def _parse_number_token(token: str) -> Optional[float]:
     t = token.strip()
     negative = t.startswith("(") and t.endswith(")")
     t = t.strip("()").strip()
-    t = t.replace("$", "").replace("R", "").replace(" ", "")
+    t = re.sub(r"(?i)us\$", "$", t)
+    t = t.replace("$", "").replace("R", "").replace("r", "").replace(" ", "")
     if t.startswith("-"):
         negative = True
         t = t[1:]
@@ -287,7 +289,7 @@ _SCALE_WORDS = (
     (r"millions?|mn|m", 1.0),
     (r"thousands?|k", 0.001),
 )
-_SCALE_RES = [(re.compile(r"(?<![a-z0-9])(?:" + pat + r")(?![a-z0-9])", re.IGNORECASE), mult)
+_SCALE_RES = [(re.compile(r"(?<![a-z])(?:" + pat + r")(?![a-z0-9])", re.IGNORECASE), mult)
               for pat, mult in _SCALE_WORDS]
 
 
@@ -336,6 +338,17 @@ def _resolve_unit_and_scale(unit_as_printed: str, context_norm: str, raw_value: 
     # basis points
     if u in ("bps",):
         return raw_value, "bps"
+
+    # tonnes (commodity mass) — unscaled
+    if u in ("t", "tonne", "tonnes"):
+        return raw_value, "tonnes"
+
+    # per-ounce price ("USD/oz") — plain currency unit, unscaled
+    if "/oz" in u:
+        currency = _detect_currency(u) or _detect_currency(value_as_printed)
+        if currency is None:
+            return None
+        return raw_value, currency
 
     # already-vocab units pass through unscaled
     if u in ("usd_mn",):
