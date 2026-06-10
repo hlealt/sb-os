@@ -7,7 +7,7 @@ runtime: agent-loop
 
 The `/sb-investor` reasoning mode that re-evaluates an EXISTING thesis against new information — surfacing staleness, new evidence-against, and tripped / near invalidation criteria — so the thesis base stays falsifiable over time. **This mode NEVER hand-writes a thesis page** — it reasons and proposes; `sb-fin-create-thesis` (its named `extend` entry point, targeting the existing thesis by slug) persists every update (delegate-not-replace).
 
-**Loaded by:** `./investor.md` reads-and-follows this file when `./capability-manifest.md` routes the `review` (B3) intent. Read `./investor-loop.md` before acting on any step below.
+**Loaded by:** `./sb-investor.md` reads-and-follows this file when `./capability-manifest.md` routes the `review` (B3) intent. Read `./sb-investor-loop.md` before acting on any step below.
 
 **Division of labour (read once, then act):**
 
@@ -22,9 +22,9 @@ The `/sb-investor` reasoning mode that re-evaluates an EXISTING thesis against n
 
 ## Step 1 — Policy gate (MANDATORY, FIRST)
 
-Before ANY reasoning, load the policy file(s) `../../CLAUDE.md` § Policy Read-Rules requires — per `./investor-loop.md` § Policy read-rules wiring. Reviewing or invalidating a thesis is such an action: `research-policy.md` is required (scope / priorities / exclusions / horizon); load `source-policy.md` too — this mode weighs and trusts the sources it evaluates. NEVER restate the read-rules table — read it.
+Before ANY reasoning, load the policy file(s) `../../CLAUDE.md` § Policy Read-Rules requires — per `./sb-investor-loop.md` § Policy read-rules wiring. Reviewing or invalidating a thesis is such an action: `research-policy.md` is required (scope / priorities / exclusions / horizon); load `source-policy.md` too — this mode weighs and trusts the sources it evaluates. NEVER restate the read-rules table — read it.
 
-If `research-policy.md` marks the thesis's topic out-of-scope or excluded, say so and STOP, or offer to widen scope via the `policy` thin mode — do NOT reason past an exclusion (`./investor-loop.md` § Policy read-rules wiring; Rule A).
+If `research-policy.md` marks the thesis's topic out-of-scope or excluded, say so and STOP, or offer to widen scope via the `policy` thin mode — do NOT reason past an exclusion (`./sb-investor-loop.md` § Policy read-rules wiring; Rule A).
 
 ## Step 2 — Load the target thesis
 
@@ -39,17 +39,17 @@ Read the target thesis page in full at `{wiki_root}/wiki/theses/{slug}.md` (reso
 | `last_reviewed` | the cutoff date for "new" evidence in Step 3 |
 | `related_companies` / `related_assets` / `related_sectors` / `related_countries` | the entities whose recent sources Step 3 gathers |
 
-If the named thesis page does not exist, surface it per `./investor-loop.md` § Issue-surfacing (this is blocking — there is nothing to review) and STOP.
+If the named thesis page does not exist, surface it per `./sb-investor-loop.md` § Issue-surfacing (this is blocking — there is nothing to review) and STOP.
 
 ## Step 3 — Gather recent evidence (Assumption Audit on standing assumptions → targeted Disconfirm)
 
-Find wiki sources touching the thesis's entities dated AFTER `last_reviewed` — read source/entity pages directly (markdown, not position data). Weigh each candidate against `source-policy` (loaded in Step 1); a source that fails the trust bar is surfaced per `./investor-loop.md` § Issue-surfacing, never silently kept or dropped.
+Find wiki sources touching the thesis's entities dated AFTER `last_reviewed` — read source/entity pages directly (markdown, not position data). Weigh each candidate against `source-policy` (loaded in Step 1); a source that fails the trust bar is surfaced per `./sb-investor-loop.md` § Issue-surfacing, never silently kept or dropped.
 
 ### Step 3a — Re-run the Assumption Audit on the thesis's STANDING assumptions
 
 A thesis decays when an assumption that held at authoring no longer holds. Re-run the Assumption Audit — **REUSE the lens defined in `./thesis.md` § Step 2a (the canonical method: the same `true` / `partial` / `unproven` / `outdated` / `convenience` classification + the rewrite-as-testable-questions step)**; this mode does NOT redefine that method. The review-specific INPUT is what differs: not a fresh claim's hidden assumptions, but the thesis's ALREADY-STATED standing assumptions — the ones its `Claim`, `Hypotheses`, and `Causal mechanism` (read in Step 2) rest on — re-classified against the evidence dated after `last_reviewed`.
 
-The review question the audit answers: **which standing assumptions turned `unproven` or `outdated` since `last_reviewed`?** An assumption that was `true`/`partial` at authoring but is contradicted, eroded, or overtaken by the new evidence is now decayed. Run the lens as a SINGLE inline pass (it fetches nothing, writes nothing, dispatches no sub-agent — per `./thesis.md` § Step 2a). Its output — the testable questions on the now-decayed assumptions — identifies WHICH of the Step 2 invalidation criteria the new evidence has pushed to `near` or left untested, and therefore which criteria Step 3b must hunt against. Surface any decayed assumption the audit cannot resolve from reasoning alone per `./investor-loop.md` § Issue-surfacing.
+The review question the audit answers: **which standing assumptions turned `unproven` or `outdated` since `last_reviewed`?** An assumption that was `true`/`partial` at authoring but is contradicted, eroded, or overtaken by the new evidence is now decayed. Run the lens as a SINGLE inline pass (it fetches nothing, writes nothing, dispatches no sub-agent — per `./thesis.md` § Step 2a). Its output — the testable questions on the now-decayed assumptions — identifies WHICH of the Step 2 invalidation criteria the new evidence has pushed to `near` or left untested, and therefore which criteria Step 3b must hunt against. Surface any decayed assumption the audit cannot resolve from reasoning alone per `./sb-investor-loop.md` § Issue-surfacing.
 
 ### Step 3b — Dispatch a Disconfirm wave PER near/untested invalidation criterion
 
@@ -61,7 +61,7 @@ For each such criterion, dispatch one sub-agent whose prompt MUST direct it to:
 2. **Retain `./research.md`'s propose→approve checkpoint** — the user still approves which disconfirming sources enter the wiki. ONLY the hunt is automatic; there are NO silent web writes and NO bypassed approval.
 3. **Return only the structured result `./research.md` produces** — the ranked disconfirming candidates + metadata + each candidate's why-it-would-overturn note (Step 7a's documented output), including any source-tension flag the Propose step surfaced. Full source text MUST NOT return to this mode (anti-context-rot — the parent context stays clean).
 
-`./disconfirm-wave.md` owns the wave mechanics (including the skill directives its sub-agent requires); `./research.md` owns capture, ingest, and the propose→approve checkpoint this mode's sub-agent returns through. On return, fold the newly-surfaced disconfirming sources into the evidence set for Step 4 and tie each to the criterion it targets. A `failed` / `partial` ingest in the summary is surfaced per `./investor-loop.md` § Issue-surfacing. If a criterion's Disconfirm wave returns no candidate that clears the `source-policy` trust bar, that criterion is evaluated in Step 4 on the existing evidence alone, and the empty hunt is surfaced per `./investor-loop.md` § Issue-surfacing.
+`./disconfirm-wave.md` owns the wave mechanics (including the skill directives its sub-agent requires); `./research.md` owns capture, ingest, and the propose→approve checkpoint this mode's sub-agent returns through. On return, fold the newly-surfaced disconfirming sources into the evidence set for Step 4 and tie each to the criterion it targets. A `failed` / `partial` ingest in the summary is surfaced per `./sb-investor-loop.md` § Issue-surfacing. If a criterion's Disconfirm wave returns no candidate that clears the `source-policy` trust bar, that criterion is evaluated in Step 4 on the existing evidence alone, and the empty hunt is surfaced per `./sb-investor-loop.md` § Issue-surfacing.
 
 **When the audit flags nothing, no wave fires (by design).** The trigger is audit-driven, not source-count-driven: if the Step 3a audit finds NO standing assumption decayed and pushes NO invalidation criterion to `near`/untested, then ZERO Disconfirm waves dispatch and the review proceeds on the existing evidence alone. This is the deliberate precision upgrade over the old thin-source auto-pull (which fired a blanket pull on a source-count heuristic regardless of whether any assumption had actually decayed) — a review that finds the thesis still holding spends no discovery budget.
 
@@ -83,11 +83,11 @@ Source tensions: #{a} ↔ #{b} — {one-line description of the disagreement}.
 
 A source tension is a flag the user weighs, not a separate analysis pass: it reads only metadata and stated conclusions already assembled. If the evidence shows no contradiction, write none — do not fetch text to manufacture one. The verdict (Step 5) MUST reflect these tensions: a criterion whose evidence is internally contradicted is `near`, not `clear`, until the contradiction resolves. A numeric market figure the sources state differently is presented as the source-attributed range per `./thesis.md` Step 2 § Market-figure range rule — unless a registered read tool resolves it.
 
-Read a related company's `## Financials` table off its wiki entity page directly when fundamentals inform the evaluation (no fundamentals tool in v1). Surface any reasoning problem — a contradicted premise, an unresolved source, a thesis already resting on tripped criteria — per `./investor-loop.md` § Issue-surfacing; a blocking issue halts the step until resolved.
+Read a related company's `## Financials` table off its wiki entity page directly when fundamentals inform the evaluation (no fundamentals tool in v1). Surface any reasoning problem — a contradicted premise, an unresolved source, a thesis already resting on tripped criteria — per `./sb-investor-loop.md` § Issue-surfacing; a blocking issue halts the step until resolved.
 
 ## Step 5 — Present findings (present-and-confirm)
 
-Run `./investor-loop.md` § Present-and-confirm. State the review outcome and STOP for the user's choice. The findings MUST carry:
+Run `./sb-investor-loop.md` § Present-and-confirm. State the review outcome and STOP for the user's choice. The findings MUST carry:
 
 | Element | Content |
 |---------|---------|
@@ -128,7 +128,7 @@ On `[S]`, invoke `sb-fin-create-thesis` in its **investor-orchestrated `extend` 
 | Sharpened invalidation | the criteria revisions confirmed in Step 5 |
 | `status` / `conviction` / `last_reviewed` | the confirmed values from Step 5 |
 
-The agent does NOT hand-write the page and does NOT re-implement the scribe's frontmatter / section / citation / index checks — those are the scribe's sole authority (`./investor-loop.md` § Own-workspace-writes boundary). The `extend` entry point skips the scope-overlap discovery prompt, so it does not interrupt; if the scribe surfaces any other structural prompt during the extend, act on it — do not pre-empt or suppress it.
+The agent does NOT hand-write the page and does NOT re-implement the scribe's frontmatter / section / citation / index checks — those are the scribe's sole authority (`./sb-investor-loop.md` § Own-workspace-writes boundary). The `extend` entry point skips the scope-overlap discovery prompt, so it does not interrupt; if the scribe surfaces any other structural prompt during the extend, act on it — do not pre-empt or suppress it.
 
 ## Step 7 — Handoff
 
@@ -137,7 +137,7 @@ After persistence, route any implied next step — surface it, never auto-chain 
 | Review implies | Handoff |
 |----------------|---------|
 | A buy / sell / hold the verdict points to | Suggest `decision` (B5, read-and-follow `./decision.md`) to record the action + rationale |
-| An invalidated thesis | Propose `status: rejected` / `archived` via `./investor-loop.md` § Present-and-confirm — applied ONLY on the user's explicit approval, persisted ONLY through the scribe's `extend` path (never hand-written) |
+| An invalidated thesis | Propose `status: rejected` / `archived` via `./sb-investor-loop.md` § Present-and-confirm — applied ONLY on the user's explicit approval, persisted ONLY through the scribe's `extend` path (never hand-written) |
 
 ---
 

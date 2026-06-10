@@ -7,7 +7,7 @@ runtime: agent-loop
 
 The `/sb-investor` reasoning mode that turns an informal investment idea into a structured, falsifiable thesis, then delegates persistence to `sb-fin-create-thesis`. **This mode NEVER writes a thesis page** — it reasons; the scribe persists (delegate-not-replace).
 
-**Loaded by:** `./investor.md` reads-and-follows this file when `./capability-manifest.md` routes the `thesis` (B1) intent. Read `./investor-loop.md` before acting on any step below.
+**Loaded by:** `./sb-investor.md` reads-and-follows this file when `./capability-manifest.md` routes the `thesis` (B1) intent. Read `./sb-investor-loop.md` before acting on any step below.
 
 **Division of labour (read once, then act):**
 
@@ -20,9 +20,9 @@ The `/sb-investor` reasoning mode that turns an informal investment idea into a 
 
 ## Step 1 — Policy gate (MANDATORY)
 
-Before ANY reasoning, load the policy file(s) `../../CLAUDE.md` § Policy Read-Rules requires for an action that REASONS about an investment — per `./investor-loop.md` § Policy read-rules wiring. Authoring a thesis is such an action: `research-policy.md` is required; load `source-policy.md` too when the thesis will cite or weigh sources. NEVER restate the read-rules table — read it.
+Before ANY reasoning, load the policy file(s) `../../CLAUDE.md` § Policy Read-Rules requires for an action that REASONS about an investment — per `./sb-investor-loop.md` § Policy read-rules wiring. Authoring a thesis is such an action: `research-policy.md` is required; load `source-policy.md` too when the thesis will cite or weigh sources. NEVER restate the read-rules table — read it.
 
-If `research-policy.md` marks the thesis topic out-of-scope or excluded, say so and STOP, or offer to widen scope via the `policy` thin mode — do not reason past an exclusion (`./investor-loop.md` § Policy read-rules wiring; Rule A).
+If `research-policy.md` marks the thesis topic out-of-scope or excluded, say so and STOP, or offer to widen scope via the `policy` thin mode — do not reason past an exclusion (`./sb-investor-loop.md` § Policy read-rules wiring; Rule A).
 
 ## Step 2 — Reason the thesis
 
@@ -42,7 +42,7 @@ The Assumption Audit (Step 2a) is the METHOD that fills `Hypotheses`, `Invalidat
 
 **Market-figure range rule.** When cited sources disagree on a numeric market figure (price level, drawdown magnitude, multiple, growth rate), resolve it ONLY through a registered `class: read` tool in `../../scripts/tools-index.md` (tools-only invariant). If no registered tool resolves the figure, the draft states the source-attributed RANGE — e.g. `-35% [^a] to -66% [^b]` — and NEVER silently picks one source's value. **Methodology/benchmark conflict:** when two figures disagree because they use different benchmarks or methodologies, STATE BOTH figures WITH their respective methodologies — e.g. `23% [^a, total-return index] vs 18% [^b, price-only index]` — and NEVER average them and NEVER silently pick one.
 
-Surface a problem with the reasoning or its inputs (a source failing the `source-policy` trust bar, a contradicted premise) per `./investor-loop.md` § Issue-surfacing — never pass it silently.
+Surface a problem with the reasoning or its inputs (a source failing the `source-policy` trust bar, a contradicted premise) per `./sb-investor-loop.md` § Issue-surfacing — never pass it silently.
 
 ### Step 2a — Assumption Audit (first-principles lens)
 
@@ -64,7 +64,7 @@ The claim rests on hidden assumptions; left implicit, they become the thesis's b
    - The questions on weak assumptions (`unproven` / `convenience`, plus any `partial` / `outdated` worth testing) become candidate `Invalidation criteria` — the observable conditions that would falsify the claim.
    - The SAME weak-assumption questions are the explicit input to the Step 2b Disconfirm dispatch (its anchor assumptions).
 
-Surface any assumption the audit cannot resolve from reasoning alone (e.g. a `convenience` assumption with no supporting basis) per `./investor-loop.md` § Issue-surfacing — do not bury it. The audit produces classified assumptions as testable questions; it does NOT produce a project plan — never append owners, timelines, metrics, or next-action lists (alien to this read-only reasoning mode, which never executes).
+Surface any assumption the audit cannot resolve from reasoning alone (e.g. a `convenience` assumption with no supporting basis) per `./sb-investor-loop.md` § Issue-surfacing — do not bury it. The audit produces classified assumptions as testable questions; it does NOT produce a project plan — never append owners, timelines, metrics, or next-action lists (alien to this read-only reasoning mode, which never executes).
 
 ### Step 2b — Populate `Evidence against` via a Disconfirm dispatch + FOR-side ad-hoc election
 
@@ -76,7 +76,7 @@ For the audit's weak assumptions (the `unproven` / `convenience` testable questi
 2. **Retain `./research.md`'s propose→approve checkpoint** for any source that would enter the wiki — the user still approves which disconfirming sources are captured. ONLY the hunt is automatic; there are NO silent web writes and NO bypassed approval.
 3. **Return only the structured result `./research.md` produces** — the ranked disconfirming candidates + metadata + each candidate's why-it-would-overturn note (Step 7a's documented output). Full source text MUST NOT return to this mode (anti-context-rot — the parent context stays clean).
 
-Fold the returned disconfirming candidates into `Evidence against`, each tied to its source per the element table. A disconfirming candidate that was NOT approved/captured contributes METADATA only — mark its evidence item **`not captured`** explicitly (its claim rests on title/metadata, not a readable source) and NEVER cite it as if a raw file existed. If the dispatch returns no disconfirming candidate that clears the `source-policy` trust bar, `Evidence against` is still filled by reasoning (the element stays MANDATORY and substantive — never an empty placeholder), and the empty hunt is surfaced per `./investor-loop.md` § Issue-surfacing. The agent NEVER hand-writes a raw source or wiki page from this dispatch — `./research.md`'s own tool and ingest sub-agents persist anything captured (delegate-not-replace).
+Fold the returned disconfirming candidates into `Evidence against`, each tied to its source per the element table. A disconfirming candidate that was NOT approved/captured contributes METADATA only — mark its evidence item **`not captured`** explicitly (its claim rests on title/metadata, not a readable source) and NEVER cite it as if a raw file existed. If the dispatch returns no disconfirming candidate that clears the `source-policy` trust bar, `Evidence against` is still filled by reasoning (the element stays MANDATORY and substantive — never an empty placeholder), and the empty hunt is surfaced per `./sb-investor-loop.md` § Issue-surfacing. The agent NEVER hand-writes a raw source or wiki page from this dispatch — `./research.md`'s own tool and ingest sub-agents persist anything captured (delegate-not-replace).
 
 **FOR-side ad-hoc election (capture floor).** After the Disconfirm wave returns, AUDIT the `Evidence for` items in the thesis:
 
@@ -120,7 +120,7 @@ Save it anywhere and give me the path — I will re-run capture with --mode manu
 
 ## Step 4 — Present-and-confirm checkpoint
 
-Run `./investor-loop.md` § Present-and-confirm before the handoff. State the proposed thesis (claim + the sections developed + entities to cross-link + sources to cite + proposed `status`/`conviction`/`time_horizon`) and STOP for the user's choice.
+Run `./sb-investor-loop.md` § Present-and-confirm before the handoff. State the proposed thesis (claim + the sections developed + entities to cross-link + sources to cite + proposed `status`/`conviction`/`time_horizon`) and STOP for the user's choice.
 
 This is the mode's single user-facing checkpoint. Per the handoff contract there is NO second checkpoint at the scribe — the agent's confirm here covers the invocation. The one carve-out is the scribe's own scope-overlap interrupt (Step 5).
 
@@ -165,7 +165,7 @@ The agent does NOT hand-write the page and does NOT re-implement the scribe's sl
 
 ### The one allowed interrupt — scope-overlap
 
-`sb-fin-create-thesis` runs a semantic scope-overlap check against existing theses. If it detects overlap, its `extend` / `new` / `abort` prompt fires as the single allowed interrupt inside this handoff (`./investor-loop.md` § Present-and-confirm carve-out). Surface it to the user and act on the choice:
+`sb-fin-create-thesis` runs a semantic scope-overlap check against existing theses. If it detects overlap, its `extend` / `new` / `abort` prompt fires as the single allowed interrupt inside this handoff (`./sb-investor-loop.md` § Present-and-confirm carve-out). Surface it to the user and act on the choice:
 
 | Choice | Effect |
 |--------|--------|

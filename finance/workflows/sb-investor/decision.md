@@ -7,7 +7,7 @@ runtime: agent-loop
 
 The `/sb-investor` reasoning mode that reasons about ONE investment decision and the rationale held at the time, then delegates persistence to `sb-fin-create-decision`. **This mode NEVER writes a decision page** — it reasons; the scribe persists (delegate-not-replace).
 
-**Loaded by:** `./investor.md` reads-and-follows this file when `./capability-manifest.md` routes the `decision` (B5) intent. Read `./investor-loop.md` before acting on any step below.
+**Loaded by:** `./sb-investor.md` reads-and-follows this file when `./capability-manifest.md` routes the `decision` (B5) intent. Read `./sb-investor-loop.md` before acting on any step below.
 
 **Division of labour (read once, then act):**
 
@@ -16,15 +16,15 @@ The `/sb-investor` reasoning mode that reasons about ONE investment decision and
 | This mode (the thinker) | reasoning: the action taken, rationale, what was believed at the time, what would prove it wrong, acknowledged risks, review trigger, the related thesis; the present-and-confirm checkpoint |
 | `sb-fin-create-decision` (the scribe) | persistence: filename (`YYYY-MM-DD-<action>-<asset-or-thesis>.md`) + collision check, frontmatter, the nine required sections, citation discipline, entity/thesis cross-linking, decisions index update. The agent NEVER re-implements these checks |
 
-**Never transaction data.** This mode records reasoning ONLY. Transaction price, quantity, fees, and position size live in the `sb-bookkeeper` ledger and are NEVER reasoned into a decision page (`./investor-loop.md` § Read-only invariant). A request to record them is out-of-structure → Rule A.
+**Never transaction data.** This mode records reasoning ONLY. Transaction price, quantity, fees, and position size live in the `sb-bookkeeper` ledger and are NEVER reasoned into a decision page (`./sb-investor-loop.md` § Read-only invariant). A request to record them is out-of-structure → Rule A.
 
 ---
 
 ## Step 1 — Policy gate (MANDATORY)
 
-Before ANY reasoning, load the policy file(s) `../../CLAUDE.md` § Policy Read-Rules requires for an action that REASONS about an investment — per `./investor-loop.md` § Policy read-rules wiring. Recording a buy/sell/hold/pass decision is such an action: `research-policy.md` is required; load `source-policy.md` too when the decision cites or weighs sources. NEVER restate the read-rules table — read it.
+Before ANY reasoning, load the policy file(s) `../../CLAUDE.md` § Policy Read-Rules requires for an action that REASONS about an investment — per `./sb-investor-loop.md` § Policy read-rules wiring. Recording a buy/sell/hold/pass decision is such an action: `research-policy.md` is required; load `source-policy.md` too when the decision cites or weighs sources. NEVER restate the read-rules table — read it.
 
-If `research-policy.md` marks the decision's subject out-of-scope or excluded, say so and STOP, or offer to widen scope via the `policy` thin mode — do not reason past an exclusion (`./investor-loop.md` § Policy read-rules wiring; Rule A).
+If `research-policy.md` marks the decision's subject out-of-scope or excluded, say so and STOP, or offer to widen scope via the `policy` thin mode — do not reason past an exclusion (`./sb-investor-loop.md` § Policy read-rules wiring; Rule A).
 
 ## Step 2 — Reason the decision
 
@@ -43,7 +43,7 @@ Develop the decision's reasoning. The decision is a dated record of ONE action a
 
 Cite the source pages and entity `## Financials` rows the reasoning rests on — these become the scribe's `Data and sources used` section. Read a single company's `## Financials` table off its wiki entity page directly when fundamentals inform the reasoning (no fundamentals tool in v1); inspect position data ONLY through a registered `class: read` tool in `../../scripts/tools-index.md` (tools-only invariant), NEVER `portfolio.json`/ledgers directly.
 
-Record reasoning ONLY — NEVER reason price, quantity, fees, or position size into the decision (the `sb-bookkeeper` ledger owns those). Surface a problem with the reasoning or its inputs (a source failing the `source-policy` trust bar, a contradicted premise) per `./investor-loop.md` § Issue-surfacing — never pass it silently.
+Record reasoning ONLY — NEVER reason price, quantity, fees, or position size into the decision (the `sb-bookkeeper` ledger owns those). Surface a problem with the reasoning or its inputs (a source failing the `source-policy` trust bar, a contradicted premise) per `./sb-investor-loop.md` § Issue-surfacing — never pass it silently.
 
 ## Step 3 — Select related thesis + entities
 
@@ -53,7 +53,7 @@ Record reasoning ONLY — NEVER reason price, quantity, fees, or position size i
 
 ## Step 4 — Present-and-confirm checkpoint
 
-Run `./investor-loop.md` § Present-and-confirm before the handoff. State the proposed decision (the action + decision date + the eight reasoned sections + the related thesis/entities to cross-link + the sources to cite) and STOP for the user's choice. State that price/qty are NOT recorded — they live in the `sb-bookkeeper` ledger.
+Run `./sb-investor-loop.md` § Present-and-confirm before the handoff. State the proposed decision (the action + decision date + the eight reasoned sections + the related thesis/entities to cross-link + the sources to cite) and STOP for the user's choice. State that price/qty are NOT recorded — they live in the `sb-bookkeeper` ledger.
 
 This is the mode's single user-facing checkpoint. Per the scribe's investor-orchestrated mode there is NO second checkpoint at the scribe — the agent's confirm here covers the invocation.
 
@@ -94,7 +94,7 @@ The scribe halts if the decision filename already exists for that date+action+su
 
 ## Step 6 — Handoff
 
-A decision that revises the conviction or status of its related thesis → suggest `/sb-investor review` (B3) to update the thesis page via its scribe; this mode NEVER edits the thesis. A suspected data problem encountered while reasoning → record it and route the user to `sb-bookkeeper` (`./investor-loop.md` § Read-only invariant) — never fix data in place.
+A decision that revises the conviction or status of its related thesis → suggest `/sb-investor review` (B3) to update the thesis page via its scribe; this mode NEVER edits the thesis. A suspected data problem encountered while reasoning → record it and route the user to `sb-bookkeeper` (`./sb-investor-loop.md` § Read-only invariant) — never fix data in place.
 
 ---
 

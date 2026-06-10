@@ -7,7 +7,7 @@ runtime: agent-loop
 
 The `/sb-investor` shared refuter-dispatch workflow. An **independent second model** that can ONLY refute the drafted argument the calling mode is about to present — it never generates its own findings. `review` / `thesis` / `decision` read-and-follow this file at their present-and-confirm checkpoint when the user elects `[R]`; the refutation is surfaced beside the draft as a distinct critique block, and the user still decides `[S] / [E] / [N]`. This file owns the CONTRACT, the DISPATCH MECHANISM, the BACKENDS, and the INVARIANTS. Each calling mode owns its own rubric and passes it in.
 
-**Loaded by:** a calling mode reads-and-follows this file ONLY after the user elects `[R]` at that mode's checkpoint. Read `./investor-loop.md` before acting.
+**Loaded by:** a calling mode reads-and-follows this file ONLY after the user elects `[R]` at that mode's checkpoint. Read `./sb-investor-loop.md` before acting.
 
 **Opt-in, never auto-fires.** This workflow runs ONLY on an explicit `[R]` election (or an always-on `research-policy.md` key, schema settled in `p4-2` — until then `[R]` is the sole trigger). It is never the default path and never blocks the checkpoint: if the refuter is not elected, or fails, the mode presents its draft unchanged.
 
@@ -36,7 +36,7 @@ The calling mode hands the refuter a CLOSED input set. Assemble all four; pass n
 | **Drafted artifact** | The exact draft the mode is about to present at its checkpoint (thesis draft / review verdict block / decision record) | The calling mode's pre-checkpoint output |
 | **Cited sources** | Every source the draft cites, passed as a CLOSED READ-SET in one of two transports: **inline** (full text in the prompt — small payloads) or **by path** (the explicit list of cited file paths — the default for large payloads, e.g. multi-MB raw captures). Path transport authorizes the refuter to read the LISTED files ONLY — never anything beyond the list. Either transport keeps the input set closed and the full text out of the parent (anti-context-rot) | The captured `raw/` + wiki source/entity pages the draft references |
 | **The calling mode's rubric** | The per-rubric-item list of attack questions THIS mode defines (thesis rubric / review rubric / decision rubric) — see § Rubric schema | The calling mode (`review`/`thesis`/`decision`), never this file |
-| **`research-policy` scope** | The scope / exclusions loaded at the mode's Step 1 policy gate — bounds what the refuter treats as in-scope | Already loaded by the calling mode per `./investor-loop.md` § Policy read-rules wiring |
+| **`research-policy` scope** | The scope / exclusions loaded at the mode's Step 1 policy gate — bounds what the refuter treats as in-scope | Already loaded by the calling mode per `./sb-investor-loop.md` § Policy read-rules wiring |
 
 The calling mode supplies the rubric text. This file NEVER hard-codes the thesis/review/decision rubric — it references "the calling mode's rubric" and defines only its SHAPE (below).
 
@@ -50,11 +50,11 @@ Selection is `auto`: the default backend is a fresh-context Claude sub-agent. Th
 | Codex opted into AND `codex` resolves AND the exec call returns within timeout | **Codex CLI** |
 | Codex opted into BUT absent / non-runnable / times out / errors | **Sub-agent** (auto-fallback) + a one-line note: `Refuter ran on the Claude sub-agent backend (Codex {unavailable | timed out | errored}).` |
 
-A Codex failure NEVER blocks the checkpoint and NEVER aborts the mode — it falls back to the sub-agent. If the sub-agent ALSO cannot run (no dispatch capability in the current context), surface that per `./investor-loop.md` § Issue-surfacing as a deferrable note and present the draft WITHOUT a refutation — the user still gets the `[S]/[E]/[N]` choice. The refuter is additive; its absence degrades gracefully.
+A Codex failure NEVER blocks the checkpoint and NEVER aborts the mode — it falls back to the sub-agent. If the sub-agent ALSO cannot run (no dispatch capability in the current context), surface that per `./sb-investor-loop.md` § Issue-surfacing as a deferrable note and present the draft WITHOUT a refutation — the user still gets the `[S]/[E]/[N]` choice. The refuter is additive; its absence degrades gracefully.
 
 ## Step 3a — Backend: Claude sub-agent (default)
 
-Dispatch ONE sub-agent (per `./investor-loop.md`; default model per `sb-sub-agents`). Its prompt MUST be SELF-CONTAINED — it requires NO web skill and NO vault skill; with inline transport it reads ONLY what the prompt carries and needs NO tool access; with path transport its ONLY tool access is read-only (Read/Grep) on the listed read-set paths. The prompt MUST:
+Dispatch ONE sub-agent (per `./sb-investor-loop.md`; default model per `sb-sub-agents`). Its prompt MUST be SELF-CONTAINED — it requires NO web skill and NO vault skill; with inline transport it reads ONLY what the prompt carries and needs NO tool access; with path transport its ONLY tool access is read-only (Read/Grep) on the listed read-set paths. The prompt MUST:
 
 1. State the refute-only role: *"You are an adversarial reviewer. You may ONLY refute the argument below. You MUST NOT add new findings, fetch anything, run a search, or rewrite the draft. Read the draft and its cited sources, then return a verdict for each rubric item."*
 2. Carry the four inputs from Step 1 (drafted artifact, cited sources — inline text OR the closed read-set path list per § Step 1, the rubric items, the policy scope). With path transport, state the closure explicitly: *"You may Read/Grep ONLY the files listed below; reading ANY other path is forbidden."*
@@ -135,19 +135,19 @@ The refuter returns NOTHING beyond this block — the response BEGINS at the `##
 
 ## Invariant preservation (each consuming mode inherits this by reference)
 
-A calling mode that dispatches this refuter inherits ALL of the following — it does NOT re-state them; it references this section. Re-checked at the Phase 4 checkpoints against `./investor-loop.md`.
+A calling mode that dispatches this refuter inherits ALL of the following — it does NOT re-state them; it references this section. Re-checked at the Phase 4 checkpoints against `./sb-investor-loop.md`.
 
 | Invariant | How the refuter preserves it |
 |-----------|------------------------------|
-| **Read-only** (`./investor-loop.md` § Read-only invariant) | Reads the artifact + already-cited sources only. No position data, no ledger, no `portfolio.json`, no dashboard — directly or via any path. The Codex backend enforces this with `--sandbox read-only`. |
+| **Read-only** (`./sb-investor-loop.md` § Read-only invariant) | Reads the artifact + already-cited sources only. No position data, no ledger, no `portfolio.json`, no dashboard — directly or via any path. The Codex backend enforces this with `--sandbox read-only`. |
 | **No-generation** (plan Architectural-Constraints refuter row) | Closed input set (artifact + its citations). Returns ONLY verdicts. Never fetches the web, runs a search, reads outside the read-set, or emits a new finding/source/claim. An unjudgeable item is `survives`, never a hunt. |
-| **Tools-only data access** (`./investor-loop.md` § Tools-only) | The refuter touches NO position data, so no read tool is involved. It reads ONLY the markdown the calling mode passed in or listed (the closed read-set) — not the store. |
-| **Own-workspace-writes / delegate-not-replace** (`./investor-loop.md` § Own-workspace-writes boundary) | The refuter persists NOTHING — no page, source, policy, capture, or session file (`--ephemeral`). It produces a critique; the calling mode and its scribe own all persistence. |
-| **Present-and-confirm** (`./investor-loop.md` § Present-and-confirm) | The critique feeds the EXISTING checkpoint as a distinct block; the user still decides `[S]/[E]/[N]`. The refuter never persists or acts on its verdict and never collapses the checkpoint. |
+| **Tools-only data access** (`./sb-investor-loop.md` § Tools-only) | The refuter touches NO position data, so no read tool is involved. It reads ONLY the markdown the calling mode passed in or listed (the closed read-set) — not the store. |
+| **Own-workspace-writes / delegate-not-replace** (`./sb-investor-loop.md` § Own-workspace-writes boundary) | The refuter persists NOTHING — no page, source, policy, capture, or session file (`--ephemeral`). It produces a critique; the calling mode and its scribe own all persistence. |
+| **Present-and-confirm** (`./sb-investor-loop.md` § Present-and-confirm) | The critique feeds the EXISTING checkpoint as a distinct block; the user still decides `[S]/[E]/[N]`. The refuter never persists or acts on its verdict and never collapses the checkpoint. |
 | **Single-pass / interactive rhythm** (plan Architectural-Constraints) | Runs exactly once and returns; never loops. It is one informational block at one already-present checkpoint — it adds no new STOP and buries no rhythm. |
 | **Anti-context-rot** (`shape.md` Constraints) | Full source text stays in the refuter's own context (sub-agent or Codex process); only the structured verdict crosses back. With path transport the full text never even transits the parent — the refuter reads the listed files in its own context. The parent context stays clean — same pattern as the `research` Disconfirm wave. |
 | **Portability** (`sb-source-of-truth`; `shape.md` § 2026-06-01 #1) | Backend-agnostic: default Claude sub-agent needs no plugin; Codex is opt-in with auto-fallback. A non-Codex installer is never broken — the refuter runs on the sub-agent. |
-| **Rule A / per-step checkpoint / watchlist** (`./investor-loop.md`) | Untouched. The refuter introduces no out-of-structure act, no watchlist change, and runs inside the calling mode's existing checkpoint. |
+| **Rule A / per-step checkpoint / watchlist** (`./sb-investor-loop.md`) | Untouched. The refuter introduces no out-of-structure act, no watchlist change, and runs inside the calling mode's existing checkpoint. |
 
 A failed or unavailable refuter NEVER blocks the checkpoint: the calling mode presents its draft unchanged and the user proceeds. The refuter is strictly additive — it can sharpen a decision but can never gate, persist, or act.
 
@@ -160,4 +160,4 @@ A failed or unavailable refuter NEVER blocks the checkpoint: the calling mode pr
 - Backend-agnostic: Claude sub-agent default; Codex CLI opt-in via the verified `codex exec --sandbox read-only` invocation; absent/slow/error → sub-agent fallback + a one-line note.
 - Single-pass: runs once, returns the critique, never loops. Accepted points fold in via the calling mode's `[E]` path, never a re-run.
 - The critique only feeds the calling mode's existing present-and-confirm checkpoint; the user decides `[S]/[E]/[N]`. The refuter never bypasses, collapses, or gates that checkpoint.
-- A request that would let the refuter generate findings, persist, call a tool, fetch the web, or bypass the checkpoint is out-of-structure → Rule A in `./investor-loop.md`.
+- A request that would let the refuter generate findings, persist, call a tool, fetch the web, or bypass the checkpoint is out-of-structure → Rule A in `./sb-investor-loop.md`.

@@ -7,7 +7,7 @@ runtime: agent-loop
 
 The intent → capability → access-mechanism routing map for `/sb-investor`. `sb-investor.md` reads this file after loading `sb-investor-loop.md` to pick the capability that matches the user's natural-language ask, then reads-and-follows that capability (or chains several). The agent infers the capability from intent; it NEVER asks the user "which mode?".
 
-This file routes. It does NOT restate the invariants, boundaries, policy read-rules, present-and-confirm pattern, or checkpoint — those live in `./investor-loop.md` and bind every capability listed here. Read `./investor-loop.md` before acting on any routed capability.
+This file routes. It does NOT restate the invariants, boundaries, policy read-rules, present-and-confirm pattern, or checkpoint — those live in `./sb-investor-loop.md` and bind every capability listed here. Read `./sb-investor-loop.md` before acting on any routed capability.
 
 ---
 
@@ -40,7 +40,7 @@ The optional **adversarial refuter** is a shared CROSS-mode access mechanism, di
 
 | Side | Contract |
 |------|----------|
-| **Reached by** | The calling mode reads-and-follows `./adversarial-refuter.md` after an `[R]` election (or an always-on `research-policy.md` key per `./investor-loop.md` § Present-and-confirm); never a standalone route |
+| **Reached by** | The calling mode reads-and-follows `./adversarial-refuter.md` after an `[R]` election (or an always-on `research-policy.md` key per `./sb-investor-loop.md` § Present-and-confirm); never a standalone route |
 | **Backend** | `auto` — Claude sub-agent default; Codex CLI opt-in via Bash; Codex absent/slow/error → sub-agent fallback (portable; a non-Codex installer is never broken) |
 | **Input** | the drafted artifact **+** its cited sources (full text, read in the refuter's own context) **+** the calling mode's rubric **+** the `research-policy` scope |
 | **Output** | a structured per-rubric-item verdict (`overturned` / `weakened` / `survives` + the disconfirming reason); persists NOTHING; the critique only feeds the calling mode's EXISTING checkpoint — the user still decides `[S]/[E]/[N]` |
@@ -59,7 +59,7 @@ One row group per mode. Route on the **Fires on** intent; reach the capability t
 |-------|-------|
 | Fires on (intent) | "turn this into a thesis", "I think `<entity>` is mispriced because…", "write up my `<entity>` thesis", developing an informal investment idea into a structured claim |
 | Access mechanism | Read-and-follow `./thesis.md` (the reasoning) **+** invoke `sb-fin-create-thesis` in its investor-orchestrated mode (the only writer of the thesis page) |
-| Inputs | the informal idea / claim; the related entity(ies); `research-policy.md` (loaded per `./investor-loop.md` § Policy read-rules); any already-captured source filenames |
+| Inputs | the informal idea / claim; the related entity(ies); `research-policy.md` (loaded per `./sb-investor-loop.md` § Policy read-rules); any already-captured source filenames |
 | When to use | The user is forming or articulating a NEW belief and wants it persisted as a falsifiable thesis (claim, causal mechanism, evidence for/against, invalidation criteria) |
 | When NOT | Re-evaluating an EXISTING thesis against new information → `review`. Finding/capturing sources → `research`. Recording a buy/sell/hold → `decision`. The agent NEVER hand-writes the thesis page — persistence is always `sb-fin-create-thesis` |
 
@@ -69,9 +69,9 @@ One row group per mode. Route on the **Fires on** intent; reach the capability t
 |-------|-------|
 | Fires on (intent) | "research `<X>`", "find sources on `<Y>`", "what's the latest on my `<entity>` thesis", "dig into `<topic>`" |
 | Access mechanism | Read-and-follow `./research.md` (the mode flow) **+** the `research` discovery-wave dispatch (above) — native web-search sub-agents for the Step 3 width sweep AND the Step 7a Disconfirm wave (plugin-agnostic) **+** `sb-wiki-capture-source` tool for capture **+** `sb-wiki-ingest` run via orchestrated sub-agents (one per source, SEQUENTIAL — shared-page write races; `./research.md` Step 7) for auto-ingest |
-| Inputs | the anchoring thesis (existing or nascent) or a bare research question; the entity(ies); `research-policy.md` (scope/exclusions) and `source-policy.md` (trust classes), loaded per `./investor-loop.md` § Policy read-rules. When dispatched by `thesis`/`review`, the handed-in anchor is a specific assumption or near/untested invalidation criterion per the Step 7a Disconfirm input contract (above) |
+| Inputs | the anchoring thesis (existing or nascent) or a bare research question; the entity(ies); `research-policy.md` (scope/exclusions) and `source-policy.md` (trust classes), loaded per `./sb-investor-loop.md` § Policy read-rules. When dispatched by `thesis`/`review`, the handed-in anchor is a specific assumption or near/untested invalidation criterion per the Step 7a Disconfirm input contract (above) |
 | When to use | New OPEN-web sources must be discovered, proposed, captured to `raw/`, and filed into the wiki so research stops dying in chat. Internally the mode also: Decomposes the anchor into atomic sub-questions + a coverage matrix (Step 2.5) before discovery; runs a parallel width sweep (Step 3) and an adversarial Disconfirm wave (Step 7a); and flags coverage gaps + source tensions at Propose (Step 4) — mechanics in `./research.md`, never restated here. `thesis`/`review` reach Decompose/width-sweep by DISPATCHING this mode, never by re-implementing them; Disconfirm is reached by dispatching `./disconfirm-wave.md` directly, never by re-implementing it |
-| When NOT | Weighing ALREADY-captured sources against a thesis verdict → `review`. Authoring the thesis itself → `thesis`. Gated/paywalled sources are NEVER fetched — they register `gated_pending_access` (per `./investor-loop.md` permanent source boundary) |
+| When NOT | Weighing ALREADY-captured sources against a thesis verdict → `review`. Authoring the thesis itself → `thesis`. Gated/paywalled sources are NEVER fetched — they register `gated_pending_access` (per `./sb-investor-loop.md` permanent source boundary) |
 
 ### `extract` (B2b — Fundamentals, standalone route)
 
@@ -89,7 +89,7 @@ One row group per mode. Route on the **Fires on** intent; reach the capability t
 |-------|-------|
 | Fires on (intent) | "review my `<entity>` thesis", "is `<thesis>` still valid?", "check `<thesis>` against the latest", a periodic-review prompt, a `Thesis Invalidation` candidate-trigger |
 | Access mechanism | Read-and-follow `./review.md` (the reasoning) **+** `./disconfirm-wave.md` (above), DISPATCHED per near/untested invalidation criterion the Step 3a Assumption Audit flags as decayed — audit-driven, replacing the old thin-source auto-pull; its propose→approve checkpoint is retained **+** invoke `sb-fin-create-thesis` in extend mode (the only writer of thesis-page updates) |
-| Inputs | the target thesis page (claim, evidence, invalidation criteria, `status`, `last_reviewed`); its related entities; sources newer than `last_reviewed`; `research-policy.md` + `source-policy.md`, loaded per `./investor-loop.md` § Policy read-rules |
+| Inputs | the target thesis page (claim, evidence, invalidation criteria, `status`, `last_reviewed`); its related entities; sources newer than `last_reviewed`; `research-policy.md` + `source-policy.md`, loaded per `./sb-investor-loop.md` § Policy read-rules |
 | When to use | An EXISTING thesis must be tested against new evidence — staleness, new evidence-against, tripped/near invalidation criteria, a `status`/`conviction` change |
 | When NOT | Creating a thesis that does not yet exist → `thesis`. Acquiring brand-new sources with no thesis to test → `research`. Acting on the buy/sell/hold a review implies → `decision`. Updates persist only via the scribe — never hand-written |
 
@@ -99,9 +99,9 @@ One row group per mode. Route on the **Fires on** intent; reach the capability t
 |-------|-------|
 | Fires on (intent) | "does my portfolio still match my theses?", "which positions have no thesis?", "which theses have no exposure?", "check my `<entity>` position", "am I over-concentrated?" |
 | Access mechanism | Read-and-follow `./portfolio.md` (the reasoning) **+** call the registered read tools `position_table`, `position_summary`, `fx_impact_report`, `validate_calculate` (per `../../scripts/tools-index.md`) **+** agent-performed join (read theses' `related_positions` frontmatter against the position list). No `portfolio-view` tool exists; the agent performs the coherence join itself |
-| Inputs | position data via the read tools above (NEVER read `portfolio.json`/ledgers directly — tools-only invariant in `./investor-loop.md`); the thesis pages' `related_positions` frontmatter; `research-policy.md` (loaded per `./investor-loop.md` § Policy read-rules); single-company fundamentals read off the entity page's `## Financials` when reasoning |
+| Inputs | position data via the read tools above (NEVER read `portfolio.json`/ledgers directly — tools-only invariant in `./sb-investor-loop.md`); the thesis pages' `related_positions` frontmatter; `research-policy.md` (loaded per `./sb-investor-loop.md` § Policy read-rules); single-company fundamentals read off the entity page's `## Financials` when reasoning |
 | When to use | Belief must be mapped to REAL exposure — positions without theses, theses without exposure, concentration |
-| When NOT | Reasoning about a belief with no portfolio link → `thesis`/`review`. Cross-entity fundamentals comparison (deferred; no tool in v1). Any ledger/`portfolio.json` mutation → out-of-structure, route to `sb-bookkeeper` per `./investor-loop.md` Rule A |
+| When NOT | Reasoning about a belief with no portfolio link → `thesis`/`review`. Cross-entity fundamentals comparison (deferred; no tool in v1). Any ledger/`portfolio.json` mutation → out-of-structure, route to `sb-bookkeeper` per `./sb-investor-loop.md` Rule A |
 
 ### `decision` (B5 — Decision record)
 
@@ -109,7 +109,7 @@ One row group per mode. Route on the **Fires on** intent; reach the capability t
 |-------|-------|
 | Fires on (intent) | "I'm buying/selling/holding `<asset>` — record it", "log this decision", "note that I passed on `<X>` because…" |
 | Access mechanism | Read-and-follow `./decision.md` (the reasoning) **+** invoke `sb-fin-create-decision` (the only writer of the decision page) |
-| Inputs | the action (buy/sell/hold/pass) + its rationale; the related thesis / asset / company; relevant sources; `research-policy.md` if the decision reasons about a thesis (loaded per `./investor-loop.md` § Policy read-rules) |
+| Inputs | the action (buy/sell/hold/pass) + its rationale; the related thesis / asset / company; relevant sources; `research-policy.md` if the decision reasons about a thesis (loaded per `./sb-investor-loop.md` § Policy read-rules) |
 | When to use | A buy/sell/hold/pass outcome and its reasoning must be persisted as an auditable dated record in `decisions/` |
 | When NOT | Forming the underlying belief → `thesis`. Testing whether a thesis still holds → `review`. The agent NEVER hand-writes the decision page — persistence is always `sb-fin-create-decision` |
 
@@ -118,10 +118,10 @@ One row group per mode. Route on the **Fires on** intent; reach the capability t
 | Field | Value |
 |-------|-------|
 | Fires on (intent) | "show my research policy", "update my exclusions", "what sources do I trust", "add `<X>` to my watchlist policy" |
-| Access mechanism | **Inline in `./investor-loop.md` § B6 Policy thin mode** — NOT a separate capability file. Follow that section |
+| Access mechanism | **Inline in `./sb-investor-loop.md` § B6 Policy thin mode** — NOT a separate capability file. Follow that section |
 | Inputs | `.user/finance/investor/research-policy.md` and `.user/finance/investor/source-policy.md` (read-write, user content, inside the own-workspace boundary) |
 | When to use | The user reads or changes the policy content itself (scope, priorities, exclusions, watchlist-approval, horizon, source trust) |
-| When NOT | A mode merely LOADING policy before reasoning is the always-on read-rules wiring in `./investor-loop.md`, not this user-facing mode. Setting `watchlist: true` requires explicit user approval (watchlist invariant in `./investor-loop.md`) |
+| When NOT | A mode merely LOADING policy before reasoning is the always-on read-rules wiring in `./sb-investor-loop.md`, not this user-facing mode. Setting `watchlist: true` requires explicit user approval (watchlist invariant in `./sb-investor-loop.md`) |
 
 ### `log` (B7 — Resolve the investor log)
 
@@ -131,7 +131,7 @@ One row group per mode. Route on the **Fires on** intent; reach the capability t
 | Access mechanism | Read-and-follow `./log.md` (the read → resolve → delete flow over `.user/finance/investor/log.md`) |
 | Inputs | `.user/finance/investor/log.md` (the investor's own actionable log — read-write inside the own-workspace boundary); each entry's `why` / `action` / `deferred`; the capability the `action` routes to (do-in-scope) or the companion owner (out-of-structure) |
 | When to use | The user wants to clear deferred/blocked/tool-gap items the investor recorded — reading each, resolving it (do-in-scope / route to a companion / dismiss), and DELETING it on resolution. Read the log ONLY on a bare invocation or an explicit "resolve my log" request — `./log.md` § Read-rule |
-| When NOT | During `research` / `review` / `thesis` / `portfolio` / `decision` / `policy` reasoning — those modes only WRITE deferrable items to the log (via `./investor-loop.md` § Issue-surfacing / Rule A); they NEVER read or resolve it. Recording a buy/sell/hold → `decision`; changing policy content → `policy` |
+| When NOT | During `research` / `review` / `thesis` / `portfolio` / `decision` / `policy` reasoning — those modes only WRITE deferrable items to the log (via `./sb-investor-loop.md` § Issue-surfacing / Rule A); they NEVER read or resolve it. Recording a buy/sell/hold → `decision`; changing policy content → `policy` |
 
 ---
 
@@ -149,6 +149,6 @@ A single ask MAY span several capabilities. Route to ALL matching modes in depen
 Chaining rules:
 
 1. **Order by dependency.** A mode that produces an input for another runs first (`research` before `review`/`thesis`; `review` before `decision`).
-2. **Each chained mode keeps its own checkpoint.** Every capability's STOP is an Investor Checkpoint per `./investor-loop.md` § Per-Step Checkpoint — chaining never collapses two confirmations into one silent run.
-3. **A blocking issue in an earlier mode halts the chain** at that mode's checkpoint (per `./investor-loop.md` § Issue-surfacing) — later modes do not run on untrustworthy output.
-4. **Ambiguous single-vs-multi intent → surface it**, do not guess: present the candidate chain via `./investor-loop.md` § Present-and-confirm and let the user confirm the scope.
+2. **Each chained mode keeps its own checkpoint.** Every capability's STOP is an Investor Checkpoint per `./sb-investor-loop.md` § Per-Step Checkpoint — chaining never collapses two confirmations into one silent run.
+3. **A blocking issue in an earlier mode halts the chain** at that mode's checkpoint (per `./sb-investor-loop.md` § Issue-surfacing) — later modes do not run on untrustworthy output.
+4. **Ambiguous single-vs-multi intent → surface it**, do not guess: present the candidate chain via `./sb-investor-loop.md` § Present-and-confirm and let the user confirm the scope.

@@ -9,7 +9,7 @@ The canonical home of the `sb-investor` disconfirm (adversarial discovery) wave 
 
 **Loaded by:** `./research.md` Step 7 flow (runs the wave as part of the Step 3 discovery pass); `./thesis.md` Step 2b (dispatches by reference); `./review.md` Step 3b (dispatches by reference). All three load by dispatch — this file is JIT-loaded into the dispatched sub-agent, not into the calling mode.
 
-**Read `./investor-loop.md` before acting.**
+**Read `./sb-investor-loop.md` before acting.**
 
 ---
 
@@ -34,7 +34,7 @@ The highest-value discovery primitive: instead of asking "what supports the anch
 4. Carry the **same URL-liveness verification and trust-class rubric requirements as the Step 3 wave prompts** (`./research.md` § Step 3 prompt items 3–4).
 5. **Return ONLY ranked disconfirming candidates + metadata + the why-it-would-overturn note.** The **full source text MUST stay inside the sub-agent** (anti-context-rot — the parent context stays clean).
 
-Rank the returned disconfirming candidates by `source-policy` trust class (loaded by the calling mode's Step 1) exactly as `./research.md` § Step 3 does; a candidate that fails the trust bar is surfaced per `./investor-loop.md` § Issue-surfacing — never silently dropped or kept. The wave writes NOTHING and fetches nothing into this mode; it adds no new data-access path. Its candidates feed the `./research.md` § Step 4 Propose checkpoint, where the user approves or rejects them through the unchanged present-and-confirm subset flow — nothing disconfirming is captured before approval, per-run or standing (the Step 4 auto-capture partition applies to disconfirming candidates identically).
+Rank the returned disconfirming candidates by `source-policy` trust class (loaded by the calling mode's Step 1) exactly as `./research.md` § Step 3 does; a candidate that fails the trust bar is surfaced per `./sb-investor-loop.md` § Issue-surfacing — never silently dropped or kept. The wave writes NOTHING and fetches nothing into this mode; it adds no new data-access path. Its candidates feed the `./research.md` § Step 4 Propose checkpoint, where the user approves or rejects them through the unchanged present-and-confirm subset flow — nothing disconfirming is captured before approval, per-run or standing (the Step 4 auto-capture partition applies to disconfirming candidates identically).
 
 ### B10 — Canonical Disconfirm-Wave Prompt Skeleton (SINGLE SOURCE — `thesis.md` Step 2b dispatches this)
 
