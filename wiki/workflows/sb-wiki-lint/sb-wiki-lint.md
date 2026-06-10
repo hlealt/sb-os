@@ -45,15 +45,10 @@ These files codify rules referenced across multiple `sb-wiki-*` workflows. Load 
 
 This workflow is read-mostly by contract. Auto-applied writes are SCOPED to index sync only. Subdivision execution writes (step 7.5) are USER-GATED — only on explicit accept at step 9.
 
+The auto-applied index-sync writes (re-sync `My take`, renumber footnotes, create/maintain raw + wiki leaf indexes, fill concept/entity `Description` cells, type-tag sync, prune the `logs/` files) are owned SOLELY by their step bodies — Steps 6, 7, and 8 are the sole scope authority for each; this table does NOT restate them. Only the questions-layer skip-if-absent rows and the USER-GATED executor rows below carry authorization semantics not fully resolved inside a single step:
+
 | Write | Scope | Authorization |
 |-------|-------|--------------|
-| Re-sync wiki sources `My take` column from each source page (step 6) | `{wiki_root}/wiki/sources/{origin}/{origin}.md` | Auto-applied — no user diff |
-| Renumber footnotes — safe bijections only; stale-def removal is REPORT-ONLY per `../shared/citation-format.md` (step 6) | Per source page touched | Auto-applied — no user diff |
-| Create missing raw `{origin}.md` indexes; add missing rows with `Wiki = No` default (step 7) | `{wiki_root}/raw/{origin}/{origin}.md`, `{wiki_root}/raw/studies/studies.md` | Auto-applied — no user diff |
-| Create missing wiki leaf indexes (`concepts.md`, `entities.md`, `topics.md`) (step 7) | `{wiki_root}/wiki/concepts/concepts.md`, `entities/entities.md`, `topics/topics.md` | Auto-applied — no user diff |
-| Fill concept/entity `Description` cells from each page's lead definition sentence; weak pages (no clean lead sentence) reported, never written (step 7) | concept/entity leaf indexes + router `## Flat pages` tables under `{wiki_root}/wiki/{concepts,entities}/` | Auto-applied — no user diff |
-| Type-tag sync (step 7) — append each page's `type:` value to its `tags:` frontmatter when absent (append-only, user tags preserved); add `type: index` + `tags: [index]` to index files missing `type:` | Every page under `{wiki_root}/wiki/` | Auto-applied — no user diff |
-| Prune spent/retired entries from the `logs/` files (step 8) — delete `candidate-topic`/`candidate-mention`/`proposed-new-thesis` entries whose page now exists, and delete retired history entries; NEVER prune a `speculative-thesis-update` | `{wiki_root}/logs/*.md` | Auto-applied — no user diff |
 | Prune promoted/retired entries from `questions.md` (step 8) — delete entries whose matching wiki page now exists (promoted) or that the user retired, by the same "page exists" test as the `candidate-mention` prune | `{wiki_root}/questions.md` | Auto-applied — no user diff. Skipped entirely when `questions.md` is absent |
 | Regenerate `open-gaps.md` wholesale (step 8.5) — overwrite the read-only cross-wiki aggregate of all open questions (both homes) | `{wiki_root}/open-gaps.md` | Auto-applied — no user diff. ALWAYS emitted (empty-state file when nothing to aggregate); never skipped |
 | Folder subdivision execution (step 7.5) — create `{type}/{subfolder}/`, leaf index, marker-block CLAUDE.md, rewrite parent index as router, MOVE pages | `{wiki_root}/wiki/{concepts,entities}/...` | USER-GATED — executed only on `accept` at step 9 |
@@ -63,7 +58,7 @@ This workflow is read-mostly by contract. Auto-applied writes are SCOPED to inde
 | Broken-link bucket-A fix execution (step 9 LINK-FIX PROPOSAL) — rewrite `[[old…]]`→`[[new…]]` wikilinks via `--execute-link-fixes` | wikilink text inside `{wiki_root}/wiki/**` pages (`#anchor`/`\|alias` preserved); NEVER `raw/` | USER-GATED — executed only on `accept` at step 9 |
 | Missing-page bucket-B stub authoring (step 9 MISSING-PAGE PROPOSAL) — author a web-verified stub per `../shared/stub-policy.md` for an accepted genuinely-missing target | `{wiki_root}/wiki/concepts/` or `entities/` (matching `kind:` subfolder) | USER-GATED — authored only on `accept` at step 9 |
 
-NEVER edit page bodies, frontmatter (other than `last-touched` on indexes and on pages moved by subdivision, the append-only type-tag sync per step 7, and wikilink-target rewrites performed by a user-accepted PDF title-conformance rename per step 7.6), or any user-authored content from this workflow. NEVER delete pages. NEVER write a `lint` entry — lint findings live in the report only. The `logs/` files are actionable queues (`candidate-topic`, `candidate-mention`, `proposed-new-thesis`, `speculative-thesis-update`); lint MAY delete entries that are spent (page exists — for `candidate-topic`/`candidate-mention`/`proposed-new-thesis`) or retired (history types), but NEVER edits the body of an entry it keeps, NEVER auto-deletes a `candidate-mention` whose page does not yet exist, and NEVER auto-prunes a `speculative-thesis-update` at all (it ages + surfaces it — the page already exists, so "page exists" is not a resolution signal). `questions.md` is the parallel user queue: lint MAY delete an entry that is promoted (matching wiki page now exists) or retired (by the same "page exists" test the `candidate-mention` prune uses), but NEVER edits the body of a kept entry and NEVER prunes a merely-answered entry that has not yet graduated. `open-gaps.md` is lint-generated and READ-ONLY — lint OVERWRITES it wholesale each run; the user's edits to it are not preserved.
+NEVER edit page bodies, frontmatter (other than `last-touched` on indexes and on pages moved by subdivision, the append-only type-tag sync per step 7, and wikilink-target rewrites performed by a user-accepted PDF title-conformance rename per step 7.6), or any user-authored content from this workflow. NEVER delete pages. NEVER write a `lint` entry — lint findings live in the report only. Lint's ONLY writes to the `logs/*.md` and `questions.md` queues are the prunes Step 8 itemizes — it never edits the body of an entry it keeps. `open-gaps.md` is lint-generated and READ-ONLY — lint OVERWRITES it wholesale each run; the user's edits to it are not preserved.
 
 **`raw/_assets/` is OUT OF SCOPE for this workflow.** No reads, no writes, no walks, no index creation, no orphan-detection participation, no filename validation. The folder is user-maintained via Obsidian's "Download attachments for current file" command (per `../shared/folder-structure.md` "Asset Folder" and schema § "Asset folder"). Treat it as if it were not present in the tree. Same exclusion applies to any pre-existing legacy asset folder nested under a specific origin (e.g., `raw/mails/assets/`) — user-owned, untouched.
 
@@ -178,15 +173,7 @@ For each `{wiki_root}/wiki/sources/{origin}/` directory (including `studies/`):
 
 1. Read `{origin}.md` (or `studies.md`). Header format per `../shared/index-formats.md` "Wiki Sources Index" section: `| File | What it says | My take |`.
 2. For each row, locate the source page at `{wiki_root}/wiki/sources/{origin}/{filename}`. Read the page's `My take` section.
-3. Apply the three-state re-sync rule per `../shared/index-formats.md` "`My take` Cell — Three States" section. **NEVER leave the cell blank** — every row carries `pending`, `—`, or a 1-sentence reflected preview.
-
-   | Source page's `My take` body | Current cell value | Action |
-   |------------------------------|--------------------|--------|
-   | Has substantive content | Any | Write 1-sentence reflected preview (≤280 chars; truncate with ellipsis; table-safe — flatten wikilinks to display text BEFORE truncating, escape remaining literal `\|`), overwriting prior cell value |
-   | Empty | `—` | Preserve `—` (final, do NOT age out) |
-   | Empty | `pending` | Preserve `pending` |
-   | Empty | Anything else (legacy blank, stray content) | Write `pending` (default to action-pending; safer to over-prompt than to over-finalize) |
-
+3. Apply the three-state re-sync rule per `../shared/index-formats.md` "`My take` Cell — Three States (NEVER blank)" section — the four lint-step-6 re-sync rows of its **Write rules** table are the sole authority for which value to write given the source page's `My take` body and the current cell value (table-safety for reflected previews per the same section). **NEVER leave the cell blank** — every row carries `pending`, `—`, or a 1-sentence reflected preview.
 4. The source page is canonical. NEVER modify the source page's `My take` content.
 5. Capture `sources-resynced` count for the LINT REPORT.
 

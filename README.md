@@ -158,7 +158,7 @@ Two install paths persist in `sb-os.json` and resolve at runtime — never hardc
 
 Edit `sb-os.json` directly to change either — every sb-os component reads them from the manifest.
 
-The wiki also supports an optional `{wiki_root}/purpose.md` focus lens for `/sb-wiki-ingest` — start from [`wiki/workflows/shared/purpose-template.md`](./wiki/workflows/shared/purpose-template.md); full behavior in the installed `{wiki_root}/CLAUDE.md` § "Regulatory Layer — purpose.md".
+The wiki also supports an optional `{wiki_root}/purpose.md` focus lens for `/sb-wiki-ingest` — start from [`wiki/docs/purpose-template.md`](./wiki/docs/purpose-template.md); full behavior in the installed `{wiki_root}/CLAUDE.md` § "Regulatory Layer — purpose.md".
 
 ## Customization model
 

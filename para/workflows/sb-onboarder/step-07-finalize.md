@@ -27,7 +27,7 @@ Suggested prompts (skip any that don't apply):
 
 Build a small table from the user's answers.
 
-If the wiki module is installed, tell the user they MAY create an optional `{wiki_root}/purpose.md` focus lens for `/sb-wiki-ingest` — start from `3-resources/tools/sb-os/wiki/workflows/shared/purpose-template.md`; full behavior in `3-resources/tools/sb-os/wiki/docs/wiki-schema.md` § "Regulatory layer — purpose.md".
+If the wiki module is installed, tell the user they MAY create an optional `{wiki_root}/purpose.md` focus lens for `/sb-wiki-ingest` — start from `3-resources/tools/sb-os/wiki/docs/purpose-template.md`; full behavior in `3-resources/tools/sb-os/wiki/docs/wiki-schema.md` § "Regulatory layer — purpose.md".
 
 ### 2. Append to root CLAUDE.md
 
