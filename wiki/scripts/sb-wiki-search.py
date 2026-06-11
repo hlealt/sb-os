@@ -43,7 +43,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 DEFAULT_MODEL = "voyage-3.5"
+DEFAULT_RERANK_MODEL = "rerank-2.5"
 EMBED_URL = "https://api.voyageai.com/v1/embeddings"
+RERANK_URL = "https://api.voyageai.com/v1/rerank"
 EMBED_BATCH_TEXTS = 96
 EMBED_BATCH_CHARS = 240_000
 MAX_CHUNK_CHARS = 6_000
@@ -389,8 +391,14 @@ def _vector_candidates(conn: sqlite3.Connection, query_vec: list[float], limit: 
         return [chunk_id for _, chunk_id in scored[:limit]]
 
 
+def _hit(path: str, anchor: str, text: str, score: float) -> dict:
+    snippet = " ".join(text.split())[:240]
+    return {"path": path, "anchor": anchor, "score": round(score, 6), "snippet": snippet}
+
+
 def search_index(conn: sqlite3.Connection, query: str, embedder=None,
-                 k: int = 8, type_filter: list | None = None) -> list[dict]:
+                 k: int = 8, type_filter: list | None = None,
+                 reranker=None) -> list[dict]:
     rankings = []
     fts = _fts_candidates(conn, query, CANDIDATES_PER_ARM)
     if fts:
@@ -407,7 +415,7 @@ def search_index(conn: sqlite3.Connection, query: str, embedder=None,
     if type_filter:
         prefixes = tuple(TYPE_PREFIXES[t] for t in type_filter)
 
-    results: list[dict] = []
+    candidates: list[dict] = []
     for chunk_id, score in rrf_fuse(rankings):
         row = conn.execute(
             "SELECT path, anchor, text FROM chunks WHERE id=?", (chunk_id,)
@@ -417,12 +425,35 @@ def search_index(conn: sqlite3.Connection, query: str, embedder=None,
         path, anchor, text = row
         if prefixes and not path.startswith(prefixes):
             continue
-        snippet = " ".join(text.split())[:240]
-        results.append({"path": path, "anchor": anchor,
-                        "score": round(score, 6), "snippet": snippet})
-        if len(results) >= k:
-            break
-    return results
+        candidates.append({"path": path, "anchor": anchor, "text": text, "score": score})
+
+    if reranker is not None and candidates:
+        try:
+            rows = reranker(query, [c["text"] for c in candidates], len(candidates))
+            results: list[dict] = []
+            seen: set[int] = set()
+            for row in rows:
+                index = int(row["index"])
+                if index < 0 or index >= len(candidates) or index in seen:
+                    continue
+                seen.add(index)
+                candidate = candidates[index]
+                score = float(row["relevance_score"])
+                results.append(_hit(candidate["path"], candidate["anchor"], candidate["text"], score))
+                if len(results) >= k:
+                    return results
+            for index, candidate in enumerate(candidates):
+                if index in seen:
+                    continue
+                results.append(_hit(candidate["path"], candidate["anchor"],
+                                    candidate["text"], candidate["score"]))
+                if len(results) >= k:
+                    return results
+            return results
+        except Exception as err:
+            print(f"voyage rerank unavailable; using RRF order ({err})", file=sys.stderr)
+
+    return [_hit(c["path"], c["anchor"], c["text"], c["score"]) for c in candidates[:k]]
 
 
 # ---------------------------------------------------------------- voyage
@@ -466,6 +497,38 @@ def make_voyage_embedder(api_key: str, model: str = DEFAULT_MODEL):
     return embed
 
 
+def make_voyage_reranker(api_key: str, model: str = DEFAULT_RERANK_MODEL):
+    def rerank(query: str, documents: list[str], top_k: int) -> list[dict]:
+        payload = json.dumps(
+            {"query": query, "documents": documents, "model": model, "top_k": top_k}
+        ).encode("utf-8")
+        request = urllib.request.Request(
+            RERANK_URL, data=payload,
+            headers={"Authorization": f"Bearer {api_key}",
+                     "Content-Type": "application/json"},
+        )
+        last_error: Exception | None = None
+        for attempt in range(1, 7):
+            try:
+                with urllib.request.urlopen(request, timeout=120) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                return data["data"]
+            except urllib.error.HTTPError as err:
+                last_error = err
+                if err.code not in (429, 500, 502, 503, 529):
+                    raise RuntimeError(
+                        f"Voyage rerank API error {err.code}: "
+                        f"{err.read().decode(errors='replace')[:300]}")
+                retry_after = err.headers.get("Retry-After") if err.headers else None
+                wait = min(float(retry_after) if retry_after else 2 ** attempt, 65.0)
+            except (urllib.error.URLError, TimeoutError) as err:
+                last_error = err
+                wait = min(2 ** attempt, 65.0)
+            time.sleep(wait)
+        raise RuntimeError(f"Voyage rerank API unreachable after 6 attempts: {last_error}")
+    return rerank
+
+
 # ---------------------------------------------------------------- CLI
 
 def _default_db(wiki_root: Path) -> Path:
@@ -505,6 +568,9 @@ def main() -> int:
     p_search.add_argument("--type", help="comma-separated: concept,entity,topic,source,thesis,decision")
     p_search.add_argument("--json", action="store_true")
     p_search.add_argument("--no-sync", action="store_true", help="skip the freshness sync")
+    p_search.add_argument("--no-rerank", action="store_true",
+                          help="skip Voyage rerank and return RRF-fused order")
+    p_search.add_argument("--rerank-model", default=DEFAULT_RERANK_MODEL)
 
     sub.add_parser("status", help="index freshness + mode as JSON")
 
@@ -562,8 +628,11 @@ def main() -> int:
                       f"files, {counts['embedded']} chunks embedded", file=sys.stderr)
         type_filter = [t.strip() for t in args.type.split(",")] if args.type else None
         try:
+            reranker = None
+            if api_key and not args.no_rerank:
+                reranker = make_voyage_reranker(api_key, args.rerank_model)
             hits = search_index(conn, args.query, embedder=embedder, k=args.k,
-                                type_filter=type_filter)
+                                type_filter=type_filter, reranker=reranker)
         except KeyError as err:
             print(f"unknown --type {err}; valid: {', '.join(TYPE_PREFIXES)}", file=sys.stderr)
             return 1

@@ -867,6 +867,7 @@ Multi-call operations (e.g. an ingest probing several stub-candidates): the FIRS
 | Read-only | The script only READS wiki content. It never writes a wiki page, index cell, or queue entry — judgment-bearing cells stay LLM-owned per the lint contract. |
 | Installer | `install.py` never creates, reads, or writes the index artifact (installer scope guarantee unchanged). Lint never walks it (`.sb-wiki-search/` is a root-level dot-folder sibling of `wiki/` and `raw/`, outside both lint subtrees). |
 | Privacy | With a Voyage key available, page text is sent to the Voyage API to be embedded. Key absent → FTS5-only mode and nothing leaves the machine. |
+| Rerank stage | When a Voyage key is available, `search` sends the full RRF-fused candidate window to Voyage `rerank-2.5` by default and returns the top `--k` hits ordered by rerank relevance score. `--no-rerank`, missing key, or rerank API failure → exact RRF order with the existing exit behavior. |
 | Failure | Script missing, Python missing, or exit code 2 (unresolvable `wiki_root`) → consumers drop to the deterministic floor silently. A search error NEVER aborts the consuming operation. |
 
 ### Consumers
