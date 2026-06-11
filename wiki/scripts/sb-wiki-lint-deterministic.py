@@ -173,6 +173,7 @@ RETIRED_LOG_TYPES = {
 }
 LOG_HEADER_RE = re.compile(r"^## \[([^\]]+)\]\s+([a-z0-9-]+)\s*\|\s*(.*)$")
 STUB_AGE_FLOOR_DAYS = 30
+CANDIDATE_AGE_FLOOR_DAYS = 7
 SOURCE_AGENT_HALF = {"Substance", "Notable quotes", "Connections"}
 
 
@@ -999,7 +1000,12 @@ def split_log_blocks(text: str) -> tuple[str, list[str]]:
     return "".join(preamble), ["".join(b) for b in blocks]
 
 
-def scan_log(wiki_root: Path, report: Report, prune: bool) -> None:
+def scan_log(
+    wiki_root: Path,
+    report: Report,
+    prune: bool,
+    candidate_age_floor: int = CANDIDATE_AGE_FLOOR_DAYS,
+) -> None:
     """Prune-test every entry across the split logs under {wiki_root}/logs/.
 
     Each entry carries its type in its own H2 header, so the scanner walks every
@@ -1010,6 +1016,13 @@ def scan_log(wiki_root: Path, report: Report, prune: bool) -> None:
       - speculative-thesis-update -> NEVER auto-pruned; aged + surfaced as
         "awaiting investor decision" (the page already exists, so there is no
         "page exists" resolution signal — DEC-2).
+
+    Unpromoted candidate-topics aged AT OR ABOVE ``candidate_age_floor`` days
+    (default CANDIDATE_AGE_FLOOR_DAYS; 0 = every pending candidate) surface in
+    ``detected.log_aging_candidate_topics`` — they feed the lint step-4 aging
+    line and the step-9 CANDIDATE-TOPIC PROMOTION block. Candidate-topic
+    headers with no parseable ``YYYY-MM-DD`` date cannot be aged and surface
+    in ``detected.log_unparseable_timestamps`` (kept, report-only).
     """
     logs_dir = wiki_root / "logs"
     if not os.path.exists(_fspath(logs_dir)):
@@ -1020,6 +1033,7 @@ def scan_log(wiki_root: Path, report: Report, prune: bool) -> None:
     unknown: list[str] = []
     retired: list[str] = []
     awaiting: list[dict[str, object]] = []
+    unparseable: list[str] = []
     pruned_spent = 0
     pruned_retired = 0
     for log_path in sorted(logs_dir.glob("*.md")):
@@ -1079,8 +1093,18 @@ def scan_log(wiki_root: Path, report: Report, prune: bool) -> None:
                 date_match = re.match(r"(\d{4}-\d{2}-\d{2})", timestamp)
                 if date_match:
                     age = (today() - datetime.date.fromisoformat(date_match.group(1))).days
-                    if age > STUB_AGE_FLOOR_DAYS:
-                        aging.append({"slug": brief, "logged": date_match.group(1), "age_days": age})
+                    if age >= candidate_age_floor:
+                        trigger_match = re.search(r"^- trigger:\s*(.+)$", block, flags=re.M)
+                        aging.append(
+                            {
+                                "slug": brief,
+                                "logged": date_match.group(1),
+                                "age_days": age,
+                                "trigger": trigger_match.group(1).strip() if trigger_match else None,
+                            }
+                        )
+                else:
+                    unparseable.append(header)
             keep.append(block)
         if prune and (file_spent or file_retired):
             write_text(log_path, preamble + "".join(keep), report, apply_changes=True)
@@ -1090,6 +1114,7 @@ def scan_log(wiki_root: Path, report: Report, prune: bool) -> None:
     report.detected["log_retired_entries"] = retired
     report.detected["log_unknown_type_entries"] = unknown
     report.detected["log_aging_candidate_topics"] = aging
+    report.detected["log_unparseable_timestamps"] = unparseable
     report.detected["log_awaiting_thesis_decisions"] = awaiting
     if prune and (pruned_spent or pruned_retired):
         report.detected["log_pruned"] = {"spent": pruned_spent, "retired": pruned_retired}
@@ -2203,6 +2228,16 @@ def main() -> int:
         help="delete spent/retired logs/*.md entries (lint-contract-authorized prune)",
     )
     parser.add_argument(
+        "--candidate-age-floor",
+        type=int,
+        default=CANDIDATE_AGE_FLOOR_DAYS,
+        metavar="DAYS",
+        help=(
+            "age floor (days) at/above which an unpromoted candidate-topic "
+            "surfaces as aged (0 = every pending candidate)"
+        ),
+    )
+    parser.add_argument(
         "--execute-renames",
         type=Path,
         metavar="PLAN_JSON",
@@ -2280,7 +2315,12 @@ def main() -> int:
         detect_broken_wikilinks(wiki_root, report)
         detect_disputed_callouts(wiki_root, report)
         detect_subdivision(wiki_root, report)
-        scan_log(wiki_root, report, prune=args.prune_log)
+        scan_log(
+            wiki_root,
+            report,
+            prune=args.prune_log,
+            candidate_age_floor=args.candidate_age_floor,
+        )
         check_questions_links(wiki_root, report)
         structural_walk(wiki_root, report, args.apply)
         detect_pdf_title_conformance(wiki_root, report)
