@@ -39,8 +39,12 @@ LEAF_INDEX_FRONTMATTER = "---\ntype: index\n---\n\n"
 STATE_SCHEMA_VERSION = "1.0"
 
 # ---------------------------------------------------------------------------
-# Token-overlap algorithm (Step 3·7b spec)
+# Token-overlap algorithm (Step 3·7b spec) — DEGRADE path only (D11)
 # ---------------------------------------------------------------------------
+# Callers (ingest 3·7b/3·7c, lint 7.7a) fire this signal ONLY when the semantic
+# tier is unavailable; semantic membership is primary when Voyage is up. The
+# tokenization rule below is UNCHANGED (stopword list NOT patched — D11) and
+# stays byte-consistent with the binding 3·7b prose.
 
 _STOPWORDS = {
     "the", "a", "an", "of", "for", "in", "on", "and", "or", "to",
