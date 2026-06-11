@@ -27,6 +27,7 @@ import hashlib
 import subprocess
 import sys
 import unicodedata
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -175,6 +176,18 @@ LOG_HEADER_RE = re.compile(r"^## \[([^\]]+)\]\s+([a-z0-9-]+)\s*\|\s*(.*)$")
 STUB_AGE_FLOOR_DAYS = 30
 CANDIDATE_AGE_FLOOR_DAYS = 7
 SOURCE_AGENT_HALF = {"Substance", "Notable quotes", "Connections"}
+
+# Firm-match relevance (update-backfill gather). A firm row fires because the
+# source's `## Substance` wikilinks a concept the topic lists in its `## Key
+# concepts` / `## Key entities`. Not all such matches are equally meaningful: a
+# match on a HUB concept (appears in dozens of sources) is incidental, while a
+# match on a RARE, topic-specific concept is strong. The gather recomputes each
+# firm row's overlap concept(s) and scores by SOURCE DOCUMENT FREQUENCY — how
+# many source pages mention it. `weak` = the rarest shared concept still appears
+# in >= FIRM_RELEVANCE_WEAK_T sources. ADVISORY ONLY — never drops a firm row
+# (total-coverage invariant). Configurable via `--weak-threshold`. Default 25 is
+# the p75 calibration from the 2026-06-10 backfill run.
+FIRM_RELEVANCE_WEAK_T = 25
 
 
 @dataclass
@@ -1831,6 +1844,15 @@ def cmd_update_backfill_gather(args_list: list[str]) -> int:
         help="Firm-only gather — skip the per-source semantic probe loop. Use for "
              "cheap incremental testing or when Voyage is intentionally not consulted.",
     )
+    parser.add_argument(
+        "--weak-threshold",
+        type=int,
+        default=FIRM_RELEVANCE_WEAK_T,
+        help="Firm-match relevance: a firm row is flagged `weak` (hub-concept, "
+             "advisory) when its rarest shared concept appears in >= this many "
+             f"source pages. Default {FIRM_RELEVANCE_WEAK_T} (p75 calibration, "
+             "2026-06-10 run). NEVER drops a row — total-coverage invariant.",
+    )
     args = parser.parse_args(args_list)
     wiki_root = resolve_wiki_root(args.vault_root.resolve())
 
@@ -1882,6 +1904,18 @@ def cmd_update_backfill_gather(args_list: list[str]) -> int:
     firm_candidates: list[dict] = []
     topic_slugs_sorted: list[str] = sorted(p.stem for p in topic_pages)
 
+    # Relevance-scoring caches, accumulated DURING the firm sweep (no second
+    # corpus walk). `src_df` counts SOURCE document frequency for every concept
+    # any source's `## Substance` wikilinks — across ALL source pages, including
+    # sources that produce no firm candidate (the sweep visits every source, so
+    # the count is corpus-complete). `src_substance_links` / `topic_key_links`
+    # cache the exact link sets a firm row's overlap is recomputed from. Links
+    # are stored normalized (lowercased, `.md`-stripped) so DF counting and
+    # overlap are stable under case/extension drift. See `_compute_firm_relevance`.
+    src_df: Counter = Counter()
+    src_substance_links: dict[str, set[str]] = {}
+    topic_key_links: dict[str, set[str]] = {}
+
     for src_page in source_pages:
         src_text = read_text(src_page)
         src_fm = frontmatter(src_text)
@@ -1893,6 +1927,13 @@ def cmd_update_backfill_gather(args_list: list[str]) -> int:
         substance_links = set(re.findall(r"\[\[([^\]|]+?\.md)\]\]", substance)) if substance else set()
         substance_text_lower = substance.lower() if substance else ""
         src_title_lower = src_title.lower()
+
+        # Accumulate relevance caches (once per source). Normalize links so the
+        # DF map and per-row overlap are computed in one canonical space.
+        substance_links_norm = {_norm_link(l) for l in substance_links}
+        src_substance_links[src_rel] = substance_links_norm
+        for link in substance_links_norm:
+            src_df[link] += 1
 
         for topic_stem in topic_slugs_sorted:
             # Citation-dedupe applies to ALL tiers (spec row 6 names it in the
@@ -1917,6 +1958,11 @@ def cmd_update_backfill_gather(args_list: list[str]) -> int:
                     topic_fm = frontmatter(topic_text)
                     related_links = _parse_related_frontmatter(topic_fm)
                     key_sections = _extract_key_section_links(topic_text)
+                    # Cache the normalized Key-section links for relevance
+                    # recompute (related: links are NOT scored — relevance is a
+                    # key-concept-overlap signal, matching the reference).
+                    if topic_stem not in topic_key_links:
+                        topic_key_links[topic_stem] = {_norm_link(l) for l in key_sections}
                     if substance_links & key_sections:
                         match_types.append("key-concept-overlap")
                     if substance_links & related_links:
@@ -1930,6 +1976,16 @@ def cmd_update_backfill_gather(args_list: list[str]) -> int:
                     "signal": "firm:" + ",".join(match_types),
                     "match_types": match_types,
                 })
+
+    # --- Firm-match relevance (advisory; never drops a row) ---
+    # Recompute each firm row's overlap concept(s) and score by source DF. The
+    # `Match`/`Rel` columns + strongest->weakest sort the artifact assembler
+    # renders read from this `relevance` field. WEAK_T is the `--weak-threshold`.
+    _compute_firm_relevance(
+        firm_candidates, src_df, src_substance_links, topic_key_links,
+        weak_t=args.weak_threshold,
+    )
+    weak_firm = sum(1 for c in firm_candidates if c["relevance"]["weak"])
 
     # --- Semantic probe loop (tier-gated) ---
     semantic_candidates: list[dict] = []
@@ -2013,6 +2069,8 @@ def cmd_update_backfill_gather(args_list: list[str]) -> int:
         "semantic_candidates": semantic_candidates,
         "firm_count": len(firm_candidates),
         "semantic_count": len(semantic_candidates),
+        "firm_weak_count": weak_firm,
+        "firm_relevance_weak_threshold": args.weak_threshold,
         "total_sources_scanned": len(source_pages),
         "total_topics_evaluated": len(topic_pages),
         "tier_available": tier_available,
@@ -2165,6 +2223,76 @@ def _make_substance_digest(substance: str | None) -> str:
     return " ".join(sentences[:2])
 
 
+def _norm_link(link: str) -> str:
+    """Normalize a wikilink target for relevance DF counting / overlap.
+
+    Lowercase, strip a trailing `.md`, and fold smart quotes / en/em dashes to
+    their ASCII twins so the same concept counts once across case/quote drift
+    (mirrors the reference `firm-match-relevance.py` `norm` + the quote fold the
+    corpus carries in curly-quote filenames). Pure string op — no I/O.
+    """
+    s = unicodedata.normalize("NFC", link).strip()
+    s = (s.replace("’", "'").replace("‘", "'")
+          .replace("“", '"').replace("”", '"')
+          .replace("–", "-").replace("—", "-"))
+    return s.lower().removesuffix(".md")
+
+
+def _compute_firm_relevance(
+    firm_candidates: list[dict],
+    src_df: "Counter",
+    src_substance_links: dict[str, set[str]],
+    topic_key_links: dict[str, set[str]],
+    weak_t: int,
+) -> None:
+    """Annotate each firm candidate IN PLACE with a `relevance` field.
+
+    A firm row fires because the source's `## Substance` wikilinks a concept the
+    topic lists in `## Key concepts` / `## Key entities`. Score each row by the
+    SOURCE DOCUMENT FREQUENCY of its overlap concept(s) — a match on a hub
+    concept (appears in many sources) is incidental; a match on a rare,
+    topic-specific concept is strong:
+
+        overlap   = source.substance_links ∩ topic.key_section_links
+        min_df    = min(src_df[c] for c in overlap)     # rarest shared concept's DF
+        best      = the overlap concept with that min DF (the `Match` concept)
+        weak      = min_df >= weak_t                     # rarest shared still common
+
+    ADVISORY ONLY — never drops a row (total-coverage invariant). Each annotation
+    carries everything the artifact assembler needs for the `Match`/`Rel` columns
+    and the strongest->weakest sort: the `Match` concept, its DF, the full
+    overlap set, the `min_df` sort key, and the `weak` flag. A firm row with NO
+    recomputed overlap (a pure slug-match row, or a related-frontmatter-only row)
+    has no key-concept signal to score: it gets `overlap: []`, `min_df: None`,
+    `weak: False` (an unscored row is NEVER auto-weak), and sorts LAST within its
+    topic (treated as min_df = +inf by the assembler's documented sort rule).
+    """
+    for cand in firm_candidates:
+        sub_links = src_substance_links.get(cand["source"], set())
+        key_links = topic_key_links.get(Path(cand["topic"]).stem, set())
+        overlap = sorted(sub_links & key_links)
+        if overlap:
+            best = min(overlap, key=lambda c: src_df.get(c, 0))
+            min_df = src_df.get(best, 0)
+            weak = min_df >= weak_t
+            cand["relevance"] = {
+                "overlap": overlap,
+                "match_concept": best,
+                "match_df": min_df,
+                "min_df": min_df,
+                "weak": weak,
+            }
+        else:
+            # No key-concept overlap to score (slug-only / related-only row).
+            cand["relevance"] = {
+                "overlap": [],
+                "match_concept": None,
+                "match_df": None,
+                "min_df": None,
+                "weak": False,
+            }
+
+
 def _call_search_helper(wiki_root: Path, query: str, k: int = 5, topic_only: bool = False) -> dict | None:
     """Call the search helper for a semantic probe.
 
@@ -2211,9 +2339,135 @@ def resolve_wiki_root(vault_root: Path) -> Path:
     return vault_root / manifest["wiki_root"]
 
 
+def _parse_artifact_pending_pairs(text: str) -> set[tuple[str, str]]:
+    """Parse drafted (source, topic) pairs from a pending-topic-updates.md table.
+
+    Reads ONLY the `## Pending topic updates` section's table rows (stops at the
+    next `##` heading — the rejected ledger is a different section with a
+    different shape). A pending row is `| source page | target topic | signal |
+    ...`. The source/topic cells are folded with `_norm_link`-equivalent
+    normalization for stable matching against the gather's pair set (smart-quote
+    / case / `.md` drift). Returns the set of (folded source-rel, folded
+    topic-name) pairs. Code-fence backticks around a cell are stripped.
+    """
+    pairs: set[tuple[str, str]] = set()
+    in_pending = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("##"):
+            in_pending = stripped.lower().startswith("## pending topic updates")
+            continue
+        if not in_pending or not stripped.startswith("|"):
+            continue
+        cells = [c.strip().strip("`").strip() for c in stripped.strip("|").split("|")]
+        if len(cells) < 2:
+            continue
+        src, topic = cells[0], cells[1]
+        if not src or src.lower() in ("source page", "---") or set(src) <= {"-"}:
+            continue  # header / separator row
+        pairs.add((_norm_pair_cell(src), _norm_pair_cell(topic)))
+    return pairs
+
+
+def _norm_pair_cell(cell: str) -> str:
+    """Normalize a source/topic cell for pair identity (case/quote/dash fold)."""
+    s = unicodedata.normalize("NFC", cell).strip()
+    s = (s.replace("’", "'").replace("‘", "'")
+          .replace("“", '"').replace("”", '"')
+          .replace("–", "-").replace("—", "-"))
+    return s.lower()
+
+
+def cmd_update_backfill_reconcile(args_list: list[str]) -> int:
+    """Coverage gate — reconcile a drafted artifact against the gather's firm set.
+
+    The firm tier is TOTAL-COVERAGE: every firm (source, topic) pair the gather
+    emitted MUST be drafted in the artifact, OR accounted for as already-cited
+    (citation staleness between gather and draft). A firm pair that is neither is
+    an UNEXPLAINED GAP — the silent-drop defect class this gate exists to catch
+    (2026-06-10: ~107 of 351 firm rows silently dropped under large per-subagent
+    source lists). Deterministic, pair-keyed — does NOT depend on the drafting
+    agent remembering to chunk or self-count.
+
+    Inputs: --gather <gather JSON>, --artifact <drafted pending-topic-updates.md>.
+    Emits a JSON coverage report (counts + the explicit gap/staleness lists).
+    Exit 1 if ANY firm pair is an unexplained gap; exit 0 when coverage is total.
+    Read-only — writes nothing under wiki/ and never touches the artifact.
+    """
+    parser = argparse.ArgumentParser(
+        description="Backfill coverage gate — drafted ∪ accounted == gather firm set."
+    )
+    parser.add_argument("--vault-root", type=Path, default=Path.cwd())
+    parser.add_argument("--gather", type=Path, required=True,
+                        help="gather JSON (from update-backfill-gather --output)")
+    parser.add_argument("--artifact", type=Path, required=True,
+                        help="drafted pending-topic-updates.md to reconcile")
+    parser.add_argument("--output", type=Path, default=None,
+                        help="write the coverage report JSON here instead of stdout")
+    args = parser.parse_args(args_list)
+    wiki_root = resolve_wiki_root(args.vault_root.resolve())
+
+    gather = json.loads(read_text(args.gather))
+    firm = gather.get("firm_candidates", [])
+    # Expected firm pair set, normalized to the artifact's pair space.
+    expected: dict[tuple[str, str], dict] = {}
+    for c in firm:
+        key = (_norm_pair_cell(c["source"]), _norm_pair_cell(c["topic"]))
+        expected[key] = c
+
+    drafted = _parse_artifact_pending_pairs(read_text(args.artifact))
+
+    # Citation map for staleness accounting: a firm pair absent from the draft is
+    # JUSTIFIED only if the topic page now cites the source (the information is
+    # already on the page — citation-dedupe would suppress it on a fresh gather).
+    citation_map = _build_topic_citation_map(wiki_root)
+
+    drafted_firm: list[list[str]] = []
+    staleness_accounted: list[list[str]] = []
+    unexplained_gaps: list[list[str]] = []
+    for key, cand in sorted(expected.items()):
+        if key in drafted:
+            drafted_firm.append(list(key))
+            continue
+        # Not drafted — is it justified by staleness (topic now cites source)?
+        topic_stem = Path(cand["topic"]).stem
+        src_filename = Path(cand["source"]).name
+        if src_filename in citation_map.get(topic_stem, set()):
+            staleness_accounted.append(list(key))
+        else:
+            unexplained_gaps.append([cand["source"], cand["topic"]])
+
+    report = {
+        "firm_expected": len(expected),
+        "firm_drafted": len(drafted_firm),
+        "staleness_accounted": len(staleness_accounted),
+        "unexplained_gaps": len(unexplained_gaps),
+        "coverage_total": not unexplained_gaps,
+        "gap_pairs": unexplained_gaps,
+        "staleness_pairs": staleness_accounted,
+    }
+    output = json.dumps(report, indent=2, ensure_ascii=False)
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(output + "\n", encoding="utf-8")
+    else:
+        print(output)
+    if unexplained_gaps:
+        print(
+            f"[update-backfill-reconcile] COVERAGE GATE FAILED: "
+            f"{len(unexplained_gaps)} firm pair(s) neither drafted nor "
+            f"citation-accounted — re-draft these before writing the artifact.",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
 def main() -> int:
     if len(sys.argv) > 1 and sys.argv[1] == "update-backfill-gather":
         return cmd_update_backfill_gather(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "update-backfill-reconcile":
+        return cmd_update_backfill_reconcile(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "open-gaps":
         return cmd_open_gaps(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "sweep-gather":

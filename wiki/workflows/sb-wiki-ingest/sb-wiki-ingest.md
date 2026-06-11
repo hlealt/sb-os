@@ -61,6 +61,7 @@ Optional-feature machinery lives in `extensions/` and loads ONLY when its featur
 | `extensions/silent-mode.md` | `silent` keyword present at invocation | Boot (before Step 1) | Silent Mode gate + Step 1, 1.5, 1.7, 10, 11 silent overrides |
 | `extensions/questions-layer.md` | `{wiki_root}/questions.md` present and parseable | Step 0.6 gate | Step 0.6 (load questions) + Step 3·7c (answer-scan) |
 | `extensions/purpose-lens.md` | `{wiki_root}/purpose.md` present and parseable (lens ON, decided at Step 0.5) | Step 0.5 (lens ON) | Step 2 (classify + depth dial), Step 3 clause 5b, Step 3·7b (ranking), Step 10 (Stage 1 presentation) |
+| `extensions/light-path.md` | Interactive mode (`silent` keyword ABSENT) AND source meets all three qualifying criteria (Markdown, ≤ 300 words body, ≤ 1 H2 heading) | Step 0.7 gate (after Step 0.6, before Step 1) | Step 0.7 (proposal gate + owner approval), Step 10 (skip-list block), escalation triggers during Steps 3–6 |
 
 Extension file missing on disk when its gate fires → HALT naming the missing path (never silently skip the feature). A gate that cannot determine feature state (e.g., `sb-os.json` unreadable) → resolve conservatively: load the extension.
 
@@ -136,6 +137,22 @@ Lens ON modulates ONLY discretionary surfaces (Steps 2, 5 Title-only/Notable-Quo
 ### Step 0.6 — Load questions (answer-scan)
 
 **Gate (questions layer).** Resolve `{wiki_root}/questions.md`. **Absent OR malformed** (unreadable, invalid frontmatter, or no parseable H2 entries) → **questions layer OFF**: hold an EMPTY question set, omit the Step 10 `PROPOSED ANSWERS` block, do NOT read the extension, and behave EXACTLY as today (optionality guarantee #1; never abort — guarantee #5). **Present and parseable** → **questions layer ON**: READ `extensions/questions-layer.md` and execute its Step 0.6 (parse + hold open questions) HERE, then its Step 3·7c (answer-scan) at the Step 3·7c gate.
+
+### Step 0.7 — Light-path gate (interactive mode only)
+
+**Gate (light path).** This gate runs ONLY in interactive mode. When the `silent` keyword is present, SKIP this gate entirely — do NOT read `extensions/light-path.md`; the full flow runs.
+
+When the `silent` keyword is ABSENT:
+
+1. Resolve the raw file path for `<slug>` (read the raw file now to measure — Step 1 will reuse this read without duplication).
+2. Measure the three qualifying criteria against the raw file:
+   - **Kind**: extension is `.md` (not `.pdf`)
+   - **Word count**: strip the opening YAML frontmatter block (leading `---` through its closing `---` at file start only — NOT inline `---` horizontal rules) and all fenced code blocks (triple-backtick delimited); count whitespace-delimited tokens in the remaining body — passes if ≤ 300 words
+   - **Structural simplicity**: count lines beginning with `## ` in the body (after frontmatter strip) — passes if ≤ 1 such heading
+3. **Any criterion fails** → do NOT read the extension; run the FULL flow unchanged from Step 1.
+4. **All criteria pass** → READ `extensions/light-path.md` NOW and execute its Step 0.7 (proposal gate + owner approval). If the owner approves, set the `light_path_active` flag and proceed to Step 1 under the reduced-flow contract in that extension. If the owner declines (or no response), clear the flag and run the FULL flow from Step 1.
+
+Extension file missing on disk when the gate fires → HALT naming the missing path (never silently skip the feature).
 
 ### Step 1 — Read raw file
 
