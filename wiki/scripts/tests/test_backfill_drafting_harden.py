@@ -384,3 +384,45 @@ def test_pending_parse_folds_curly_vs_straight_quotes():
     )
     parsed = m._parse_artifact_pending_pairs(art)
     assert (m._norm_pair_cell(curly), "t1.md") in parsed
+
+
+def test_gather_probe_passes_no_rerank(tmp_path, monkeypatch):
+    """The gather's semantic probe must opt out of the search rerank stage.
+
+    p4-11 pilot (2026-06-11): the gather harvests by top-k MEMBERSHIP (cap
+    2/source) and the LLM confirmation bar supplies precision - under rerank,
+    confirmed-class candidates inside the cap-2 window fell 81/95 -> 75/95.
+    Owner-ruled tune: `--no-rerank` on the gather probe ONLY; rerank stays
+    default-on for every other search consumer.
+    """
+    m = _load_module()
+    # 2-level wiki root: _call_search_helper resolves vault root as
+    # wiki_root.parent.parent (the production shape, e.g. 3-resources/kb).
+    wiki_root = tmp_path / "3-resources" / "kb"
+    wiki_root.mkdir(parents=True)
+    (tmp_path / "sb-os.json").write_text(json.dumps({
+        "wiki_root": "3-resources/kb",
+        # absolute path wins the pathlib join; points at the REAL repo root
+        # so the search script existence check passes
+        "sb_os_path": str(SCRIPT.parents[2]),
+    }), encoding="utf-8")
+
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+
+        class R:
+            returncode = 0
+            stdout = '{"results": []}'
+            stderr = ""
+
+        return R()
+
+    monkeypatch.setattr(m.subprocess, "run", fake_run)
+    result = m._call_search_helper(wiki_root, "probe query", k=5, topic_only=True)
+    assert result == {"results": []}
+    cmd = captured["cmd"]
+    assert "--no-rerank" in cmd
+    assert "--no-sync" in cmd
+    assert cmd[cmd.index("--type") + 1] == "topic"

@@ -2310,6 +2310,13 @@ def _call_search_helper(wiki_root: Path, query: str, k: int = 5, topic_only: boo
         "--vault-root", str(vault_root),
         "search", query,
         "--k", str(k), "--json", "--no-sync",
+        # --no-rerank: the gather harvests by top-k MEMBERSHIP (cap 2/source)
+        # and the LLM confirmation bar supplies precision, so the rerank
+        # stage's precision reordering only costs harvest recall here
+        # (p4-11 pilot: confirmed-class candidates inside the cap-2 window
+        # fell 81/95 -> 75/95 under rerank). Rerank stays default-on for
+        # every other search consumer.
+        "--no-rerank",
     ]
     if topic_only:
         cmd.extend(["--type", "topic"])
