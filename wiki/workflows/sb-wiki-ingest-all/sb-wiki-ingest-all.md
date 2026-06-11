@@ -83,6 +83,7 @@ Duplicates (skipped or newly detected, if any): <origin>/<filename> — duplicat
 Cross-origin duplicate slugs created by ≥2 batches: <slug list, or "none">
 Questions layer: <U> firm topic-updates applied | <S> speculative updates rejected | <A> proposed answers rejected | <G> graduations (lint)
 Lint: <one-line outcome — see LINT REPORT above>
+Tail steps: lint <ran | SKIPPED> | commit <ran | SKIPPED — <N> paths uncommitted> | manifest cleanup <ran | SKIPPED — ingest-all-manifest.json present>
 ```
 
 The `Questions layer` line reflects silent-mode auto-resolution: only FIRM topic updates auto-apply (append-only); speculative updates and proposed answers (both homes, including answer-origin firm entries) are rejected and recorded. When the questions layer is OFF for every source (no `questions.md`) and no firm/speculative topic-update fired, all four counts are `0`. Omit the line entirely only if every count is `0`.
@@ -90,6 +91,14 @@ The `Questions layer` line reflects silent-mode auto-resolution: only FIRM topic
 Delete `{wiki_root}/ingest-all-manifest.json` after the report (transient artifact).
 
 Then create the run's SINGLE git commit, covering every change this run produced (source pages, stubs, indexes, log entries, lint heals). Skip when the vault root is not a git repository. This is the ONLY git commit of the entire run — never commit per source, per batch, or per wave.
+
+**Tail-steps close-out (interrupted runs).** If the orchestrator session ends before reaching this step, any conductor resuming the run MUST execute the three tail steps manually before declaring the run complete:
+
+1. **Heal-lint** — run `/sb-wiki-lint` as in Step 5.
+2. **Single commit** — create the run's git commit covering all uncommitted changes (source pages, stubs, indexes, log entries, lint heals).
+3. **Manifest cleanup** — delete `{wiki_root}/ingest-all-manifest.json` if it is still present.
+
+A conductor verifies the close-out by checking: (a) git shows no uncommitted wiki changes; (b) `{wiki_root}/ingest-all-manifest.json` is absent. Any skipped tail step MUST be reported with its reason in the `Tail steps:` line of the INGEST-ALL COMPLETE summary.
 
 ## Subagent dispatch prompt
 

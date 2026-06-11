@@ -2289,6 +2289,25 @@ def main() -> int:
     # State file resolution: explicit --report flag takes precedence; otherwise
     # fall back to the canonical path under wiki_root.
     state_path = args.report if args.report else wiki_root / "lint-deterministic-report.json"
+
+    # Guard: --prune-log combined with --report at the canonical state path is
+    # forbidden.  The prune-only flow (Step 8) must NEVER carry --report at the
+    # canonical path: doing so re-snapshots state in check-mode, bumps
+    # runs_completed a second time, and overwrites the --full report from the
+    # mandatory pre-Step-1 apply run (live incident p2-7 RUN-1; D10 ruling).
+    # Scratch-path --report is still allowed; prune without --report is unchanged.
+    # Mirrors the p2-1 execute-mode write-guard (report.mode != "execute").
+    canonical_state_path = wiki_root / "lint-deterministic-report.json"
+    if args.prune_log and args.report and args.report.resolve() == canonical_state_path.resolve():
+        print(
+            "ERROR: --prune-log combined with --report at the canonical state path is forbidden.\n"
+            "The Step-8 prune invocation must NOT carry --report <canonical path>: it re-snapshots\n"
+            "state in check-mode, double-bumps runs_completed, and overwrites the --apply report.\n"
+            "Fix: run --prune-log WITHOUT --report (prune only), or use a scratch path for --report.",
+            file=sys.stderr,
+        )
+        return 1
+
     prev_stamps, fallback_reason, prev_runs_completed = load_state(state_path)
 
     if args.execute_renames or args.execute_subdivision or args.execute_link_fixes:

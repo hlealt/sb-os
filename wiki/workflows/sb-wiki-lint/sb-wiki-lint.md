@@ -445,14 +445,14 @@ Omit any zero-count line with empty list (e.g., `Broken wikilinks (0)` may be el
 
 **Step 9 response handlers — per-set JIT load.** Each handler table below is loaded ONLY when its proposal set is non-empty (a clean run loads zero handlers). For each non-empty set, READ and execute the named extension file before applying the user's response; if the set is empty, the block is already omitted from the report (above) and the handler is NOT read. If a needed handler file is missing on disk, HALT naming the missing path.
 
-| When this proposal set is non-empty | READ and follow |
-|--------------------------------------|-----------------|
-| LINK-FIX (broken-link bucket A, step 5) | `{sb_os_path}/wiki/workflows/sb-wiki-lint/extensions/handler-link-fix.md` |
-| MISSING-PAGE (broken-link bucket B, step 5) | `{sb_os_path}/wiki/workflows/sb-wiki-lint/extensions/handler-missing-page.md` |
-| SUBDIVISION (step 7.5) | `{sb_os_path}/wiki/workflows/sb-wiki-lint/extensions/handler-subdivision.md` |
-| RENAME (PDF title-conformance, step 7.6) | `{sb_os_path}/wiki/workflows/sb-wiki-lint/extensions/handler-rename.md` |
-| PROPOSED ANSWERS (questions answer-sweep, step 7.7a — questions layer ON) | `{sb_os_path}/wiki/workflows/sb-wiki-lint/extensions/handler-proposed-answers.md` |
-| GRADUATION (mature `questions.md` entries, step 7.7b — questions layer ON) | `{sb_os_path}/wiki/workflows/sb-wiki-lint/extensions/handler-graduation.md` |
+| When this proposal set is non-empty | Set source | READ and follow |
+|--------------------------------------|------------|-----------------|
+| LINK-FIX (broken-link bucket A, step 5) | `detected.broken_wikilinks` bucket A — Step 5 | `{sb_os_path}/wiki/workflows/sb-wiki-lint/extensions/handler-link-fix.md` |
+| MISSING-PAGE (broken-link bucket B, step 5) | `detected.broken_wikilinks` bucket B — Step 5 | `{sb_os_path}/wiki/workflows/sb-wiki-lint/extensions/handler-missing-page.md` |
+| SUBDIVISION (step 7.5) | `detected.subdivision_proposals` — Step 7.5 | `{sb_os_path}/wiki/workflows/sb-wiki-lint/extensions/handler-subdivision.md` |
+| RENAME (PDF title-conformance, step 7.6) | `detected.rename_proposals` — Step 7.6 | `{sb_os_path}/wiki/workflows/sb-wiki-lint/extensions/handler-rename.md` |
+| PROPOSED ANSWERS (questions answer-sweep, step 7.7a — questions layer ON) | `questions-answer-proposals` — Step 7.7a (`ext-questions-sweep.md`) | `{sb_os_path}/wiki/workflows/sb-wiki-lint/extensions/handler-proposed-answers.md` |
+| GRADUATION (mature `questions.md` entries, step 7.7b — questions layer ON) | `graduation-proposals` — Step 7.7b (`ext-questions-sweep.md`) | `{sb_os_path}/wiki/workflows/sb-wiki-lint/extensions/handler-graduation.md` |
 
 The CANDIDATE-TOPIC PROMOTION block (set source: `detected.log_aging_candidate_topics`, step 4) has NO handler file — its handling is fully inline in the block text: `promote N` → invoke `sb-wiki-create-topic` once per accepted row; `dismiss N` → delete that entry (H2 header + body) from `{wiki_root}/logs/topics.md`; `defer` → no action.
 
