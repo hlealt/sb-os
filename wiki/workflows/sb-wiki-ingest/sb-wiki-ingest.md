@@ -339,21 +339,28 @@ Run all three triggers per `./data/candidate-topic-triggers.md`. For each fire, 
 
 If no triggers fire, leave the candidate set empty — Stage 1 omits the PROPOSED TOPICS block.
 
-### Step 7 — Update raw index
+### Steps 7–8 — Record index transaction
 
-1. Resolve raw index: `{wiki_root}/raw/{origin}/{origin}.md` (or `{wiki_root}/raw/studies/studies.md`).
-2. Locate the row whose `File` column wikilinks the current raw filename.
-3. Set `Wiki = Yes` in that row. Format per `../shared/index-formats.md` raw index entry.
-4. Raw-index ROW missing → CREATE it. Raw-index FILE missing → LOG A WARNING; do NOT create the file (lint owns raw-index files); do not block the ingest.
+Invoke the transaction helper once after the source page and staged wiki writes are ready:
 
-### Step 8 — Update wiki sources index
+```bash
+python {sb_os_path}/wiki/scripts/sb-wiki-index-transaction.py --vault-root <vault-root> --origin <origin> --raw-file <raw-filename> --source-file <source-page-filename> --what-it-says "<1-sentence factual summary>" --raw-title "<raw title>" --raw-date "<capture date>"
+```
 
-1. Resolve wiki sources index: `{wiki_root}/wiki/sources/{origin}/{origin}.md`.
-2. If the index file does not exist → create it with header row per `../shared/index-formats.md` wiki sources index format: `| File | What it says | My take |`.
-3. Add (or update) the row for the current source:
-   - `File`: `[[<date>-<slug>.md>]]` matching the source page filename exactly.
-   - `What it says`: 1-sentence factual summary (≤280 chars) derived from the source page's `Substance` section.
-   - `My take`: write `pending` at this step (NEVER blank — see `../shared/index-formats.md` "`My take` Cell — Three States" section). Stage 2 (step 11) may overwrite this cell with a 1-sentence reflected preview, with `—` (em-dash) if the user finalizes empty, or leave it as `pending` if the user declines reflection.
+The helper resolves `{wiki_root}` from `sb-os.json`, sets the raw index `Wiki` cell to `Yes`, and adds the wiki sources index row atomically: both index writes land or neither does. It reads table headers to locate columns and follows `../shared/index-formats.md` exactly.
+
+Arguments:
+
+- `--origin`: raw/source origin folder.
+- `--raw-file`: current raw filename, including extension.
+- `--source-file`: source page filename matching Step 2 exactly.
+- `--what-it-says`: 1-sentence factual summary (≤280 chars) derived from the source page's `Substance` section.
+- `--my-take`: omit at initial ingest; default is `pending`. Stage 2 (step 11) may overwrite this cell with a 1-sentence reflected preview, with `—` (em-dash) if the user finalizes empty, or leave it as `pending` if the user declines reflection.
+- `--raw-title` and `--raw-date`: required only if the raw-index row is missing; use deterministic values already established for the raw index format.
+
+Idempotency: if the wiki sources row already exists, the helper writes no duplicate and still ensures the raw index `Wiki` cell is `Yes`.
+
+Manual fallback for environments without Python: perform the same two edits manually as one staged unit, then verify both landed before continuing. Resolve raw index `{wiki_root}/raw/{origin}/{origin}.md` (or `{wiki_root}/raw/studies/studies.md`), locate/create the row whose `File` column wikilinks the current raw filename, and set `Wiki = Yes`. Resolve wiki sources index `{wiki_root}/wiki/sources/{origin}/{origin}.md`, add or update the row `| [[<source-page-filename>]] | <What it says> | pending |`, and keep the cell rules in `../shared/index-formats.md` "`My take` Cell — Three States" authoritative. Raw-index FILE missing → LOG A WARNING; do not create it. Wiki sources index FILE missing → create it with `| File | What it says | My take |` plus the separator row before adding the source row.
 
 ### Step 9 — Append log entries
 
