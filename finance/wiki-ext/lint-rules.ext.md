@@ -74,22 +74,22 @@ Captured XBRL companyfacts JSONs (`YYYY-MM-DD-{entity}-xbrl-companyfacts.json`, 
 
 ## Source-Lifecycle Rules (`source-queue.md`)
 
-Scope: `{wiki_root}/source-queue.md` — the investment source queue, a root-level sibling of the `logs/` queues (frontmatter `type: source-queue` per `./frontmatter-schemas.ext.md`). It holds the open lifecycle states of investment sources that could not complete the capture→ingest path: `gated_pending_access` (paywalled/login — awaits user action) and `blocked` (fetch failed after both tool methods — retry candidate). The `sb-wiki-capture-source` tool is the SOLE writer of entries; lint's only write is the rule-3 prune; the user retires a source by deleting its entry.
+Scope: `{wiki_root}/source-queue.md` — the investment source queue, a root-level sibling of the `logs/` queues (frontmatter `type: source-queue` per `./frontmatter-schemas.ext.md`). It holds the open lifecycle states of investment sources that could not complete the capture→ingest path: `gated_pending_access` (paywalled/login — awaits user action) and `blocked` (fetch failed after both tool methods — retry candidate). The `sb-wiki-capture-source` tool is the SOLE writer of entries; lint's only write is the rule-3 prune, applied SOLELY under the owner-gated `--prune-source-queue` flag (never on a plain check/apply run); the user retires a source by deleting its entry.
 
 File absent → no sources are queued; skip these rules silently. Present but malformed (unreadable, or no parseable H2 entries) → WARN, skip these rules, NEVER abort the lint. Mirrors the `questions.md` skip-if-absent contract.
 
 Entry shape (tool-written): `## {state} — YYYY-MM-DD` H2 + `- title:`, `- url:`, `- source:` (origin), `- related_thesis:`, `- why_it_matters:` (gated), `- failure:` (blocked), `- required_user_action:` bullets.
 
-Process rule 3 (prune) FIRST, then surface the remaining entries via rules 1, 2, and 4 — a just-resolved entry never appears in the report.
+`sb-wiki-lint-deterministic.py` (`scan_source_queue`) computes rule 3 (resolution) FIRST on every run; rules 1, 2, and 4 then surface the remaining open entries from the helper's `source_queue_open` list — a resolved entry never appears under rules 1/2/4. The delete is owner-gated: every run surfaces resolved entries as prune candidates (helper `source_queue_resolved`); the `--prune-source-queue` invocation applies the delete.
 
 | # | Condition | Lint surfaces |
 |---|-----------|---------------|
 | 1 | An open `gated_pending_access` entry | EVERY open gated entry with its `required_user_action`; append `[AGED]` when the entry date is >30 days old |
 | 2 | An open `blocked` entry | EVERY open blocked entry as a retry candidate (re-run the capture tool); append `[AGED]` when the entry date is >30 days old |
-| 3 | An entry whose wiki source page now EXISTS under `wiki/sources/` (resolution = page exists; match the entry's `url`/`title` against raw indexes and wiki source pages — LLM judgment, no tool-side markers) | PRUNE the entry — auto-applied write mirroring the base `logs/` prune; count for the report |
+| 3 | An entry whose wiki source page now EXISTS under `wiki/sources/{origin}/` — resolution is DETERMINISTIC, computed by `sb-wiki-lint-deterministic.py` (`scan_source_queue`): the entry's `url:` matched (normalized, prefix-tolerant) against a source-page `url:` frontmatter in the same origin (authoritative), with a shared DOI or an exact normalized-title match (vs page H1 / filename stem) as confirmation for PDF-sourced entries. NEVER title-token fuzz. | SURFACE the entry as a prune candidate (helper `source_queue_resolved`); DELETE it ONLY under the owner-gated `--prune-source-queue` invocation — count pruned for the report |
 | 4 | An entry whose raw file exists but whose wiki source page does NOT (a manually-recovered source awaiting ingest) | KEEP the entry open; append `[captured, awaiting ingest]` to its report row |
 
-Report block — append to the LINT REPORT after the base findings. Omit the whole block when the file is absent or holds zero entries after the prune; omit the `pruned` line when 0:
+Report block — append to the LINT REPORT after the base findings. Omit the whole block when the file is absent or holds zero entries; omit the `prune candidates` / `pruned` lines when 0:
 
 ```
 SOURCE QUEUE — open lifecycle states:
@@ -97,7 +97,9 @@ Gated pending access (N, M aged >30d):
   "<title>" (<origin>) — registered YYYY-MM-DD — action: <required_user_action> [AGED]
 Blocked, retry candidates (N, M aged >30d):
   "<title>" (<origin>) — blocked YYYY-MM-DD [AGED] [captured, awaiting ingest]
-Source queue pruned: <N> resolved (page now exists)
+Source queue prune candidates (N) — page now exists, awaiting owner-gated --prune-source-queue:
+  "<title>" (<origin>) → [[<matched_page>]] via <url|doi|title>
+Source queue pruned: <N> deleted (only on a --prune-source-queue run)
 ```
 
 One row per open entry under its state line; `[AGED]` and `[captured, awaiting ingest]` appear only when rule 1/2/4 marks them.
@@ -105,5 +107,5 @@ One row per open entry under its state line; `[AGED]` and `[captured, awaiting i
 ## Governance
 
 - **Lint shows state; it never decides.** It surfaces findings only — the `sb-investor` proposes next actions from the lint output. Lint NEVER auto-resolves a conflict, NEVER edits a thesis or `## Financials` row, NEVER promotes or archives a page.
-- **Lint NEVER writes a source-queue entry.** The capture tool is the sole entry writer; lint's only queue write is the rule-3 prune of spent entries.
+- **Lint NEVER writes a source-queue entry.** The capture tool is the sole entry writer; lint's only queue write is the rule-3 prune of resolved entries, and that delete fires ONLY under the owner-gated `--prune-source-queue` invocation — a plain check/apply lint run surfaces prune candidates but never deletes.
 - **Implement incrementally — not all rules are required at MVP.** Add rules as the investment wiki grows; an unimplemented rule simply does not fire.

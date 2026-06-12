@@ -213,19 +213,16 @@ def today() -> datetime.date:
 
 
 def excluded_dir(path: Path) -> bool:
-    """Asset-folder exclusion: any path segment named `assets` or `*-assets`."""
-    return any(part == "assets" or part.endswith("-assets") for part in path.parts)
+    """Binary-dump asset exclusion: skip ONLY genuine binary-dump folders.
 
-
-def _binary_asset_dir(path: Path) -> bool:
-    """Binary-dump asset exclusion for the normalize-filenames reference scan.
-
-    Narrower than ``excluded_dir``: skips ONLY the binary-dump folders
-    (``_assets`` and ``*-assets``) and NEVER a semantic content folder literally
-    named ``assets`` — ``wiki/entities/assets/`` holds asset-class entity ``.md``
-    pages whose references must still be healed. ``excluded_dir`` skips any
-    ``assets`` segment, which silently dropped that content folder from the
-    reference heal/count (the p4-9 stray-healer coverage gap, shape 1).
+    Skips ``_assets`` and ``*-assets`` (image/PDF dumps) and NEVER a semantic
+    content folder literally named ``assets`` — ``wiki/entities/assets/`` holds
+    asset-class entity ``.md`` pages (gold, us-dollar, brent-crude, ...) that
+    must be linted like any other entity page. The earlier predicate skipped
+    any ``assets`` segment, which silently dropped that whole content folder
+    from every ``excluded_dir``-gated check (structural walk, type-tag sync,
+    disputed-callout scan, valid-page-name set). Bare ``assets`` is reserved
+    for semantic content; binary dumps are always ``_assets`` or ``*-assets``.
     """
     return any(part == "_assets" or part.endswith("-assets") for part in path.parts)
 
@@ -1144,6 +1141,176 @@ def scan_log(
     report.detected["log_awaiting_thesis_decisions"] = awaiting
     if prune and (pruned_spent or pruned_retired):
         report.detected["log_pruned"] = {"spent": pruned_spent, "retired": pruned_retired}
+
+
+# ---------------------------------------------------------------------------
+# Source-queue rule-3 prune (finance lint extension) — deterministic matcher
+# ---------------------------------------------------------------------------
+# A source-queue.md entry is "spent" once its wiki source page exists. The
+# finance extension (wiki-ext/lint-rules.ext.md rule 3) resolves this
+# DETERMINISTICALLY (decision 2026-06-10, source-queue-adjudication-2026-06-10.md
+# § Rule-3 implementation), in priority order:
+#   1. URL — entry `url:` matched (normalized, prefix-tolerant) against a
+#      source-page `url:` frontmatter, within the SAME origin folder. Authoritative.
+#   2. DOI — a DOI extracted from the entry url/title appears in the page.
+#   3. exact title — entry title normalizes EQUAL to the page H1 or filename stem.
+# NEVER a title-token-overlap heuristic: that produced the IEA false-negative
+# (real page fell under the 60% cutoff) and the ENGIE false-collapse (two
+# quarters onto one page) on the real queue.
+#
+# source-queue.md exists ONLY via the finance capture tool, so its presence is
+# the scope guard: absent -> silent no-op (general wikis never carry it).
+
+SOURCE_QUEUE_FILENAME = "source-queue.md"
+SOURCE_QUEUE_HEADER_RE = re.compile(rf"^##\s+(\S+)\s+{DASH}\s+(.+?)\s*$")
+_DOI_RE = re.compile(r"10\.\d{4,9}/[^\s\"'<>)\]]+")
+
+
+def _norm_source_url(url: str) -> str:
+    """Normalize a URL for prefix-tolerant matching: drop scheme, www, trailing slash."""
+    u = (url or "").strip().strip("\"'").lower()
+    u = re.sub(r"^https?://", "", u)
+    u = re.sub(r"^www\.", "", u)
+    return u.rstrip("/")
+
+
+def _norm_title_exact(text: str) -> str:
+    """Fold a title/H1/stem to a canonical form for EXACT (not fuzzy) comparison.
+
+    Casefold, fold smart quotes / dashes, strip accents, collapse every run of
+    non-alphanumerics to a single space. Two strings that differ only in
+    punctuation, case, accent, or separator collapse equal; a differing
+    substantive token (`3t25` vs `4t25`) keeps them distinct — the property the
+    token-overlap heuristic lacked.
+    """
+    text = "".join(_FOLD_TRANS.get(ch, ch) for ch in (text or ""))
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    text = text.casefold()
+    return re.sub(r"[^a-z0-9]+", " ", text).strip()
+
+
+def _extract_dois(text: str) -> set[str]:
+    return {m.rstrip(".").lower() for m in _DOI_RE.findall(text or "")}
+
+
+def _load_source_queue_pages(wiki_root: Path, origin: str) -> list[dict[str, str]]:
+    """Source pages under wiki/sources/{origin}/ (leaf index + non-source files excluded)."""
+    out: list[dict[str, str]] = []
+    if not origin:
+        return out
+    origin_dir = wiki_root / "wiki" / "sources" / origin
+    if not origin_dir.is_dir():
+        return out
+    index_name = f"{origin}.md"
+    for page in sorted(origin_dir.glob("*.md")):
+        if page.name == index_name or page.name in NON_SOURCE_FILES:
+            continue
+        text = read_text(page)
+        out.append(
+            {
+                "name": page.name,
+                "stem": page.stem,
+                "url": frontmatter(text).get("url", ""),
+                "h1": first_h1(text),
+                "text": text,
+            }
+        )
+    return out
+
+
+def _match_source_queue_entry(
+    entry: dict[str, str], pages: list[dict[str, str]]
+) -> tuple[str, str] | None:
+    """Return (matched_page_filename, signal) or None. Signal is url|doi|title."""
+    # Signal 1 — URL (authoritative, prefix-tolerant).
+    qn = _norm_source_url(entry.get("url", ""))
+    if qn:
+        for p in pages:
+            pn = _norm_source_url(p["url"])
+            if pn and (pn == qn or pn.startswith(qn) or qn.startswith(pn)):
+                return p["name"], "url"
+    # Signal 2 — a DOI shared between the entry (url/title) and a page.
+    qdois = _extract_dois(entry.get("url", "")) | _extract_dois(entry.get("title", ""))
+    if qdois:
+        for p in pages:
+            if qdois & (_extract_dois(p["url"]) | _extract_dois(p["text"])):
+                return p["name"], "doi"
+    # Signal 3 — exact normalized title vs page H1 or filename stem.
+    qt = _norm_title_exact(entry.get("title", ""))
+    if qt:
+        for p in pages:
+            stem_words = p["stem"].replace("-", " ").replace("_", " ")
+            if qt == _norm_title_exact(p["h1"]) or qt == _norm_title_exact(stem_words):
+                return p["name"], "title"
+    return None
+
+
+def scan_source_queue(wiki_root: Path, report: Report, prune: bool) -> None:
+    """Rule-3: resolve spent source-queue entries deterministically; optionally prune.
+
+    Detection ALWAYS runs (check mode surfaces prune candidates in the report).
+    The delete is applied only when ``prune`` is True (the owner-gated
+    --prune-source-queue flow). Absent file -> silent no-op (scope guard).
+    Present but no parseable H2 entry -> WARN via report, skip, NEVER abort.
+    Mirrors the logs/ prune pattern in ``scan_log``.
+    """
+    queue_path = wiki_root / SOURCE_QUEUE_FILENAME
+    if not os.path.exists(_fspath(queue_path)):
+        return
+    preamble, blocks = split_log_blocks(read_text(queue_path))
+    resolved: list[dict[str, str]] = []
+    open_entries: list[dict[str, str]] = []
+    keep: list[str] = []
+    pruned = 0
+    parsed_any = False
+    for block in blocks:
+        header = block.splitlines()[0].rstrip()
+        match = SOURCE_QUEUE_HEADER_RE.match(header)
+        if not match:
+            keep.append(block)  # plain heading — never an entry, never pruned
+            continue
+        parsed_any = True
+        state, date = match.group(1), match.group(2).strip()
+        entry: dict[str, str] = {"state": state, "date": date}
+        for key in ("title", "url", "source"):
+            field_match = re.search(rf"^-\s+{key}:\s*(.+)$", block, flags=re.M)
+            if field_match:
+                entry[key] = field_match.group(1).strip()
+        pages = _load_source_queue_pages(wiki_root, entry.get("source", ""))
+        hit = _match_source_queue_entry(entry, pages)
+        if hit:
+            matched_page, signal = hit
+            resolved.append(
+                {
+                    "state": state,
+                    "date": date,
+                    "title": entry.get("title", ""),
+                    "origin": entry.get("source", ""),
+                    "matched_page": matched_page,
+                    "signal": signal,
+                }
+            )
+            pruned += 1
+            continue  # dropped on prune (resolution = page exists)
+        open_entries.append(
+            {
+                "state": state,
+                "date": date,
+                "title": entry.get("title", ""),
+                "origin": entry.get("source", ""),
+            }
+        )
+        keep.append(block)
+    if blocks and not parsed_any:
+        # Present but no parseable H2 entry — warn, skip, never abort.
+        report.detected["source_queue_malformed"] = str(queue_path)
+        return
+    report.detected["source_queue_resolved"] = resolved
+    report.detected["source_queue_open"] = open_entries
+    if prune and pruned:
+        write_text(queue_path, preamble + "".join(keep), report, apply_changes=True)
+        report.detected["source_queue_pruned"] = pruned
 
 
 def check_questions_links(wiki_root: Path, report: Report) -> None:
@@ -2666,7 +2833,7 @@ def _all_wiki_files(wiki_root: Path) -> list[Path]:
         if not d.exists():
             continue
         for p in d.rglob("*"):
-            if p.is_file() and not _binary_asset_dir(p.relative_to(wiki_root)):
+            if p.is_file() and not excluded_dir(p.relative_to(wiki_root)):
                 result.append(p)
     return result
 
@@ -2788,7 +2955,7 @@ def _count_reference_classes(wiki_root: Path, rename_map: list[tuple[Path, Path]
     wiki_dir = wiki_root / "wiki"
     if wiki_dir.exists():
         for p in wiki_dir.rglob("*.md"):
-            if _binary_asset_dir(p.relative_to(wiki_root)):
+            if excluded_dir(p.relative_to(wiki_root)):
                 continue
             try:
                 text = read_text(p)
@@ -2806,7 +2973,7 @@ def _count_reference_classes(wiki_root: Path, rename_map: list[tuple[Path, Path]
     raw_dir = wiki_root / "raw"
     if raw_dir.exists():
         for p in raw_dir.rglob("*.md"):
-            if _binary_asset_dir(p.relative_to(wiki_root)):
+            if excluded_dir(p.relative_to(wiki_root)):
                 continue
             try:
                 text = read_text(p)
@@ -2954,7 +3121,7 @@ def _execute_normalize(
     wiki_dir = wiki_root / "wiki"
     if wiki_dir.exists():
         for p in wiki_dir.rglob("*.md"):
-            if _binary_asset_dir(p.relative_to(wiki_root)):
+            if excluded_dir(p.relative_to(wiki_root)):
                 continue
             n = _heal_file(p)
             result["wikilinks_healed"] += n
@@ -2963,7 +3130,7 @@ def _execute_normalize(
     raw_dir = wiki_root / "raw"
     if raw_dir.exists():
         for p in raw_dir.rglob("*.md"):
-            if _binary_asset_dir(p.relative_to(wiki_root)):
+            if excluded_dir(p.relative_to(wiki_root)):
                 continue
             n = _heal_file(p)
             result["raw_index_cells_healed"] += n
@@ -3212,6 +3379,14 @@ def main() -> int:
         help="delete spent/retired logs/*.md entries (lint-contract-authorized prune)",
     )
     parser.add_argument(
+        "--prune-source-queue",
+        action="store_true",
+        help=(
+            "delete resolved source-queue.md entries whose wiki source page now "
+            "exists (finance lint rule 3; owner-gated — irreversible delete)"
+        ),
+    )
+    parser.add_argument(
         "--candidate-age-floor",
         type=int,
         default=CANDIDATE_AGE_FLOOR_DAYS,
@@ -3282,12 +3457,13 @@ def main() -> int:
     # Scratch-path --report is still allowed; prune without --report is unchanged.
     # Mirrors the p2-1 execute-mode write-guard (report.mode != "execute").
     canonical_state_path = wiki_root / "lint-deterministic-report.json"
-    if args.prune_log and args.report and args.report.resolve() == canonical_state_path.resolve():
+    if (args.prune_log or args.prune_source_queue) and args.report and args.report.resolve() == canonical_state_path.resolve():
         print(
-            "ERROR: --prune-log combined with --report at the canonical state path is forbidden.\n"
-            "The Step-8 prune invocation must NOT carry --report <canonical path>: it re-snapshots\n"
-            "state in check-mode, double-bumps runs_completed, and overwrites the --apply report.\n"
-            "Fix: run --prune-log WITHOUT --report (prune only), or use a scratch path for --report.",
+            "ERROR: a prune flag (--prune-log / --prune-source-queue) combined with --report at the\n"
+            "canonical state path is forbidden. The Step-8 prune invocation must NOT carry --report\n"
+            "<canonical path>: it re-snapshots state in check-mode, double-bumps runs_completed, and\n"
+            "overwrites the --apply report.\n"
+            "Fix: run the prune flag WITHOUT --report (prune only), or use a scratch path for --report.",
             file=sys.stderr,
         )
         return 1
@@ -3324,6 +3500,7 @@ def main() -> int:
             prune=args.prune_log,
             candidate_age_floor=args.candidate_age_floor,
         )
+        scan_source_queue(wiki_root, report, prune=args.prune_source_queue)
         check_questions_links(wiki_root, report)
         structural_walk(wiki_root, report, args.apply)
         detect_pdf_title_conformance(wiki_root, report)
