@@ -46,6 +46,8 @@ DEFAULT_MODEL = "voyage-3.5"
 DEFAULT_RERANK_MODEL = "rerank-2.5"
 EMBED_URL = "https://api.voyageai.com/v1/embeddings"
 RERANK_URL = "https://api.voyageai.com/v1/rerank"
+VOYAGE_TIMEOUT = 30  # explicit per-request socket timeout (s) — bounds a stalled
+                     # Voyage call so the caller never hangs; failures degrade to FTS
 EMBED_BATCH_TEXTS = 96
 EMBED_BATCH_CHARS = 240_000
 MAX_CHUNK_CHARS = 6_000
@@ -404,10 +406,15 @@ def search_index(conn: sqlite3.Connection, query: str, embedder=None,
     if fts:
         rankings.append(fts)
     if embedder is not None:
-        qvec = embedder([query], "query")[0]
-        vec = _vector_candidates(conn, qvec, CANDIDATES_PER_ARM)
-        if vec:
-            rankings.append(vec)
+        try:
+            qvec = embedder([query], "query")[0]
+            vec = _vector_candidates(conn, qvec, CANDIDATES_PER_ARM)
+            if vec:
+                rankings.append(vec)
+        except Exception as err:
+            # mirror the no-key fallback: drop the vector tier, answer from FTS
+            print(f"voyage embedding unavailable; using keyword (FTS5) tier ({err})",
+                  file=sys.stderr)
     if not rankings:
         return []
 
@@ -458,7 +465,8 @@ def search_index(conn: sqlite3.Connection, query: str, embedder=None,
 
 # ---------------------------------------------------------------- voyage
 
-def make_voyage_embedder(api_key: str, model: str = DEFAULT_MODEL):
+def make_voyage_embedder(api_key: str, model: str = DEFAULT_MODEL,
+                         timeout: float = VOYAGE_TIMEOUT):
     def embed(texts: list[str], input_type: str) -> list[list[float]]:
         payload = json.dumps(
             {"input": texts, "model": model, "input_type": input_type}
@@ -471,7 +479,7 @@ def make_voyage_embedder(api_key: str, model: str = DEFAULT_MODEL):
         last_error: Exception | None = None
         for attempt in range(1, 7):
             try:
-                with urllib.request.urlopen(request, timeout=120) as resp:
+                with urllib.request.urlopen(request, timeout=timeout) as resp:
                     data = json.loads(resp.read().decode("utf-8"))
                 rows = sorted(data["data"], key=lambda d: d["index"])
                 return [r["embedding"] for r in rows]
@@ -497,7 +505,8 @@ def make_voyage_embedder(api_key: str, model: str = DEFAULT_MODEL):
     return embed
 
 
-def make_voyage_reranker(api_key: str, model: str = DEFAULT_RERANK_MODEL):
+def make_voyage_reranker(api_key: str, model: str = DEFAULT_RERANK_MODEL,
+                         timeout: float = VOYAGE_TIMEOUT):
     def rerank(query: str, documents: list[str], top_k: int) -> list[dict]:
         payload = json.dumps(
             {"query": query, "documents": documents, "model": model, "top_k": top_k}
@@ -510,7 +519,7 @@ def make_voyage_reranker(api_key: str, model: str = DEFAULT_RERANK_MODEL):
         last_error: Exception | None = None
         for attempt in range(1, 7):
             try:
-                with urllib.request.urlopen(request, timeout=120) as resp:
+                with urllib.request.urlopen(request, timeout=timeout) as resp:
                     data = json.loads(resp.read().decode("utf-8"))
                 return data["data"]
             except urllib.error.HTTPError as err:
@@ -622,10 +631,16 @@ def main() -> int:
 
     if args.command == "search":
         if not args.no_sync:
-            counts = sync(conn, wiki_root, embedder=embedder)
-            if any(counts.values()):
-                print(f"synced: +{counts['added']} ~{counts['changed']} -{counts['removed']} "
-                      f"files, {counts['embedded']} chunks embedded", file=sys.stderr)
+            try:
+                counts = sync(conn, wiki_root, embedder=embedder)
+                if any(counts.values()):
+                    print(f"synced: +{counts['added']} ~{counts['changed']} -{counts['removed']} "
+                          f"files, {counts['embedded']} chunks embedded", file=sys.stderr)
+            except Exception as err:
+                # a stalled/failed Voyage embedding must not hang or crash the query;
+                # structural state is already committed, so answer from the current index
+                print(f"self-sync incomplete ({err}); answering from the current index",
+                      file=sys.stderr)
         type_filter = [t.strip() for t in args.type.split(",")] if args.type else None
         try:
             reranker = None
