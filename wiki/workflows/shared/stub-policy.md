@@ -110,3 +110,4 @@ When updating an existing page, NEVER overwrite a main content section that alre
 - Add bullets to an existing list section ONLY if the list itself is under 50 words OR explicitly bullet-shaped
 - Add `[^N]: [[<raw-filename>]]` footnote definitions to the `Sources` section
 - Write a NEW sibling section (e.g., `## How it works — Code Mode perspective`) instead of editing an existing section that exceeds 50 words
+- Rewrite or extend a section under 50 words ONLY when every inline `[^N]` marker present before the rewrite survives in the rewritten text (citation preservation per `citation-format.md`)
