@@ -20,7 +20,7 @@ Schema § "Retrieval tiers — hybrid search" governs every semantic-tier touchp
 | Semantic / keyword (helper runs, exit 0) | `python {sb_os_path}/wiki/scripts/sb-wiki-search.py search "<query>" --k N [--type ...]` — the tier-gated augments below are ACTIVE |
 | Unavailable (helper missing, errors, exit 2) | Every tier-gated augment is OFF — the flow runs the mechanical baseline exactly as pre-v7 |
 
-The FIRST helper call of the run syncs the index (the step-2 source page enters it there); subsequent calls in the same run pass `--no-sync`. A helper failure NEVER aborts the ingest — drop the augment and continue. **The semantic tier NEVER decides a mechanical fire** — firm-tier topic detection, `Substance`-bullet stubs, and Step 6 trigger detection stay fully deterministic per the schema's mechanical-fire invariant. Runs in BOTH modes (default and silent) — silent's auto-reject postures for speculative updates and proposed answers are unchanged.
+The first helper call at or after Step 3·5c syncs the index (the step-2 source page enters it there); any earlier boot-time tier probe and all subsequent calls pass `--no-sync`. A helper failure NEVER aborts the ingest — drop the augment and continue. **The semantic tier NEVER decides a mechanical fire** — firm-tier topic detection, `Substance`-bullet stubs, and Step 6 trigger detection stay fully deterministic per the schema's mechanical-fire invariant. Runs in BOTH modes (default and silent) — silent's auto-reject postures for speculative updates and proposed answers are unchanged.
 
 ## Path Resolution
 

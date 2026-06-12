@@ -62,6 +62,26 @@ TYPE_PREFIXES = {
     "thesis": "wiki/theses/",
     "decision": "wiki/decisions/",
 }
+# Rerank type-boost (C1 ruling, 2026-06-12 → tune): rerank-2.5 systematically
+# prefers verbose SOURCE pages and can demote a precise concept/topic/thesis page
+# out of the visible window. After rerank we multiply each candidate's relevance
+# by this factor for the favored KINDS, then re-sort by the boosted key. The boost
+# changes ORDER only — the reported score stays the raw rerank relevance. The
+# magnitude is conservative: it flips a near-tie demotion without burying a
+# source the reranker scored decisively higher.
+RERANK_TYPE_BOOST = 1.25
+RERANK_BOOST_KINDS = ("concept", "topic", "thesis")
+
+
+def _kind_for_path(path: str) -> str | None:
+    for kind, prefix in TYPE_PREFIXES.items():
+        if path.startswith(prefix):
+            return kind
+    return None
+
+
+def _type_boost(path: str) -> float:
+    return RERANK_TYPE_BOOST if _kind_for_path(path) in RERANK_BOOST_KINDS else 1.0
 
 
 def _fspath(path: Path) -> str:
@@ -399,7 +419,7 @@ def _hit(path: str, anchor: str, text: str, score: float) -> dict:
 
 
 def search_index(conn: sqlite3.Connection, query: str, embedder=None,
-                 k: int = 8, type_filter: list | None = None,
+                 k: int = 25, type_filter: list | None = None,
                  reranker=None) -> list[dict]:
     rankings = []
     fts = _fts_candidates(conn, query, CANDIDATES_PER_ARM)
@@ -437,7 +457,7 @@ def search_index(conn: sqlite3.Connection, query: str, embedder=None,
     if reranker is not None and candidates:
         try:
             rows = reranker(query, [c["text"] for c in candidates], len(candidates))
-            results: list[dict] = []
+            reranked: list[tuple[float, dict]] = []  # (boosted_sort_key, hit)
             seen: set[int] = set()
             for row in rows:
                 index = int(row["index"])
@@ -446,17 +466,24 @@ def search_index(conn: sqlite3.Connection, query: str, embedder=None,
                 seen.add(index)
                 candidate = candidates[index]
                 score = float(row["relevance_score"])
-                results.append(_hit(candidate["path"], candidate["anchor"], candidate["text"], score))
-                if len(results) >= k:
-                    return results
+                boosted = score * _type_boost(candidate["path"])
+                reranked.append(
+                    (boosted,
+                     _hit(candidate["path"], candidate["anchor"], candidate["text"], score))
+                )
+            # Type-boost reorders the reranked rows; sort is stable, so rows sharing
+            # a boosted key keep the reranker's original order. The reported score
+            # stays the raw relevance — only the ORDER reflects the boost.
+            reranked.sort(key=lambda r: r[0], reverse=True)
+            results: list[dict] = [hit for _, hit in reranked]
+            # RRF-fill tail: candidates the reranker did not return, in RRF order,
+            # carrying their RRF scores (never a rerank relevance score).
             for index, candidate in enumerate(candidates):
                 if index in seen:
                     continue
                 results.append(_hit(candidate["path"], candidate["anchor"],
                                     candidate["text"], candidate["score"]))
-                if len(results) >= k:
-                    return results
-            return results
+            return results[:k]
         except Exception as err:
             print(f"voyage rerank unavailable; using RRF order ({err})", file=sys.stderr)
 
@@ -553,12 +580,7 @@ def _check_model(conn: sqlite3.Connection, model: str) -> None:
         conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('model', ?)", (model,))
 
 
-def main() -> int:
-    try:
-        sys.stdout.reconfigure(encoding="utf-8")
-        sys.stderr.reconfigure(encoding="utf-8")
-    except AttributeError:
-        pass
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--vault-root", type=Path, default=None,
@@ -573,7 +595,7 @@ def main() -> int:
 
     p_search = sub.add_parser("search", help="query the index")
     p_search.add_argument("query")
-    p_search.add_argument("--k", type=int, default=8)
+    p_search.add_argument("--k", type=int, default=25)
     p_search.add_argument("--type", help="comma-separated: concept,entity,topic,source,thesis,decision")
     p_search.add_argument("--json", action="store_true")
     p_search.add_argument("--no-sync", action="store_true", help="skip the freshness sync")
@@ -582,7 +604,16 @@ def main() -> int:
     p_search.add_argument("--rerank-model", default=DEFAULT_RERANK_MODEL)
 
     sub.add_parser("status", help="index freshness + mode as JSON")
+    return parser
 
+
+def main() -> int:
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except AttributeError:
+        pass
+    parser = build_parser()
     args = parser.parse_args()
 
     if args.vault_root is not None:

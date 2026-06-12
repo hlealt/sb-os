@@ -6,6 +6,7 @@ Network calls are mocked; the live Voyage endpoint is never contacted.
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import io
 import json
 import sys
@@ -170,6 +171,75 @@ def test_partial_rerank_fills_remainder_in_rrf_order(tmp_path, monkeypatch):
     assert hits[0]["score"] == 0.99
     # filled rows carry their RRF scores, not the rerank score
     assert hits[1]["score"] < 1.0 and hits[2]["score"] < 1.0
+
+
+def build_typed_index(tmp_path: Path):
+    """An index spanning a verbose SOURCE page and a precise CONCEPT page —
+    the shape of the C1 demotion case the type-boost must correct."""
+    conn = sws.open_db(tmp_path / "index.db")
+    rows = [
+        (1, "wiki/sources/verbose.md", "", 0, "Verbose source\n\nlong rambling source page"),
+        (2, "wiki/concepts/precise.md", "", 0, "Precise concept\n\ntight concept page"),
+    ]
+    conn.executemany(
+        "INSERT INTO chunks (id, path, anchor, pos, text) VALUES (?,?,?,?,?)",
+        rows,
+    )
+    conn.commit()
+    return conn
+
+
+def test_type_boost_lifts_concept_above_verbose_source(tmp_path, monkeypatch):
+    """C1 reproduction: the reranker scores the SOURCE page above the CONCEPT
+    page; the type-boost must reorder the concept above the source. The reported
+    score stays the raw rerank relevance — the boost changes ORDER only."""
+    conn = build_typed_index(tmp_path)
+    force_candidate_order(monkeypatch, [1, 2], [])  # candidates: [verbose(0), precise(1)]
+
+    def reranker(query, documents, top_k):
+        return [
+            {"index": 0, "relevance_score": 0.80},   # verbose source — reranker's top
+            {"index": 1, "relevance_score": 0.70},   # precise concept — demoted by reranker
+        ]
+
+    hits = sws.search_index(conn, "needle", embedder=None, k=2, reranker=reranker)
+
+    assert [h["path"] for h in hits] == [
+        "wiki/concepts/precise.md",   # boosted above the source
+        "wiki/sources/verbose.md",
+    ]
+    # reported scores are the raw rerank relevance, not the boosted ordering key
+    assert [h["score"] for h in hits] == [0.70, 0.80]
+
+
+def test_type_boost_does_not_bury_genuinely_best_source(tmp_path, monkeypatch):
+    """A source page the reranker scores far above the concept must stay on top —
+    the boost is bounded and must not flip a genuinely-best source."""
+    conn = build_typed_index(tmp_path)
+    force_candidate_order(monkeypatch, [1, 2], [])
+
+    def reranker(query, documents, top_k):
+        return [
+            {"index": 0, "relevance_score": 0.95},   # clearly-best source
+            {"index": 1, "relevance_score": 0.50},   # weaker concept
+        ]
+
+    hits = sws.search_index(conn, "needle", embedder=None, k=2, reranker=reranker)
+
+    assert [h["path"] for h in hits] == [
+        "wiki/sources/verbose.md",
+        "wiki/concepts/precise.md",
+    ]
+
+
+def test_search_index_default_k_is_25():
+    assert inspect.signature(sws.search_index).parameters["k"].default == 25
+
+
+def test_cli_search_k_default_is_25():
+    parser = sws.build_parser()
+    args = parser.parse_args(["search", "needle"])
+    assert args.k == 25
 
 
 class FakeResponse:

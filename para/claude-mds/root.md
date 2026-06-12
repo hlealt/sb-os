@@ -35,6 +35,8 @@ Fits an existing file → append. Index files (`{dir-name}.md`) are NEVER conten
 
 **Exception — daily-note override.** When the user explicitly says "add to today", "save to daily", or "add to daily note", route to the daily note regardless of the table above.
 
+**Archives are off-limits.** NEVER read, search, list, or load files under `4-archives/` unless the user explicitly directs you to that folder ("check 4-archives", "look in archives", or names a path inside it). It is a pre-deletion holding zone — its contents are stale or under review and MUST NOT inform agent answers, routing, or context. An explicit instruction lifts this for that request only.
+
 **Auto-memory.** Claude Code's auto-memory serves ONLY for agent behavior feedback (preferences, corrections, workflow tweaks). Content goes to the vault. When in doubt, vault wins.
 
 **Parallel sessions — write collisions.** On an Edit rejection for "file modified since read" (another session wrote the file), re-read the file and re-apply ONLY your delta to the fresh state — never restore frontmatter or body content from your earlier read. This retry is the canonical discipline; do not add lock or marker machinery.
