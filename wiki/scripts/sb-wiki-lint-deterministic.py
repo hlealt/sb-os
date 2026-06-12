@@ -1490,7 +1490,7 @@ def structural_walk(wiki_root: Path, report: Report, apply_changes: bool) -> Non
 
         # --- C2b orphan inbound map (STRICT: cet pages are the only sources) ---
         if not is_source:
-            for target in set(re.findall(r"\[\[([^\]|#]+?\.md)\]\]", text)):
+            for target in set(re.findall(r"\[\[([^\]|#]+?\.md)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]", text)):
                 target_name = Path(target).name
                 if target_name != page.name and target_name in cet_names:
                     inbound[target_name] = inbound.get(target_name, 0) + 1
