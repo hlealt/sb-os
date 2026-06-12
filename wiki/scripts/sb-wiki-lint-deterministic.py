@@ -3026,7 +3026,7 @@ def cmd_normalize_filenames(args_list: list[str]) -> int:
 
     Voyage search index note: index.db stores document paths. After --execute,
     the conductor must run:
-        python sb-wiki-search.py --vault-root <vault> sync
+        python sb-wiki-search.py --vault-root <vault> index
     to rebuild the index against the renamed paths. Stale paths in index.db
     produce dead search results for any renamed file until that sync runs.
     The clipper writes raws OUTSIDE sb-os governance — the normalize-filenames
@@ -3105,7 +3105,7 @@ def cmd_normalize_filenames(args_list: list[str]) -> int:
             "reference_class_counts": ref_counts,
             "voyage_index_note": (
                 "After --execute the conductor must run: "
-                "python sb-wiki-search.py --vault-root <vault> sync "
+                "python sb-wiki-search.py --vault-root <vault> index "
                 "to rebuild the Voyage index against the renamed paths."
             ),
         }

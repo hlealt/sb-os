@@ -249,7 +249,7 @@ python wiki/scripts/sb-wiki-lint-deterministic.py normalize-filenames --vault-ro
 python wiki/scripts/sb-wiki-lint-deterministic.py normalize-filenames --vault-root <vault> --execute
 ```
 
-Run the dry-run before every migration. The subcommand exits 2 on collision and must exit 0 before `--execute` is permitted. After `--execute`, re-run `sb-wiki-search.py sync` to rebuild the Voyage search index (path-keyed).
+Run the dry-run before every migration. The subcommand exits 2 on collision and must exit 0 before `--execute` is permitted. After `--execute`, re-run `sb-wiki-search.py index` to rebuild the Voyage search index (path-keyed).
 
 ### Raw PDF title-conformance
 
