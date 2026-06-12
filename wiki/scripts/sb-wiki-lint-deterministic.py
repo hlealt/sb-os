@@ -217,6 +217,19 @@ def excluded_dir(path: Path) -> bool:
     return any(part == "assets" or part.endswith("-assets") for part in path.parts)
 
 
+def _binary_asset_dir(path: Path) -> bool:
+    """Binary-dump asset exclusion for the normalize-filenames reference scan.
+
+    Narrower than ``excluded_dir``: skips ONLY the binary-dump folders
+    (``_assets`` and ``*-assets``) and NEVER a semantic content folder literally
+    named ``assets`` — ``wiki/entities/assets/`` holds asset-class entity ``.md``
+    pages whose references must still be healed. ``excluded_dir`` skips any
+    ``assets`` segment, which silently dropped that content folder from the
+    reference heal/count (the p4-9 stray-healer coverage gap, shape 1).
+    """
+    return any(part == "_assets" or part.endswith("-assets") for part in path.parts)
+
+
 def _fspath(path: Path) -> str:
     """Return an OS path safe to open on Windows past the 260-char MAX_PATH.
 
@@ -2643,7 +2656,9 @@ def _all_wiki_files(wiki_root: Path) -> list[Path]:
     """Return ALL files under wiki_root that may need renaming.
 
     Scope: raw/ + wiki/ subtrees — ALL file types (not just .md), because
-    raw/ contains PDFs too. Excludes asset folders.
+    raw/ contains PDFs too. Excludes only binary-dump asset folders (``_assets``
+    / ``*-assets``); a semantic ``assets/`` content folder stays in scope so its
+    pages rename consistently with how their references are healed.
     """
     result: list[Path] = []
     for subtree in ("raw", "wiki"):
@@ -2651,7 +2666,7 @@ def _all_wiki_files(wiki_root: Path) -> list[Path]:
         if not d.exists():
             continue
         for p in d.rglob("*"):
-            if p.is_file() and not excluded_dir(p.relative_to(wiki_root)):
+            if p.is_file() and not _binary_asset_dir(p.relative_to(wiki_root)):
                 result.append(p)
     return result
 
@@ -2757,6 +2772,7 @@ def _count_reference_classes(wiki_root: Path, rename_map: list[tuple[Path, Path]
         "raw_backlinks": 0,
         "questions_logs_entries": 0,
         "pending_topic_updates_rows": 0,
+        "root_level_files": 0,
         "state_file_stamps": 0,
     }
 
@@ -2772,7 +2788,7 @@ def _count_reference_classes(wiki_root: Path, rename_map: list[tuple[Path, Path]
     wiki_dir = wiki_root / "wiki"
     if wiki_dir.exists():
         for p in wiki_dir.rglob("*.md"):
-            if excluded_dir(p.relative_to(wiki_root)):
+            if _binary_asset_dir(p.relative_to(wiki_root)):
                 continue
             try:
                 text = read_text(p)
@@ -2790,7 +2806,7 @@ def _count_reference_classes(wiki_root: Path, rename_map: list[tuple[Path, Path]
     raw_dir = wiki_root / "raw"
     if raw_dir.exists():
         for p in raw_dir.rglob("*.md"):
-            if excluded_dir(p.relative_to(wiki_root)):
+            if _binary_asset_dir(p.relative_to(wiki_root)):
                 continue
             try:
                 text = read_text(p)
@@ -2836,6 +2852,22 @@ def _count_reference_classes(wiki_root: Path, rename_map: list[tuple[Path, Path]
             if old_name in text:
                 counts["pending_topic_updates_rows"] += text.count(old_name)
 
+    # Count root-level wiki files ({wiki_root}/*.md, e.g. tecer-relevant.md).
+    # These sit OUTSIDE the wiki/ and raw/ subtrees the loops above scan, so
+    # their [[file.md]] references were silently uncounted (stray-healer gap,
+    # shape 2). NON_SOURCE_FILES (CLAUDE.md etc.) are not wiki content; questions
+    # and pending are tallied in their own classes above — exclude all three.
+    for p in sorted(wiki_root.glob("*.md")):
+        if p.name in NON_SOURCE_FILES or p.name in ("questions.md", "pending-topic-updates.md"):
+            continue
+        try:
+            text = read_text(p)
+        except OSError:
+            continue
+        for old_name in old_stems:
+            if f"[[{old_name}" in text:
+                counts["root_level_files"] += text.count(f"[[{old_name}")
+
     # Count lint state-file stamps that need re-key.
     state_path = wiki_root / "lint-deterministic-report.json"
     if state_path.exists():
@@ -2873,6 +2905,7 @@ def _execute_normalize(
         "raw_backlinks_healed": 0,
         "questions_logs_healed": 0,
         "pending_topic_updates_healed": 0,
+        "root_level_files_healed": 0,
         "state_stamps_rekeyed": 0,
         "errors": [],
     }
@@ -2921,7 +2954,7 @@ def _execute_normalize(
     wiki_dir = wiki_root / "wiki"
     if wiki_dir.exists():
         for p in wiki_dir.rglob("*.md"):
-            if excluded_dir(p.relative_to(wiki_root)):
+            if _binary_asset_dir(p.relative_to(wiki_root)):
                 continue
             n = _heal_file(p)
             result["wikilinks_healed"] += n
@@ -2930,7 +2963,7 @@ def _execute_normalize(
     raw_dir = wiki_root / "raw"
     if raw_dir.exists():
         for p in raw_dir.rglob("*.md"):
-            if excluded_dir(p.relative_to(wiki_root)):
+            if _binary_asset_dir(p.relative_to(wiki_root)):
                 continue
             n = _heal_file(p)
             result["raw_index_cells_healed"] += n
@@ -2946,11 +2979,40 @@ def _execute_normalize(
             n = _heal_file(p)
             result["questions_logs_healed"] += n
 
+    # Heal root-level wiki files ({wiki_root}/*.md, e.g. tecer-relevant.md) —
+    # outside the wiki/ and raw/ subtrees above (stray-healer gap, shape 2).
+    # NON_SOURCE_FILES are not wiki content; questions/pending are healed in
+    # their own blocks — exclude all three to avoid touching or double-healing.
+    for p in sorted(wiki_root.glob("*.md")):
+        if p.name in NON_SOURCE_FILES or p.name in ("questions.md", "pending-topic-updates.md"):
+            continue
+        n = _heal_file(p)
+        result["root_level_files_healed"] += n
+
     # Heal pending-topic-updates.md (read: designed here, executed by conductor).
+    # _heal_file rewrites the column-5 [[file.md]] citation cells; the column-1
+    # source-path cells are bare `wiki/sources/{origin}/{file}.md` paths the
+    # wikilink regex never matches (stray-healer gap, shape 3). Heal those by
+    # full rel-path substitution after the wikilink pass.
     pending = wiki_root / "pending-topic-updates.md"
     if pending.exists():
         n = _heal_file(pending)
         result["pending_topic_updates_healed"] += n
+        try:
+            text = read_text(pending)
+            updated = text
+            path_subs = 0
+            for old_rel, new_rel in old_to_new_rel.items():
+                occurrences = updated.count(old_rel)
+                if occurrences:
+                    updated = updated.replace(old_rel, new_rel)
+                    path_subs += occurrences
+            if updated != text:
+                with open(_fspath(pending), "w", encoding="utf-8") as fh:
+                    fh.write(updated)
+            result["pending_topic_updates_healed"] += path_subs
+        except OSError as e:
+            result["errors"].append(f"PENDING-PATH-HEAL-FAIL {pending}: {e}")
 
     # Step B: Re-key lint state-file stamps.
     effective_state = state_path if state_path else wiki_root / "lint-deterministic-report.json"

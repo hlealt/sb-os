@@ -426,3 +426,162 @@ class TestExecuteMode:
         exec_new_names = {r["new"] for r in exec_payload["renames_performed"]}
 
         assert dry_new_names == exec_new_names
+
+
+# ---------------------------------------------------------------------------
+# Reference-heal coverage gap (3 shapes the original execute missed; found
+# 2026-06-12 during the p4-9 corpus migration). Regression coverage per the
+# task criteria: every shape healed by --execute, dry-run counts == execute
+# heal counts per class, existing suite stays green.
+#
+# Shape 1: footnote-form [[file.md]] links on a wiki page inside the semantic
+#          `assets/` content folder (wiki/entities/assets/) — the broad
+#          excluded_dir() asset skip wrongly dropped that whole content folder.
+# Shape 2: a root-level knowledge-base file ({wiki_root}/*.md, e.g.
+#          tecer-relevant.md) — never visited by the wiki//raw/ heal loops.
+# Shape 3: pending-topic-updates.md bare source-path cells (column 1, a plain
+#          `wiki/sources/{origin}/{file}.md` path) — the wikilink regex healed
+#          only the column-5 [[file.md]] citation cell.
+# ---------------------------------------------------------------------------
+
+class TestReferenceHealCoverageGap:
+
+    # --- Shape 1: assets-folder content page ---
+
+    def test_execute_heals_footnote_link_in_assets_folder(self, tmp_path):
+        vault, wiki_root = make_vault(tmp_path)
+        (wiki_root / "wiki" / "entities" / "assets").mkdir(parents=True, exist_ok=True)
+        (wiki_root / "raw" / "origin-a" / "2026-são.md").write_text("c", encoding="utf-8")
+        gold = wiki_root / "wiki" / "entities" / "assets" / "gold.md"
+        gold.write_text(
+            "---\ntype: entity\n---\n\n## Substance\n\nbody[^1]\n\n[^1]: [[2026-são.md]]\n",
+            encoding="utf-8",
+        )
+        run_cmd(vault, "--execute")
+        txt = gold.read_text(encoding="utf-8")
+        assert "[[2026-sao.md]]" in txt
+        assert "são" not in txt
+
+    def test_assets_folder_link_dry_run_execute_parity(self, tmp_path):
+        vault, wiki_root = make_vault(tmp_path)
+        (wiki_root / "wiki" / "entities" / "assets").mkdir(parents=True, exist_ok=True)
+        (wiki_root / "raw" / "origin-a" / "2026-são.md").write_text("c", encoding="utf-8")
+        gold = wiki_root / "wiki" / "entities" / "assets" / "gold.md"
+        gold.write_text("body[^1]\n\n[^1]: [[2026-são.md]]\n", encoding="utf-8")
+        _, dry = run_cmd(vault)
+        _, ex = run_cmd(vault, "--execute")
+        assert dry["reference_class_counts"]["wikilinks"] == 1
+        assert ex["wikilinks_healed"] == 1
+
+    # --- Shape 2: root-level KB file ---
+
+    def test_execute_heals_root_level_kb_file(self, tmp_path):
+        vault, wiki_root = make_vault(tmp_path)
+        (wiki_root / "raw" / "origin-a" / "2026-são.md").write_text("c", encoding="utf-8")
+        root = wiki_root / "tecer-relevant.md"
+        root.write_text("see [[2026-são.md]] here\n", encoding="utf-8")
+        run_cmd(vault, "--execute")
+        txt = root.read_text(encoding="utf-8")
+        assert "[[2026-sao.md]]" in txt
+        assert "são" not in txt
+
+    def test_root_level_file_dry_run_execute_parity(self, tmp_path):
+        vault, wiki_root = make_vault(tmp_path)
+        (wiki_root / "raw" / "origin-a" / "2026-são.md").write_text("c", encoding="utf-8")
+        (wiki_root / "tecer-relevant.md").write_text("see [[2026-são.md]] here\n", encoding="utf-8")
+        _, dry = run_cmd(vault)
+        _, ex = run_cmd(vault, "--execute")
+        assert dry["reference_class_counts"]["root_level_files"] == 1
+        assert ex["root_level_files_healed"] == 1
+
+    def test_root_level_non_source_files_not_healed(self, tmp_path):
+        # CLAUDE.md / AGENTS.md / QWEN.md / README.md at the wiki root are NOT
+        # wiki content and must never be rewritten by the heal.
+        vault, wiki_root = make_vault(tmp_path)
+        (wiki_root / "raw" / "origin-a" / "2026-são.md").write_text("c", encoding="utf-8")
+        claude = wiki_root / "CLAUDE.md"
+        claude.write_text("mentions [[2026-são.md]]\n", encoding="utf-8")
+        run_cmd(vault, "--execute")
+        assert claude.read_text(encoding="utf-8") == "mentions [[2026-são.md]]\n"
+
+    # --- Shape 3: pending-topic-updates.md bare source-path cell ---
+
+    def test_execute_heals_pending_artifact_bare_path_and_wikilink(self, tmp_path):
+        vault, wiki_root = make_vault(tmp_path)
+        src = wiki_root / "wiki" / "sources" / "origin-a" / "2026-são.md"
+        src.write_text("c", encoding="utf-8")
+        pending = wiki_root / "pending-topic-updates.md"
+        pending.write_text(
+            "| source page | proposed bullet + citation |\n"
+            "|---|---|\n"
+            "| wiki/sources/origin-a/2026-são.md | x — [[2026-são.md]] |\n",
+            encoding="utf-8",
+        )
+        run_cmd(vault, "--execute")
+        txt = pending.read_text(encoding="utf-8")
+        assert "wiki/sources/origin-a/2026-sao.md" in txt   # bare path cell healed
+        assert "[[2026-sao.md]]" in txt                       # wikilink cell healed
+        assert "são" not in txt
+
+    def test_pending_artifact_dry_run_execute_parity(self, tmp_path):
+        vault, wiki_root = make_vault(tmp_path)
+        src = wiki_root / "wiki" / "sources" / "origin-a" / "2026-são.md"
+        src.write_text("c", encoding="utf-8")
+        pending = wiki_root / "pending-topic-updates.md"
+        pending.write_text(
+            "| source page | proposed bullet + citation |\n"
+            "|---|---|\n"
+            "| wiki/sources/origin-a/2026-são.md | x — [[2026-são.md]] |\n",
+            encoding="utf-8",
+        )
+        _, dry = run_cmd(vault)
+        _, ex = run_cmd(vault, "--execute")
+        # Each row carries the renamed filename twice: bare path (col 1) + [[..]] (col 5).
+        assert dry["reference_class_counts"]["pending_topic_updates_rows"] == 2
+        assert ex["pending_topic_updates_healed"] == 2
+
+    # --- All three shapes in one corpus (task criterion) ---
+
+    def test_corpus_with_all_three_shapes_fully_healed_with_parity(self, tmp_path):
+        """A fixture corpus carrying all 3 missed shapes is fully healed by
+        --execute, with dry-run counts == execute heal counts per class."""
+        vault, wiki_root = make_vault(tmp_path)
+        (wiki_root / "wiki" / "entities" / "assets").mkdir(parents=True, exist_ok=True)
+
+        # Two distinct renamed files: a raw source and a wiki/sources source page.
+        raw_src = wiki_root / "raw" / "origin-a" / "2026-são.md"
+        raw_src.write_text("c", encoding="utf-8")
+        page_src = wiki_root / "wiki" / "sources" / "origin-a" / "2026-café.md"
+        page_src.write_text("c", encoding="utf-8")
+
+        # Shape 1: footnote-form link on an assets-folder content page.
+        gold = wiki_root / "wiki" / "entities" / "assets" / "gold.md"
+        gold.write_text("body[^1]\n\n[^1]: [[2026-são.md]]\n", encoding="utf-8")
+        # Shape 2: root-level KB file.
+        (wiki_root / "tecer-relevant.md").write_text(
+            "see [[2026-são.md]] here\n", encoding="utf-8"
+        )
+        # Shape 3: pending artifact — bare path cell + [[..]] citation cell.
+        (wiki_root / "pending-topic-updates.md").write_text(
+            "| source page | proposed bullet + citation |\n"
+            "|---|---|\n"
+            "| wiki/sources/origin-a/2026-café.md | x — [[2026-café.md]] |\n",
+            encoding="utf-8",
+        )
+
+        _, dry = run_cmd(vault)
+        _, ex = run_cmd(vault, "--execute")
+        rc = dry["reference_class_counts"]
+
+        # Per-class parity for every shape.
+        assert rc["wikilinks"] == ex["wikilinks_healed"] == 1            # shape 1
+        assert rc["root_level_files"] == ex["root_level_files_healed"] == 1  # shape 2
+        assert (
+            rc["pending_topic_updates_rows"] == ex["pending_topic_updates_healed"] == 2
+        )  # shape 3 (bare path + wikilink)
+
+        # No residual non-ASCII reference survives anywhere.
+        for f in (gold, wiki_root / "tecer-relevant.md", wiki_root / "pending-topic-updates.md"):
+            assert "são" not in f.read_text(encoding="utf-8")
+            assert "café" not in f.read_text(encoding="utf-8")
+        assert ex["errors"] == []
