@@ -52,12 +52,27 @@ def _validate_runtime_env(repo_root: Path) -> int:
     return 0
 
 
-def _resolve_target(cli_mod, manifest_mod, repo_root: Path) -> tuple[Path, bool]:
+def _resolve_target(
+    cli_mod, manifest_mod, repo_root: Path, non_interactive: bool = False
+) -> tuple[Path, bool]:
     found = cli_mod.find_manifest_upward(Path.cwd())
     if found is not None:
         print(f"  Found existing sb-os install at: {found}")
-        if cli_mod.confirm("  Use this as the target?", default=True):
+        # --non-interactive promises no prompts: accept the detected install
+        # without confirming. Interactive runs still confirm.
+        if non_interactive or cli_mod.confirm("  Use this as the target?", default=True):
             return found, True
+
+    if non_interactive:
+        # No install detected upward and no --target given: there is no prior
+        # selection to reuse and nowhere safe to scaffold without a prompt.
+        # Fail loud with an actionable message instead of aborting at a prompt
+        # the flag promised to suppress.
+        raise SystemExit(
+            "error: --non-interactive found no existing sb-os install via upward "
+            "search from the current directory.\n"
+            "  Pass --target <vault-path> to choose where to install or upgrade."
+        )
 
     # When the user runs install.py from inside the sb-os repo directory, cwd
     # IS the repo — not a sensible vault root.  Default to its parent instead.
@@ -134,7 +149,9 @@ def main(argv: list[str] | None = None) -> int:
         target = args.target.expanduser().resolve()
         has_manifest = (target / manifest_mod.MANIFEST_FILENAME).is_file()
     else:
-        target, has_manifest = _resolve_target(cli_mod, manifest_mod, repo_root)
+        target, has_manifest = _resolve_target(
+            cli_mod, manifest_mod, repo_root, non_interactive=args.non_interactive
+        )
 
     selected, excluded = _resolve_selection(
         cli_mod, loaders_mod, manifest_mod, target, args
