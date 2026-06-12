@@ -9,3 +9,6 @@ Thumbs.db
 *.egg-info/
 dist/
 build/
+
+# Local done-gate evidence artifacts (sheets + captures) — never shipped
+docs/done-gate-evidence/
