@@ -91,7 +91,7 @@ Body composition rules:
 
 The mechanical bookkeeping from the previous Steps 3–5 (cross-links + `last-touched` bumps, log-entry resolution, leaf-index row) is performed by a single atomic script call. For the behavioral semantics of each operation, read `../shared/scribe-shared.md`.
 
-**Resolve source-queue entries (agent-side, before calling the script):** If the user or investor referenced a `{wiki_root}/source-queue.md` entry (e.g., a `gated_pending_access` source the user finally read and acted on), resolve that entry NOW — agent-side, per that file's own resolution rule — before building the payload. The script resolves ONLY `{wiki_root}/logs/theses.md` entries; `source-queue.md` resolution stays here, never delegated to the script.
+**Source-queue entries (script-resolved):** If the user or investor referenced a `{wiki_root}/source-queue.md` entry (e.g., a `gated_pending_access` source the user finally read and acted on), JUDGE agent-side whether the entry is now spent (per that file's own rule — an entry is spent once its wiki source page exists). When spent, do NOT delete it by hand — pass a `source_queue_ref` in the payload and the script retires the entry atomically with the rest of the bookkeeping. Identify the entry by its `url` (authoritative) or, for an entry without a usable URL, its exact `title`. The judgment stays here; only the mechanical deletion is delegated.
 
 **Assemble the payload JSON file** (write to a temp file, e.g. `/tmp/scribe_payload.json`):
 
@@ -105,12 +105,14 @@ The mechanical bookkeeping from the previous Steps 3–5 (cross-links + `last-to
     {"kind": "assets", "slug": "<asset-slug>"}
   ],
   "log_ref": {"timestamp": "<timestamp>", "slug": "<slug>"},
+  "source_queue_ref": {"url": "<source-queue entry url>"},
   "description": "<action + subject summary ≤280 chars>"
 }
 ```
 
 - `links`: one entry per wikilink in `related_thesis` / `related_asset` / `related_company`. Use `kind: "theses"` for thesis cross-links; `kind: "organizations"` or `kind: "assets"` for entity cross-links. Omit the array (or pass `[]`) when there are none.
 - `log_ref`: include ONLY when closing a referenced `{wiki_root}/logs/theses.md` thesis entry; omit otherwise. Supported shapes: `{"timestamp": "...", "slug": "..."}` for a `proposed-new-thesis` / thesis-queue entry, or `{"target_thesis": "..."}` for a `speculative-thesis-update`.
+- `source_queue_ref`: include ONLY when retiring a referenced `{wiki_root}/source-queue.md` entry the user acted on; omit otherwise. Supported shapes: `{"url": "<entry url>"}` (authoritative — matched URL-normalized) or `{"title": "<exact entry title>"}` (for an entry without a usable URL). The script deletes the matching H2 block; a not-found ref aborts with no writes. Independent of `log_ref` — both may appear in one payload.
 - `description`: the one-line action + subject summary (≤280 chars; e.g., `Sell Petrobras — dividend thesis weakened by reinvestment shift`).
 
 **Run the script** (from the vault root — no `--vault-root` flag needed):

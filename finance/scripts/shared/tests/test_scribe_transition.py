@@ -20,13 +20,42 @@ sys.path.insert(0, str(_SCRIPTS))
 from investimentos.scribe_transition import (
     _append_index_row,
     _delete_log_entry,
+    _delete_source_queue_entry,
     _ensure_related_link,
     _has_index_row,
+    _normalize_url,
     _parse_frontmatter,
     _set_frontmatter_field,
     _update_index_description,
     run,
 )
+
+
+# A realistic two-entry source-queue.md (mirrors production shape).
+_SOURCE_QUEUE = """---
+type: source-queue
+---
+
+# Source queue
+
+> Open investment source-lifecycle states.
+
+## gated_pending_access — 2026-06-07
+- title: Retail Media Ad Spending Forecast and Trends H2 2025
+- url: https://www.emarketer.com/content/retail-media-ad-spending-forecast-trends-h2-2025
+- source: emarketer
+- related_thesis: representativity-niche-brands
+- why_it_matters: eMarketer paywall
+- required_user_action: Fetch manually
+
+## blocked — 2026-06-06
+- title: DHL Global Connectedness Tracker
+- url: https://www.dhl.com/global-en/delivered/globalization/global-connectedness-tracker.html
+- source: dhl
+- related_thesis: new-world-order-deglobalization
+- failure: read timeout
+- required_user_action: Retry later
+"""
 
 
 # ---------------------------------------------------------------------------
@@ -143,6 +172,51 @@ class TestLogDeletionHelper:
         new_text, found = _delete_log_entry(text, "proposed-new-thesis", {"timestamp": "nope", "slug": "nope"})
         assert not found
         assert new_text == text
+
+
+class TestSourceQueueHelpers:
+    def test_normalize_url_strips_scheme_www_trailing_slash(self):
+        assert _normalize_url("https://www.Example.com/path/") == "example.com/path"
+        assert _normalize_url("http://example.com/x") == "example.com/x"
+        assert _normalize_url('"https://example.com"') == "example.com"
+        assert _normalize_url("") == ""
+
+    def test_delete_by_url(self):
+        new_text, found = _delete_source_queue_entry(
+            _SOURCE_QUEUE,
+            {"url": "https://www.emarketer.com/content/retail-media-ad-spending-forecast-trends-h2-2025"},
+        )
+        assert found
+        assert "emarketer" not in new_text
+        assert "dhl.com" in new_text  # other entry intact
+        assert "# Source queue" in new_text  # preamble preserved
+
+    def test_delete_by_url_normalized_variant_matches(self):
+        # A trailing slash + http scheme variant still matches the stored https/no-slash url.
+        new_text, found = _delete_source_queue_entry(
+            _SOURCE_QUEUE,
+            {"url": "http://emarketer.com/content/retail-media-ad-spending-forecast-trends-h2-2025/"},
+        )
+        assert found
+        assert "emarketer" not in new_text
+
+    def test_delete_by_title(self):
+        new_text, found = _delete_source_queue_entry(
+            _SOURCE_QUEUE, {"title": "DHL Global Connectedness Tracker"}
+        )
+        assert found
+        assert "dhl.com" not in new_text
+        assert "emarketer" in new_text  # other entry intact
+
+    def test_not_found_by_url(self):
+        new_text, found = _delete_source_queue_entry(_SOURCE_QUEUE, {"url": "https://nope.example/x"})
+        assert not found
+        assert new_text == _SOURCE_QUEUE
+
+    def test_not_found_by_title(self):
+        new_text, found = _delete_source_queue_entry(_SOURCE_QUEUE, {"title": "Nonexistent"})
+        assert not found
+        assert new_text == _SOURCE_QUEUE
 
 
 class TestIndexHelpers:
@@ -533,6 +607,147 @@ class TestDecision:
         assert not report["errors"]
         new_log = (wiki_root / "logs" / "theses.md").read_text(encoding="utf-8")
         assert "x" not in new_log
+
+
+class TestDecisionSourceQueue:
+    """source_queue_ref: a decision-mode payload retires a {wiki_root}/source-queue.md entry."""
+
+    def _setup(self, tmp_path: Path) -> Path:
+        vault = _make_vault(tmp_path)
+        wiki_root = vault / "wiki"
+        (wiki_root / "wiki" / "decisions" / "d.md").write_text("# D", encoding="utf-8")
+        (wiki_root / "source-queue.md").write_text(_SOURCE_QUEUE, encoding="utf-8")
+        return vault
+
+    def test_resolves_by_url(self, tmp_path: Path):
+        vault = self._setup(tmp_path)
+        wiki_root = vault / "wiki"
+        payload = {
+            "mode": "decision",
+            "filename": "d.md",
+            "links": [],
+            "source_queue_ref": {"url": "https://www.emarketer.com/content/retail-media-ad-spending-forecast-trends-h2-2025"},
+            "description": "Act on the eMarketer source",
+        }
+        report = run(payload, vault, dry_run=False)
+        assert not report["errors"], report["errors"]
+        sq = (wiki_root / "source-queue.md").read_text(encoding="utf-8")
+        assert "emarketer" not in sq
+        assert "dhl.com" in sq  # other entry untouched
+        assert any(e["action"] == "resolve-source-queue-entry" for e in report["edits"])
+
+    def test_resolves_by_title(self, tmp_path: Path):
+        vault = self._setup(tmp_path)
+        wiki_root = vault / "wiki"
+        payload = {
+            "mode": "decision",
+            "filename": "d.md",
+            "links": [],
+            "source_queue_ref": {"title": "DHL Global Connectedness Tracker"},
+            "description": "Act on the DHL source",
+        }
+        report = run(payload, vault, dry_run=False)
+        assert not report["errors"], report["errors"]
+        sq = (wiki_root / "source-queue.md").read_text(encoding="utf-8")
+        assert "dhl.com" not in sq
+        assert "emarketer" in sq
+
+    def test_log_ref_and_source_queue_ref_both_resolve(self, tmp_path: Path):
+        vault = self._setup(tmp_path)
+        wiki_root = vault / "wiki"
+        (wiki_root / "logs" / "theses.md").write_text(
+            "## 2026-06-10T08:00:00 — proposed-new-thesis: t\n\nDetails\n", encoding="utf-8"
+        )
+        payload = {
+            "mode": "decision",
+            "filename": "d.md",
+            "links": [],
+            "log_ref": {"timestamp": "2026-06-10T08:00:00", "slug": "t"},
+            "source_queue_ref": {"url": "https://www.emarketer.com/content/retail-media-ad-spending-forecast-trends-h2-2025"},
+            "description": "Desc",
+        }
+        report = run(payload, vault, dry_run=False)
+        assert not report["errors"], report["errors"]
+        assert "emarketer" not in (wiki_root / "source-queue.md").read_text(encoding="utf-8")
+        assert "proposed-new-thesis" not in (wiki_root / "logs" / "theses.md").read_text(encoding="utf-8")
+
+    def test_not_found_aborts_with_no_writes(self, tmp_path: Path):
+        vault = self._setup(tmp_path)
+        before = _hash_tree(vault)
+        payload = {
+            "mode": "decision",
+            "filename": "d.md",
+            "links": [],
+            "source_queue_ref": {"url": "https://nope.example/missing"},
+            "description": "Desc",
+        }
+        report = run(payload, vault, dry_run=False)
+        assert report["errors"]
+        assert any("source-queue entry not found" in e for e in report["errors"])
+        assert _hash_tree(vault) == before  # validate-first: zero writes
+
+    def test_source_queue_ref_rejected_in_thesis_mode(self, tmp_path: Path):
+        vault = _make_vault(tmp_path)
+        wiki_root = vault / "wiki"
+        (wiki_root / "wiki" / "theses" / "x.md").write_text("# X", encoding="utf-8")
+        (wiki_root / "source-queue.md").write_text(_SOURCE_QUEUE, encoding="utf-8")
+        before = _hash_tree(vault)
+        payload = {
+            "mode": "thesis-new",
+            "slug": "x",
+            "entities": [],
+            "source_queue_ref": {"title": "DHL Global Connectedness Tracker"},
+            "description": "Desc",
+        }
+        report = run(payload, vault, dry_run=False)
+        assert report["errors"]
+        assert any("only valid in decision mode" in e for e in report["errors"])
+        assert _hash_tree(vault) == before
+
+    def test_missing_source_queue_file_aborts(self, tmp_path: Path):
+        vault = _make_vault(tmp_path)
+        wiki_root = vault / "wiki"
+        (wiki_root / "wiki" / "decisions" / "d.md").write_text("# D", encoding="utf-8")
+        # source-queue.md intentionally absent
+        payload = {
+            "mode": "decision",
+            "filename": "d.md",
+            "links": [],
+            "source_queue_ref": {"title": "Anything"},
+            "description": "Desc",
+        }
+        report = run(payload, vault, dry_run=False)
+        assert report["errors"]
+        assert any("Source queue file not found" in e for e in report["errors"])
+
+    def test_ref_without_url_or_title_aborts(self, tmp_path: Path):
+        vault = self._setup(tmp_path)
+        payload = {
+            "mode": "decision",
+            "filename": "d.md",
+            "links": [],
+            "source_queue_ref": {"source": "emarketer"},
+            "description": "Desc",
+        }
+        report = run(payload, vault, dry_run=False)
+        assert report["errors"]
+        assert any("must contain" in e for e in report["errors"])
+
+    def test_dry_run_leaves_source_queue_untouched(self, tmp_path: Path):
+        vault = self._setup(tmp_path)
+        before = _hash_tree(vault)
+        payload = {
+            "mode": "decision",
+            "filename": "d.md",
+            "links": [],
+            "source_queue_ref": {"url": "https://www.emarketer.com/content/retail-media-ad-spending-forecast-trends-h2-2025"},
+            "description": "Desc",
+        }
+        report = run(payload, vault, dry_run=True)
+        assert not report["errors"], report["errors"]
+        assert report["dry_run"]
+        assert _hash_tree(vault) == before
+        assert any(e["action"] == "resolve-source-queue-entry" for e in report["edits"])
 
 
 class TestEdgeCases:

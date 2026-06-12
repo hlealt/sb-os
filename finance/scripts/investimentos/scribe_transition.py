@@ -150,6 +150,64 @@ def _delete_log_entry(text: str, entry_type: str, ref: dict) -> tuple[str, bool]
 
 
 # ---------------------------------------------------------------------------
+# Source-queue helpers
+# ---------------------------------------------------------------------------
+
+def _normalize_url(u: str) -> str:
+    """Normalize a URL for authoritative equality: strip quotes, scheme, www, trailing slash; lowercase.
+
+    Mirrors the adjudication matcher's normalization so a stored entry url and
+    the ref passed by the scribe compare equal across scheme/www/trailing-slash
+    variation.
+    """
+    if not u:
+        return ""
+    u = u.strip().strip('"').strip("'").lower()
+    u = re.sub(r"^https?://", "", u)
+    u = re.sub(r"^www\.", "", u)
+    return u.rstrip("/")
+
+
+def _delete_source_queue_entry(text: str, ref: dict) -> tuple[str, bool]:
+    """Delete the matching H2 block from {wiki_root}/source-queue.md.
+
+    The entry is identified by ``ref['url']`` (authoritative — matched after
+    URL normalization) or, when no url is given, ``ref['title']`` (exact match).
+    Returns (new_text, found). The first matching block (H2 header + body, up to
+    the next H2 or EOF) is removed; non-matching blocks and any preamble before
+    the first H2 are preserved.
+    """
+    want_url = _normalize_url(ref.get("url", ""))
+    want_title = (ref.get("title") or "").strip()
+
+    lines = text.split("\n")
+    h2_positions = [i for i, line in enumerate(lines) if line.startswith("## ")]
+
+    for idx, start in enumerate(h2_positions):
+        end = h2_positions[idx + 1] if idx + 1 < len(h2_positions) else len(lines)
+        block_url = ""
+        block_title = ""
+        for bl in lines[start:end]:
+            m = re.match(r"^-\s+url:\s*(.+)$", bl)
+            if m and not block_url:
+                block_url = m.group(1).strip()
+            m = re.match(r"^-\s+title:\s*(.+)$", bl)
+            if m and not block_title:
+                block_title = m.group(1).strip()
+
+        if want_url:
+            matched = bool(block_url) and _normalize_url(block_url) == want_url
+        else:
+            matched = bool(want_title) and block_title == want_title
+
+        if matched:
+            new_lines = lines[:start] + lines[end:]
+            return "\n".join(new_lines), True
+
+    return text, False
+
+
+# ---------------------------------------------------------------------------
 # Index helpers
 # ---------------------------------------------------------------------------
 
@@ -380,6 +438,42 @@ def run(payload: dict, vault_root: Path, dry_run: bool) -> dict:
         if new_log != original_log:
             operations.append((log_path, original_log, new_log, "resolve log entry"))
             report["edits"].append({"path": str(log_path), "action": "resolve-log-entry", "ref": log_ref})
+
+    # 5b. Source-queue resolution (decision mode only)
+    # The agent JUDGES whether a source-queue entry is spent (agent-side, per
+    # source-queue.md's own rule); the script performs the mechanical deletion.
+    source_queue_ref = payload.get("source_queue_ref")
+    if source_queue_ref:
+        if mode != "decision":
+            report["errors"].append("source_queue_ref is only valid in decision mode")
+            return report
+        if not (source_queue_ref.get("url") or source_queue_ref.get("title")):
+            report["errors"].append("source_queue_ref must contain 'url' or 'title'")
+            return report
+
+        sq_path = wiki_root / "source-queue.md"
+        if not sq_path.exists():
+            report["errors"].append(f"Source queue file not found: {sq_path}")
+            return report
+
+        try:
+            original_sq = sq_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            report["errors"].append(f"Cannot read {sq_path}: {exc}")
+            return report
+
+        new_sq, found = _delete_source_queue_entry(original_sq, source_queue_ref)
+        if not found:
+            report["errors"].append(
+                f"Referenced source-queue entry not found: {json.dumps(source_queue_ref)}"
+            )
+            return report
+
+        if new_sq != original_sq:
+            operations.append((sq_path, original_sq, new_sq, "resolve source-queue entry"))
+            report["edits"].append(
+                {"path": str(sq_path), "action": "resolve-source-queue-entry", "ref": source_queue_ref}
+            )
 
     # 6. Index
     if mode in ("thesis-new", "thesis-extend"):

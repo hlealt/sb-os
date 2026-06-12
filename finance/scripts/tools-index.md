@@ -612,9 +612,9 @@ purpose: Atomic mechanical bookkeeping for thesis/decision persistence — cross
 owner_script: investimentos/scribe_transition.py
 class: write
 use: upsert
-expected_inputs: --payload PATH to JSON file (or - for stdin) with mode (thesis-new/thesis-extend/decision), slug/filename, entity/link list, optional log/queue ref, description; optional --vault-root PATH (defaults to CWD); optional --dry-run
-outputs: Stdout report of every edit performed and every skip; zero writes under --dry-run. Mutates entity pages (Related section + last-touched), logs/theses.md (entry deletion), and theses.md / decisions.md leaf index.
-canonical_reader_writer: writes {wiki_root}/wiki/entities/**, {wiki_root}/wiki/theses/theses.md, {wiki_root}/wiki/decisions/decisions.md, {wiki_root}/logs/theses.md
+expected_inputs: --payload PATH to JSON file (or - for stdin) with mode (thesis-new/thesis-extend/decision), slug/filename, entity/link list, optional log/queue ref (logs/theses.md), optional source_queue_ref (decision mode only — {url} or {title} retiring a source-queue.md entry), description; optional --vault-root PATH (defaults to CWD); optional --dry-run
+outputs: Stdout report of every edit performed and every skip; zero writes under --dry-run. Mutates entity pages (Related section + last-touched), logs/theses.md (entry deletion), source-queue.md (decision-mode entry deletion via source_queue_ref), and theses.md / decisions.md leaf index.
+canonical_reader_writer: writes {wiki_root}/wiki/entities/**, {wiki_root}/wiki/theses/theses.md, {wiki_root}/wiki/decisions/decisions.md, {wiki_root}/logs/theses.md, {wiki_root}/source-queue.md
 dry_run: available
-last_validated: pending
+last_validated: 2026-06-12
 ```
