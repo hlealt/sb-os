@@ -1304,7 +1304,7 @@ Source files live in the sb-os repo under `sb-os/workflows/sb-wiki-*/`. Skills a
 | `sb-wiki-ingest-all` | Slash command | `sb-os/workflows/sb-wiki-ingest-all/` | `.claude/commands/sb-wiki-ingest-all.md` | User-invocable batch backfill of all non-ingested sources (orchestration only) |
 | `sb-wiki-create-topic` | Skill (auto-discovered) | `sb-os/workflows/sb-wiki-create-topic/` | `.claude/skills/sb-wiki-create-topic/SKILL.md` | Agent-invokable mid-ingest; auto-fires when the user expresses topic-creation intent |
 | `sb-wiki-lint` | Slash command | `sb-os/workflows/sb-wiki-lint/` | `.claude/commands/sb-wiki-lint.md` | User-invocable health check + index maintenance |
-| `sb-wiki-query` | Slash command | `sb-os/workflows/sb-wiki-query/` | `.claude/commands/sb-wiki-query.md` | User-invocable synthesized query |
+| `sb-wiki-query` | Skill (auto-discovered) | `sb-os/workflows/sb-wiki-query/` | `.claude/skills/sb-wiki-query/SKILL.md` | Auto-fires on open / knowledge-seeking questions unless web research is explicitly requested; also user-invocable via `/sb-wiki-query` |
 
 Workflows hold all logic. Slash commands and skills are thin loaders only.
 
