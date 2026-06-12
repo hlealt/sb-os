@@ -233,6 +233,24 @@ A vault MAY have legacy asset folders nested inside specific origin subdirectori
 | Wikilinks in frontmatter | `"[[slug.md]]"` (quoted) |
 | Type folder | disambiguates collisions; same slug may exist in `concepts/` and `entities/`. **Forbidden**: same slug in `concepts/` and `topics/` (if reclassified, the old slug retires) |
 
+### ASCII filename requirement
+
+All filenames in the wiki corpus — raw sources and wiki pages — MUST be pure ASCII. Non-ASCII characters (accented letters, curly quotes, em-dashes, typographic punctuation, emoji) are forbidden in filenames.
+
+**Creation-time rule.** `/sb-wiki-ingest` enforces this at write time via rule A11. New files born with a non-ASCII stem from a browser clipper or other tool MUST be renamed to their ASCII-folded equivalent before the ingest proceeds (see A11 in `sb-wiki-ingest.md`).
+
+**Recurring stray healer.** Clippers and browser extensions may deposit non-ASCII filenames despite this rule. The `normalize-filenames` subcommand of `sb-wiki-lint-deterministic.py` is the recurring corrector:
+
+```bash
+# Dry-run: scan corpus, emit rename map + reference class counts
+python wiki/scripts/sb-wiki-lint-deterministic.py normalize-filenames --vault-root <vault>
+
+# Execute: rename files + heal all reference classes + re-key state stamps
+python wiki/scripts/sb-wiki-lint-deterministic.py normalize-filenames --vault-root <vault> --execute
+```
+
+Run the dry-run before every migration. The subcommand exits 2 on collision and must exit 0 before `--execute` is permitted. After `--execute`, re-run `sb-wiki-search.py sync` to rebuild the Voyage search index (path-keyed).
+
 ### Raw PDF title-conformance
 
 A raw **PDF** filename MUST equal the kebab-slug of the paper's actual title (the title printed on the document; mirrored in the raw index `Title` column). Cryptic publisher/repository names (arXiv IDs like `2602.21012v1.pdf`, scan dumps like `kolmbook-eng-scan.pdf`) do NOT reflect the title and are renamed. Scope: PDF raw sources ONLY — markdown raw sources arrive title-named from the clipper and are exempt.

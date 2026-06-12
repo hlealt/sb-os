@@ -93,6 +93,14 @@ These rules bind ALL write operations in this workflow regardless of mode (defau
 | Raw T4 framing — a specific below-bar claim extracted from a source | Source page ONLY | Write verbatim on its source page. NEVER on an entity page. |
 | Synthesized below-bar verdict | Entity page (permitted) | MUST include attribution: `per {source}, T4 — see [[source-page]]`. NEVER absorb unattributed. |
 
+### A11 — ASCII-only filenames at creation time
+
+Every raw file placed into `{wiki_root}/raw/` and every wiki page written by this workflow MUST have a pure ASCII filename (stem + extension). Non-ASCII characters (accented letters, curly quotes, em-dashes, emoji, etc.) MUST be folded to ASCII before any write.
+
+The ASCII-fold authority is the `normalize-filenames` subcommand of `sb-wiki-lint-deterministic.py` (`_slug_fold`), documented in `../../docs/wiki-schema.md` § "ASCII filename requirement". For PDFs, the title-slug algorithm at Step 1.5 already enforces ASCII; for `.md` raws delivered by a clipper or browser extension, the agent MUST verify the filename is ASCII-only at Step 1 and, if any character is above `0x7F`, rename it via the subcommand (`sb-wiki-lint-deterministic.py normalize-filenames --vault-root <vault> --execute` — it folds the non-ASCII stem, heals every reference class, and re-keys lint state) before proceeding with the ingest. Do NOT create any wiki page whose stem contains a non-ASCII character.
+
+**Clipper seam.** Browser extensions and clippers frequently produce filenames with accents (e.g., `2026-06-01-são-paulo.md`) or curly quotes. These arrive already written to `raw/`. On Step 1, check the resolved raw filename — if it contains any byte above `0x7F`, treat the situation identically to the Step 1.5 PDF rename: fold the stem to ASCII via the algorithm, verify no collision, rename the raw file, and use the ASCII stem for all downstream references (source page, raw index, wiki sources index).
+
 ### A10 — File and image routing
 
 **Rule A — Relocate referenced files via the designated capture tool.**
@@ -340,8 +348,8 @@ For each entry in `stub-candidates`:
 3. Write frontmatter per `../shared/frontmatter-schemas.md` (Concept adds `kind:` free-form string; Entity adds `kind:` from the enum defined in `../shared/frontmatter-schemas.md` — single source of truth, never restated here).
 4. Write a 1–2 sentence preamble derived from the raw source.
 5. Write the required sections empty:
-   - Concept: `Definition` (1 factual sentence) + `Sources` (with the current `[^N]: [[<raw-filename>]]` definition)
-   - Entity: `What it is` (1 factual sentence) + `Sources`
+   - Concept: `Definition` (1 factual sentence ending with the inline `[^1]` marker) + `Sources` (with the matching `[^1]: [[<raw-filename>]]` definition)
+   - Entity: `What it is` (1 factual sentence ending with the inline `[^1]` marker) + `Sources` (with the matching `[^1]: [[<raw-filename>]]` definition)
 6. Do NOT populate optional sections — stub-state per `../shared/stub-policy.md` requires main content sections empty or absent.
 
 ### Step 6 — Detect candidate-topic triggers
@@ -471,6 +479,14 @@ User response handling:
 | Proposed answer `reject N` (per row, default if user omits) | No change to the topic page or `questions.md` entry; for a topic-home row, discard the staged step-4.5 topic-update too. No log entry. The detection is not preserved — re-detected on future ingests (or by the lint sweep) if overlap recurs. |
 
 Default behavior when the user omits per-topic decisions: defer all topics, **apply firm updates** (genuine firm rows apply on commit; an explicit `reject N` ledgers that pair, omission does not), reject semantic, reject speculative, reject all proposed answers. Answer-origin firm entries (in PROPOSED ANSWERS) reject by omission like the other answer rows.
+
+**Post-commit citation-integrity gate (MANDATORY — runs after ANY committing response, including silent mode; skipped only on `abort`).** Immediately after the commit lands, run the gate over EVERY page the commit wrote or edited (source page, step-4 updated pages, step-5 stubs, accepted topic pages):
+
+```bash
+python {sb_os_path}/wiki/scripts/sb-wiki-lint-deterministic.py check-pages --vault-root <vault-root> <page> [<page> ...]
+```
+
+Exit 0 → proceed. Exit 1 → repair each listed failure NOW (place the missing inline `[^N]` marker on the sentence the source backs, or add the missing `[^N]:` definition) and re-run until exit 0. The ingest is NOT complete while the gate fails. NEVER repair by deleting a `[^N]:` definition — stale-removal is report-only per `../shared/citation-format.md`.
 
 **Silent mode override (step 10) — gate.** Silent mode (keyword present) → apply the "Step 10 silent override" block from `extensions/silent-mode.md` (loaded at boot): do NOT present the preview, do NOT prompt, do NOT HALT; bucket every firm-set entry by origin (genuine firm updates auto-APPLY; answer-origin entries auto-REJECT); auto-resolve every decision point to its fixed default; write the per-record audit `Flags` lines; RETURN the structured summary. The silent-summary purpose-band field (lens ON only) is in that same extension block.
 

@@ -1214,6 +1214,58 @@ def footnote_state(text: str) -> dict[str, object]:
     return {"defs": defs, "inline": inline_all, "order": order}
 
 
+def cmd_check_pages(args_list: list[str]) -> int:
+    """Citation-integrity gate (``check-pages``) — ingest post-commit check.
+
+    Validates the footnote state of the named pages only: every inline
+    ``[^N]`` marker has a definition, every definition has at least one
+    inline marker, and no definition number is duplicated.  Ordering is
+    NOT checked — the C3 renumber pass owns normalization.  Exits 1 on
+    any issue so workflow callers can hard-gate on the result.
+    """
+    parser = argparse.ArgumentParser(
+        description="Citation-integrity check on specific pages."
+    )
+    parser.add_argument("--vault-root", type=Path, default=Path.cwd())
+    parser.add_argument(
+        "pages",
+        nargs="+",
+        type=Path,
+        help="page paths (absolute or vault-root-relative)",
+    )
+    args = parser.parse_args(args_list)
+    vault_root = args.vault_root.resolve()
+
+    failures: list[dict[str, object]] = []
+    for raw_path in args.pages:
+        page = raw_path if raw_path.is_absolute() else vault_root / raw_path
+        if not page.exists():
+            failures.append({"page": str(raw_path), "issues": ["file not found"]})
+            continue
+        state = footnote_state(read_text(page))
+        defs, inline = state["defs"], state["inline"]
+        issues: list[str] = []
+        if len(defs) != len(set(defs)):
+            issues.append("duplicate defs")
+        missing = sorted(set(inline) - set(defs), key=int)
+        if missing:
+            issues.append(f"inline without def: {','.join(missing)}")
+        stale = sorted(set(defs) - set(inline), key=int)
+        if stale:
+            issues.append(f"def without inline ref: {','.join(stale)}")
+        if issues:
+            failures.append({"page": str(raw_path), "issues": issues})
+
+    print(
+        json.dumps(
+            {"checked": len(args.pages), "failures": failures},
+            indent=2,
+            ensure_ascii=False,
+        )
+    )
+    return 1 if failures else 0
+
+
 def structural_walk(wiki_root: Path, report: Report, apply_changes: bool) -> None:
     cet_pages, source_pages = collect_wiki_pages(wiki_root)
     stubs_aged: list[dict[str, object]] = []
@@ -1267,7 +1319,14 @@ def structural_walk(wiki_root: Path, report: Report, apply_changes: bool) -> Non
         state = footnote_state(text)
         defs, inline, order = state["defs"], state["inline"], state["order"]
         if defs and not inline:
-            provenance_only += 1  # stub-provenance shape — report bucket only, NEVER touch
+            if substantive:
+                # Born-cited regression: a substantive page whose defs have
+                # zero inline markers is a content defect, not stub shape.
+                footnote_issues.append(
+                    {"page": rel, "issues": ["provenance-only (substantive page)"]}
+                )
+            else:
+                provenance_only += 1  # stub-provenance shape — report bucket only, NEVER touch
             continue
         issues: list[str] = []
         if len(defs) != len(set(defs)):
@@ -2470,6 +2529,604 @@ def cmd_update_backfill_reconcile(args_list: list[str]) -> int:
     return 0
 
 
+# ---------------------------------------------------------------------------
+# normalize-filenames subcommand (p4-9)
+# ---------------------------------------------------------------------------
+# ASCII-slugify all non-ASCII wiki filenames. Fold map:
+#   – typographic quotes/dashes: ' ' → ' | ' ' → drop | " " → - | — – ‑ → -
+#   – ellipsis: … → drop | bullet: • → -
+#   – accents (PT + other): NFKD + strip non-ASCII combining marks
+#   – mojibake ├Â (= UTF-8 ö mis-decoded): repair to ö BEFORE NFKD fold
+#   – emoji / surrogate pairs: drop
+#   – post-fold: collapse consecutive hyphens, strip leading/trailing hyphens
+# Collision gate: emitted rename map verified collision-free BEFORE any
+# execute path exists. A collision halts with the colliding set (exit 2).
+# Modes:
+#   --dry-run (default): scan → emit JSON rename map + reference-class counts
+#   --execute:           perform renames + heal all reference classes
+#                        + re-key lint state-file stamps (never wipe)
+# State-file re-key: when --state-report is given, re-key (old_rel→new_rel)
+# in the JSON stamps dict, preserving runs_completed and all other fields.
+# The Voyage search index (index.db) stores paths; document the re-key step
+# here — the conductor runs a full --sync after migration to rebuild it.
+
+_MOJIBAKE_PAIRS: list[tuple[str, str]] = [
+    # Each entry is (mojibake_sequence, intended_unicode_char).
+    # Source: UTF-8 multi-byte sequences decoded as individual Latin-1 chars.
+    # ├Â = U+251C U+00C2 = the UTF-8 bytes C3 B6 (ö) decoded as CP437/Latin-1
+    # produces E2 94 9C (├, U+251C) + C3 (Ã) B6... actually the observed
+    # pair from the live corpus is ├Â (U+251C + U+00C2), documented in task
+    # dispatch as the known mojibake class for ö in these filenames.
+    ("├Â", "ö"),  # ├Â → ö (Swedish/German o-umlaut)
+]
+
+
+def _slug_fold(name: str) -> str:
+    """Fold a filename stem to pure ASCII per the p4-9 design.
+
+    Steps:
+    1. Repair mojibake sequences (byte-exact substitutions).
+    2. Fold typographic punctuation: curly quotes, em/en dashes, bullet,
+       ellipsis.
+    3. Drop emoji / surrogate-pair characters.
+    4. NFKD-decompose and strip non-ASCII (accent fold).
+    5. Normalise hyphens: collapse runs, strip leading/trailing.
+    6. Lowercase the result (names are already lowercase; this is a guard).
+
+    The `.md` extension is stripped before calling and re-appended by the
+    caller — pass the stem only.
+    """
+    s = name
+
+    # Step 1: mojibake repair (order matters — apply before any Unicode fold).
+    for mojibake, intended in _MOJIBAKE_PAIRS:
+        s = s.replace(mojibake, intended)
+
+    # Step 2: typographic punctuation fold.
+    # RIGHT SINGLE QUOTATION MARK ' → apostrophe ' (kept as a separator signal).
+    # LEFT SINGLE QUOTATION MARK ' → drop (decorative open-quote).
+    # LEFT/RIGHT DOUBLE QUOTATION MARKS " " → - (title separator).
+    # EM DASH — → -.
+    # EN DASH – → -.
+    # NON-BREAKING HYPHEN ‑ → -.
+    # HORIZONTAL ELLIPSIS … → drop.
+    # BULLET • → -.
+    s = (
+        s
+        .replace("’", "'")   # RIGHT SINGLE QUOTATION MARK → apostrophe
+        .replace("‘", "")    # LEFT SINGLE QUOTATION MARK → drop
+        .replace("“", "-")   # LEFT DOUBLE QUOTATION MARK → -
+        .replace("”", "-")   # RIGHT DOUBLE QUOTATION MARK → -
+        .replace("—", "-")   # EM DASH → -
+        .replace("–", "-")   # EN DASH → -
+        .replace("‑", "-")   # NON-BREAKING HYPHEN → -
+        .replace("…", "")    # HORIZONTAL ELLIPSIS → drop
+        .replace("•", "-")   # BULLET → -
+    )
+
+    # Step 3: drop emoji and surrogate-pair characters.
+    # Emoji occupy the Supplementary Multilingual Plane (U+1F000 and above),
+    # represented as surrogate pairs in Python str when built from UTF-16.
+    # Also drop any remaining high-plane chars (U+10000+) and surrogates.
+    cleaned: list[str] = []
+    for ch in s:
+        cp = ord(ch)
+        if cp >= 0xD800 and cp <= 0xDFFF:
+            continue   # surrogate — drop
+        if cp >= 0x10000:
+            continue   # supplementary plane (emoji etc.) — drop
+        cleaned.append(ch)
+    s = "".join(cleaned)
+
+    # Step 4: NFKD decomposition + strip non-ASCII.
+    # Decomposes accented chars into base + combining marks, then drops
+    # any remaining non-ASCII character (the combining marks and any char
+    # that has no ASCII base).
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(c for c in s if ord(c) < 128)
+
+    # Step 5: normalise hyphens (the apostrophe from step 2 also folds here).
+    # Replace apostrophe with nothing (it appears mid-word, not as separator).
+    s = s.replace("'", "")
+    # Collapse consecutive hyphens produced by chained folds.
+    s = re.sub(r"-{2,}", "-", s)
+    # Strip leading/trailing hyphens.
+    s = s.strip("-")
+
+    # Step 6: lowercase guard.
+    s = s.lower()
+
+    return s
+
+
+def _all_wiki_files(wiki_root: Path) -> list[Path]:
+    """Return ALL files under wiki_root that may need renaming.
+
+    Scope: raw/ + wiki/ subtrees — ALL file types (not just .md), because
+    raw/ contains PDFs too. Excludes asset folders.
+    """
+    result: list[Path] = []
+    for subtree in ("raw", "wiki"):
+        d = wiki_root / subtree
+        if not d.exists():
+            continue
+        for p in d.rglob("*"):
+            if p.is_file() and not excluded_dir(p.relative_to(wiki_root)):
+                result.append(p)
+    return result
+
+
+def _build_rename_map(wiki_root: Path) -> tuple[
+    list[tuple[Path, Path]], list[dict[str, str]]
+]:
+    """Scan wiki_root and return (renames, collisions).
+
+    renames: list of (old_path, new_path) for files whose folded name differs.
+    collisions: list of dicts describing any fold-map collisions.
+
+    Collision = two different old names fold to the same new name, OR a
+    folded name clashes with an EXISTING file that is NOT itself being renamed.
+    """
+    all_files = _all_wiki_files(wiki_root)
+
+    # Map from (parent_dir, new_stem+ext) → list of old Path objects.
+    fold_map: dict[tuple[Path, str], list[Path]] = {}
+    # Files that keep their name (fold produces identical stem).
+    unchanged: set[Path] = set()
+
+    for p in all_files:
+        stem = p.stem
+        ext = p.suffix  # e.g. ".md" or ".pdf"
+        # SCOPE GATE (p4-9 contract, Q1b ruling 2026-06-11): the migration is
+        # bounded to NON-ASCII-NAMED files only. Uppercase, spaces, and ASCII
+        # punctuation are all ASCII and are OUT of scope — folding them inflates
+        # the migration far beyond the ruled scope. A file whose stem is already
+        # pure ASCII keeps its name even if _slug_fold would alter it (e.g.
+        # case/space normalisation). Only a stem carrying a byte above 0x7F is a
+        # rename candidate.
+        if all(ord(c) < 128 for c in stem):
+            unchanged.add(p)
+            continue
+        folded_stem = _slug_fold(stem)
+        new_name = folded_stem + ext
+        if new_name == p.name:
+            unchanged.add(p)
+            continue
+        key = (p.parent, new_name)
+        fold_map.setdefault(key, []).append(p)
+
+    renames: list[tuple[Path, Path]] = []
+    collisions: list[dict[str, str]] = []
+
+    for (parent, new_name), old_paths in fold_map.items():
+        new_path = parent / new_name
+        # Collision type A: two different old files fold to the same new name.
+        if len(old_paths) > 1:
+            collisions.append({
+                "new_name": str(new_path.relative_to(wiki_root)).replace("\\", "/"),
+                "sources": [
+                    str(p.relative_to(wiki_root)).replace("\\", "/")
+                    for p in old_paths
+                ],
+                "reason": "multiple-sources-fold-to-same-name",
+            })
+            continue
+        # Collision type B: target name is already taken by a file NOT itself
+        # being renamed (i.e., it is in `unchanged` OR was not visited at all).
+        if new_path.exists() and new_path not in {p for p, _ in renames}:
+            old_path = old_paths[0]
+            if new_path != old_path:  # not renaming to itself
+                collisions.append({
+                    "new_name": str(new_path.relative_to(wiki_root)).replace("\\", "/"),
+                    "sources": [str(old_path.relative_to(wiki_root)).replace("\\", "/")],
+                    "existing": str(new_path.relative_to(wiki_root)).replace("\\", "/"),
+                    "reason": "target-name-already-exists",
+                })
+                continue
+        renames.append((old_paths[0], new_path))
+
+    return sorted(renames, key=lambda t: str(t[0])), collisions
+
+
+def _count_reference_classes(wiki_root: Path, rename_map: list[tuple[Path, Path]]) -> dict:
+    """Count how many references of each class need healing (dry-run only).
+
+    Reference classes:
+    1. wikilinks — [[old-stem.md]] or [[old-stem.pdf]] in wiki/ files
+    2. raw-index File cells — | [[old-stem.md]] | rows in raw/{origin}/{origin}.md
+    3. raw: backlinks — raw: "[[old-stem.md]]" frontmatter in source pages
+    4. questions.md / logs entries — string occurrences in those files
+    5. pending-topic-updates.md source-path cells (read-only count)
+    6. lint state-file stamps — path-keyed entries that need re-key
+    """
+    # Build a set of (old_rel, new_rel) for fast lookup.
+    old_to_new: dict[str, str] = {}
+    for old_p, new_p in rename_map:
+        old_rel = str(old_p.relative_to(wiki_root)).replace("\\", "/")
+        new_rel = str(new_p.relative_to(wiki_root)).replace("\\", "/")
+        old_to_new[old_rel] = new_rel
+
+    # We also need old-stem lookup (without path context) for wikilink patterns.
+    old_stems: set[str] = set()
+    for old_p, _ in rename_map:
+        old_stems.add(old_p.stem + old_p.suffix)
+
+    counts = {
+        "wikilinks": 0,
+        "raw_index_file_cells": 0,
+        "raw_backlinks": 0,
+        "questions_logs_entries": 0,
+        "pending_topic_updates_rows": 0,
+        "state_file_stamps": 0,
+    }
+
+    # Count wikilinks in wiki/ files.
+    # NOTE: source pages under wiki/sources/ carry a `raw: "[[stem.md]]"`
+    # frontmatter backlink. The bare-prefix count below (`[[old`) would absorb
+    # those into `wikilinks`, leaving the `raw_backlinks` class falsely 0 — the
+    # heal IS performed at execute time (every wiki/ file is healed for both the
+    # body `[[old…]]` and the quoted frontmatter pattern), so the defect is in
+    # attribution, not coverage. Tally the quoted frontmatter occurrences under
+    # `raw_backlinks` and EXCLUDE them from the `wikilinks` total so the dry-run
+    # count matches what the conductor verifies post-migration.
+    wiki_dir = wiki_root / "wiki"
+    if wiki_dir.exists():
+        for p in wiki_dir.rglob("*.md"):
+            if excluded_dir(p.relative_to(wiki_root)):
+                continue
+            try:
+                text = read_text(p)
+            except OSError:
+                continue
+            for old_name in old_stems:
+                fm_backlinks = text.count(f'"[[{old_name}]]"')
+                if fm_backlinks:
+                    counts["raw_backlinks"] += fm_backlinks
+                if f"[[{old_name}" in text:
+                    # bare-prefix total minus the quoted-frontmatter occurrences
+                    counts["wikilinks"] += text.count(f"[[{old_name}") - fm_backlinks
+
+    # Count raw-index File cells and raw: backlinks under raw/ (legacy location).
+    raw_dir = wiki_root / "raw"
+    if raw_dir.exists():
+        for p in raw_dir.rglob("*.md"):
+            if excluded_dir(p.relative_to(wiki_root)):
+                continue
+            try:
+                text = read_text(p)
+            except OSError:
+                continue
+            for old_name in old_stems:
+                # Raw index File cells: | [[slug.md]] |
+                if f"[[{old_name}]]" in text:
+                    counts["raw_index_file_cells"] += text.count(f"[[{old_name}]]")
+                # raw: frontmatter backlinks
+                if f'"[[{old_name}]]"' in text:
+                    counts["raw_backlinks"] += text.count(f'"[[{old_name}]]"')
+
+    # Count questions.md and logs/*.md occurrences.
+    for special in [wiki_root / "questions.md"]:
+        if special.exists():
+            try:
+                text = read_text(special)
+            except OSError:
+                continue
+            for old_name in old_stems:
+                if old_name in text:
+                    counts["questions_logs_entries"] += text.count(old_name)
+    logs_dir = wiki_root / "logs"
+    if logs_dir.exists():
+        for p in logs_dir.glob("*.md"):
+            try:
+                text = read_text(p)
+            except OSError:
+                continue
+            for old_name in old_stems:
+                if old_name in text:
+                    counts["questions_logs_entries"] += text.count(old_name)
+
+    # Count pending-topic-updates.md source-path cells (read-only).
+    pending = wiki_root / "pending-topic-updates.md"
+    if pending.exists():
+        try:
+            text = read_text(pending)
+        except OSError:
+            text = ""
+        for old_name in old_stems:
+            if old_name in text:
+                counts["pending_topic_updates_rows"] += text.count(old_name)
+
+    # Count lint state-file stamps that need re-key.
+    state_path = wiki_root / "lint-deterministic-report.json"
+    if state_path.exists():
+        try:
+            state = json.loads(read_text(state_path))
+            stamps = state.get("stamps", {})
+            for key in stamps:
+                base = Path(key).name
+                if base in old_stems:
+                    counts["state_file_stamps"] += 1
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    return counts
+
+
+def _execute_normalize(
+    wiki_root: Path,
+    rename_map: list[tuple[Path, Path]],
+    state_path: Path | None = None,
+    output: Path | None = None,
+) -> dict:
+    """Execute renames + heal all reference classes + re-key state stamps.
+
+    MIGRATION IS CONDUCTOR-EXECUTED. This function is called by the executor
+    (cmd_normalize_filenames --execute). In the plan, the conductor runs this
+    after reviewer certification.
+
+    Returns a result dict with counts of renames performed and references healed.
+    """
+    result: dict = {
+        "renames_performed": [],
+        "wikilinks_healed": 0,
+        "raw_index_cells_healed": 0,
+        "raw_backlinks_healed": 0,
+        "questions_logs_healed": 0,
+        "pending_topic_updates_healed": 0,
+        "state_stamps_rekeyed": 0,
+        "errors": [],
+    }
+
+    # Build old→new mapping indexed by (stem+ext) for text healing.
+    old_to_new_name: dict[str, str] = {}  # old_filename → new_filename
+    old_to_new_rel: dict[str, str] = {}   # old_rel_path → new_rel_path
+    for old_p, new_p in rename_map:
+        old_to_new_name[old_p.name] = new_p.name
+        old_rel = str(old_p.relative_to(wiki_root)).replace("\\", "/")
+        new_rel = str(new_p.relative_to(wiki_root)).replace("\\", "/")
+        old_to_new_rel[old_rel] = new_rel
+
+    # Step A: Heal all TEXT references BEFORE renaming files.
+    # This ensures we can still read files at their old paths.
+
+    def _heal_file(p: Path) -> int:
+        """Rewrite wikilink references in a file. Returns count of subs made."""
+        try:
+            text = read_text(p)
+        except OSError as e:
+            result["errors"].append(f"READ-FAIL {p}: {e}")
+            return 0
+        updated = text
+        for old_name, new_name in old_to_new_name.items():
+            # Heal [[old-stem.ext…]] patterns preserving anchors/aliases.
+            pattern = re.compile(
+                r"(!?\[\[)" + re.escape(old_name) + r"((?:#[^\]|]*)?(?:\|[^\]]*)?\]\])"
+            )
+            updated = pattern.sub(lambda m, n=new_name: m.group(1) + n + m.group(2), updated)
+            # Heal "[[old-stem.ext]]" frontmatter patterns.
+            updated = updated.replace(f'"[[{old_name}]]"', f'"[[{new_name}]]"')
+        if updated != text:
+            try:
+                with open(_fspath(p), "w", encoding="utf-8") as fh:
+                    fh.write(updated)
+            except OSError as e:
+                result["errors"].append(f"WRITE-FAIL {p}: {e}")
+                return 0
+            return len(re.findall(re.compile(
+                r"(!?\[\[)(?:" + "|".join(re.escape(n) for n in old_to_new_name) + r")",
+            ), text))
+        return 0
+
+    # Heal wiki/ files.
+    wiki_dir = wiki_root / "wiki"
+    if wiki_dir.exists():
+        for p in wiki_dir.rglob("*.md"):
+            if excluded_dir(p.relative_to(wiki_root)):
+                continue
+            n = _heal_file(p)
+            result["wikilinks_healed"] += n
+
+    # Heal raw/ files (index + raw: frontmatter).
+    raw_dir = wiki_root / "raw"
+    if raw_dir.exists():
+        for p in raw_dir.rglob("*.md"):
+            if excluded_dir(p.relative_to(wiki_root)):
+                continue
+            n = _heal_file(p)
+            result["raw_index_cells_healed"] += n
+
+    # Heal questions.md and logs/*.md.
+    for special in [wiki_root / "questions.md"]:
+        if special.exists():
+            n = _heal_file(special)
+            result["questions_logs_healed"] += n
+    logs_dir = wiki_root / "logs"
+    if logs_dir.exists():
+        for p in logs_dir.glob("*.md"):
+            n = _heal_file(p)
+            result["questions_logs_healed"] += n
+
+    # Heal pending-topic-updates.md (read: designed here, executed by conductor).
+    pending = wiki_root / "pending-topic-updates.md"
+    if pending.exists():
+        n = _heal_file(pending)
+        result["pending_topic_updates_healed"] += n
+
+    # Step B: Re-key lint state-file stamps.
+    effective_state = state_path if state_path else wiki_root / "lint-deterministic-report.json"
+    if effective_state.exists():
+        try:
+            state = json.loads(read_text(effective_state))
+            stamps = state.get("stamps", {})
+            new_stamps: dict[str, str] = {}
+            rekeyed = 0
+            for rel, stamp_val in stamps.items():
+                # rel is a wiki-root-relative path like "wiki/sources/origin/file.md"
+                if rel in old_to_new_rel:
+                    new_stamps[old_to_new_rel[rel]] = stamp_val
+                    rekeyed += 1
+                else:
+                    new_stamps[rel] = stamp_val
+            state["stamps"] = new_stamps
+            result["state_stamps_rekeyed"] = rekeyed
+            # Write back preserving all other fields including runs_completed.
+            with open(_fspath(effective_state), "w", encoding="utf-8") as fh:
+                fh.write(json.dumps(state, indent=2, ensure_ascii=False) + "\n")
+        except (json.JSONDecodeError, OSError) as e:
+            result["errors"].append(f"STATE-REKEY-FAIL: {e}")
+
+    # Step C: Perform the actual renames.
+    for old_p, new_p in rename_map:
+        if not old_p.exists():
+            result["errors"].append(f"RENAME-SKIP-MISSING: {old_p.relative_to(wiki_root)}")
+            continue
+        if new_p.exists() and new_p != old_p:
+            result["errors"].append(
+                f"RENAME-SKIP-COLLISION: {old_p.relative_to(wiki_root)} → "
+                f"{new_p.relative_to(wiki_root)} (target exists)"
+            )
+            continue
+        try:
+            os.replace(_fspath(old_p), _fspath(new_p))
+            result["renames_performed"].append({
+                "old": str(old_p.relative_to(wiki_root)).replace("\\", "/"),
+                "new": str(new_p.relative_to(wiki_root)).replace("\\", "/"),
+            })
+        except OSError as e:
+            result["errors"].append(
+                f"RENAME-FAIL: {old_p.relative_to(wiki_root)} → {new_p.relative_to(wiki_root)}: {e}"
+            )
+
+    if output:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        with open(_fspath(output), "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(result, indent=2, ensure_ascii=False) + "\n")
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    return result
+
+
+def cmd_normalize_filenames(args_list: list[str]) -> int:
+    """ASCII-slugify all non-ASCII filenames in the wiki corpus.
+
+    Fold map (p4-9 design, Q1b owner ruling 2026-06-11):
+    - Typographic quotes/dashes: ' → ' (apostrophe, then dropped in post-fold)
+      ' → drop | " " → - | — – ‑ → -
+    - Ellipsis … → drop | Bullet • → -
+    - Accents (PT + other): NFKD + strip non-ASCII combining marks
+    - Mojibake ├Â (UTF-8 ö mis-decoded): repair to ö BEFORE fold
+    - Emoji / supplementary-plane chars: drop
+    - Post-fold: collapse consecutive hyphens, strip leading/trailing
+
+    Modes:
+      Default (--dry-run):  scan → emit JSON rename map + reference counts;
+                            exit 0 when no collisions, exit 2 on collision.
+      --execute:            renames + reference-class heals + state re-key.
+                            MIGRATION IS CONDUCTOR-EXECUTED — run only after
+                            reviewer certification and before Phase-5 lint.
+
+    Voyage search index note: index.db stores document paths. After --execute,
+    the conductor must run:
+        python sb-wiki-search.py --vault-root <vault> sync
+    to rebuild the index against the renamed paths. Stale paths in index.db
+    produce dead search results for any renamed file until that sync runs.
+    The clipper writes raws OUTSIDE sb-os governance — the normalize-filenames
+    subcommand doubles as the recurring stray-healer for any non-ASCII files
+    introduced by the clipper after the one-time corpus migration. Run it
+    periodically (or on ingest post-commit) to catch stragglers. Document
+    this seam so operators know: the creation-time rule governs ingest, the
+    normalize subcommand governs everything else.
+    """
+    parser = argparse.ArgumentParser(
+        description="ASCII-slugify non-ASCII filenames in the wiki corpus."
+    )
+    parser.add_argument("--vault-root", type=Path, default=Path.cwd())
+    parser.add_argument(
+        "--execute",
+        action="store_true",
+        help=(
+            "CONDUCTOR-EXECUTED: perform renames, heal all reference classes, "
+            "re-key lint state-file stamps. Requires --output for the result log."
+        ),
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="write the rename map / result JSON here instead of stdout",
+    )
+    parser.add_argument(
+        "--state-report",
+        type=Path,
+        default=None,
+        help="path to the lint state JSON for stamp re-key (default: canonical path)",
+    )
+    args = parser.parse_args(args_list)
+    vault_root = args.vault_root.resolve()
+    wiki_root = resolve_wiki_root(vault_root)
+
+    renames, collisions = _build_rename_map(wiki_root)
+
+    if collisions:
+        payload = {
+            "status": "COLLISION",
+            "collision_count": len(collisions),
+            "collisions": collisions,
+            "rename_count": 0,
+            "renames": [],
+        }
+        text = json.dumps(payload, indent=2, ensure_ascii=False)
+        if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            with open(_fspath(args.output), "w", encoding="utf-8") as fh:
+                fh.write(text + "\n")
+        print(text)
+        print(
+            f"\nCOLLISION GATE: {len(collisions)} collision(s) detected. "
+            "Resolve before --execute. See 'collisions' field above.",
+            file=sys.stderr,
+        )
+        return 2
+
+    rename_list = [
+        {
+            "old": str(old_p.relative_to(wiki_root)).replace("\\", "/"),
+            "new": str(new_p.relative_to(wiki_root)).replace("\\", "/"),
+        }
+        for old_p, new_p in renames
+    ]
+
+    if not args.execute:
+        # Dry-run: emit rename map + reference-class counts.
+        ref_counts = _count_reference_classes(wiki_root, renames)
+        payload = {
+            "status": "DRY_RUN",
+            "rename_count": len(renames),
+            "renames": rename_list,
+            "reference_class_counts": ref_counts,
+            "voyage_index_note": (
+                "After --execute the conductor must run: "
+                "python sb-wiki-search.py --vault-root <vault> sync "
+                "to rebuild the Voyage index against the renamed paths."
+            ),
+        }
+        text = json.dumps(payload, indent=2, ensure_ascii=False)
+        if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            with open(_fspath(args.output), "w", encoding="utf-8") as fh:
+                fh.write(text + "\n")
+        print(text)
+        return 0
+
+    # Execute mode.
+    result = _execute_normalize(
+        wiki_root,
+        renames,
+        state_path=args.state_report,
+        output=args.output,
+    )
+    return 1 if result.get("errors") else 0
+
+
 def main() -> int:
     if len(sys.argv) > 1 and sys.argv[1] == "update-backfill-gather":
         return cmd_update_backfill_gather(sys.argv[2:])
@@ -2479,6 +3136,10 @@ def main() -> int:
         return cmd_open_gaps(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "sweep-gather":
         return cmd_sweep_gather(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "check-pages":
+        return cmd_check_pages(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "normalize-filenames":
+        return cmd_normalize_filenames(sys.argv[2:])
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--vault-root", type=Path, default=Path.cwd())
     parser.add_argument("--apply", action="store_true", help="write deterministic changes")
