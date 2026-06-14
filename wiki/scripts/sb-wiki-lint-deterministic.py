@@ -1386,7 +1386,14 @@ def substantive_word_count(text: str) -> int:
 
 def footnote_state(text: str) -> dict[str, object]:
     defs = re.findall(r"^\[\^(\d+)\]:", text, flags=re.M)
-    inline_all = re.findall(r"\[\^(\d+)\](?!:)", text)
+    # Strip ONLY the line-start definition marker (``[^N]:``) so it is not
+    # double-counted as an inline use. Everything else — including a mid-line
+    # ``Candidate answer[^N]:`` occurrence (questions-layer answer accretion),
+    # where ``[^N]`` sits immediately before a ``:`` — is a genuine inline use.
+    # A blanket ``(?!:)`` lookahead wrongly excluded those mid-line uses,
+    # leaving a real reference invisible and failing the integrity gate.
+    body = re.sub(r"^\[\^\d+\]:", "", text, flags=re.M)
+    inline_all = re.findall(r"\[\^(\d+)\]", body)
     order: list[str] = []
     for marker in inline_all:
         if marker not in order:
