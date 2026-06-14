@@ -252,7 +252,7 @@ Citations: emit inline `[^N]` markers at every claim derived from the raw, then 
    - The `Substance`-bullet branch is MECHANICAL — fire on match against the cluster representative.
    - The Source-title branch is MECHANICAL ONLY when the title name also appears in a Substance bullet. Title-only names fall under DISCRETION per `../shared/stub-policy.md` § "Title-Branch Rule" — apply the relevance heuristic before firing.
    - The Notable-Quote branch is AGENT DISCRETION per `../shared/stub-policy.md` § "Notable Quote Stub Creation" — apply the relevance heuristic before firing.
-5b. **Gate (purpose lens — discretionary stub branches).** Lens ON (Step 0.5) → apply the "Step 3 clause 5b — discretionary stub branches" block from `extensions/purpose-lens.md` HERE: bias ONLY the Title-only / Notable-Quote relevance heuristic by the source's band; the MECHANICAL `Substance`-bullet branch is UNTOUCHED. Lens OFF → apply the heuristic exactly as clause 5 specifies, no bias.
+5b. **Gate (purpose lens — discretionary stub branches).** Lens ON (Step 0.5) → apply the "Step 3 clause 5b — discretionary stub branches" block from `extensions/purpose-lens.md` HERE: bias the Title-only / Notable-Quote relevance heuristic by the source's band — the MECHANICAL `Substance`-bullet branch is UNTOUCHED — AND apply that block's **connectivity guard** at the clause 5c → 6 boundary (a would-be-demoted discretionary stub whose HELD clause-5c probe hits include a SOLID topic match is sorted into `stub-candidates` instead of `mention-only`; plus an orphan floor — never leave the source page with 0 wiki links). Lens OFF → apply the heuristic exactly as clause 5 specifies, no bias, no rescue.
 5c. **Near-duplicate probe (NON-SKIPPABLE gates — run for EVERY candidate regardless of tier availability).** Before creating any stub, EVERY candidate MUST pass ALL of the following gates:
 
    1. **Cross-kind + theses-namespace check (always runs).** The planned slug MUST NOT already exist in ANY kind folder under `wiki/` — `concepts/`, `entities/`, `topics/` — OR as a filename in `wiki/theses/` (vault-wide filename uniqueness). A `concepts/` vs `entities/` collision is allowed per the naming convention; `concepts/` vs `topics/` and any `wiki/theses/` collision are FORBIDDEN. A collision routes the candidate to the `existing-pages` set (step-4 update path) or halts to ask.
@@ -354,7 +354,7 @@ For each entry in `stub-candidates`:
 
 ### Step 6 — Detect candidate-topic triggers
 
-Run all three triggers per `./data/candidate-topic-triggers.md`. For each fire, record the data needed for the step 9 log entry and the step 10 PROPOSED TOPICS block.
+Run all three triggers per `./data/candidate-topic-triggers.md`, INCLUDING its Granularity Gate. The Contradiction Disputed callout and the Evolution home-citation are recorded on every fire; a `candidate-topic` (step 9 log entry + step 10 PROPOSED TOPICS row) is recorded ONLY when the fire clears the durability bar — otherwise the lower-granularity capture is complete and no candidate is recorded.
 
 | Trigger | Action on fire |
 |---------|----------------|

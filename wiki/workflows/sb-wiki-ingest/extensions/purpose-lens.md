@@ -38,6 +38,13 @@ This shapes only the discretionary inputs; the Substance-bullet stub branch (Ste
 
 The bias only tilts the existing yes/no heuristic — it NEVER fires the mechanical branch differently, NEVER drops a Substance-bullet stub, and NEVER coarsens peripheral clustering below baseline (guarantee #4). A demoted name still lands in `mention-only` (logged `candidate-mention`), so nothing is dropped. Lens OFF → apply the heuristic exactly as clause 5 specifies, no bias.
 
+**Connectivity guard (live-structure promotion) — overrides a lean-demote.** A discretionary stub the band leaned to demote to `candidate-mention` is rescued when it connects to live topic structure. Evaluated at the clause 5c → 6 boundary, reusing the near-duplicate probe clause 5c already ran for EVERY candidate (its topic-page hits are HELD for clause 7b — NO new helper call):
+
+- **Solid topic match → CREATE.** If the name's HELD clause-5c probe hits include an existing TOPIC page at SOLID semantic membership (not weak token overlap), sort the name into `stub-candidates` (create the stub) instead of `mention-only` — it extends live structure. One shared solid-match threshold — tunable; err LOW (keep signal over losing it), above noise level.
+- **Orphan floor.** After the guard runs over every discretionary stub of this source, if the source page would STILL land with 0 wiki links, CREATE the single strongest stub anyway (highest topic-match score; else the strongest by the base relevance heuristic). NEVER orphan a source page.
+- **Mechanical → batch-safe.** No owner gesture — applies in silent / `ingest-all` mode too, erring toward creation (the safeguard against silent signal loss where no owner can override). Creates only concept/entity stubs, never a topic page.
+- **Tier-gated.** Semantic tier unavailable → clause 5c gate 3 was skipped (no held topic hits), so the topic-match rescue is OFF (demote as the band specifies); the orphan floor still fires via the base heuristic's strongest candidate.
+
 ## Step 3·7b — speculative ranking (lens ON only)
 
 **Lens — speculative ranking (discretionary; lens ON only).** When the lens is ON, re-rank the qualifying candidates by **focus overlap** (overlap with the source's classified `Focus area`) WITHIN the existing TOP-2 cap: focus overlap orders the list and breaks ties when signal strengths are equal. The firing rules (token overlap ≥2, tier-gated semantic fire, firm-dedupe), the cap of 2, and the silent-drop of overflow are UNCHANGED — the lens only reorders the kept set, never widens it. Lens OFF → rank exactly as above (token fires first by count, semantic-only fires by score).
