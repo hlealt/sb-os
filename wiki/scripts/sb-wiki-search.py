@@ -8,7 +8,10 @@ agents. The semantic tier is availability-gated per the wiki schema:
 - key available (`VOYAGE_API_KEY` env var, else `{vault_root}/.user/config/env/.env`)
                             -> hybrid mode (FTS5 BM25 + vector cosine, RRF-fused)
 - key absent                -> FTS5-only mode (no API calls, still ranked)
-- wiki root unresolvable    -> exit 2 (callers fall back to grep)
+- wiki root unresolvable    -> `probe` and `search --json` return a clean
+                               {"available": false, ...} verdict (exit 0) so a
+                               mandatory caller always has parseable output; other
+                               commands keep exit 2 (callers fall back to grep)
 
 `search` self-heals before answering: changed/added/removed pages are
 re-indexed incrementally (mtime+size prefilter, sha256 confirm), so results
@@ -18,6 +21,7 @@ re-embedded.
 Commands:
     index  [--full]                    build / refresh the index
     search QUERY [--k N] [--type t,..] [--json] [--no-sync]
+    probe                              availability + mode as JSON (no query)
     status                             index freshness + mode as JSON
 
 The index lives at `{wiki_root}/.sb-wiki-search/index.db` (derived data —
@@ -571,6 +575,65 @@ def _default_db(wiki_root: Path) -> Path:
     return wiki_root / ".sb-wiki-search" / "index.db"
 
 
+def _index_file_count(db_path: Path) -> int:
+    """Indexed-file count WITHOUT creating the db. 0 when no index exists yet."""
+    db_path = Path(db_path)
+    if not db_path.is_file():
+        return 0
+    try:
+        conn = sqlite3.connect(_fspath(db_path))
+        try:
+            return conn.execute("SELECT COUNT(*) FROM files").fetchone()[0]
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return 0
+
+
+def availability_verdict(vault_root: Path, *, db_path: Path | None = None,
+                         api_key="__auto__") -> dict:
+    """Wiki availability + mode as a verdict dict — never builds or writes an index.
+
+    The reusable "is-wiki-available" capability behind the `probe` command. Shape:
+    {available, ready, mode, pages, reason}. `available` = the wiki tree is present;
+    `ready` = an index is already built; `mode` = hybrid/fts-only/unavailable; `pages`
+    = indexable pages on disk. The not-installed shape is identical with available=false
+    so callers branch on one stable schema. `api_key="__auto__"` resolves the key from
+    env/.env (production); pass an explicit key or None to force the mode in tests.
+    """
+    try:
+        wiki_root = resolve_wiki_root(vault_root)
+    except (FileNotFoundError, KeyError, json.JSONDecodeError) as err:
+        return {"available": False, "ready": False, "mode": "unavailable",
+                "pages": 0, "reason": f"cannot resolve wiki_root from sb-os.json: {err}"}
+    if not (wiki_root / "wiki").is_dir():
+        return {"available": False, "ready": False, "mode": "unavailable",
+                "pages": 0, "reason": f"no wiki tree at {wiki_root / 'wiki'}"}
+    if api_key == "__auto__":
+        api_key = resolve_api_key(vault_root)
+    db = db_path or _default_db(wiki_root)
+    return {"available": True, "ready": _index_file_count(db) > 0,
+            "mode": "hybrid" if api_key else "fts-only",
+            "pages": len(walk_wiki(wiki_root)), "reason": "ok"}
+
+
+def _emit_unavailable(args: argparse.Namespace, reason: str) -> int:
+    """Not-installed exit path. `probe` and `search --json` get a clean JSON verdict
+    (exit 0) so a mandatory caller always has parseable output; every other command
+    keeps the historical stderr message + exit 2 (callers fall back to grep)."""
+    if args.command == "probe":
+        print(json.dumps({"available": False, "ready": False, "mode": "unavailable",
+                          "pages": 0, "reason": reason}, indent=2))
+        return 0
+    if args.command == "search" and getattr(args, "json", False):
+        print(json.dumps({"available": False, "mode": "unavailable",
+                          "query": args.query, "results": [], "reason": reason},
+                         ensure_ascii=False, indent=2))
+        return 0
+    print(reason, file=sys.stderr)
+    return 2
+
+
 def _check_model(conn: sqlite3.Connection, model: str) -> None:
     row = conn.execute("SELECT value FROM meta WHERE key='model'").fetchone()
     if row and row[0] != model:
@@ -603,6 +666,7 @@ def build_parser() -> argparse.ArgumentParser:
                           help="skip Voyage rerank and return RRF-fused order")
     p_search.add_argument("--rerank-model", default=DEFAULT_RERANK_MODEL)
 
+    sub.add_parser("probe", help="availability + mode as JSON (no query) — is the wiki installed/ready?")
     sub.add_parser("status", help="index freshness + mode as JSON")
     return parser
 
@@ -621,19 +685,20 @@ def main() -> int:
     else:
         vault_root = _find_vault_root()
         if vault_root is None:
-            print("cannot resolve vault root: sb-os.json not found in script directory "
-                  "ancestors or cwd ancestors; pass --vault-root explicitly",
-                  file=sys.stderr)
-            return 2
+            return _emit_unavailable(
+                args, "cannot resolve vault root: sb-os.json not found in script directory "
+                "ancestors or cwd ancestors; pass --vault-root explicitly")
+
+    if args.command == "probe":
+        print(json.dumps(availability_verdict(vault_root, db_path=args.db), indent=2))
+        return 0
 
     try:
         wiki_root = resolve_wiki_root(vault_root)
     except (FileNotFoundError, KeyError, json.JSONDecodeError) as err:
-        print(f"cannot resolve wiki_root from sb-os.json: {err}", file=sys.stderr)
-        return 2
+        return _emit_unavailable(args, f"cannot resolve wiki_root from sb-os.json: {err}")
     if not (wiki_root / "wiki").is_dir():
-        print(f"no wiki tree at {wiki_root / 'wiki'}", file=sys.stderr)
-        return 2
+        return _emit_unavailable(args, f"no wiki tree at {wiki_root / 'wiki'}")
 
     api_key = resolve_api_key(vault_root)
     embedder = make_voyage_embedder(api_key, args.model) if api_key else None
@@ -683,8 +748,8 @@ def main() -> int:
             print(f"unknown --type {err}; valid: {', '.join(TYPE_PREFIXES)}", file=sys.stderr)
             return 1
         if args.json:
-            print(json.dumps({"mode": mode, "query": args.query, "results": hits},
-                             ensure_ascii=False, indent=2))
+            print(json.dumps({"available": True, "mode": mode, "query": args.query,
+                              "results": hits}, ensure_ascii=False, indent=2))
         else:
             if not hits:
                 print("no results", file=sys.stderr)
