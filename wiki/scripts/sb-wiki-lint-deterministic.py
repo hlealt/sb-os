@@ -2750,8 +2750,8 @@ def _slug_fold(name: str) -> str:
        ellipsis.
     3. Drop emoji / surrogate-pair characters.
     4. NFKD-decompose and strip non-ASCII (accent fold).
-    5. Normalise hyphens: collapse runs, strip leading/trailing.
-    6. Lowercase the result (names are already lowercase; this is a guard).
+    5. Whitespace → hyphen, then collapse hyphen runs, strip leading/trailing.
+    6. Lowercase the result.
 
     The `.md` extension is stripped before calling and re-appended by the
     caller — pass the stem only.
@@ -2808,6 +2808,11 @@ def _slug_fold(name: str) -> str:
     # Step 5: normalise hyphens (the apostrophe from step 2 also folds here).
     # Replace apostrophe with nothing (it appears mid-word, not as separator).
     s = s.replace("'", "")
+    # Whitespace → hyphen: a kebab filename never contains a space. This also
+    # powers the case/space normalisation of not-yet-ingested raw files
+    # (see `_is_case_space_candidate`); for non-ASCII renames it rides along
+    # harmlessly (references are always healed).
+    s = re.sub(r"\s+", "-", s)
     # Collapse consecutive hyphens produced by chained folds.
     s = re.sub(r"-{2,}", "-", s)
     # Strip leading/trailing hyphens.
@@ -2838,9 +2843,50 @@ def _all_wiki_files(wiki_root: Path) -> list[Path]:
     return result
 
 
-def _build_rename_map(wiki_root: Path) -> tuple[
-    list[tuple[Path, Path]], list[dict[str, str]]
-]:
+def _is_case_space_candidate(p: Path, wiki_root: Path) -> bool:
+    """True if ``p`` is a not-yet-ingested raw source file eligible for
+    case/space filename normalisation (owner ruling 2026-06-14).
+
+    Scope is deliberately narrow so the rename can NEVER break a live
+    reference:
+
+    - under ``raw/`` (never ``wiki/``), a DIRECT child of an origin folder
+      (``raw/{origin}/{file}``), and NOT in a binary-dump asset folder
+      (``_assets`` / ``*-assets``, already filtered by ``excluded_dir``);
+    - a real source candidate: a ``.md``/``.pdf`` whose name is neither a
+      ``NON_SOURCE_FILES`` sentinel (``CLAUDE.md`` etc.) nor the origin index
+      (``{origin}.md``);
+    - NOT yet ingested: no source page exists at
+      ``wiki/sources/{origin}/{stem}.md`` (mirrors the ingest "ingested"
+      definition in ``sb-wiki-ingest-all-manifest.py``).
+
+    An un-ingested raw file has no source page and nothing links to it, so a
+    case/space rename is reference-safe — that is exactly why ALREADY-ingested
+    files are excluded here (the owner's stated fear of breaking links).
+    """
+    try:
+        rel = p.relative_to(wiki_root)
+    except ValueError:
+        return False
+    parts = rel.parts
+    # raw/{origin}/{file} — direct origin child only (mirrors the manifest's
+    # iterdir scope; deeper nesting like legacy raw/{origin}/assets/ is out).
+    if len(parts) != 3 or parts[0] != "raw":
+        return False
+    if excluded_dir(rel):
+        return False
+    if p.suffix not in (".md", ".pdf"):
+        return False
+    origin = parts[1]
+    if p.name in NON_SOURCE_FILES or p.name == f"{origin}.md":
+        return False
+    source_page = wiki_root / "wiki" / "sources" / origin / f"{p.stem}.md"
+    return not source_page.exists()
+
+
+def _build_rename_map(
+    wiki_root: Path, files: list[Path] | None = None
+) -> tuple[list[tuple[Path, Path]], list[dict[str, str]]]:
     """Scan wiki_root and return (renames, collisions).
 
     renames: list of (old_path, new_path) for files whose folded name differs.
@@ -2848,8 +2894,14 @@ def _build_rename_map(wiki_root: Path) -> tuple[
 
     Collision = two different old names fold to the same new name, OR a
     folded name clashes with an EXISTING file that is NOT itself being renamed.
+
+    ``files``: when provided, evaluate ONLY these paths instead of rglob-ing the
+    whole ``raw/`` + ``wiki/`` corpus (bounded-rescan path — owner ruling
+    2026-06-14). The caller (e.g. the ingest A11 step) passes just the
+    file(s) it touched, so a clean incoming file no longer triggers a
+    whole-corpus scan. ``None`` = scan the whole corpus (default / migration).
     """
-    all_files = _all_wiki_files(wiki_root)
+    all_files = files if files is not None else _all_wiki_files(wiki_root)
 
     # Map from (parent_dir, new_stem+ext) → list of old Path objects.
     fold_map: dict[tuple[Path, str], list[Path]] = {}
@@ -2861,14 +2913,16 @@ def _build_rename_map(wiki_root: Path) -> tuple[
         ext = p.suffix  # e.g. ".md" or ".pdf"
         # SCOPE GATE (p4-9 contract, Q1b ruling 2026-06-11): the migration is
         # bounded to NON-ASCII-NAMED files only. Uppercase, spaces, and ASCII
-        # punctuation are all ASCII and are OUT of scope — folding them inflates
-        # the migration far beyond the ruled scope. A file whose stem is already
-        # pure ASCII keeps its name even if _slug_fold would alter it (e.g.
-        # case/space normalisation). Only a stem carrying a byte above 0x7F is a
-        # rename candidate.
+        # punctuation are all ASCII and are OUT of scope for the migration.
+        # EXTENSION (owner ruling 2026-06-14): a pure-ASCII file ALSO becomes a
+        # rename candidate when it is a not-yet-ingested raw file — its case and
+        # spaces are normalised to canonical kebab via _slug_fold. Reference-safe
+        # because nothing links to an un-ingested raw file (see
+        # _is_case_space_candidate). Every other pure-ASCII file keeps its name.
         if all(ord(c) < 128 for c in stem):
-            unchanged.add(p)
-            continue
+            if not _is_case_space_candidate(p, wiki_root):
+                unchanged.add(p)
+                continue
         folded_stem = _slug_fold(stem)
         new_name = folded_stem + ext
         if new_name == p.name:
@@ -2921,6 +2975,20 @@ def _count_reference_classes(wiki_root: Path, rename_map: list[tuple[Path, Path]
     5. pending-topic-updates.md source-path cells (read-only count)
     6. lint state-file stamps — path-keyed entries that need re-key
     """
+    # Bounded-rescan short-circuit (owner ruling 2026-06-14): no renames means
+    # nothing to heal — return zeroed counts WITHOUT rglob-ing the corpus. This
+    # is what makes a scoped, clean incoming file O(scope), not O(corpus).
+    if not rename_map:
+        return {
+            "wikilinks": 0,
+            "raw_index_file_cells": 0,
+            "raw_backlinks": 0,
+            "questions_logs_entries": 0,
+            "pending_topic_updates_rows": 0,
+            "root_level_files": 0,
+            "state_file_stamps": 0,
+        }
+
     # Build a set of (old_rel, new_rel) for fast lookup.
     old_to_new: dict[str, str] = {}
     for old_p, new_p in rename_map:
@@ -3076,6 +3144,17 @@ def _execute_normalize(
         "state_stamps_rekeyed": 0,
         "errors": [],
     }
+
+    # Bounded-rescan short-circuit (owner ruling 2026-06-14): an empty rename map
+    # means nothing to heal or re-key — return the zeroed result WITHOUT rglob-ing
+    # the whole corpus. Mirrors the same guard in _count_reference_classes.
+    if not rename_map:
+        if output:
+            output.parent.mkdir(parents=True, exist_ok=True)
+            with open(_fspath(output), "w", encoding="utf-8") as fh:
+                fh.write(json.dumps(result, indent=2, ensure_ascii=False) + "\n")
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        return result
 
     # Build old→new mapping indexed by (stem+ext) for text healing.
     old_to_new_name: dict[str, str] = {}  # old_filename → new_filename
@@ -3246,12 +3325,21 @@ def cmd_normalize_filenames(args_list: list[str]) -> int:
     - Emoji / supplementary-plane chars: drop
     - Post-fold: collapse consecutive hyphens, strip leading/trailing
 
+    Also normalises CASE and SPACE for not-yet-ingested raw files (owner ruling
+    2026-06-14): a pure-ASCII raw file with no source page yet (nothing links to
+    it) is folded to canonical kebab (lowercase, spaces → hyphens). Already-
+    ingested files are never touched by this rule — see _is_case_space_candidate.
+
     Modes:
       Default (--dry-run):  scan → emit JSON rename map + reference counts;
                             exit 0 when no collisions, exit 2 on collision.
       --execute:            renames + reference-class heals + state re-key.
                             MIGRATION IS CONDUCTOR-EXECUTED — run only after
                             reviewer certification and before Phase-5 lint.
+      --scope PATH ...:     BOUNDED RESCAN — evaluate only the given file(s)
+                            instead of the whole corpus; a clean incoming file
+                            does no whole-corpus scan. Combine with --execute
+                            for the per-ingest stray-heal (A11 wiring).
 
     Voyage search index note: index.db stores document paths. After --execute,
     the conductor must run:
@@ -3289,11 +3377,38 @@ def cmd_normalize_filenames(args_list: list[str]) -> int:
         default=None,
         help="path to the lint state JSON for stamp re-key (default: canonical path)",
     )
+    parser.add_argument(
+        "--scope",
+        type=Path,
+        action="append",
+        default=None,
+        metavar="PATH",
+        help=(
+            "BOUNDED RESCAN: evaluate ONLY these file(s) for renaming instead of "
+            "scanning the whole corpus (repeatable). Paths resolve against the "
+            "current dir or absolute; any path outside wiki_root or inside a "
+            "binary-dump asset folder is ignored. Omit to scan the whole corpus "
+            "(default / migration). Used by the ingest A11 step to pass just the "
+            "incoming raw file so a clean file triggers no whole-corpus scan."
+        ),
+    )
     args = parser.parse_args(args_list)
     vault_root = args.vault_root.resolve()
     wiki_root = resolve_wiki_root(vault_root)
 
-    renames, collisions = _build_rename_map(wiki_root)
+    scoped_files: list[Path] | None = None
+    if args.scope:
+        scoped_files = []
+        for raw_path in args.scope:
+            sp = raw_path.resolve()
+            try:
+                rel = sp.relative_to(wiki_root)
+            except ValueError:
+                continue  # outside the wiki corpus — ignore
+            if sp.is_file() and not excluded_dir(rel):
+                scoped_files.append(sp)
+
+    renames, collisions = _build_rename_map(wiki_root, files=scoped_files)
 
     if collisions:
         payload = {

@@ -247,9 +247,16 @@ python wiki/scripts/sb-wiki-lint-deterministic.py normalize-filenames --vault-ro
 
 # Execute: rename files + heal all reference classes + re-key state stamps
 python wiki/scripts/sb-wiki-lint-deterministic.py normalize-filenames --vault-root <vault> --execute
+
+# Bounded rescan: evaluate ONLY the given file(s) — no whole-corpus scan.
+# Used by /sb-wiki-ingest (A11) on the incoming raw file so one stray clipper
+# file never triggers a corpus-wide rescan per ingest. Repeatable.
+python wiki/scripts/sb-wiki-lint-deterministic.py normalize-filenames --vault-root <vault> --scope <file> --execute
 ```
 
 Run the dry-run before every migration. The subcommand exits 2 on collision and must exit 0 before `--execute` is permitted. After `--execute`, re-run `sb-wiki-search.py index` to rebuild the Voyage search index (path-keyed).
+
+**Case/space normalization (not-yet-ingested raw files only).** Beyond non-ASCII folding, `--execute` also normalizes CASE and SPACE for raw files under `raw/{origin}/` that have **no source page yet** (`wiki/sources/{origin}/{stem}.md` absent): the stem is folded to lowercase-kebab (uppercase → lowercase, spaces → hyphens). This is reference-safe because an un-ingested raw file has no inbound links. **Already-ingested files, every `wiki/` page, `raw/_assets/`, non-source sentinels (`CLAUDE.md` etc.), and origin index files are never touched by this rule** — only the incoming, link-free raw file is normalized.
 
 ### Raw PDF title-conformance
 

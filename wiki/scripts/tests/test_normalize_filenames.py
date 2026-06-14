@@ -31,6 +31,9 @@ sys.modules["sb_wiki_lint_deterministic"] = _mod
 _spec.loader.exec_module(_mod)
 _slug_fold = _mod._slug_fold
 _build_rename_map = _mod._build_rename_map
+_is_case_space_candidate = _mod._is_case_space_candidate
+_count_reference_classes = _mod._count_reference_classes
+_execute_normalize = _mod._execute_normalize
 resolve_wiki_root = _mod.resolve_wiki_root
 
 SCRIPT = Path(__file__).parent.parent / "sb-wiki-lint-deterministic.py"
@@ -225,19 +228,24 @@ class TestBuildRenameMap:
         assert len(collisions) == 1
         assert collisions[0]["reason"] == "target-name-already-exists"
 
-    # --- SCOPE GATE (p4-9 contract, Q1b ruling): non-ASCII-named files ONLY ---
+    # --- SCOPE GATE (p4-9 contract, Q1b ruling): non-ASCII-named files, PLUS
+    #     case/space for not-yet-ingested raw files (owner ruling 2026-06-14) ---
 
-    def test_ascii_uppercase_stem_not_renamed(self, tmp_path):
-        # An ASCII-clean stem with uppercase is OUT of scope — never renamed,
-        # even though _slug_fold would lowercase it.
+    def test_ascii_uppercase_ingested_not_renamed(self, tmp_path):
+        # An ASCII uppercase stem that is ALREADY ingested (its source page
+        # exists) is protected — case/space normalisation never touches a file
+        # with live references (owner ruling 2026-06-14).
         _, wiki_root = make_vault(tmp_path)
         (wiki_root / "raw" / "origin-a" / "My-Title.md").write_text("", encoding="utf-8")
+        (wiki_root / "wiki" / "sources" / "origin-a" / "My-Title.md").write_text(
+            "---\ntype: source\n---\n", encoding="utf-8")
         renames, collisions = _build_rename_map(wiki_root)
         assert collisions == []
         assert renames == []
 
-    def test_ascii_space_stem_not_renamed(self, tmp_path):
-        # An ASCII-clean asset name with spaces is OUT of scope.
+    def test_ascii_space_stem_in_assets_not_renamed(self, tmp_path):
+        # An ASCII-clean asset name with spaces inside a binary-dump folder is
+        # OUT of scope (excluded_dir) — raw/_assets stays user-owned.
         _, wiki_root = make_vault(tmp_path)
         assets = wiki_root / "raw" / "_assets"
         assets.mkdir(parents=True, exist_ok=True)
@@ -246,18 +254,31 @@ class TestBuildRenameMap:
         assert collisions == []
         assert renames == []
 
-    def test_ascii_clean_and_nonascii_mixed_only_nonascii_renamed(self, tmp_path):
-        # Mixed corpus: ASCII-clean uppercase/space files stay; only the
-        # non-ASCII-named file is a rename candidate.
+    def test_ascii_uppercase_wiki_page_not_renamed(self, tmp_path):
+        # An ASCII uppercase wiki page (e.g. entities/assets/DXY.md) is NOT a
+        # case/space candidate — the rule is bounded to raw/ source files.
         _, wiki_root = make_vault(tmp_path)
-        d = wiki_root / "raw" / "origin-a"
-        (d / "My-Title.md").write_text("", encoding="utf-8")        # ASCII — skip
-        (d / "Some Asset.png").write_text("", encoding="utf-8")     # ASCII — skip
-        (d / "2026-01-01-café.md").write_text("", encoding="utf-8")  # non-ASCII — rename
+        d = wiki_root / "wiki" / "entities" / "assets"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "DXY.md").write_text("---\ntype: entity\n---\n", encoding="utf-8")
         renames, collisions = _build_rename_map(wiki_root)
         assert collisions == []
-        assert len(renames) == 1
-        assert renames[0][1].name == "2026-01-01-cafe.md"
+        assert renames == []
+
+    def test_mixed_ascii_nonascii_and_case_space(self, tmp_path):
+        # Mixed not-yet-ingested raw corpus (owner ruling 2026-06-14):
+        #   - uppercase .md   -> case/space candidate (renamed)
+        #   - .png asset      -> not a source suffix (.md/.pdf) -> stays
+        #   - non-ASCII .md   -> migration candidate (renamed)
+        _, wiki_root = make_vault(tmp_path)
+        d = wiki_root / "raw" / "origin-a"
+        (d / "My-Title.md").write_text("", encoding="utf-8")          # case  -> rename
+        (d / "Some Asset.png").write_text("", encoding="utf-8")       # png   -> stays
+        (d / "2026-01-01-café.md").write_text("", encoding="utf-8")    # accent -> rename
+        renames, collisions = _build_rename_map(wiki_root)
+        assert collisions == []
+        new_names = sorted(n.name for _, n in renames)
+        assert new_names == ["2026-01-01-cafe.md", "my-title.md"]
 
 
 # ---------------------------------------------------------------------------
@@ -585,3 +606,158 @@ class TestReferenceHealCoverageGap:
             assert "são" not in f.read_text(encoding="utf-8")
             assert "café" not in f.read_text(encoding="utf-8")
         assert ex["errors"] == []
+
+
+# ---------------------------------------------------------------------------
+# Case/space normalisation of NOT-yet-ingested raw files (owner ruling
+# 2026-06-14). A raw file with no source page yet has no inbound links, so
+# folding its case/spaces to canonical kebab is reference-safe. Already-ingested
+# files, wiki/ pages, non-source sentinels, origin indexes, and asset dumps are
+# all protected.
+# ---------------------------------------------------------------------------
+
+class TestCaseSpaceNotYetIngested:
+
+    def test_space_in_not_yet_ingested_raw_renamed(self, tmp_path):
+        _, wiki_root = make_vault(tmp_path)
+        (wiki_root / "raw" / "origin-a" / "How This Ends.md").write_text("", encoding="utf-8")
+        renames, collisions = _build_rename_map(wiki_root)
+        assert collisions == []
+        assert [n.name for _, n in renames] == ["how-this-ends.md"]
+
+    def test_uppercase_in_not_yet_ingested_raw_renamed(self, tmp_path):
+        _, wiki_root = make_vault(tmp_path)
+        (wiki_root / "raw" / "origin-a" / "Made-With-ML.md").write_text("", encoding="utf-8")
+        renames, _ = _build_rename_map(wiki_root)
+        assert [n.name for _, n in renames] == ["made-with-ml.md"]
+
+    def test_pdf_case_space_not_yet_ingested_renamed(self, tmp_path):
+        _, wiki_root = make_vault(tmp_path)
+        (wiki_root / "raw" / "origin-a" / "State of AI 2025.pdf").write_text("", encoding="utf-8")
+        renames, _ = _build_rename_map(wiki_root)
+        assert [n.name for _, n in renames] == ["state-of-ai-2025.pdf"]
+
+    def test_ingested_raw_protected(self, tmp_path):
+        # Source page exists → file has live references → never case/space-folded.
+        _, wiki_root = make_vault(tmp_path)
+        (wiki_root / "raw" / "origin-a" / "Made-With-ML.md").write_text("", encoding="utf-8")
+        (wiki_root / "wiki" / "sources" / "origin-a" / "Made-With-ML.md").write_text(
+            "---\ntype: source\n---\n", encoding="utf-8")
+        renames, _ = _build_rename_map(wiki_root)
+        assert renames == []
+
+    def test_candidate_predicate_exclusions(self, tmp_path):
+        _, wiki_root = make_vault(tmp_path)
+        raw = wiki_root / "raw" / "origin-a"
+        # non-source sentinel
+        assert _is_case_space_candidate(raw / "README.md", wiki_root) is False
+        # origin index file
+        assert _is_case_space_candidate(raw / "origin-a.md", wiki_root) is False
+        # wiki/ page (not raw/)
+        assert _is_case_space_candidate(
+            wiki_root / "wiki" / "entities" / "assets" / "DXY.md", wiki_root) is False
+        # binary-dump asset folder
+        assert _is_case_space_candidate(
+            wiki_root / "raw" / "_assets" / "Some Image.png", wiki_root) is False
+        # non source suffix
+        assert _is_case_space_candidate(raw / "Some Asset.png", wiki_root) is False
+        # genuine not-yet-ingested raw .md → True
+        (raw / "My File.md").write_text("", encoding="utf-8")
+        assert _is_case_space_candidate(raw / "My File.md", wiki_root) is True
+
+    def test_execute_renames_case_space_file_on_disk(self, tmp_path):
+        vault, wiki_root = make_vault(tmp_path)
+        old = wiki_root / "raw" / "origin-a" / "My Draft.md"
+        old.write_text("body", encoding="utf-8")
+        rc, payload = run_cmd(vault, "--execute")
+        assert rc == 0
+        assert not old.exists()
+        assert (wiki_root / "raw" / "origin-a" / "my-draft.md").exists()
+        assert [r["new"] for r in payload["renames_performed"]] == [
+            "raw/origin-a/my-draft.md"]
+
+    def test_case_space_collision_with_existing_ingested_blocks(self, tmp_path):
+        # "My File.md" folds to "my-file.md", which already exists (ingested) →
+        # collision gate fires, nothing renamed.
+        vault, wiki_root = make_vault(tmp_path)
+        d = wiki_root / "raw" / "origin-a"
+        (d / "My File.md").write_text("", encoding="utf-8")
+        (d / "my-file.md").write_text("", encoding="utf-8")
+        rc, payload = run_cmd(vault)
+        assert rc == 2
+        assert payload["status"] == "COLLISION"
+
+
+# ---------------------------------------------------------------------------
+# Bounded rescan (owner ruling 2026-06-14): --scope evaluates only the given
+# file(s); an empty rename map short-circuits BOTH the count and execute corpus
+# scans so a clean incoming file does O(scope) work, not O(corpus).
+# ---------------------------------------------------------------------------
+
+class TestBoundedScope:
+
+    def test_scoped_clean_file_ignores_corpus_nonascii(self, tmp_path):
+        # A non-ASCII file sits in the corpus; scoping to a DIFFERENT clean file
+        # must find no rename — proving the scan never looked at the corpus.
+        _, wiki_root = make_vault(tmp_path)
+        (wiki_root / "raw" / "origin-a" / "2026-01-01-café.md").write_text("", encoding="utf-8")
+        clean = wiki_root / "raw" / "origin-a" / "already-fine.md"
+        clean.write_text("", encoding="utf-8")
+        scoped, collisions = _build_rename_map(wiki_root, files=[clean])
+        assert scoped == []
+        assert collisions == []
+        # Unscoped DOES find the corpus non-ASCII file (sanity: scope is the cause).
+        full, _ = _build_rename_map(wiki_root)
+        assert [n.name for _, n in full] == ["2026-01-01-cafe.md"]
+
+    def test_scoped_to_the_stray_file_finds_it(self, tmp_path):
+        _, wiki_root = make_vault(tmp_path)
+        stray = wiki_root / "raw" / "origin-a" / "2026-01-01-café.md"
+        stray.write_text("", encoding="utf-8")
+        scoped, _ = _build_rename_map(wiki_root, files=[stray])
+        assert [n.name for _, n in scoped] == ["2026-01-01-cafe.md"]
+
+    def test_cli_scope_leaves_unscoped_stray_untouched(self, tmp_path):
+        vault, wiki_root = make_vault(tmp_path)
+        stray = wiki_root / "raw" / "origin-a" / "2026-01-01-café.md"
+        stray.write_text("", encoding="utf-8")
+        clean = wiki_root / "raw" / "origin-a" / "already-fine.md"
+        clean.write_text("", encoding="utf-8")
+        rc, payload = run_cmd(vault, "--scope", str(clean), "--execute")
+        assert rc == 0
+        assert payload["renames_performed"] == []
+        # The unscoped stray was never evaluated → still at its original path.
+        assert stray.exists()
+
+    def test_cli_scope_ignores_paths_outside_wiki_and_assets(self, tmp_path):
+        vault, wiki_root = make_vault(tmp_path)
+        outside = tmp_path / "outside.md"
+        outside.write_text("", encoding="utf-8")
+        asset = wiki_root / "raw" / "_assets" / "Some Image.png"
+        asset.parent.mkdir(parents=True, exist_ok=True)
+        asset.write_text("", encoding="utf-8")
+        rc, payload = run_cmd(vault, "--scope", str(outside), "--scope", str(asset))
+        assert rc == 0
+        assert payload["rename_count"] == 0
+
+    def test_empty_rename_map_short_circuits_corpus_reads(self, tmp_path, monkeypatch):
+        # The bounded-rescan win: no renames → neither count nor execute reads
+        # any corpus file. Spy on the module's read_text and assert zero calls.
+        _, wiki_root = make_vault(tmp_path)
+        # Populate a corpus that WOULD be read on a full scan.
+        (wiki_root / "wiki" / "topics" / "t.md").write_text("[[x.md]]", encoding="utf-8")
+        (wiki_root / "raw" / "origin-a" / "r.md").write_text("[[x.md]]", encoding="utf-8")
+        calls = {"n": 0}
+        orig = _mod.read_text
+
+        def spy(path):
+            calls["n"] += 1
+            return orig(path)
+
+        monkeypatch.setattr(_mod, "read_text", spy)
+        counts = _count_reference_classes(wiki_root, [])
+        result = _execute_normalize(wiki_root, [])
+        assert calls["n"] == 0
+        assert all(v == 0 for v in counts.values())
+        assert result["renames_performed"] == []
+        assert result["errors"] == []
