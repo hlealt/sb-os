@@ -21,6 +21,17 @@ The investor NEVER mutates financial data stores. It NEVER writes a ledger CSV, 
 
 The loop NEVER reads a ledger CSV, `portfolio.json`, or a raw source file directly to inspect position data. It reads position data ONLY through a registered `class: read` tool in `../../scripts/tools-index.md` (e.g. `position_table`, `position_summary`, `fx_impact_report`, `validate_calculate`). To find a tool, scan `tools-index.md` for `class: read` and the matching `use`. Wiki pages (thesis / decision / entity / source) and the user's policy files are markdown the agent reads directly — they are not position data. If the data the agent needs has no read tool, that is out-of-structure → run Rule A (the missing read capability is surfaced; the investor never builds tools at runtime and never hand-reads the store to compensate).
 
+## Wiki-page discovery
+
+Modes that discover relevant wiki pages — `review` (B3), `research` (B2), `thesis` (B1) — do so through this shared procedure: **search-first, additive, fail-soft**. Each consuming step states its own `<query>`, `<kinds>`, and `<N>`; this section is the single definition (modes REFERENCE it, never restate it).
+
+The discovery primitive is the deterministic `python {sb_os_path}/wiki/scripts/sb-wiki-search.py search "<query>" --json [--type <kinds>] [--k <N>]` (`{sb_os_path}` resolved from `sb-os.json`; run from the vault root). It returns ranked hits as `{path, anchor, score, snippet}` — **metadata only, never full page text** (anti-context-rot holds; read a discovered page's full content only when the reasoning needs it).
+
+1. **Probe-gate.** A return of `{"available": false, … "results": []}` (exit 0) means the index is absent or un-indexed. On `available: false` — OR any helper error / timeout — SKIP search and go straight to step 3: NEVER block, NEVER halt the mode (a helper failure NEVER halts a workflow).
+2. **Search FIRST (primary lens).** On `available: true`, run the search for the step's `<query>` / `<kinds>` and treat the returned page paths as discovery candidates — including pages the agent did not know to name. This is the recall gain over direct-by-entity reads.
+3. **Direct-entity reads + grep ALWAYS also run (completeness backstop).** Search ADDS TO — never replaces — the mode's existing direct page reads (the named-entity pages from thesis frontmatter) and its grep. Grep catches what semantic search misses: exact strings and freshly-written pages not yet embedded. The discovered set is the **UNION** (search ∪ direct-entity ∪ grep) — the union is what guarantees no recall regression versus the prior direct-only path.
+4. **Navigate after.** Discovery is a starting point, not a stop: after assembling the union, follow entity links and read neighbouring pages the agent judges relevant. The tool seeds awareness; it does not bound the work.
+
 ## Own-workspace-writes boundary
 
 The investor writes ONLY to:

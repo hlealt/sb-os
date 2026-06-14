@@ -45,6 +45,8 @@ Build a **coverage matrix** mapping each sub-question to the angle and source-ty
 
 Decompose reasons only; it writes nothing and fetches nothing. Keep it lightweight — atomic sub-questions and one matrix, not a research plan. This step adds no web access and no new write path.
 
+**Wiki pre-pass (search-first, before the Step 3 web fan-out).** After building the coverage matrix and before any web discovery, run `./sb-investor-loop.md` § Wiki-page discovery on the anchor (the thesis claim / research question fixed in Step 2; suggested `--type source,entity,concept,topic`) to (i) seed the coverage matrix with what the wiki ALREADY covers and (ii) flag anchor-relevant sources already ingested so the Step 3 web sweep does not re-discover or re-capture them. This pre-pass is a local read-only index query (no web access, no new write path); probe-gated, non-blocking, fail-soft — `available: false` or any helper error skips it and the web sweep proceeds unchanged. It changes NEITHER the Step 3 width sweep NOR the Step 7a Disconfirm wave — those stay open-web.
+
 ## Step 3 — Discover (parallel width sweep — one sub-agent wave per sub-question)
 
 Run a **parallel width sweep**: fan out web-search sub-agents — **one wave per Step 2.5 sub-question** — dispatched concurrently so breadth is covered in a single pass rather than one serial search. Each wave hunts OPEN sources for its own sub-question and the angle/source-type the coverage matrix assigned it. The fan-out MUST keep the mode plugin-agnostic — discovery is NOT wired to any single search plugin, preserving sb-os finance-module portability.

@@ -117,6 +117,7 @@ Save it anywhere and give me the path — I will re-run capture with --mode manu
 1. Identify the investment entity(ies) the thesis touches (companies, assets, sectors, countries). These become the scribe's `related_companies` / `related_assets` / `related_sectors` / `related_countries` cross-links.
 2. Read a single company's `## Financials` table off its wiki entity page directly when fundamentals inform the reasoning (no fundamentals tool in v1).
 3. Map owned positions ONLY if the user maps a belief to real exposure — these become `related_positions`. Inspect position data ONLY through a registered `class: read` tool in `../../scripts/tools-index.md` (tools-only invariant); NEVER read `portfolio.json`/ledgers directly. Leave `related_positions` empty when the user does not map exposure.
+4. **Related-page awareness — run `./sb-investor-loop.md` § Wiki-page discovery on the `Claim`** (suggested `--type concept,source,thesis,entity`) to surface related concept / source / sibling-thesis pages the author should weigh — ADDITIVE to the named-entity reads in item 1, never a replacement. This is the MODE's broad related-page awareness; it is distinct from (and does NOT duplicate) the `sb-fin-create-thesis` scribe's later Step-1 `--type thesis` scope-overlap check at persistence. Probe-gated and fail-soft per § Wiki-page discovery — an unavailable index simply skips this awareness pass.
 
 ## Step 4 — Present-and-confirm checkpoint
 

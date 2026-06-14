@@ -43,7 +43,7 @@ If the named thesis page does not exist, surface it per `./sb-investor-loop.md` 
 
 ## Step 3 — Gather recent evidence (Assumption Audit on standing assumptions → targeted Disconfirm)
 
-Find wiki sources touching the thesis's entities dated AFTER `last_reviewed` — read source/entity pages directly (markdown, not position data). Weigh each candidate against `source-policy` (loaded in Step 1); a source that fails the trust bar is surfaced per `./sb-investor-loop.md` § Issue-surfacing, never silently kept or dropped.
+**Discovery runs `./sb-investor-loop.md` § Wiki-page discovery FIRST** — search the wiki for pages relevant to the thesis (query = the thesis `Claim`, scoped by its `related_companies` / `related_assets` / `related_sectors` / `related_countries` entities; suggested `--type source,entity,concept`), treating the returned paths as discovery candidates including pages not named in the frontmatter. Then the existing pass runs as the retained backstop: find wiki sources touching the thesis's entities dated AFTER `last_reviewed` — read source/entity pages directly (markdown, not position data) — and grep the entities to catch exact strings and freshly-written pages. The evidence set is the **UNION** — search hits ∪ the direct-by-entity reads ∪ grep — so it always contains at least today's direct-by-entity candidate set (no recall regression; § Wiki-page discovery step 3). Weigh each candidate against `source-policy` (loaded in Step 1); a source that fails the trust bar is surfaced per `./sb-investor-loop.md` § Issue-surfacing, never silently kept or dropped.
 
 ### Step 3a — Re-run the Assumption Audit on the thesis's STANDING assumptions
 
