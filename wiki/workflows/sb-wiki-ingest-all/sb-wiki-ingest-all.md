@@ -113,6 +113,8 @@ For EACH file, in order:
 2. Run `/sb-wiki-ingest silent <slug>` with this file as `<slug>` by reading and executing `{sb_os_path}/wiki/workflows/sb-wiki-ingest/sb-wiki-ingest.md` in its silent mode. Follow it EXACTLY — it is the sole authority on how a source is distilled and on every checkpoint auto-resolution. PDFs (`.pdf`) are valid slugs; the workflow resolves and reads them natively.
 3. Fully complete one file — every staged change written to disk — before starting the next. Never run two ingests at once.
 
+Shared-page writes — re-read-and-reapply (you do NOT inherit workspace rules): other workers in this wave may edit the SAME existing entity/concept/topic page (ingest Step 4 / 4.5). If an Edit to such a page is rejected because the file changed since you read it, RE-READ the page and RE-APPLY ONLY your own addition to the fresh content — NEVER restore the page from your earlier read. The candidate logs and the semantic-update queue are already collision-safe (the ingest routes those through the lock-guarded sb-wiki-shared-append.py), so this applies only to the shared-page edits.
+
 Do NOT run /sb-wiki-lint. Do NOT create topic pages. Do NOT touch files outside this batch. NEVER run any git command (add/commit/push) — the orchestrator makes the run's single git commit at the end.
 
 Report back, per file, the FULL structured summary silent mode returns: per-file status `committed` | `partial (reason)` | `failed (reason)`; the list of NEW concept/entity page slugs created (filename stems); and the `Flags` lines verbatim (deferred candidate-topics, applied firm topic-updates, rejected speculative updates, rejected proposed answers). The orchestrator tallies the `Flags` into the final-report counts — do NOT drop or summarize them.

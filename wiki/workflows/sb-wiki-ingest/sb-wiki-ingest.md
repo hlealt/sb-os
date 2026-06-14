@@ -379,6 +379,14 @@ Append entries to the split logs under `{wiki_root}/logs/` per `../shared/log-en
 | `candidate-topic` | `{wiki_root}/logs/topics.md` | Once per trigger fire from step 6 |
 | `candidate-mention` | `{wiki_root}/logs/mentions.md` | Once per name in the `mention-only` set from step 3 |
 
+**Collision-safe append (MANDATORY — both modes).** These are GLOBAL files; in a bulk run parallel cross-origin workers append to them at once, and a direct read-modify-write can clobber a sibling's entry. Append EACH entry through the lock-guarded helper — NEVER by direct file edit:
+
+```bash
+python {sb_os_path}/wiki/scripts/sb-wiki-shared-append.py append-block --vault-root <vault-root> --file logs/topics.md --entry-file <temp-entry-file> --consume
+```
+
+Compose the H2 entry, write it to a temporary file, and pass it as `--entry-file` (`--consume` deletes the temp on success); use `--file logs/mentions.md` for a `candidate-mention`. The helper takes a per-file lock, appends blank-line-separated, and verifies the write — so concurrent workers never lose an entry, while a single-source run is byte-identical to a direct append (the lock never contends). Manual fallback for environments without Python: append directly, then RE-READ the file and confirm your entry landed before continuing.
+
 Emit NOTHING for the ingest itself, for stubs created in step 5, or for topic updates from step 10. Those are recorded by the pages themselves (the source page's `raw:` field, the raw index `Wiki = Yes` row, the stub/topic pages). Overflow speculative matches dropped at step 3.7b are NOT logged — they re-detect on future ingests. Resolution = page exists: a candidate leaves the queue when its page is created (lint prunes it). See `../shared/log-entry-shapes.md` § "Retired Types".
 
 ### Step 10 — Stage 1 checkpoint

@@ -43,6 +43,14 @@ Content-duplicate fire (URL or title matches an already-ingested source) → do 
 | Speculative topic updates (SPECULATIVE TOPIC UPDATES) | `reject` ALL. Write ONE audit record per rejected speculative update into `Flags`. NEVER apply unattended. |
 | Proposed answers (PROPOSED ANSWERS — both homes; INCLUDES answer-origin firm entries) | `reject` ALL. Write ONE audit record per rejected proposed answer into `Flags`. NEVER apply unattended (no `questions.md` `answer:` accretion; no topic-home strike-and-fold). |
 
+**Collision-safe queue append (MANDATORY).** Parallel bulk workers queue to the SAME `{wiki_root}/pending-topic-updates.md`; append each SEMANTIC-update row through the lock-guarded helper — NEVER by direct edit:
+
+```bash
+python {sb_os_path}/wiki/scripts/sb-wiki-shared-append.py append-row --vault-root <vault-root> --file pending-topic-updates.md --section "Pending topic updates" --row "<row>" --dedupe-cols 0,1
+```
+
+The helper inserts the row at the end of the Pending-topic-updates table under a per-file lock, skips a duplicate (source, topic) pair, and — when the file is absent — creates it from the minimal header passed via `--init-header`. Concurrent workers never lose a queued row.
+
 Only the FIRM tier of genuine topic updates auto-applies. Semantic topic updates QUEUE to `{wiki_root}/pending-topic-updates.md` (never applied, never dropped). Speculative updates and proposed answers (including answer-origin firm entries) NEVER auto-apply. For proposed topics and file changes these resolutions are IDENTICAL to the default-omission / `accept-all` behavior above. After committing, RETURN the structured summary the caller parses, per the schema § "/sb-wiki-ingest" subsection "Silent (non-interactive) mode" → "Return — structured summary (silent)". The summary's per-file status MUST be `committed` when all staged changes commit; `partial (<reason>)` ONLY when the source page committed but ≥1 staged change failed mid-commit (`<reason>` names what failed); `failed (<reason>)` when nothing committed (slug-resolution outcome from step 1, or an abort cause). NEVER emit `partial`/`failed` for a skipped step — clustering, trigger detection, and append-only protection all run in full. The mode NEVER writes a topic page and NEVER runs `/sb-wiki-lint`.
 
 **Audit records (silent firm-apply + rejections).** Each applied firm update and each rejected speculative-update / proposed-answer is recorded in the structured summary's `Flags` field (the existing caller-facing channel that already carries `deferred candidate-topic` flags — NO new log entry type, NO parallel log; the `topic-updated` type is retired and the queues hold no accretion/history entries per `../../shared/log-entry-shapes.md`). One `Flags` line per record, each naming the topic page (or question), the action, and the citing source:
