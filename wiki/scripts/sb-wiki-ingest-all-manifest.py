@@ -28,6 +28,7 @@ import json
 import logging
 import os
 import re
+import sys
 from pathlib import Path
 
 logging.getLogger("pypdf").setLevel(logging.ERROR)
@@ -251,8 +252,221 @@ def collect(wiki_root: Path, exclude: set[str], only_origin: str | None) -> dict
     }
 
 
+HAS_EXT = (".md", ".pdf")
+
+
+def raw_index(wiki_root: Path, exclude: set[str]) -> tuple[list[dict], set[str]]:
+    """Every raw source file across origins + the set of origin folder names.
+
+    Used to classify and resolve positional targets. Reads only; does NOT filter
+    on ingested/duplicate status — that happens later, per the chosen selection.
+    """
+    raw_root = wiki_root / "raw"
+    index: list[dict] = []
+    origin_names: set[str] = set()
+    for origin_dir in sorted(
+        p for p in raw_root.iterdir() if p.is_dir() and p.name not in exclude
+    ):
+        origin = origin_dir.name
+        origin_names.add(origin)
+        index_name = f"{origin}.md"
+        for raw_file in sorted(origin_dir.iterdir()):
+            if (
+                raw_file.is_file()
+                and raw_file.suffix in HAS_EXT
+                and raw_file.name != index_name
+                and raw_file.name not in NON_SOURCE_FILES
+            ):
+                index.append({
+                    "origin": origin,
+                    "filename": raw_file.name,
+                    "stem": raw_file.stem,
+                    "path": raw_file,
+                    "_abs": raw_file.resolve(),
+                })
+    return index, origin_names
+
+
+def resolve_target(
+    target: str, vault_root: Path, wiki_root: Path,
+    index: list[dict], by_name: dict, by_stem: dict,
+) -> list[dict]:
+    """Resolve one positional file target to raw-source item(s), deduped by path.
+
+    Union of strategies: a path under raw/ (joined to cwd / vault / wiki / raw
+    roots); `origin/name` or `origin/stem`; a bare filename; a bare stem. The
+    caller treats 0 hits as unresolved and >1 hits as ambiguous.
+    """
+    raw_root = wiki_root / "raw"
+    abs_to_item = {it["_abs"]: it for it in index}
+    matches: dict[Path, dict] = {}
+    normalized = target.replace("\\", "/").strip("/")
+
+    for base in (Path.cwd(), vault_root, wiki_root, raw_root):
+        try:
+            resolved = (base / target).resolve()
+        except (OSError, ValueError):
+            continue
+        if resolved in abs_to_item:
+            matches[resolved] = abs_to_item[resolved]
+
+    parts = normalized.split("/")
+    if len(parts) >= 2:
+        origin, name = parts[-2], parts[-1]
+        name_stem = Path(name).stem
+        for it in index:
+            if it["origin"] == origin and (it["filename"] == name or it["stem"] == name_stem):
+                matches[it["_abs"]] = it
+    elif len(parts) == 1:
+        name = parts[0]
+        for it in by_name.get(name, []):
+            matches[it["_abs"]] = it
+        for it in by_stem.get(Path(name).stem, []):
+            matches[it["_abs"]] = it
+
+    return list(matches.values())
+
+
+def classify_targets(
+    targets: list[str], origin_names: set[str], index: list[dict],
+    vault_root: Path, wiki_root: Path,
+) -> tuple[str, str | None, list[dict] | None, list]:
+    """Deterministically map positional targets to a run mode — never guess.
+
+    Returns (mode, only_origin, selected_items, errors):
+      mode    — "all" (no targets) | "origin" | "files"
+      errors  — list of (kind, ...) tuples; non-empty means HALT (exit 2).
+
+    Origin mode fires ONLY for a single bare token (no .md/.pdf extension, no
+    path separator) that names an origin folder. A bare token that names BOTH an
+    origin folder AND a raw-file stem is a collision: halt and demand
+    disambiguation. Every other shape is a file list.
+    """
+    if not targets:
+        return "all", None, None, []
+
+    by_name: dict[str, list[dict]] = {}
+    by_stem: dict[str, list[dict]] = {}
+    for it in index:
+        by_name.setdefault(it["filename"], []).append(it)
+        by_stem.setdefault(it["stem"], []).append(it)
+
+    if len(targets) == 1:
+        token = targets[0]
+        bare = (
+            Path(token).suffix.lower() not in HAS_EXT
+            and "/" not in token
+            and "\\" not in token
+        )
+        if bare:
+            stem_hits = by_stem.get(token, [])
+            if token in origin_names and stem_hits:
+                return "files", None, None, [("collision", token, stem_hits)]
+            if token in origin_names:
+                return "origin", token, None, []
+            # bare, not an origin → fall through to file resolution below
+
+    selected: list[dict] = []
+    errors: list = []
+    for token in targets:
+        hits = resolve_target(token, vault_root, wiki_root, index, by_name, by_stem)
+        if not hits:
+            errors.append(("unresolved", token))
+        elif len(hits) > 1:
+            errors.append(("ambiguous", token, hits))
+        else:
+            selected.append(hits[0])
+    return "files", None, selected, errors
+
+
+def collect_selection(wiki_root: Path, selected: list[dict]) -> dict:
+    """Manifest for an explicit file list — same payload shape as collect(),
+    plus `skipped_ingested[]` for listed files that already have a wiki page."""
+    sources_root = wiki_root / "wiki" / "sources"
+    raw_root = wiki_root / "raw"
+    items: list[dict] = []
+    origins: dict[str, dict[str, int]] = {}
+    skipped_ingested: list[str] = []
+    duplicate_files: list[str] = []
+    duplicates = 0
+    dup_cache: dict[str, set[str]] = {}
+
+    for it in selected:
+        origin, raw_file = it["origin"], it["path"]
+        if (sources_root / origin / f"{it['stem']}.md").exists():
+            skipped_ingested.append(f"{origin}/{it['filename']}")
+            continue
+        if origin not in dup_cache:
+            dup_cache[origin] = duplicate_rows(raw_root / origin)
+        if it["filename"] in dup_cache[origin]:
+            duplicates += 1
+            duplicate_files.append(f"{origin}/{it['filename']}")
+            continue
+        is_pdf = raw_file.suffix == ".pdf"
+        title, date, tokens = describe_pdf(raw_file) if is_pdf else describe_md(raw_file)
+        items.append({
+            "path": raw_file.relative_to(wiki_root.parent).as_posix(),
+            "origin": origin,
+            "filename": it["filename"],
+            "stem": it["stem"],
+            "is_pdf": is_pdf,
+            "title": title,
+            "date": date,
+            "token_estimate": tokens,
+        })
+        bucket = origins.setdefault(origin, {"missing": 0, "token_sum": 0})
+        bucket["missing"] += 1
+        bucket["token_sum"] += tokens or 0
+
+    return {
+        "totals": {
+            "origins_with_missing": len(origins),
+            "raw_total": len(selected),
+            "ingested": len(skipped_ingested),
+            "duplicates": duplicates,
+            "missing": len(items),
+        },
+        "duplicate_files": duplicate_files,
+        "skipped_ingested": skipped_ingested,
+        "origins": origins,
+        "items": items,
+    }
+
+
+def report_target_errors(errors: list, raw_root: Path) -> None:
+    """Print human-readable, actionable messages for classify_targets errors."""
+    for err in errors:
+        kind = err[0]
+        if kind == "collision":
+            token, hits = err[1], err[2]
+            where = ", ".join(sorted(f"{h['origin']}/{h['filename']}" for h in hits))
+            print(
+                f"ERROR: '{token}' is AMBIGUOUS - it names an origin folder AND "
+                f"matches raw source(s): {where}.", file=sys.stderr)
+            print(
+                f"  Disambiguate to ingest the file: '{token}.md', '{token}.pdf', "
+                f"or '{hits[0]['origin']}/{token}.md'.", file=sys.stderr)
+        elif kind == "ambiguous":
+            token, hits = err[1], err[2]
+            where = ", ".join(sorted(f"{h['origin']}/{h['filename']}" for h in hits))
+            print(
+                f"ERROR: '{token}' matches multiple raw sources: {where}. Qualify it "
+                f"with the origin prefix (e.g. '{hits[0]['origin']}/{token}').",
+                file=sys.stderr)
+        else:  # unresolved
+            print(
+                f"ERROR: '{err[1]}' matches no raw source under {raw_root}.",
+                file=sys.stderr)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "targets",
+        nargs="*",
+        help="an origin folder name (single bare token) OR one-or-more raw "
+             "filenames/paths to ingest; empty = every not-yet-ingested source",
+    )
     parser.add_argument("--vault-root", type=Path, default=Path.cwd())
     parser.add_argument("--report", type=Path, help="optional JSON report path")
     parser.add_argument(
@@ -260,7 +474,11 @@ def main() -> int:
         default=",".join(sorted(DEFAULT_EXCLUDE)),
         help="comma-separated raw subfolders to skip (asset folders)",
     )
-    parser.add_argument("--origin", help="scope the scan to a single origin")
+    parser.add_argument(
+        "--origin",
+        help="DEPRECATED — scope to a single origin (equivalent to passing the "
+             "origin name as a positional target). Kept for back-compat.",
+    )
     parser.add_argument(
         "--no-plan",
         action="store_true",
@@ -268,9 +486,32 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    wiki_root = resolve_wiki_root(args.vault_root.resolve())
+    vault_root = args.vault_root.resolve()
+    wiki_root = resolve_wiki_root(vault_root)
     exclude = {o.strip() for o in args.exclude_origins.split(",") if o.strip()}
-    payload = collect(wiki_root, exclude, args.origin)
+
+    # Resolve the run mode. --origin is the legacy explicit form; positional
+    # targets are classified deterministically (origin folder vs. file list).
+    if args.origin:
+        if args.targets:
+            print("ERROR: pass either positional targets OR --origin, not both.",
+                  file=sys.stderr)
+            return 2
+        mode, only_origin, selected, errors = "origin", args.origin, None, []
+    else:
+        index, origin_names = raw_index(wiki_root, exclude)
+        mode, only_origin, selected, errors = classify_targets(
+            args.targets, origin_names, index, vault_root, wiki_root)
+
+    if errors:
+        report_target_errors(errors, wiki_root / "raw")
+        return 2
+
+    if mode == "files":
+        payload = collect_selection(wiki_root, selected)
+    else:
+        payload = collect(wiki_root, exclude, only_origin)
+    payload["mode"] = mode
 
     if not args.no_plan:
         batches = build_batches(payload["items"])

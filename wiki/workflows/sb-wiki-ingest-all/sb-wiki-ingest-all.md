@@ -21,7 +21,15 @@ Each subagent runs the unmodified `sb-wiki-ingest` workflow per source. This orc
 
 ## Invocation
 
-`/sb-wiki-ingest-all [origin]`. No argument → every origin. Optional `[origin]` → scope the run to a single raw origin (e.g. `lennys-podcast`) for a smaller test run before backfilling everything.
+`/sb-wiki-ingest-all [origin | file …]`. The manifest script (Step 1) classifies the argument(s) deterministically — forward whatever the user typed as positional targets; NEVER pre-decide the mode yourself.
+
+| Argument shape | Run mode (`mode` field in the manifest) |
+|----------------|------------------------------------------|
+| none | `all` — every not-yet-ingested source across every origin |
+| one bare token naming an origin folder (no `.md`/`.pdf` extension, no path separator), e.g. `lennys-podcast` | `origin` — scope to that origin's missing sources |
+| one-or-more raw filenames/paths (`.md`/`.pdf`, `origin/file`, or a path), or two-or-more tokens | `files` — ingest exactly those files; already-ingested ones are skipped |
+
+A single bare token naming BOTH an origin folder AND a raw-file stem, an unresolvable target, or a bare name matching multiple raw files → the script exits non-zero with an actionable message and ingests nothing. Surface the message and STOP — never guess.
 
 ## Contracts
 
@@ -39,15 +47,17 @@ Each subagent runs the unmodified `sb-wiki-ingest` workflow per source. This orc
 
 ### Step 1 — Discover non-ingested sources + dispatch plan
 
-Run from the vault root with the active Python interpreter:
+Run from the vault root with the active Python interpreter, forwarding the user's argument(s) VERBATIM as positional targets (an origin name, or one-or-more filenames/paths — the script classifies them; see Invocation):
 
 ```bash
-python {sb_os_path}/wiki/scripts/sb-wiki-ingest-all-manifest.py --report {wiki_root}/ingest-all-manifest.json
+python {sb_os_path}/wiki/scripts/sb-wiki-ingest-all-manifest.py --report {wiki_root}/ingest-all-manifest.json [targets…]
 ```
 
-Append `--origin <origin>` when the user scoped the run. Read the JSON:
+If the script exits non-zero, it printed an actionable error to stderr (origin/file collision, unresolvable target, or a bare name matching multiple files). Surface that message and STOP — do NOT dispatch. Otherwise read the JSON:
 
-- `totals` + `origins{}` — discovery counts. If `totals.missing` is 0, report "wiki fully ingested" (note `totals.duplicates` if non-zero) and STOP. Raw files whose index row is `Wiki = Duplicate (…)` are already excluded by the script (`duplicate_files[]` lists them — surface the list in the final report).
+- `mode` — `all` | `origin` | `files`, the classification the script applied. Echo it in the run's opening status so the user sees what was targeted.
+- `totals` + `origins{}` — discovery counts. If `totals.missing` is 0, STOP: report "wiki fully ingested" (`all`/`origin` mode) or "all listed files already ingested" (`files` mode — `skipped_ingested[]` names them); note `totals.duplicates` if non-zero. Raw files whose index row is `Wiki = Duplicate (…)` are already excluded by the script (`duplicate_files[]` lists them — surface the list in the final report).
+- `skipped_ingested[]` (`files` mode only) — listed files already having a wiki page, dropped from this run. Echo the count in the opening status.
 - `plan.batches{origin: [batch…]}` — each batch carries `origin`, `index`, `files[]`, `token_sum`, and `model` (`sonnet` | `opus`, per the script's threshold). Same-origin batches packed by filename order, ≤50,000 tokens; a lone file over the cap (or `null` estimate) is its own batch.
 - `plan.waves[]` — ordered list of waves, each a list of `{origin, index}` refs (≤5 per wave, distinct origins within a wave, same-origin batches serialized across waves).
 
@@ -130,3 +140,5 @@ Report back, per file, the FULL structured summary silent mode returns: per-file
 | A subagent returns `failed (content-duplicate: …)` | NOT an error — the silent step-1.7 fire marked the raw-index row `Duplicate (…)`; re-runs skip it. List it on the report's Duplicates line for user disposition (delete the raw vs. re-point). |
 | A whole batch's subagent errors out | Mark every file in that batch `failed`; continue other waves. Re-running the command re-targets only the still-missing sources. |
 | User scoped to an `[origin]` with no missing sources | Report "nothing to ingest for `<origin>`"; STOP. |
+| Script exits non-zero — target collision (a bare name is both an origin and a file), unresolvable target, or a bare name matching multiple raw files | The script printed an actionable message to stderr and ingested nothing. Surface it and STOP — never guess the intended target. |
+| File list where every listed file is already ingested (`missing = 0`, `skipped_ingested[]` populated) | Report "all listed files already ingested"; STOP. |

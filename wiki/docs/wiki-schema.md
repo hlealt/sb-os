@@ -933,7 +933,7 @@ Four operations covering the wiki lifecycle:
 | Component | Type | Invoked by | Purpose |
 |-----------|------|------------|---------|
 | `/sb-wiki-ingest <slug>` | Slash command | The user | Distill a raw source into wiki pages |
-| `/sb-wiki-ingest-all [origin]` | Slash command | The user | Backfill: ingest every non-ingested raw source via batched Opus subagents, then lint |
+| `/sb-wiki-ingest-all [origin \| file …]` | Slash command | The user | Backfill: ingest non-ingested raw sources (all, one origin, or an explicit file list) via batched subagents, then lint |
 | `sb-wiki-create-topic` | Skill (auto-discovered) | Agent mid-ingest, OR auto-fired when the user expresses intent | Create a topic page from a candidate or freshly-proposed topic |
 | `/sb-wiki-lint` | Slash command | The user | Health check + index maintenance for `raw/` and `wiki/` |
 | `/sb-wiki-query <question>` | Slash command | The user | Synthesize an answer from wiki + optionally file the result back |
@@ -1096,11 +1096,11 @@ Silent mode runs the full append-only protection, clustering, and trigger detect
 
 ### `/sb-wiki-ingest-all`
 
-`/sb-wiki-ingest-all [origin]`. Orchestration-only command: it ingests every raw source that has no source page yet (`wiki/sources/{origin}/{stem}.md` absent) by dispatching subagents that each run `/sb-wiki-ingest` unchanged. It adds NO ingestion logic — `/sb-wiki-ingest` remains the sole authority on how one source is distilled.
+`/sb-wiki-ingest-all [origin | file …]`. Orchestration-only command: it ingests raw sources that have no source page yet (`wiki/sources/{origin}/{stem}.md` absent) by dispatching subagents that each run `/sb-wiki-ingest` unchanged. The manifest script (Step 1) classifies the argument(s) deterministically — no argument = every origin; a single bare origin name = that origin; one-or-more filenames/paths = exactly those files (already-ingested skipped); an ambiguous/unresolvable target exits non-zero and ingests nothing. It adds NO ingestion logic — `/sb-wiki-ingest` remains the sole authority on how one source is distilled.
 
 | Step | Operation | Owner |
 |------|-----------|-------|
-| 1 | Run `sb-wiki-ingest-all-manifest.py` → JSON of non-ingested sources (`.md` + `.pdf`) with per-file approx `token_estimate` and per-origin token sums. "Ingested" = source page exists. Excludes asset folders; includes `studies` and any `_`-prefixed origin except assets. SKIPS raw files whose raw-index row is `Wiki = Duplicate (…)` — confirmed content-duplicates are never re-targeted | Script |
+| 1 | Run `sb-wiki-ingest-all-manifest.py` (forwarding any positional targets — origin name or explicit file list, classified by the script into `mode` `all`/`origin`/`files`) → JSON of non-ingested sources (`.md` + `.pdf`) with per-file approx `token_estimate` and per-origin token sums. "Ingested" = source page exists. Excludes asset folders; includes `studies` and any `_`-prefixed origin except assets. SKIPS raw files whose raw-index row is `Wiki = Duplicate (…)` — confirmed content-duplicates are never re-targeted. An ambiguous/unresolvable target exits non-zero and ingests nothing | Script |
 | 2 | The same script (`--plan`) greedily packs each origin's files into batches ≤50,000 source tokens (a lone file >50,000 or null estimate is its own batch — a source is never split), schedules waves (wave K = batch K of each origin; distinct origins → parallel-safe; cap 5 concurrent; same-origin batches always serialized), and assigns each batch a `model`: `sonnet` when the batch's token sum ≤15,000 and every file has a non-null estimate, else `opus` | Script |
 | 3 | Read the plan's batches and waves verbatim — no agent re-packing, no re-scheduling | Agent |
 | 4 | Dispatch one subagent per batch per wave on the batch's planned `model`; subagents run `/sb-wiki-ingest silent <slug>` (silent mode owns every checkpoint auto-resolution — see "Silent (non-interactive) mode"), one file at a time | Agent + Subagents |
