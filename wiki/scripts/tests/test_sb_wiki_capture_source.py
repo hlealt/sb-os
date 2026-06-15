@@ -26,6 +26,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+from datetime import date
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -1494,3 +1495,149 @@ def test_queue_filename_override_cli_flag(tmp_path):
     assert "## gated_pending_access — " in study_queue.read_text(encoding="utf-8")
     # The default queue file must NOT have been created
     assert not (vault / "knowledge-base" / "source-queue.md").exists()
+
+
+# ---------------------------------------------------------------------------
+# (l) --capture-date / clip-date preservation: routing a staged file keeps its
+#     original YYYY-MM-DD clip date instead of silently re-stamping today.
+# ---------------------------------------------------------------------------
+
+_DATED_BODY = "# The Inference Shift\n\nReal article prose body for the capture.\n"
+
+
+def test_manual_mode_preserves_dated_stem(tmp_path):
+    """Routing a staged file named YYYY-MM-DD-… keeps that clip date, not today."""
+    vault = _make_vault(tmp_path)
+    staged = tmp_path / "2026-06-01-the-inference-shift.md"
+    staged.write_text(_DATED_BODY, encoding="utf-8")
+
+    with patch("httpx.get") as mock_get:
+        result = capture(
+            url="https://every.to/the-inference-shift",
+            origin="every",
+            mode="manual",
+            title="The Inference Shift",
+            thesis=None,
+            vault_root=vault,
+            dry_run=False,
+            gated=False,
+            gated_why="",
+            manual_file=staged,
+        )
+        mock_get.assert_not_called()
+
+    saved = Path(result["saved_paths"][0])
+    assert saved.name == "2026-06-01-the-inference-shift.md", saved.name
+
+
+def test_manual_mode_undated_stem_uses_today(tmp_path):
+    """A manual file with no YYYY-MM-DD prefix still dates today (no inference)."""
+    vault = _make_vault(tmp_path)
+    staged = tmp_path / "the-inference-shift.md"
+    staged.write_text(_DATED_BODY, encoding="utf-8")
+
+    with patch("httpx.get"):
+        result = capture(
+            url="https://every.to/the-inference-shift",
+            origin="every",
+            mode="manual",
+            title="The Inference Shift",
+            thesis=None,
+            vault_root=vault,
+            dry_run=False,
+            gated=False,
+            gated_why="",
+            manual_file=staged,
+        )
+
+    saved = Path(result["saved_paths"][0])
+    assert saved.name.startswith(date.today().isoformat() + "-"), saved.name
+
+
+def test_capture_date_override_beats_stem(tmp_path):
+    """Explicit capture_date wins over the manual-file stem's date prefix."""
+    vault = _make_vault(tmp_path)
+    staged = tmp_path / "2026-06-01-foo.md"
+    staged.write_text(_DATED_BODY, encoding="utf-8")
+
+    with patch("httpx.get"):
+        result = capture(
+            url="https://example.com/foo",
+            origin="example",
+            mode="manual",
+            title="Foo",
+            thesis=None,
+            vault_root=vault,
+            dry_run=False,
+            gated=False,
+            gated_why="",
+            manual_file=staged,
+            capture_date="2025-12-25",
+        )
+
+    saved = Path(result["saved_paths"][0])
+    assert saved.name.startswith("2025-12-25-"), saved.name
+
+
+def test_fetch_mode_dates_today(tmp_path):
+    """A fresh fetch (no --manual-file) is unaffected — primary + sidecar date today."""
+    vault = _make_vault(tmp_path)
+    mock_resp = _mock_response("Body", title_tag="Fresh Fetch")
+
+    with patch("httpx.get", return_value=mock_resp):
+        result = capture(
+            url="https://example.com/fresh-fetch",
+            origin="example",
+            mode="markdown",
+            title="Fresh Fetch",
+            thesis=None,
+            vault_root=vault,
+            dry_run=False,
+            gated=False,
+            gated_why="",
+        )
+
+    today = date.today().isoformat()
+    saved = Path(result["saved_paths"][0])
+    assert saved.name.startswith(today + "-"), saved.name
+    sidecar = Path(result["sidecar_paths"][0])
+    assert sidecar.name.startswith(today + "-"), sidecar.name
+
+
+def test_cli_capture_date_flag(tmp_path):
+    """--capture-date YYYY-MM-DD overrides the saved raw filename's date prefix."""
+    vault = _make_vault(tmp_path)
+    staged = tmp_path / "2026-06-01-foo.md"
+    staged.write_text(_DATED_BODY, encoding="utf-8")
+
+    exit_code = main([
+        "--url", "https://example.com/foo",
+        "--origin", "example",
+        "--mode", "manual",
+        "--manual-file", str(staged),
+        "--title", "Foo",
+        "--capture-date", "2025-01-15",
+        "--vault-root", str(vault),
+    ])
+
+    assert exit_code == 0
+    hits = list((vault / "knowledge-base" / "raw" / "example").glob("2025-01-15-*.md"))
+    assert hits, "expected a raw file dated 2025-01-15"
+
+
+def test_cli_capture_date_invalid_exits_1(tmp_path):
+    """A malformed --capture-date is rejected with exit 1 before any capture."""
+    vault = _make_vault(tmp_path)
+
+    exit_code = main([
+        "--url", "https://example.com/foo",
+        "--origin", "example",
+        "--mode", "manual",
+        "--manual-file", str(tmp_path / "whatever.md"),
+        "--capture-date", "notadate",
+        "--vault-root", str(vault),
+    ])
+
+    assert exit_code == 1
+    # Nothing written — the validation fired before the manual read.
+    assert not (vault / "knowledge-base" / "raw" / "example").exists()

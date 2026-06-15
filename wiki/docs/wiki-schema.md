@@ -897,9 +897,10 @@ Two consumption patterns, one invariant:
 python {sb_os_path}/wiki/scripts/sb-wiki-search.py search "<natural-language query>" --k 8 [--type concept,entity,topic,source,thesis,decision] [--json] [--no-sync]
 python {sb_os_path}/wiki/scripts/sb-wiki-search.py index          # build / refresh the index
 python {sb_os_path}/wiki/scripts/sb-wiki-search.py status         # freshness + mode as JSON
+python {sb_os_path}/wiki/scripts/sb-wiki-search.py probe          # availability + mode as JSON (no query, no index sync)
 ```
 
-Multi-call operations (e.g. an ingest probing several stub-candidates): the FIRST helper call of the run syncs the index (picking up pages the run already wrote); subsequent calls in the same run SHOULD pass `--no-sync` — the tree has not changed since.
+Multi-call operations (e.g. an ingest probing several stub-candidates): the FIRST `search` of the run syncs the index (picking up pages the run already wrote); subsequent `search` calls in the same run SHOULD pass `--no-sync` — the tree has not changed since. Check availability up front with the non-syncing `probe` subcommand (it never touches the index), so the syncing `search` lands AFTER the run has written its pages — a `search` used as a boot probe would sync a tree that does not yet hold them.
 
 | Property | Rule |
 |----------|------|

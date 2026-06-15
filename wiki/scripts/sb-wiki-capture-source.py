@@ -12,7 +12,15 @@ CLI:
         [--ext md|html|json]
         [--pdf-text]
         [--queue-file NAME]
+        [--capture-date YYYY-MM-DD]
         [--dry-run]
+
+--capture-date YYYY-MM-DD overrides the date prefix of the saved raw filename.
+When omitted, routing a manual/browser --manual-file whose stem starts with a
+YYYY-MM-DD prefix PRESERVES that original clip date (so staging a file in
+raw/_unrouted/ and later routing it into raw/{origin}/ no longer silently
+re-dates it to today); a fresh fetch with no such prefix still uses today. PDF
+saves are title-slug with no date prefix and are unaffected.
 
 --queue-file NAME selects the source-lifecycle queue file (under {wiki_root}/)
 that gated/blocked rows are appended to. Default is source-queue.md — the
@@ -103,8 +111,9 @@ Date-parse hardening (A2): _parse_published_date is a defensive lenient
 date parser — a malformed or implausible value (e.g. 0000-12-31, empty,
 garbage) yields None rather than crashing. This tool writes raw article
 prose with NO frontmatter and passes any source-supplied frontmatter
-through verbatim (it never emits a published: field of its own), so the
-function is NOT wired into the capture path here; it is exposed for the
+through verbatim (it never emits a published: field of its own), so its only
+capture-path use is validating the optional --capture-date override (via
+_resolve_capture_date); it is otherwise exposed for the
 INGEST stage (sb-wiki-ingest), where a source's published: value is read
 into wiki frontmatter and the 0000-12-31-class crash actually originates.
 A2's date-parse home is therefore ingest-side — see concerns in the task
@@ -490,9 +499,10 @@ def _parse_published_date(raw: object) -> Optional[str]:
     Returns None on malformed, empty, implausible (year outside
     [_DATE_MIN_YEAR, _DATE_MAX_YEAR]), or absent input — never raises.
 
-    NOT called by capture() in this tool: capture writes raw article prose with
-    no frontmatter and never emits a published: field, so there is no date to
-    parse at this layer. This utility exists for the ingest stage, where a
+    Called by _resolve_capture_date to validate the optional --capture-date
+    override. Beyond that, capture() writes raw article prose with no frontmatter
+    and never emits a published: field, so no published: date is parsed at this
+    layer. This utility also exists for the ingest stage, where a
     source's published: value is read into wiki frontmatter — the place where a
     malformed value such as 0000-12-31 actually crashes. Keep it here as the
     shared, tested implementation; wire it at the ingest date-read site.
@@ -543,20 +553,52 @@ def _wiki_root(vault_root: Path) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# Slug generation
+# Slug + filename-date generation
 # ---------------------------------------------------------------------------
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
+
+# A staged/clipped raw filename opens with its capture (clip) date — the date
+# the source was originally saved (YYYY-MM-DD-slug). Routing such a file MUST
+# preserve that date rather than re-stamp today; see _resolve_capture_date.
+_DATE_PREFIX_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})-")
 
 
 def _slugify(text: str) -> str:
     return _SLUG_RE.sub("-", text.lower().strip()).strip("-")[:80]
 
 
-def _filename(title: str, url: str, ext: str) -> str:
-    today = date.today().isoformat()
+def _resolve_capture_date(
+    explicit: Optional[str],
+    mode: str,
+    manual_file: Optional[Path],
+) -> str:
+    """Resolve the date prefix for a date-stamped raw filename.
+
+    Precedence:
+      1. ``explicit`` — a --capture-date YYYY-MM-DD override (validated here; an
+         implausible/malformed value is ignored and resolution falls through).
+      2. The YYYY-MM-DD prefix of a manual/browser --manual-file stem — preserves
+         a staged file's ORIGINAL clip date when it is routed from raw/_unrouted/
+         or Downloads into raw/{origin}/ (the re-date-on-routing bug this fixes).
+      3. date.today() — a fresh capture. Fetch modes pass no --manual-file, so a
+         newly fetched source is always dated today unless --capture-date overrides.
+    """
+    if explicit:
+        iso = _parse_published_date(explicit)
+        if iso:
+            return iso
+    if mode in ("manual", "browser") and manual_file is not None:
+        m = _DATE_PREFIX_RE.match(Path(manual_file).stem)
+        if m:
+            return m.group(1)
+    return date.today().isoformat()
+
+
+def _filename(title: str, url: str, ext: str, capture_date: Optional[str] = None) -> str:
+    prefix = capture_date or date.today().isoformat()
     slug = _slugify(title) if title else _slugify(url.split("//")[-1])
-    return f"{today}-{slug}.{ext}"
+    return f"{prefix}-{slug}.{ext}"
 
 
 # ---------------------------------------------------------------------------
@@ -989,6 +1031,7 @@ def capture(
     ext: str = "md",
     pdf_text: bool = False,
     queue_filename: str = QUEUE_FILENAME,
+    capture_date: Optional[str] = None,
 ) -> dict:
     """Capture a source and return a metadata summary dict.
 
@@ -1007,6 +1050,10 @@ def capture(
     wiki = _wiki_root(vault_root)
     raw_dir = wiki / "raw" / origin
     queue_path = wiki / queue_filename
+    # Date prefix for the saved raw filename — preserves a staged file's original
+    # clip date on routing (see _resolve_capture_date). Unused by the gated and
+    # PDF (title-slug, no date) paths, which return before any _filename call.
+    capture_date_prefix = _resolve_capture_date(capture_date, mode, manual_file)
 
     # Gated path — register only, no fetch
     if gated:
@@ -1130,20 +1177,20 @@ def capture(
         if mode in ("markdown", "both"):
             # A2 — extract article body; full HTML preserved as sidecar.
             article_md, extraction_note = _extract_article_markdown(body)
-            fname = _filename(resolved_title, url, ext)
+            fname = _filename(resolved_title, url, ext, capture_date_prefix)
             dest = raw_dir / fname
             n = _save(dest, article_md, dry_run)
             saved.append(str(dest))
             total_bytes += n
             # Full-page sidecar (archival/fallback); keyed separately so
             # saved_paths retains the same length as before A2.
-            sidecar_path = raw_dir / _filename(resolved_title, url, "full.html")
+            sidecar_path = raw_dir / _filename(resolved_title, url, "full.html", capture_date_prefix)
             ns = _save(sidecar_path, body, dry_run)
             sidecars.append(str(sidecar_path))
             total_bytes += ns
 
         if mode in ("html-archive", "both"):
-            fname = _filename(resolved_title, url, "html")
+            fname = _filename(resolved_title, url, "html", capture_date_prefix)
             dest = raw_dir / fname
             n = _save(dest, body, dry_run)
             saved.append(str(dest))
@@ -1212,7 +1259,7 @@ def capture(
                 "failure_reason": failure_reason,
                 "manual_source": str(src),
             }
-        fname = _filename(resolved_title, url, ext)
+        fname = _filename(resolved_title, url, ext, capture_date_prefix)
         dest = raw_dir / fname
         n = _save(dest, body, dry_run)
         result = {
@@ -1293,6 +1340,14 @@ def _build_parser() -> argparse.ArgumentParser:
              "extracted via pypdf (optional dependency) beside the PDF, for "
              "grep-based ingest verification. Ignored for non-PDF captures.",
     )
+    p.add_argument(
+        "--capture-date",
+        default=None,
+        help="Override the raw filename's date prefix (ISO YYYY-MM-DD). When "
+             "omitted, a manual/browser --manual-file whose name starts with a "
+             "YYYY-MM-DD prefix keeps that original clip date on routing; otherwise "
+             "today's date is used. Does not apply to PDF saves (title-slug, no date).",
+    )
     p.add_argument("--gated", action="store_true", help="Declare source gated (no fetch; register only)")
     p.add_argument("--gated-why", default="(not specified)", help="Why this source matters (for the source-lifecycle queue)")
     p.add_argument(
@@ -1318,6 +1373,18 @@ def main(argv: list[str] | None = None) -> int:
     except FileNotFoundError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
+
+    # --capture-date must be a real ISO date if supplied (the filename date prefix).
+    if args.capture_date is not None:
+        try:
+            date.fromisoformat(args.capture_date)
+        except ValueError:
+            print(
+                f"ERROR: --capture-date must be an ISO date (YYYY-MM-DD), got "
+                f"{args.capture_date!r}",
+                file=sys.stderr,
+            )
+            return 1
 
     # A3 — stdin mode: --manual-file - reads content from stdin, writes to a
     # temp file, then proceeds as a normal manual capture. Allows piping content
@@ -1360,6 +1427,7 @@ def main(argv: list[str] | None = None) -> int:
         ext=args.ext,
         pdf_text=args.pdf_text,
         queue_filename=args.queue_file,
+        capture_date=args.capture_date,
     )
 
     # Clean up stdin temp file if used.

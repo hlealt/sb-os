@@ -13,14 +13,14 @@ Read `3-resources/tools/sb-os/wiki/docs/wiki-schema.md` — Operations § "/sb-w
 
 ## Retrieval Tiers
 
-Schema § "Retrieval tiers — hybrid search" governs every semantic-tier touchpoint in this flow (Steps 3·5c, 3·7b, 3·7c, 3·7d). Probe the tier by invoking the helper once; degrade gracefully:
+Schema § "Retrieval tiers — hybrid search" governs every semantic-tier touchpoint in this flow (Steps 3·5c, 3·7b, 3·7c, 3·7d). Establish tier availability ONCE with the non-syncing `probe` subcommand — `python {sb_os_path}/wiki/scripts/sb-wiki-search.py probe` returns `{available, mode, …}` as JSON (exit 0) and NEVER touches the index. Degrade gracefully:
 
 | Tier | Behavior |
 |------|----------|
-| Semantic / keyword (helper runs, exit 0) | `python {sb_os_path}/wiki/scripts/sb-wiki-search.py search "<query>" --k N [--type ...]` — the tier-gated augments below are ACTIVE |
-| Unavailable (helper missing, errors, exit 2) | Every tier-gated augment is OFF — the flow runs the mechanical baseline exactly as pre-v7 |
+| Available (`probe` → `available: true`) | Run the tier-gated augments below with `python {sb_os_path}/wiki/scripts/sb-wiki-search.py search "<query>" --k N [--type ...]` |
+| Unavailable (`probe` → `available: false`, or the helper is missing / errors) | Every tier-gated augment is OFF — the flow runs the mechanical baseline exactly as pre-v7 |
 
-The first helper call at or after Step 3·5c syncs the index (the step-2 source page enters it there); any earlier boot-time tier probe and all subsequent calls pass `--no-sync`. A helper failure NEVER aborts the ingest — drop the augment and continue. **The semantic tier NEVER decides a mechanical fire** — firm-tier topic detection, `Substance`-bullet stubs, and Step 6 trigger detection stay fully deterministic per the schema's mechanical-fire invariant. Runs in BOTH modes (default and silent) — silent's auto-reject postures for speculative updates and proposed answers are unchanged.
+**Never probe availability with a `search` call** — `search` syncs the index by default, so a probe fired before Step 2 writes the source page wastes an embedding/sync round on a tree that does not yet hold the page. The boot `probe` never syncs; the FIRST index-syncing call is the tier-gated `search` at Step 3·5c, which runs AFTER Step 2 — so the source page enters the index exactly once, there. Every `search` after that first sync passes `--no-sync` (the tree has not changed since). A helper failure NEVER aborts the ingest — drop the augment and continue. **The semantic tier NEVER decides a mechanical fire** — firm-tier topic detection, `Substance`-bullet stubs, and Step 6 trigger detection stay fully deterministic per the schema's mechanical-fire invariant. Runs in BOTH modes (default and silent) — silent's auto-reject postures for speculative updates and proposed answers are unchanged.
 
 ## Path Resolution
 
@@ -103,7 +103,7 @@ The ASCII-fold authority is the `normalize-filenames` subcommand of `sb-wiki-lin
 ### A10 — File and image routing
 
 **Rule A — Relocate referenced files via the designated capture tool.**
-When the user directs ingest to handle a file NOT yet in `raw/{origin}/` (parked in Downloads or in `raw/_unrouted/`), route it into `raw/{origin}/{title-slug}.{ext}` via the workspace's DESIGNATED sole raw-capture tool — the SOLE raw writer, NEVER an ad-hoc file move. Guard: fire ONLY on explicit ingest/capture intent. Infer `origin` from URL/content and CONFIRM when ambiguous. For files already in `raw/_unrouted/`, this IS the staging→`raw/{origin}/` move.
+When the user directs ingest to handle a file NOT yet in `raw/{origin}/` (parked in Downloads or in `raw/_unrouted/`), route it into `raw/{origin}/{title-slug}.{ext}` via the DESIGNATED sole raw-capture tool — `{sb_os_path}/wiki/scripts/sb-wiki-capture-source.py` — the SOLE raw writer, NEVER an ad-hoc file move. For a file already on disk (Downloads or `raw/_unrouted/`), pass it with `--mode manual --manual-file <path> --url <source-url> --origin <origin> --title "<title>"` (run `--help` for the full interface); the tool PRESERVES the staged file's original clip date when its name carries a `YYYY-MM-DD` prefix (pass `--capture-date YYYY-MM-DD` to set it explicitly), else stamps today — routing no longer silently re-dates a staged file — and emits an ASCII-clean slug. Guard: fire ONLY on explicit ingest/capture intent. Infer `origin` from URL/content and CONFIRM when ambiguous. For files already in `raw/_unrouted/`, this IS the staging→`raw/{origin}/` move.
 
 **Rule B — Screenshot images → `raw/_assets/` + embedded in place.**
 When the user explicitly mentions a file has images and provides their paths (e.g. from the OS screenshot folder), the agent MUST:

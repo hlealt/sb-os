@@ -30,7 +30,7 @@ Every entry MUST carry exactly these keys, in this order:
 ## Registered Tools
 
 ```yaml
-tool: sb-wiki-capture-source (python wiki/scripts/sb-wiki-capture-source.py --url URL --origin ORIGIN [--mode markdown|html-archive|both|browser|manual] [--ext md|html|json] [--title TITLE] [--thesis SLUG] [--vault-root PATH] [--user-agent UA] [--manual-file PATH|-] [--no-curl-fallback] [--pdf-text] [--queue-file NAME] [--dry-run] [--gated] [--gated-why TEXT])
+tool: sb-wiki-capture-source (python wiki/scripts/sb-wiki-capture-source.py --url URL --origin ORIGIN [--mode markdown|html-archive|both|browser|manual] [--ext md|html|json] [--title TITLE] [--thesis SLUG] [--vault-root PATH] [--user-agent UA] [--manual-file PATH|-] [--no-curl-fallback] [--pdf-text] [--queue-file NAME] [--capture-date YYYY-MM-DD] [--dry-run] [--gated] [--gated-why TEXT])
 purpose: |
   Save an approved open-web URL to {wiki_root}/raw/{origin}/ and return a metadata summary only
   (title, url, origin, related thesis, saved path, lifecycle state, byte count, fetch method).
@@ -99,7 +99,10 @@ expected_inputs: |
   manual captures only: write a {title-slug}.md companion via pypdf, a lazy optional dep; extraction
   failure or near-empty scanned-PDF surfaced as transform_error/warning, never fatal);
   --no-curl-fallback (disable subprocess-curl retry; fallback ON by default, binary resolved via
-  shutil.which — never a shell alias; missing binary → state=blocked)
+  shutil.which — never a shell alias; missing binary → state=blocked); --capture-date YYYY-MM-DD
+  (override the saved raw filename's date prefix; when omitted a manual/browser --manual-file whose
+  stem starts with YYYY-MM-DD keeps that original clip date on routing, else today; does not apply to
+  PDF saves)
 
   Worked examples:
     # Gated paywall source — register without fetching (lands a queue row + manual-capture handoff)
@@ -139,21 +142,27 @@ outputs: |
   - manual PDF --pdf-text: {title-slug}.md companion (pypdf text extraction)
   - .json data artifacts (--ext json): YYYY-MM-DD-{slug}.json
 
+  The YYYY-MM-DD prefix is the source's CLIP date: a fresh fetch uses today; routing a manual/browser
+  --manual-file whose stem already carries a YYYY-MM-DD prefix preserves that original date; --capture-date
+  overrides. (The source page's own `created:` frontmatter, set by ingest, stays today — only the raw
+  clip-date filename is preserved.)
+
   Creates {wiki_root}/{queue-file} (default source-queue.md) with type: source-queue frontmatter when
   absent. Dry-run writes nothing.
 canonical_reader_writer: writes {wiki_root}/raw/{origin}/<YYYY-MM-DD-slug>.{md,html,json} and <YYYY-MM-DD-slug>.full.html (sidecar) and {wiki_root}/raw/{origin}/<title-slug>.pdf (+ companion .md); appends {wiki_root}/{queue-file} (default source-queue.md; gated + transport-blocked + content-validation-blocked registrations)
 dry_run: available
-last_validated: 2026-06-09
+last_validated: 2026-06-14
 ```
 
 ```yaml
-tool: sb-wiki-search (python wiki/scripts/sb-wiki-search.py {index [--full] | search QUERY [--k N] [--type t,..] [--json] [--no-sync] | status})
+tool: sb-wiki-search (python wiki/scripts/sb-wiki-search.py {index [--full] | search QUERY [--k N] [--type t,..] [--json] [--no-sync] | status | probe})
 purpose: Hybrid semantic + keyword search over the wiki page tree ({wiki_root}/wiki/**/*.md) — answers ranked queries for agents, self-healing the index incrementally before each search so results never go stale. Read-only over wiki content; never writes a wiki page.
 owner_script: sb-wiki-search.py
 class: read
 use: audit-diagnostic
 expected_inputs: |
-  subcommand index|search|status. search QUERY positional; optional --k N result count, --type
+  subcommand index|search|status|probe (probe = availability + mode JSON, exit 0, no query, no index
+  sync — the boot availability gate). search QUERY positional; optional --k N result count, --type
   comma-separated page-type filter (concept|entity|topic|source|thesis|decision), --json machine
   output, --no-sync to skip the pre-search reindex; index [--full] to (re)build. Reads
   {wiki_root}/wiki/**/*.md and the local index at {wiki_root}/.sb-wiki-search/index.db; reads
@@ -161,7 +170,9 @@ expected_inputs: |
   + Voyage vector cosine, RRF-fused); key absent → FTS5-only (no API calls, still ranked).
 outputs: |
   search — ranked results (page path, type, score, snippet) as a table or JSON (--json). index —
-  build/refresh summary. status — index freshness + active mode as JSON. Exit 0 = success; exit 2
+  build/refresh summary. status — index freshness + active mode as JSON. probe — availability + mode
+  verdict as JSON (exit 0 even when unavailable, so a mandatory caller always gets parseable output).
+  Exit 0 = success; exit 2
   when the wiki root is unresolvable (callers fall back to grep). Writes only the derived index DB
   ({wiki_root}/.sb-wiki-search/index.db — derived data, kept out of vault git); never a wiki page.
 canonical_reader_writer: reads {wiki_root}/wiki/**/*.md; reads/writes the derived index {wiki_root}/.sb-wiki-search/index.db (no wiki-page write)
