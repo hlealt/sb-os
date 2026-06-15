@@ -13,6 +13,10 @@ Source repository for **sb-os** — an opinionated, PARA-based personal knowledg
 | Installer (`install.py`) | Bootstraps fresh vaults and upgrades existing installs idempotently |
 | Managed CLAUDE.md sources | Marker-block-managed agent-context files installed into the vault |
 
+## Install Model — Just-in-Time
+
+The installer (`install.py`) is fast and idempotent, so users install components just-in-time — only when they need them. Any given vault therefore carries only a SUBSET of components at once: `sb-os.json` records `selected_modules` and `excluded_components`, and a component absent or excluded there is NORMAL, not an error. Check `sb-os.json` for what is actually installed before assuming a component is missing.
+
 ## Repo Layout
 
 Shippable components live under per-module folders at the repo root: `para/` (PARA-aligned components), `wiki/` (knowledge-base layer), and `finance/` (personal-finance system). Each module folder mirrors the same internal layout (`commands/`, `rules/`, `skills/`, `workflows/`, plus module-specific folders such as `claude-mds/`, `docs/`, `templates/`, `scripts/`).

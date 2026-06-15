@@ -23,7 +23,7 @@ If the planned sub-agent task or prompt contains ANY trigger in a row below, you
 
 | Trigger family — keywords or task type | Matching sb-os skill |
 |----------------------------------------|----------------------|
-| Creating/routing tasks; creating/moving/renaming/deleting vault content; creating project/area/resource directories; editing CLAUDE.md; modifying sb-os/.claude/.agents system components | `sb-vault-ops` |
+| Creating/routing tasks; creating/moving/renaming/deleting vault content (EXCLUDING wiki content — pages, raw sources, and logs in the knowledge base, which `sb-wiki-ingest`/`sb-wiki-lint` govern); creating project/area/resource directories; editing CLAUDE.md; modifying sb-os/.claude/.agents system components | `sb-vault-ops` |
 | Moving, renaming, or deleting vault files; creating project/area/resource directories; creating vault files that change routing or dependencies | `sb-vault-integrity` |
 
 Ordinary edits to existing routed files are non-triggers when path, filename, frontmatter type, task format, routing, links, and directory structure are unchanged.

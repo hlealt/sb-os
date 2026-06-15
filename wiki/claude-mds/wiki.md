@@ -20,6 +20,8 @@ Locked schema: `3-resources/tools/sb-os/wiki/docs/wiki-schema.md`. Operational d
 
 > **Installer scope guarantee.** The sb-os installer (`install.py`) NEVER reads or writes anything under `{wiki_root}/wiki/` or `{wiki_root}/raw/` — wiki content (pages, indexes, the `logs/` queues) is created and maintained EXCLUSIVELY by `/sb-wiki-ingest` and `/sb-wiki-lint`. Re-running `install.py --upgrade` is safe at any time. Full guarantee: schema § "Installer scope guarantee".
 
+> **Vault-ops scope guarantee.** Wiki writes do NOT route through the PARA `sb-vault-ops` skill — the wiki schema + `/sb-wiki-ingest`/`/sb-wiki-lint` are the authoritative interface for every page, index, and `logs/` entry (mirrors the `sb-inject-context` self-exemption). A sub-agent dispatched to ingest a wiki source MUST NOT be told to invoke `sb-vault-ops`.
+
 ---
 
 ## Page Types

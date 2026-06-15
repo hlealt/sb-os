@@ -1,11 +1,15 @@
 ---
 name: sb-vault-ops
-description: Gatekeeper for vault content and system component modifications — indexes, task files, references, logs, personal documents, periodic notes, directories, and `.claude/` files. Enforces format, routing, naming, and structural invariants. Do NOT use for project deliverables (PRDs, architecture docs, specs, plans, stories, code).
+description: Gatekeeper for vault content and system component modifications — indexes, task files, references, logs, personal documents, periodic notes, directories, and `.claude/` files. Enforces format, routing, naming, and structural invariants. Do NOT use for project deliverables (PRDs, architecture docs, specs, plans, stories, code). Do NOT use for wiki content — the knowledge base's pages, raw sources, and logs are governed by `sb-wiki-ingest`/`sb-wiki-lint` and the wiki schema.
 ---
 
 # Vault Ops
 
 Gatekeeper for vault content and system component modifications. Identify the operation type, then load the corresponding reference file.
+
+## Out of Scope — Wiki Content
+
+Wiki content — pages under `{wiki_root}/wiki/`, raw sources under `{wiki_root}/raw/`, and the `{wiki_root}/logs/` queues — is OUT OF SCOPE. `sb-wiki-ingest`/`sb-wiki-lint` and the wiki schema govern every wiki write; this skill NEVER does. Do not load any reference file for a wiki write, and never instruct a dispatched worker to invoke this skill before a wiki-page write.
 
 ## Fast Path
 
@@ -28,7 +32,7 @@ If every check passes, proceed with the requested edit only.
 | 1 | Creating, routing, reprioritizing, rescheduling, completing, or changing the canonical fields of a **task**? | Read `./data/tasks.md` |
 | 2 | Creating or editing a **CLAUDE.md** file? | Read `./data/directories.md` — follow the Universal CLAUDE.md Principles |
 | 3 | Creating a **new directory** in Projects/Areas/Resources? | Read `./data/directories.md` |
-| 4 | Creating, moving, renaming, or deleting a **vault content file** (PARA folders)? | Read `./data/vault-files.md` |
+| 4 | Creating, moving, renaming, or deleting a **vault content file** (PARA folders, EXCLUDING wiki content — see Out of Scope)? | Read `./data/vault-files.md` |
 | 5 | Modifying a **system component** (`.claude/`, `.agents/`, or sb-os source)? | Read `./data/components.md` |
 
 Multiple operations in one task → load all applicable refs.
