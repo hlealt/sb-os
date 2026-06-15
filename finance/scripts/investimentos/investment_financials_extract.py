@@ -303,13 +303,15 @@ def _scale_from_text(text: str) -> Optional[float]:
 
 
 def _detect_currency(text: str) -> Optional[str]:
-    """Return 'BRL' / 'USD' for a currency symbol or code in `text`, else None.
+    """Return 'BRL' / 'USD' / 'EUR' for a currency symbol or code in `text`, else None.
     R$ / BRL is checked BEFORE $ / USD so 'R$' never reads as bare '$'."""
     low = text.lower()
     if "r$" in low or re.search(r"(?<![a-z])brl(?![a-z])", low):
         return "BRL"
     if "$" in low or re.search(r"(?<![a-z])us\$|(?<![a-z])usd(?![a-z])", low):
         return "USD"
+    if "€" in low or re.search(r"(?<![a-z])eur(?![a-z])", low):
+        return "EUR"
     return None
 
 
@@ -355,6 +357,8 @@ def _resolve_unit_and_scale(unit_as_printed: str, context_norm: str, raw_value: 
         return raw_value, "USD_mn"
     if u in ("brl_mn",):
         return raw_value, "BRL_mn"
+    if u in ("eur_mn",):
+        return raw_value, "EUR_mn"
 
     # currency: explicit in the unit wins, else detect in value_as_printed.
     currency = _detect_currency(u) or _detect_currency(value_as_printed)
@@ -369,7 +373,11 @@ def _resolve_unit_and_scale(unit_as_printed: str, context_norm: str, raw_value: 
     if mult is None:
         mult = 1.0
     scaled = raw_value * mult
-    return (scaled, "BRL_mn") if currency == "BRL" else (scaled, "USD_mn")
+    if currency == "BRL":
+        return scaled, "BRL_mn"
+    if currency == "EUR":
+        return scaled, "EUR_mn"
+    return scaled, "USD_mn"
 
 
 def _round_half_up(value: float, places: int) -> float:

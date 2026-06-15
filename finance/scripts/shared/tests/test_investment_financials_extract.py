@@ -84,7 +84,7 @@ Comparative / aggregate metrics: `sector_revenue_growth, sector_margin`
 
 ## Allowed Sets
 
-**units:** `BRL_mn, USD_mn, pct, pct_yoy, pct_mom, x, bps, years, rating, BRL, USD, index`
+**units:** `BRL_mn, USD_mn, EUR_mn, pct, pct_yoy, pct_mom, x, bps, years, rating, BRL, USD, EUR, index`
 
 **period_type:** `annual, quarterly, monthly, ttm, point`
 
@@ -559,6 +559,44 @@ def test_bare_scale_word_unit_with_brl_currency(tmp_path):
     crow = [r for r in _data_rows(entity.read_text(encoding="utf-8")) if r[0] == "revenue"][0]
     assert crow[3] == "1586"
     assert crow[4] == "BRL_mn"
+
+
+def test_eur_mn_unit_passthrough(tmp_path):
+    # Explicit EUR_mn unit (foreign private issuer, e.g. Spotify) → EUR_mn, unscaled.
+    vault = _make_vault(tmp_path)
+    entity = _write_entity(tmp_path, with_financials=False)
+    _write_raw(vault, body="<html><body><div>Total revenue was 4,193 for the quarter</div></body></html>")
+    vocab = _write_vocab(tmp_path)
+    targets = _write_targets(tmp_path, [{
+        "metric": "revenue", "period_type": "quarterly", "period_end": "2025-06-30",
+        "value_as_printed": "4,193", "unit_as_printed": "EUR_mn",
+        "anchor": "Total revenue was 4,193 for the quarter",
+    }])
+    result = extract(entity_path=entity, xbrl_path=None, targets_path=targets,
+                     vault_root=vault, vocab_path=vocab, dry_run=False)
+    assert not any(r["metric"] == "revenue" for r in result["rejected"]), result["rejected"]
+    crow = [r for r in _data_rows(entity.read_text(encoding="utf-8")) if r[0] == "revenue"][0]
+    assert crow[3] == "4193"
+    assert crow[4] == "EUR_mn"
+
+
+def test_euro_symbol_currency_detected(tmp_path):
+    # € symbol in value_as_printed + bare scale word unit → EUR_mn.
+    vault = _make_vault(tmp_path)
+    entity = _write_entity(tmp_path, with_financials=False)
+    _write_raw(vault, body="<html><body><div>Gross profit of €1,320 million in the quarter</div></body></html>")
+    vocab = _write_vocab(tmp_path)
+    targets = _write_targets(tmp_path, [{
+        "metric": "gross_profit", "period_type": "quarterly", "period_end": "2025-06-30",
+        "value_as_printed": "€1,320 million", "unit_as_printed": "million",
+        "anchor": "Gross profit of €1,320 million in the quarter",
+    }])
+    result = extract(entity_path=entity, xbrl_path=None, targets_path=targets,
+                     vault_root=vault, vocab_path=vocab, dry_run=False)
+    assert not any(r["metric"] == "gross_profit" for r in result["rejected"]), result["rejected"]
+    crow = [r for r in _data_rows(entity.read_text(encoding="utf-8")) if r[0] == "gross_profit"][0]
+    assert crow[3] == "1320"
+    assert crow[4] == "EUR_mn"
 
 
 def test_bare_scale_word_no_currency_rejected(tmp_path):

@@ -54,7 +54,9 @@ A valid `metric` is a base identifier from the entity-kind's list above, OR a ba
 
 ## Allowed Sets
 
-**units:** `BRL_mn, USD_mn, pct, pct_yoy, pct_mom, x, bps, years, rating, BRL, USD, index, tonnes`
+**units:** `BRL_mn, USD_mn, EUR_mn, pct, pct_yoy, pct_mom, x, bps, years, rating, BRL, USD, EUR, index, tonnes`
+
+`EUR_mn` / `EUR` admitted 2026-06-14 (governed; euro-reporting issuers — first need: Spotify Technology S.A., a Luxembourg-domiciled foreign private issuer reporting in euros with IFRS-only XBRL).
 
 **period_type:** `annual, quarterly, monthly, ttm, point`
 
