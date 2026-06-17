@@ -35,10 +35,20 @@ If a thread of work has a deadline and a defined outcome, it belongs in `1-proje
 | Index file | `{area-name}.md` inside the folder — describes the area's scope, current state, and standing notes |
 | Task file | `{area-name}-tasks.md` inside the folder — single source of recurring or open tasks for the area. OPTIONAL: create it when the area's first task lands — an area with no tasks has no tasks file (dashboards discover task files; empty ones only add noise) |
 | Per-area `CLAUDE.md` | User-owned (sb-os does not manage it). Use it for area-specific agent rules and routing |
-| Sub-folders | Free-form per area — agents follow the area's own `CLAUDE.md` if present |
+| Sub-folders | One per ongoing sub-topic, each with its own `{sub-topic}.md` leaf index. Build-record artifacts (plans, phase folders, dispatch prompts, evidence) signal a project hiding here — see Project-Shaped Work below. Agents follow the area's own `CLAUDE.md` if present |
 | Sub-files | Loose `.md` files at the `2-areas/` root (siblings of area folders) are user-owned and freeform — sb-os does not manage their structure or naming |
 
 Use evocative folder names that describe the responsibility itself: `health/`, `finance/`, `home/`. Treat those as illustrations only — pick names that match your areas.
+
+---
+
+## Project-Shaped Work in an Area
+
+When work inside an area takes the shape of a **project** — a bounded outcome with a defined "done", or the build signature (its own plan, numbered phase folders, dispatch prompts, evidence sheets) — it is a project sitting in the wrong layer.
+
+On noticing either signal — when creating such work, or when encountering it in an existing sub-folder — surface it: name what was detected, recommend extracting it to `1-projects/{name}/` (with `area:` frontmatter pointing back to this area), and offer to keep it as an area topic instead. Proceed on the owner's decision; this is an advisory default, not a hard block.
+
+An ongoing *practice* that happens to spawn bounded efforts (e.g. a continuous benchmarking topic) stays in the area — only the bounded efforts it spawns extract to `1-projects/`.
 
 ---
 

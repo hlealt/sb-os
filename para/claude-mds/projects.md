@@ -34,10 +34,24 @@ When the outcome is reached or the work stops, move the folder to `4-archives/`.
 | Index frontmatter | YAML frontmatter on the index SHOULD declare `area:` (the parent area this project rolls up to) and MAY declare `due:` (an optional due date) — see Frontmatter Convention below |
 | Task file | `{project-name}-tasks.md` inside the folder — single source of tasks for the project (tasks carry their own dates). OPTIONAL: create it when the project's first task lands — a project with no tasks has no tasks file (dashboards discover task files; empty ones only add noise) |
 | Per-project `CLAUDE.md` | User-owned (sb-os does not manage it). Use it for project-specific agent rules |
-| Sub-folders | Free-form per project — phases, deliverables, references — agents follow the project's own `CLAUDE.md` if present |
+| Sub-folders | Nest planning and build-record artifacts under one `build/` folder; keep the root to the living set (see Root Layout). Other reference sub-folders are free-form — agents follow the project's own `CLAUDE.md` if present |
 | Sub-files | Loose `.md` files at the `1-projects/` root (siblings of project folders) are user-owned and freeform — sb-os does not manage their structure or naming |
 
 Use evocative folder names that describe the work itself: `marketing-launch-2027/`, `office-relocation/`, `thesis-q3/`. Treat those as illustrations only — pick names that match your projects.
+
+---
+
+## Root Layout — keep the root scannable
+
+Only files navigated constantly stay at the project root; everything that records *how* the work was planned and built drops into a single `build/` folder.
+
+| At the root (living) | One level down, in `build/` |
+|----------------------|------------------------------|
+| `{project-name}.md` — index, carries current **status** | plan, design, decisions, deliverables |
+| `{project-name}-tasks.md` — open tasks | run log, state snapshots, specs, phase folders |
+| the current product (code package, main document) | dispatch prompts, evidence sheets, review mockups |
+
+Status lives in the index, open work in the tasks file — mutually exclusive and jointly complete: the index states *where the work stands* (never re-listing tasks); the tasks file lists *what is left*. A root accumulating planning/record files is the signal to move them into `build/`.
 
 ---
 

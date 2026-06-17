@@ -74,6 +74,10 @@ Header: `# {dir-name}/` followed by one-line purpose. Projects add `Status: acti
 
 Rules section covers: content routing, guard triggers, hidden dependencies, directory-specific conventions. Only include sections that carry non-derivable information.
 
+### Project & Area Folder Layout
+
+Creating or organizing a Project or Area folder — follow the layout in the installed `1-projects/CLAUDE.md` and `2-areas/CLAUDE.md`. A Project root holds only its living set (index, tasks, current product) with build-record artifacts nested under `build/`; project-shaped work proposed inside an Area (a bounded "done", or a plan/phase/evidence signature) is surfaced and routed to `1-projects/{name}/` as an advisory default.
+
 ### User-owned System Directories
 
 When the user maintains a personal `.user/` folder with subdirectories, the same CLAUDE.md structure applies. Additionally document:
