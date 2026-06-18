@@ -5,14 +5,14 @@ Lists every raw source that has NOT been ingested yet, with an approximate
 token count, and (with --plan, the default) packs them into per-subagent
 batches, schedules waves, and assigns each batch a model:
 
-- Batches: per origin, greedy consecutive packing <= BATCH_TOKEN_CAP source
-  tokens; a lone file above the cap (or with a null estimate) is its own
-  batch — a source is never split across subagents.
+- Batches: per origin, greedy consecutive packing <= OPUS_MAX_BATCH_TOKENS
+  source tokens; a lone file above the cap (or with a null estimate) is its
+  own batch — a source is never split across subagents.
 - Waves: wave K holds batch index K of every origin (distinct origins are
   parallel-safe; same-origin batches serialize across waves), split into
   sub-waves of <= WAVE_CONCURRENCY batches.
-- Model: "sonnet" when the batch's token sum <= SONNET_MAX_BATCH_TOKENS and
-  every file in it has a non-null estimate; "opus" otherwise.
+- Model: "opus" for every batch (the default ingest agent), regardless of
+  token sum.
 
 A raw file is "ingested" when its source page exists at
 `wiki/sources/{origin}/{stem}.md`. Files whose raw-index row marks
@@ -37,8 +37,7 @@ logging.getLogger("PyPDF2").setLevel(logging.ERROR)
 CHARS_PER_TOKEN = 4
 DEFAULT_EXCLUDE = {"assets", "_assets"}
 NON_SOURCE_FILES = {"AGENTS.md", "CLAUDE.md", "QWEN.md", "README.md"}
-BATCH_TOKEN_CAP = 50_000
-SONNET_MAX_BATCH_TOKENS = 15_000
+OPUS_MAX_BATCH_TOKENS = 60_000
 WAVE_CONCURRENCY = 5
 
 
@@ -128,7 +127,7 @@ def duplicate_rows(origin_dir: Path) -> set[str]:
 
 
 def build_batches(items: list[dict]) -> dict[str, list[dict]]:
-    """Per origin: greedy consecutive packing by filename order, <= BATCH_TOKEN_CAP."""
+    """Per origin: greedy consecutive packing by filename order, <= OPUS_MAX_BATCH_TOKENS."""
     by_origin: dict[str, list[dict]] = {}
     for item in items:
         by_origin.setdefault(item["origin"], []).append(item)
@@ -141,13 +140,13 @@ def build_batches(items: list[dict]) -> dict[str, list[dict]]:
         current_sum = 0
         for item in origin_items:
             tokens = item["token_estimate"]
-            if tokens is None or tokens > BATCH_TOKEN_CAP:
+            if tokens is None or tokens > OPUS_MAX_BATCH_TOKENS:
                 if current:
                     packed.append(current)
                     current, current_sum = [], 0
                 packed.append([item])
                 continue
-            if current and current_sum + tokens > BATCH_TOKEN_CAP:
+            if current and current_sum + tokens > OPUS_MAX_BATCH_TOKENS:
                 packed.append(current)
                 current, current_sum = [], 0
             current.append(item)
@@ -159,11 +158,8 @@ def build_batches(items: list[dict]) -> dict[str, list[dict]]:
         for index, batch_items in enumerate(packed):
             has_null = any(i["token_estimate"] is None for i in batch_items)
             token_sum = sum(i["token_estimate"] or 0 for i in batch_items)
-            model = (
-                "sonnet"
-                if not has_null and token_sum <= SONNET_MAX_BATCH_TOKENS
-                else "opus"
-            )
+            # opus is the default for every batch regardless of token sum.
+            model = "opus"
             batches[origin].append({
                 "origin": origin,
                 "index": index,
@@ -517,8 +513,7 @@ def main() -> int:
         batches = build_batches(payload["items"])
         payload["plan"] = {
             "constants": {
-                "batch_token_cap": BATCH_TOKEN_CAP,
-                "sonnet_max_batch_tokens": SONNET_MAX_BATCH_TOKENS,
+                "opus_max_batch_tokens": OPUS_MAX_BATCH_TOKENS,
                 "wave_concurrency": WAVE_CONCURRENCY,
             },
             "batches": batches,

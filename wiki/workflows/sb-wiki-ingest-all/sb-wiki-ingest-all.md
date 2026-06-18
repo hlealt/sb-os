@@ -1,6 +1,6 @@
 ---
 name: sb-wiki-ingest-all
-description: Backfill the wiki — ingest every not-yet-ingested raw source (Markdown + PDF) by dispatching Opus subagents that each run /sb-wiki-ingest non-interactively, batched by origin with a per-subagent token budget, then auto-run /sb-wiki-lint.
+description: Backfill the wiki — ingest every not-yet-ingested raw source (Markdown + PDF) by dispatching opus subagents that each run /sb-wiki-ingest non-interactively, batched by origin with a per-subagent token budget, then auto-run /sb-wiki-lint.
 ---
 
 # sb-wiki-ingest-all
@@ -35,11 +35,11 @@ A single bare token naming BOTH an origin folder AND a raw-file stem, an unresol
 
 | Contract | Rule |
 |----------|------|
-| Token budget | A subagent's batch MUST NOT exceed **50,000** estimated source tokens (sum of `token_estimate` across its files). A single source whose estimate alone exceeds 50,000 becomes its own batch — a source is NEVER split across subagents. |
+| Token budget | A subagent's batch MUST NOT exceed **60,000** estimated source tokens (sum of `token_estimate` across its files). A single source whose estimate alone exceeds 60,000 becomes its own batch — a source is NEVER split across subagents. |
 | Same-origin serialization | Batches of the SAME origin run STRICTLY sequentially — never two at once. Same-source files reuse the same entities/concepts; concurrent ingestion would create duplicate stubs. |
 | Cross-origin parallelism | Batches of DIFFERENT origins MAY run in parallel, capped at **5** concurrent subagents per wave. |
 | Non-interactive ingest | Subagents invoke `/sb-wiki-ingest silent <slug>` per file; that mode owns every checkpoint auto-resolution. NO subagent ever pauses for user input. |
-| Model | Per batch, from the manifest plan: **sonnet** when the batch's source-token sum ≤ 15,000 and every file has a non-null estimate; **opus** otherwise. The script computes this — NEVER override it by judgment. |
+| Model | Per batch, from the manifest plan: **opus** for every batch — the default ingest agent, regardless of source-token sum. The script computes this — NEVER override it by judgment. |
 | No mid-run topic pages | Subagents NEVER create topic pages mid-run — every proposed topic is deferred (the `candidate-topic` persists for the final lint pass). Topic-UPDATE resolution is owned by `/sb-wiki-ingest silent` (firm updates auto-apply append-only; speculative updates and proposed answers reject — see that mode's silent override); this caller NEVER re-states or overrides those defaults. Topic-page creation and cross-origin duplicate healing happen after, via the final lint pass. |
 | Single git commit | NO git command runs during ingestion — subagents NEVER git-commit, and the orchestrator NEVER commits per source, per batch, or per wave. The orchestrator creates EXACTLY ONE git commit at the end of the run (step 6). Per-file status `committed` means staged FILE changes written to disk, never git. |
 
@@ -58,7 +58,7 @@ If the script exits non-zero, it printed an actionable error to stderr (origin/f
 - `mode` — `all` | `origin` | `files`, the classification the script applied. Echo it in the run's opening status so the user sees what was targeted.
 - `totals` + `origins{}` — discovery counts. If `totals.missing` is 0, STOP: report "wiki fully ingested" (`all`/`origin` mode) or "all listed files already ingested" (`files` mode — `skipped_ingested[]` names them); note `totals.duplicates` if non-zero. Raw files whose index row is `Wiki = Duplicate (…)` are already excluded by the script (`duplicate_files[]` lists them — surface the list in the final report).
 - `skipped_ingested[]` (`files` mode only) — listed files already having a wiki page, dropped from this run. Echo the count in the opening status.
-- `plan.batches{origin: [batch…]}` — each batch carries `origin`, `index`, `files[]`, `token_sum`, and `model` (`sonnet` | `opus`, per the script's threshold). Same-origin batches packed by filename order, ≤50,000 tokens; a lone file over the cap (or `null` estimate) is its own batch.
+- `plan.batches{origin: [batch…]}` — each batch carries `origin`, `index`, `files[]`, `token_sum`, and `model` (always `opus`). Same-origin batches packed by filename order, ≤60,000 tokens; a lone file over the cap (or `null` estimate) is its own batch.
 - `plan.waves[]` — ordered list of waves, each a list of `{origin, index}` refs (≤5 per wave, distinct origins within a wave, same-origin batches serialized across waves).
 
 ### Step 2 — Adopt the plan
@@ -71,7 +71,7 @@ Wave scheduling is computed by the script (see Step 1). Nothing to do here.
 
 ### Step 4 — Dispatch subagents
 
-For each wave, dispatch one subagent per batch IN PARALLEL (multiple Agent calls in a single message), using the dispatch prompt below with the batch's planned `model` (`sonnet` or `opus`). Wait for every subagent in the wave to finish before starting the next wave. Collect each subagent's per-file status and the slugs it created. A `failed (content-duplicate: …)` status is EXPECTED behavior, not an error — the source's raw-index row is now `Duplicate (…)` and re-runs skip it; carry it into the final report's duplicates line.
+For each wave, dispatch one subagent per batch IN PARALLEL (multiple Agent calls in a single message), using the dispatch prompt below with the batch's planned `model` (always `opus`). Wait for every subagent in the wave to finish before starting the next wave. Collect each subagent's per-file status and the slugs it created. A `failed (content-duplicate: …)` status is EXPECTED behavior, not an error — the source's raw-index row is now `Duplicate (…)` and re-runs skip it; carry it into the final report's duplicates line.
 
 ### Step 5 — Heal with lint
 
@@ -112,7 +112,7 @@ A conductor verifies the close-out by checking: (a) git shows no uncommitted wik
 
 ## Subagent dispatch prompt
 
-Fill `<files>` with the batch's source filenames and dispatch with `subagent_type: general-purpose`, `model:` the batch's planned model (`sonnet` | `opus`):
+Fill `<files>` with the batch's source filenames and dispatch with `subagent_type: general-purpose`, `model:` the batch's planned model (always `opus`):
 
 ```
 Ingest these raw wiki sources, one at a time, in this exact order:
