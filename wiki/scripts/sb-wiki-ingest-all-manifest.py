@@ -2,17 +2,18 @@
 """Discovery manifest + dispatch plan for sb-wiki-ingest-all.
 
 Lists every raw source that has NOT been ingested yet, with an approximate
-token count, and (with --plan, the default) packs them into per-subagent
-batches, schedules waves, and assigns each batch a model:
+token count, and (with --plan, the default) builds a flat, ordered,
+ONE-file-per-subagent dispatch plan:
 
-- Batches: per origin, greedy consecutive packing <= OPUS_MAX_BATCH_TOKENS
-  source tokens; a lone file above the cap (or with a null estimate) is its
-  own batch — a source is never split across subagents.
-- Waves: wave K holds batch index K of every origin (distinct origins are
-  parallel-safe; same-origin batches serialize across waves), split into
-  sub-waves of <= WAVE_CONCURRENCY batches.
-- Model: "opus" for every batch (the default ingest agent), regardless of
-  token sum.
+- Files: each not-yet-ingested source is its own dispatch unit — never
+  batched with another source. The orchestrator runs them STRICTLY
+  SEQUENTIALLY (one sub-agent at a time), so each source gets a fresh,
+  undiluted context. Ordered by origin then filename so same-origin sources
+  (which reuse entities/concepts) ingest consecutively.
+- Model: per file — "opus" only when the token estimate exceeds
+  OPUS_TOKEN_THRESHOLD (or is unknown, the conservative default for an
+  un-estimable source); "sonnet" otherwise. A dedicated single-source run
+  lets Sonnet ingest at full depth; Opus is reserved for the largest sources.
 
 A raw file is "ingested" when its source page exists at
 `wiki/sources/{origin}/{stem}.md`. Files whose raw-index row marks
@@ -37,8 +38,7 @@ logging.getLogger("PyPDF2").setLevel(logging.ERROR)
 CHARS_PER_TOKEN = 4
 DEFAULT_EXCLUDE = {"assets", "_assets"}
 NON_SOURCE_FILES = {"AGENTS.md", "CLAUDE.md", "QWEN.md", "README.md"}
-OPUS_MAX_BATCH_TOKENS = 60_000
-WAVE_CONCURRENCY = 5
+OPUS_TOKEN_THRESHOLD = 30_000
 
 
 def _fspath(path: Path) -> str:
@@ -126,64 +126,35 @@ def duplicate_rows(origin_dir: Path) -> set[str]:
     return marked
 
 
-def build_batches(items: list[dict]) -> dict[str, list[dict]]:
-    """Per origin: greedy consecutive packing by filename order, <= OPUS_MAX_BATCH_TOKENS."""
-    by_origin: dict[str, list[dict]] = {}
-    for item in items:
-        by_origin.setdefault(item["origin"], []).append(item)
-
-    batches: dict[str, list[dict]] = {}
-    for origin, origin_items in by_origin.items():
-        origin_items.sort(key=lambda i: i["filename"])
-        packed: list[list[dict]] = []
-        current: list[dict] = []
-        current_sum = 0
-        for item in origin_items:
-            tokens = item["token_estimate"]
-            if tokens is None or tokens > OPUS_MAX_BATCH_TOKENS:
-                if current:
-                    packed.append(current)
-                    current, current_sum = [], 0
-                packed.append([item])
-                continue
-            if current and current_sum + tokens > OPUS_MAX_BATCH_TOKENS:
-                packed.append(current)
-                current, current_sum = [], 0
-            current.append(item)
-            current_sum += tokens
-        if current:
-            packed.append(current)
-
-        batches[origin] = []
-        for index, batch_items in enumerate(packed):
-            has_null = any(i["token_estimate"] is None for i in batch_items)
-            token_sum = sum(i["token_estimate"] or 0 for i in batch_items)
-            # opus is the default for every batch regardless of token sum.
-            model = "opus"
-            batches[origin].append({
-                "origin": origin,
-                "index": index,
-                "files": [i["filename"] for i in batch_items],
-                "token_sum": token_sum,
-                "has_null_estimate": has_null,
-                "model": model,
-            })
-    return batches
+def assign_model(token_estimate: int | None) -> str:
+    """Per-file model: Sonnet by default; Opus only when the source exceeds
+    OPUS_TOKEN_THRESHOLD tokens, or when its size is unknown (a PDF with no
+    extractable text) — the conservative default for an un-estimable source."""
+    if token_estimate is None or token_estimate > OPUS_TOKEN_THRESHOLD:
+        return "opus"
+    return "sonnet"
 
 
-def build_waves(batches: dict[str, list[dict]]) -> list[list[dict]]:
-    """Wave K = batch index K of each origin, split into sub-waves of <= WAVE_CONCURRENCY."""
-    waves: list[list[dict]] = []
-    deepest = max((len(b) for b in batches.values()), default=0)
-    for k in range(deepest):
-        tier = [
-            {"origin": origin, "index": k}
-            for origin in sorted(batches)
-            if len(batches[origin]) > k
-        ]
-        for start in range(0, len(tier), WAVE_CONCURRENCY):
-            waves.append(tier[start:start + WAVE_CONCURRENCY])
-    return waves
+def build_plan(items: list[dict]) -> list[dict]:
+    """Flat, ordered, ONE-file-per-subagent dispatch plan — no batching, no waves.
+
+    Each not-yet-ingested source is its own dispatch unit, run strictly
+    sequentially by the orchestrator so every source gets a fresh, undiluted
+    context. Ordered by origin then filename so same-origin sources (which reuse
+    entities/concepts) ingest consecutively. Per-file model via assign_model.
+    """
+    ordered = sorted(items, key=lambda i: (i["origin"], i["filename"]))
+    return [
+        {
+            "index": index,
+            "origin": item["origin"],
+            "filename": item["filename"],
+            "path": item["path"],
+            "token_estimate": item["token_estimate"],
+            "model": assign_model(item["token_estimate"]),
+        }
+        for index, item in enumerate(ordered)
+    ]
 
 
 def collect(wiki_root: Path, exclude: set[str], only_origin: str | None) -> dict:
@@ -478,7 +449,7 @@ def main() -> int:
     parser.add_argument(
         "--no-plan",
         action="store_true",
-        help="omit the batch/wave/model dispatch plan (manifest only)",
+        help="omit the per-file model dispatch plan (manifest only)",
     )
     args = parser.parse_args()
 
@@ -510,18 +481,14 @@ def main() -> int:
     payload["mode"] = mode
 
     if not args.no_plan:
-        batches = build_batches(payload["items"])
+        files = build_plan(payload["items"])
         payload["plan"] = {
             "constants": {
-                "opus_max_batch_tokens": OPUS_MAX_BATCH_TOKENS,
-                "wave_concurrency": WAVE_CONCURRENCY,
+                "opus_token_threshold": OPUS_TOKEN_THRESHOLD,
             },
-            "batches": batches,
-            "waves": build_waves(batches),
+            "files": files,
             "model_counts": {
-                model: sum(
-                    1 for bs in batches.values() for b in bs if b["model"] == model
-                )
+                model: sum(1 for f in files if f["model"] == model)
                 for model in ("sonnet", "opus")
             },
         }

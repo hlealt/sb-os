@@ -394,11 +394,11 @@ Required: `Sources`.
 
 | Section | When to include |
 |---------|-----------------|
-| `Substance` | Paraphrased prose synthesis of the source — usually included |
+| `Substance` | Distilled synthesis of the source (NOT a table of contents) — usually included. Depth scales to source breadth; every load-bearing signal class present survives in compact form (core claims; decision criteria / tests; tradeoff & comparison tables kept AS compact tables; quantified specifics; named patterns + their effect). Operational rule: `/sb-wiki-ingest` Step 2 "Substance coverage discipline" |
 | `Notable quotes` | Verbatim quotations only — kept distinct from `Substance` for MECE (paraphrase vs. verbatim) |
 | `Connections` | Wiki pages this updates / contradicts; each connection states *why* (one clause); usually included |
 | `Methodology` | For studies, papers — the method, dataset, sample, limitations |
-| `Counterpoints` | Where the source disagrees with itself or with prior wiki claims |
+| `Counterpoints` | Where the source disagrees with itself or with prior wiki claims, OR flags its own claims as uncertain / unvalidated / low-confidence — capture WHICH specific claims the author marks (e.g. "needs validation" callouts), not merely that some exist |
 
 **User half** (separated by `---`):
 

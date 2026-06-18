@@ -58,11 +58,11 @@ Required and optional sections per wiki page type. Agents select optional sectio
 
 | Section | When to include |
 |---------|----------------|
-| `Substance` | Paraphrased prose synthesis of the source — usually included |
+| `Substance` | Distilled synthesis of the source (NOT a table of contents) — usually included. Depth scales to the source's breadth; every load-bearing signal class present in the source survives in compact form (core claims; decision criteria / tests; tradeoff & comparison tables kept AS compact tables; quantified specifics; named patterns + their effect). See `/sb-wiki-ingest` Step 2 "Substance coverage discipline" |
 | `Notable quotes` | Verbatim quotations only — kept distinct from `Substance` (paraphrase vs. verbatim) |
 | `Connections` | Wiki pages this source updates or contradicts; each connection states why (one clause) — usually included |
 | `Methodology` | For studies, papers — method, dataset, sample, limitations |
-| `Counterpoints` | Where the source disagrees with itself or with prior wiki claims |
+| `Counterpoints` | Where the source disagrees with itself or with prior wiki claims, OR flags its own claims as uncertain / unvalidated / low-confidence — capture WHICH specific claims the author marks (e.g. "needs validation" callouts), not merely that some exist |
 
 When `{wiki_root}/purpose.md` is present, the focus lens modulates which optional sections to include and at what depth. Full spec: `3-resources/tools/sb-os/wiki/docs/wiki-schema.md` § "Regulatory layer — purpose.md".
 
