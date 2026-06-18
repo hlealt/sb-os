@@ -35,7 +35,7 @@ Fits an existing file → append. Index files (`{dir-name}.md`) are NEVER conten
 
 **Exception — daily-note override.** When the user explicitly says "add to today", "save to daily", or "add to daily note", route to the daily note regardless of the table above.
 
-**Archives are off-limits.** NEVER read, search, list, or load files under `4-archives/` unless the user explicitly directs you to that folder ("check 4-archives", "look in archives", or names a path inside it). It is a pre-deletion holding zone — its contents are stale or under review and MUST NOT inform agent answers, routing, or context. An explicit instruction lifts this for that request only.
+**Archives are off-limits.** NEVER read, search, list, or load files under `4-archives/` unless the user explicitly directs you to that folder ("check 4-archives", "look in archives", or names a path inside it). It is a pre-deletion holding zone — its contents are stale or under review and MUST NOT inform agent answers, routing, or context. An explicit instruction lifts this for that request only. **Exception — direct reference:** when a file you are legitimately working with carries a direct path to a specific file under `4-archives/`, you MAY open that referenced file to follow the reference. This lifts the rule for that one referenced path ONLY — never for browsing, searching, or listing the archive.
 
 **Auto-memory.** Claude Code's auto-memory serves ONLY for agent behavior feedback (preferences, corrections, workflow tweaks). Content goes to the vault. When in doubt, vault wins.
 
