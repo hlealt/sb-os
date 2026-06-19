@@ -48,6 +48,13 @@ def run(vault, *flags):
     return sw.main(argv)
 
 
+def run_sweep(vault, dry_run=False):
+    """Call sweep() the way main() does and return its report dict."""
+    state = vault / ".user" / "runtime" / "state"
+    archive = state / "work-log-archive"
+    return sw.sweep(vault, state, archive, TODAY, "09:00", dry_run)
+
+
 # --------------------------------------------------------------------------- #
 # Day-rollover
 # --------------------------------------------------------------------------- #
@@ -244,3 +251,174 @@ def test_no_done_tasks_is_clean_noop(tmp_path):
     rc = run(vault)
     assert rc == 0
     assert foo.read_text(encoding="utf-8") == src   # nothing removed
+
+
+# --------------------------------------------------------------------------- #
+# Fail-safe: skip-not-delete on blocks that cannot be routed with confidence
+# --------------------------------------------------------------------------- #
+
+def _reasons(report):
+    return " | ".join(s["reason"] for s in report["skipped"])
+
+
+def test_failsafe_skips_done_task_with_no_date(tmp_path):
+    """A column-0 `- [x]` with NO ✅ date stays in source, is not logged, is reported.
+
+    This is the real `pagamentos-recorrentes.md` shape (`- [x] Tiago — 930`) that
+    the OLD code would have swept to today's log and deleted.
+    """
+    vault, state, archive = make_vault(tmp_path)
+    fresh_today_worklog(state)
+    foo = vault / "2-areas" / "pay" / "pay-tasks.md"
+    src = (
+        "# pay\n\n#### Should\n\n"
+        "- [x] Tiago — 930\n"
+        "- [x] Internet — 120 (débito automático — confirmar que caiu)\n"
+    )
+    write_bytes(foo, src, crlf=False)
+
+    report = run_sweep(vault)
+    # nothing swept, both blocks skipped
+    assert report["tasks_swept"] == 0
+    assert report["tasks_skipped"] == 2
+    assert all("no valid" in s["reason"] for s in report["skipped"])
+    assert report["skipped"][0]["source"] == "2-areas/pay/pay-tasks.md"
+    # source untouched byte-for-byte; nothing in the work-log
+    assert foo.read_text(encoding="utf-8") == src
+    today_log = (state / "work-log.md").read_text(encoding="utf-8")
+    assert "Tiago" not in today_log
+    assert "Internet" not in today_log
+
+
+def test_failsafe_skips_invalid_calendar_and_unpadded_dates(tmp_path):
+    vault, state, archive = make_vault(tmp_path)
+    fresh_today_worklog(state)
+    foo = vault / "1-projects" / "p" / "p-tasks.md"
+    src = (
+        "# p\n\n"
+        "- [x] impossible month ✅ 2026-13-40\n"
+        "- [x] unpadded date ✅ 2026-6-1\n"
+        "- [x] no space before date ✅2026-06-18\n"
+    )
+    write_bytes(foo, src, crlf=False)
+
+    report = run_sweep(vault)
+    assert report["tasks_swept"] == 0
+    assert report["tasks_skipped"] == 3
+    # all three left in source untouched
+    assert foo.read_text(encoding="utf-8") == src
+    today_log = (state / "work-log.md").read_text(encoding="utf-8")
+    assert "impossible month" not in today_log
+    assert "unpadded date" not in today_log
+    assert "no space before date" not in today_log
+
+
+def test_failsafe_skips_multiple_distinct_dates(tmp_path):
+    vault, state, archive = make_vault(tmp_path)
+    fresh_today_worklog(state)
+    foo = vault / "1-projects" / "p" / "p-tasks.md"
+    src = "# p\n\n- [x] did, then redid ✅ 2026-06-18 then again ✅ 2026-06-15\n"
+    write_bytes(foo, src, crlf=False)
+
+    report = run_sweep(vault)
+    assert report["tasks_swept"] == 0
+    assert report["tasks_skipped"] == 1
+    assert "multiple distinct" in _reasons(report)
+    assert foo.read_text(encoding="utf-8") == src
+    assert "did, then redid" not in (state / "work-log.md").read_text(encoding="utf-8")
+
+
+def test_failsafe_same_date_twice_is_not_ambiguous(tmp_path):
+    """Two ✅ of the SAME date is one distinct date -> still sweeps (not a skip)."""
+    vault, state, archive = make_vault(tmp_path)
+    fresh_today_worklog(state)
+    foo = vault / "1-projects" / "p" / "p-tasks.md"
+    src = "# p\n\n- [x] belt and braces ✅ 2026-06-18 (done ✅ 2026-06-18)\n"
+    write_bytes(foo, src, crlf=False)
+
+    report = run_sweep(vault)
+    assert report["tasks_swept"] == 1
+    assert report["tasks_skipped"] == 0
+    assert "belt and braces" in (state / "work-log.md").read_text(encoding="utf-8")
+
+
+def test_failsafe_mixed_valid_and_malformed_in_one_file(tmp_path):
+    """Valid blocks sweep; malformed blocks in the SAME file skip + stay. No
+    cross-contamination: a skipped block between two valid ones is preserved and
+    the valid ones still move with correct boundaries."""
+    vault, state, archive = make_vault(tmp_path)
+    fresh_today_worklog(state)
+    foo = vault / "1-projects" / "foo" / "foo-tasks.md"
+    src = (
+        "# foo\n\n#### Should\n\n"
+        "- [x] Valid one ✅ 2026-06-18\n"
+        "  - _Ref:_ travels with valid one\n"
+        "- [x] Malformed no date — KEEP ME\n"
+        "  - _Ref:_ this body must also stay\n"
+        "- [x] Valid two ✅ 2026-06-18\n"
+        "- [ ] still open\n"
+    )
+    write_bytes(foo, src, crlf=False)
+
+    report = run_sweep(vault)
+    assert report["tasks_swept"] == 2
+    assert report["tasks_skipped"] == 1
+
+    foo_after = foo.read_text(encoding="utf-8")
+    # malformed block (line + its body) preserved verbatim in source
+    assert "- [x] Malformed no date — KEEP ME" in foo_after
+    assert "this body must also stay" in foo_after
+    assert "- [ ] still open" in foo_after
+    # valid blocks removed from source, present in log with their bodies
+    assert "Valid one" not in foo_after
+    assert "Valid two" not in foo_after
+    today_log = (state / "work-log.md").read_text(encoding="utf-8")
+    assert "Valid one" in today_log
+    assert "travels with valid one" in today_log
+    assert "Valid two" in today_log
+    # malformed block never reached the log
+    assert "KEEP ME" not in today_log
+
+
+def test_failsafe_skips_reported_in_dry_run(tmp_path):
+    vault, state, archive = make_vault(tmp_path)
+    fresh_today_worklog(state)
+    foo = vault / "1-projects" / "p" / "p-tasks.md"
+    src = "# p\n\n- [x] no date here\n- [x] good ✅ 2026-06-18\n"
+    write_bytes(foo, src, crlf=False)
+
+    report = run_sweep(vault, dry_run=True)
+    assert report["tasks_skipped"] == 1
+    assert "no valid" in _reasons(report)
+    # dry-run writes nothing
+    assert foo.read_text(encoding="utf-8") == src
+
+
+def test_failsafe_text_report_surfaces_skips(tmp_path):
+    vault, state, archive = make_vault(tmp_path)
+    fresh_today_worklog(state)
+    foo = vault / "1-projects" / "p" / "p-tasks.md"
+    write_bytes(foo, "# p\n\n- [x] no date here\n", crlf=False)
+
+    report = run_sweep(vault, dry_run=True)
+    text = sw.format_text_report(("noop", {"date": TODAY}), report)
+    assert "SKIPPED" in text
+    assert "no date here" in text
+    assert "1-projects/p/p-tasks.md" in text
+
+
+def test_failsafe_skips_undecodable_source_whole(tmp_path):
+    """A source that is not valid UTF-8 is skipped whole and left untouched."""
+    vault, state, archive = make_vault(tmp_path)
+    fresh_today_worklog(state)
+    foo = vault / "1-projects" / "bad" / "bad-tasks.md"
+    foo.parent.mkdir(parents=True, exist_ok=True)
+    raw = b"# bad\n\n- [x] looks done \xff\xfe not utf-8 \x80\n"
+    foo.write_bytes(raw)
+
+    report = run_sweep(vault)
+    assert report["tasks_swept"] == 0
+    assert report["tasks_skipped"] == 1
+    assert "unreadable source" in _reasons(report)
+    # bytes untouched
+    assert foo.read_bytes() == raw

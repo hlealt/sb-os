@@ -17,6 +17,21 @@ Canonical rule for creation, format, routing, and lifecycle of tasks in the vaul
 
 Completion: `- [x] 📅 2026-03-31 Close design partner ✅ 2026-04-01` — keep original `📅`, add `✅ YYYY-MM-DD`.
 
+## Sweep Contract (the archivist Done-Task Sweep keys on this)
+
+The `sb-archivist` Done-Task Sweep (`sweep_done_tasks.py`) moves completed tasks out of `*-tasks.md` into the work-log and REMOVES them from source. Because it deletes from source, it routes a block ONLY when it can do so with confidence; on ANY doubt it SKIPS the block (leaves it byte-for-byte in source, never writes it to a work-log) and logs the reason. To be swept, a completed task MUST satisfy this contract:
+
+| # | Rule | A block that violates it is |
+|---|------|-----------------------------|
+| 1 | The task line starts at **column 0** with `- [x] ` (a leading space → indented child, never a top-level task). | Not a sweep target — an indented `- [x]` under an open parent is never swept. |
+| 2 | The task line carries a completion marker `✅ YYYY-MM-DD` with a **single space** after `✅` and a **zero-padded, calendar-valid** date (`✅ 2026-04-01`, never `✅2026-04-01`, `✅ 2026-4-1`, or `✅ 2026-13-40`). | **Skipped + logged** (no valid date / invalid date). |
+| 3 | The task line carries **exactly one** distinct `✅` date. Two or more different `✅` dates on one line is ambiguous. | **Skipped + logged** (multiple distinct dates). |
+| 4 | The source file is valid UTF-8. | **Skipped whole + logged** (unreadable source). |
+
+Trailing prose after the date is allowed (`✅ 2026-04-01 — note…`) and does NOT block the sweep. The block body is every following line up to the next column-0 `- [` or heading — sub-bullets travel with the task verbatim.
+
+**Author takeaway:** a completed task with no `✅` date, or a malformed/ambiguous one, will NOT be swept and WILL be reported as a skip — it stays in the file until corrected. This is intentional: it guarantees the sweep can never move or drop content it cannot route. Column-0 `- [x]` checklist items that are NOT work-log tasks (e.g. domain tracking checkboxes without a `✅` date) are safely left in place by this same rule.
+
 ## Sub-bullets
 
 ### Context prefixes

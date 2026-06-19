@@ -19,6 +19,17 @@ list item (`^- \[`), the next heading (`^#`), or EOF. Checked items indented
 under an open `- [ ]` parent are column-0-excluded and never swept. Source files
 keep their original CRLF/LF; work-log content is written LF.
 
+FAIL-SAFE (data-loss floor): the sweep moves a `- [x]` block ONLY when it can
+route it with confidence — i.e. the task line carries exactly one calendar-valid
+`✅ YYYY-MM-DD`. A block whose task line has NO `✅ YYYY-MM-DD`, a non-calendar
+date (e.g. `✅ 2026-13-40`, unpadded `✅ 2026-6-1`), or two or more DIFFERENT
+`✅` dates is SKIPPED: left byte-for-byte in its source, never written to any
+work-log, and reported with its source file + reason. A source file that cannot
+be decoded as UTF-8 is skipped whole. The strict completed-task format contract
+the parser keys on is documented in
+`para/workflows/sb-vault-ops/data/tasks.md` (§ Sweep contract). Skip-not-delete
+is the invariant: on ANY routing doubt the sweep refuses to remove content.
+
 Usage:
     python sweep_done_tasks.py [--vault-path PATH] [--rollover-only]
                                [--dry-run] [--json] [--today YYYY-MM-DD]
@@ -53,7 +64,8 @@ DONE_RE = re.compile(r"^- \[x\] ")
 # Block boundary: any top-level list item (requires the `[`) OR any heading.
 # Requiring `[` ignores non-checkbox top-level `-` continuations (e.g. `- *Ref:*`).
 BOUNDARY_RE = re.compile(r"^- \[|^#")
-# Completion-date marker on the task line.
+# Completion-date marker on the task line. Zero-padded 4-2-2 shape required;
+# calendar validity (e.g. no month 13) is checked separately by valid_iso_date.
 DATE_RE = re.compile(r"✅ (\d{4}-\d{2}-\d{2})")
 # Frontmatter date of a work-log.
 FM_DATE_RE = re.compile(r"^date:\s*(\d{4}-\d{2}-\d{2})\s*$", re.MULTILINE)
@@ -72,6 +84,41 @@ def is_boundary(line):
 
 def to_lf(text):
     return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def valid_iso_date(s):
+    """True iff `s` is a real, zero-padded YYYY-MM-DD calendar date.
+
+    datetime.date.fromisoformat rejects both impossible dates (2026-13-40,
+    2026-02-30) and unpadded ones (2026-6-1), giving a strict validity check.
+    """
+    try:
+        datetime.date.fromisoformat(s)
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
+def routed_date(task_line, today):
+    """Decide the routing date for a `- [x]` task line, fail-safe.
+
+    Returns (date, None) when the line can be routed WITH CONFIDENCE, or
+    (None, reason) when it cannot and the block must be skipped (left in source,
+    never moved). Confidence requires exactly one calendar-valid `✅ YYYY-MM-DD`
+    on the task line. The `today` argument is accepted for signature symmetry and
+    intentionally NOT used as a fallback — a missing/invalid date is a skip, never
+    a silent route-to-today (that was the data-loss path this replaces).
+    """
+    dates = DATE_RE.findall(task_line)
+    if not dates:
+        return None, "no valid ✅ YYYY-MM-DD on task line"
+    valid = [d for d in dates if valid_iso_date(d)]
+    if not valid:
+        return None, f"✅ date not a valid calendar date: {dates[0]}"
+    distinct = set(valid)
+    if len(distinct) > 1:
+        return None, f"multiple distinct ✅ dates: {sorted(distinct)}"
+    return valid[0], None
 
 
 def default_template_path():
@@ -204,14 +251,18 @@ def discover_sources(vault):
 
 
 def extract_blocks(lines, today):
-    """From a source file's lines, return (blocks, remove_ranges).
+    """From a source file's lines, return (blocks, remove_ranges, skips).
 
     blocks: list of (block_text_LF, date) — block_text byte-faithful (LF), trailing
-            blanks stripped. date routed from the ✅ marker (today if missing/malformed).
-    remove_ranges: list of (start, end) line ranges (end exclusive) to drop.
+            blanks stripped. Only blocks routed WITH CONFIDENCE appear here.
+    remove_ranges: list of (start, end) line ranges (end exclusive) to drop. Only
+            ranges for blocks that are actually swept — a skipped block is NEVER
+            added here, so it stays in source byte-for-byte (fail-safe).
+    skips: list of (task_line_stripped, reason) for every `- [x]` block the parser
+            could not route with confidence and therefore left in place.
     """
     n = len(lines)
-    blocks, remove_ranges = [], []
+    blocks, remove_ranges, skips = [], [], []
     i = 0
     while i < n:
         if DONE_RE.match(lines[i]):
@@ -219,18 +270,23 @@ def extract_blocks(lines, today):
             j = i + 1
             while j < n and not is_boundary(lines[j]):
                 j += 1
+            date, reason = routed_date(lines[start], today)
+            if reason is not None:
+                # Cannot route with confidence -> SKIP: leave in source, do not
+                # move, record why. No remove_range, no block appended.
+                skips.append((lines[start].rstrip("\r\n").strip(), reason))
+                i = j
+                continue
             bl = list(lines[start:j])
             while bl and bl[-1].strip() == "":
                 bl.pop()
             block_text = to_lf("".join(bl)).rstrip("\n")
-            m = DATE_RE.search(lines[start])
-            date = m.group(1) if m else today
             blocks.append((block_text, date))
             remove_ranges.append((start, j))
             i = j
         else:
             i += 1
-    return blocks, remove_ranges
+    return blocks, remove_ranges, skips
 
 
 def ensure_archive_worklog(path, date):
@@ -321,12 +377,21 @@ def sweep(vault, state_dir, archive_dir, today, now_hm, dry_run):
     by_target = OrderedDict()
     source_removals = OrderedDict()   # rel -> (lines, remove_ranges)
     total_blocks = 0
+    skipped = []                      # [{source, task, reason}, ...] (fail-safe)
 
     for rel in sources:
         fpath = vault / rel
-        with open(fpath, "r", encoding="utf-8", newline="") as f:   # preserve endings
-            lines = f.readlines()
-        blocks, remove_ranges = extract_blocks(lines, today)
+        try:
+            with open(fpath, "r", encoding="utf-8", newline="") as f:   # preserve endings
+                lines = f.readlines()
+        except (UnicodeDecodeError, OSError) as e:
+            # Cannot safely read the file -> skip it whole, touch nothing.
+            skipped.append({"source": rel, "task": None,
+                            "reason": f"unreadable source ({type(e).__name__}); file left untouched"})
+            continue
+        blocks, remove_ranges, file_skips = extract_blocks(lines, today)
+        for task_line, reason in file_skips:
+            skipped.append({"source": rel, "task": task_line, "reason": reason})
         if not blocks:
             continue
         basename = Path(rel).stem
@@ -342,6 +407,8 @@ def sweep(vault, state_dir, archive_dir, today, now_hm, dry_run):
     report = {
         "sources_scanned": len(sources),
         "tasks_swept": total_blocks,
+        "tasks_skipped": len(skipped),
+        "skipped": skipped,
         "sources_cleaned": list(source_removals.keys()),
         "worklogs_written": [],
         "appended_per_target": {},
@@ -352,16 +419,14 @@ def sweep(vault, state_dir, archive_dir, today, now_hm, dry_run):
         report["dry_run"] = bool(dry_run)
         return report
 
-    # 1) Remove swept blocks from each source (line-ending preserving).
-    for rel, (lines, remove_ranges) in source_removals.items():
-        drop = set()
-        for s, e in remove_ranges:
-            drop.update(range(s, e))
-        newlines = [lines[k] for k in range(len(lines)) if k not in drop]
-        with open(vault / rel, "w", encoding="utf-8", newline="") as f:
-            f.writelines(newlines)
+    # Write order is APPEND-THEN-REMOVE so a block is never deleted from its
+    # source before it is safely persisted in a work-log. If a target append
+    # fails (e.g. a pre-existing work-log a user stripped of its `## Completed`
+    # heading), the source still holds the content — the run fails loud with
+    # nothing dropped, never the reverse (remove-then-append would lose the
+    # block in the gap between the two writes).
 
-    # 2) Append into each target work-log.
+    # 1) Append into each target work-log.
     for tp, groups in by_target.items():
         tp_path = Path(tp)
         date = next(iter(groups))[2]   # first group's routed date
@@ -370,6 +435,16 @@ def sweep(vault, state_dir, archive_dir, today, now_hm, dry_run):
         appended = append_to_worklog(tp_path, grouped, today, now_hm)
         report["worklogs_written"].append(tp_path.name)
         report["appended_per_target"][tp_path.name] = appended
+
+    # 2) Remove swept blocks from each source (line-ending preserving). Runs
+    #    only after every append above has succeeded.
+    for rel, (lines, remove_ranges) in source_removals.items():
+        drop = set()
+        for s, e in remove_ranges:
+            drop.update(range(s, e))
+        newlines = [lines[k] for k in range(len(lines)) if k not in drop]
+        with open(vault / rel, "w", encoding="utf-8", newline="") as f:
+            f.writelines(newlines)
 
     return report
 
@@ -406,6 +481,13 @@ def format_text_report(rollover, sweep_report):
         else:
             lines.append(f"{prefix} {n} task(s) from {srcs} source file(s) "
                          f"into {logs} work-log(s)")
+        skips = sweep_report.get("skipped", [])
+        if skips:
+            lines.append(f"[sweep] SKIPPED {len(skips)} unparseable/ambiguous "
+                         f"`- [x]` block(s) — left in source, not swept:")
+            for s in skips:
+                where = s["source"] if s.get("task") is None else f"{s['source']}: {s['task']}"
+                lines.append(f"  - SKIP ({s['reason']}) — {where}")
     return "\n".join(lines)
 
 
