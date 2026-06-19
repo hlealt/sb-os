@@ -19,7 +19,10 @@ never go stale. Embedding spend is incremental — unchanged files are never
 re-embedded.
 
 Commands:
-    index  [--full]                    build / refresh the index
+    index  [--full]                    build / refresh the page index
+    index-raw [--glob G] [--json]      embed raw/** sources into the raw tables
+                                       (thin-page detector chunked-recall input;
+                                       per-vector model id, OD-2 model invalidation)
     search QUERY [--k N] [--type t,..] [--json] [--no-sync]
     probe                              availability + mode as JSON (no query)
     status                             index freshness + mode as JSON
@@ -58,6 +61,19 @@ MAX_CHUNK_CHARS = 6_000
 CANDIDATES_PER_ARM = 50
 RRF_K = 60
 NON_PAGE_FILES = {"CLAUDE.md", "AGENTS.md", "README.md"}
+
+# Raw-source embedding (consumed by the thin-page detector's chunked-recall layer).
+# Raw sources are embedded into a SEPARATE table pair (raw_files / raw_chunks) so the
+# pages-only index (files / chunks / chunks_fts) and the search CLI are never touched.
+# Windows are FIXED-SIZE sliding windows over the raw body (NOT H2-split): pypdf paper
+# twins have no clean heading structure, so a heading splitter degrades on the highest-
+# stakes sources (synthesis §2b / decisions D-3). ~900 tokens at ~4 chars/token ≈ 3600
+# chars, 15% overlap. The model id is stored PER VECTOR so an embedding-model upgrade
+# invalidates and re-embeds stale raw vectors (OD-2 guardrail — the hash/mtime prefilter
+# covers a content change but NOT a model change).
+RAW_WINDOW_CHARS = 3_600          # ~900 tokens at ~4 chars/token
+RAW_WINDOW_OVERLAP = 0.15         # 15% overlap between consecutive windows
+RAW_CHARS_PER_TOKEN = 4.0         # coarse token estimate for window sizing only
 TYPE_PREFIXES = {
     "concept": "wiki/concepts/",
     "entity": "wiki/entities/",
@@ -233,6 +249,59 @@ def diff_files(stored: dict[str, str], current: dict[str, str]) -> tuple[set, se
     return added, changed, removed
 
 
+# -------------------------------------------------------------- raw walking + windowing
+
+def walk_raw(wiki_root: Path) -> list[str]:
+    """Indexable raw sources under `{wiki_root}/raw/` as sorted wiki_root-relative posix
+    paths. Excludes origin index files (`{dir}/{dir}.md`) and non-page files, mirroring
+    `walk_wiki` so a raw origin's own index (e.g. `raw/a16z/a16z.md`) is not embedded."""
+    raw_root = wiki_root / "raw"
+    if not raw_root.is_dir():
+        return []
+    out: list[str] = []
+    for path in raw_root.rglob("*.md"):
+        if path.name in NON_PAGE_FILES or path.stem == path.parent.name:
+            continue
+        out.append(path.relative_to(wiki_root).as_posix())
+    return sorted(out)
+
+
+def _strip_frontmatter(text: str) -> str:
+    return _FRONTMATTER_RE.sub("", text, count=1)
+
+
+def window_raw(text: str, rel_path: str,
+               window_chars: int = RAW_WINDOW_CHARS,
+               overlap: float = RAW_WINDOW_OVERLAP) -> list[Chunk]:
+    """Split a raw source into FIXED-SIZE sliding character windows (NOT H2-split).
+
+    Frontmatter is dropped; the remaining body is sliced into ~`window_chars` windows
+    with `overlap` fractional overlap, each title-prefixed (filename stem, raw sources
+    rarely carry a clean H1). `anchor` records the window's char span; `pos` is the
+    sequential window index. Heading-independent by design so headingless pypdf paper
+    twins window cleanly (synthesis §2b)."""
+    body = _strip_frontmatter(text).strip()
+    title = Path(rel_path).stem
+    if not body:
+        return []
+    step = max(1, int(window_chars * (1.0 - overlap)))
+    windows: list[Chunk] = []
+    pos = 0
+    start = 0
+    n = len(body)
+    while start < n:
+        end = min(start + window_chars, n)
+        segment = body[start:end].strip()
+        if segment:
+            windows.append(Chunk(anchor=f"{start}:{end}", pos=pos,
+                                 text=f"{title}\n\n{segment}"))
+            pos += 1
+        if end >= n:
+            break
+        start += step
+    return windows
+
+
 # ---------------------------------------------------------------- fusion
 
 def rrf_fuse(rankings: list[list], k: int = RRF_K) -> list[tuple]:
@@ -265,6 +334,21 @@ def open_db(db_path: Path) -> sqlite3.Connection:
         );
         CREATE INDEX IF NOT EXISTS idx_chunks_path ON chunks(path);
         CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(text);
+        -- Raw-source embeddings (thin-page detector chunked-recall layer). SEPARATE
+        -- from the pages tables above so the existing index + search CLI are untouched.
+        -- raw_chunks.model carries the embedding model id PER VECTOR so a model upgrade
+        -- invalidates stale raw vectors (OD-2). No FTS table for raw: the detector's
+        -- BM25 floor is computed in-process over the raw windows, not via SQLite FTS.
+        CREATE TABLE IF NOT EXISTS raw_files (
+            path TEXT PRIMARY KEY, hash TEXT NOT NULL,
+            mtime REAL NOT NULL, size INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS raw_chunks (
+            id INTEGER PRIMARY KEY, path TEXT NOT NULL,
+            anchor TEXT NOT NULL, pos INTEGER NOT NULL,
+            text TEXT NOT NULL, embedding BLOB, model TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_raw_chunks_path ON raw_chunks(path);
         """
     )
     return conn
@@ -370,6 +454,144 @@ def sync(conn: sqlite3.Connection, wiki_root: Path, embedder=None) -> dict:
     conn.commit()
     return {"added": len(added), "changed": len(changed),
             "removed": len(removed), "embedded": embedded}
+
+
+# ---------------------------------------------------------------- raw sync (detector)
+
+def _delete_raw_paths(conn: sqlite3.Connection, paths: set) -> None:
+    for path in paths:
+        conn.execute("DELETE FROM raw_chunks WHERE path=?", (path,))
+        conn.execute("DELETE FROM raw_files WHERE path=?", (path,))
+
+
+def sync_raw(conn: sqlite3.Connection, wiki_root: Path, embedder=None,
+             model: str = DEFAULT_MODEL, glob: str | None = None) -> dict:
+    """Embed raw sources under `{wiki_root}/raw/` into raw_files / raw_chunks, incrementally.
+
+    Mirrors `sync` (mtime+size prefilter, sha256 confirm) but writes the SEPARATE raw
+    tables, so the pages index and search CLI are untouched. Two invalidation paths:
+
+      1. content change — hash/mtime/size differs → re-window + re-embed (same as pages);
+      2. model change (OD-2) — any raw chunk whose stored `model` != the requested `model`
+         is dropped and re-embedded, so a model upgrade never leaves stale raw vectors.
+
+    `glob` (a wiki_root-relative fnmatch pattern, e.g. `raw/papers/*frontier*`) bounds the
+    walked set so a caller can embed a SMALL subset (cost/time bound) without touching the
+    rest. `embedder=None` (no key) still maintains structure (windows/files) but embeds
+    nothing — the detector then reports chunked-recall OFF rather than a false all-clear.
+    Returns change counts including `reembedded_model` (OD-2 invalidations)."""
+    import fnmatch
+
+    raw_rels = walk_raw(wiki_root)
+    if glob:
+        raw_rels = [r for r in raw_rels if fnmatch.fnmatch(r, glob)]
+
+    stored = {
+        path: (h, mtime, size)
+        for path, h, mtime, size in conn.execute(
+            "SELECT path, hash, mtime, size FROM raw_files")
+    }
+    current_hashes: dict[str, str] = {}
+    texts: dict[str, str] = {}
+    stats: dict[str, tuple[float, int]] = {}
+    for rel in raw_rels:
+        stat = (wiki_root / rel).stat()
+        stats[rel] = (stat.st_mtime, stat.st_size)
+        prior = stored.get(rel)
+        if prior and prior[1] == stat.st_mtime and prior[2] == stat.st_size:
+            current_hashes[rel] = prior[0]
+            continue
+        text = read_text(wiki_root / rel)
+        texts[rel] = text
+        current_hashes[rel] = sha256_text(text)
+
+    # content-change diff (only over the walked subset — never touches rows outside `glob`)
+    stored_sub = {p: stored[p][0] for p in stored if p in set(raw_rels)}
+    added, changed, _ = diff_files(stored_sub, current_hashes)
+
+    _delete_raw_paths(conn, changed)
+    for rel in sorted(added | changed):
+        text = texts.get(rel)
+        if text is None:
+            text = read_text(wiki_root / rel)
+        for w in window_raw(text, rel):
+            conn.execute(
+                "INSERT INTO raw_chunks (path, anchor, pos, text, embedding, model) "
+                "VALUES (?,?,?,?,NULL,NULL)",
+                (rel, w.anchor, w.pos, w.text),
+            )
+        mtime, size = stats[rel]
+        conn.execute(
+            "INSERT OR REPLACE INTO raw_files (path, hash, mtime, size) VALUES (?,?,?,?)",
+            (rel, current_hashes[rel], mtime, size),
+        )
+    for rel, (mtime, size) in stats.items():
+        if rel in current_hashes and rel not in (added | changed):
+            conn.execute("UPDATE raw_files SET mtime=?, size=? WHERE path=?",
+                         (mtime, size, rel))
+
+    # OD-2: invalidate raw vectors embedded under a DIFFERENT model id, within the walked
+    # subset. Null the embedding so the incremental embed pass below re-embeds them.
+    reembedded_model = 0
+    if embedder is not None and raw_rels:
+        placeholders = ",".join("?" for _ in raw_rels)
+        stale = conn.execute(
+            f"SELECT id FROM raw_chunks WHERE embedding IS NOT NULL "
+            f"AND (model IS NULL OR model != ?) AND path IN ({placeholders})",
+            (model, *raw_rels),
+        ).fetchall()
+        reembedded_model = len(stale)
+        for (cid,) in stale:
+            conn.execute(
+                "UPDATE raw_chunks SET embedding=NULL, model=NULL WHERE id=?", (cid,))
+    conn.commit()  # structural + invalidation state survives an embedding-phase abort
+
+    embedded = 0
+    if embedder is not None:
+        if raw_rels:
+            placeholders = ",".join("?" for _ in raw_rels)
+            pending = conn.execute(
+                f"SELECT id, text FROM raw_chunks WHERE embedding IS NULL "
+                f"AND path IN ({placeholders}) ORDER BY id",
+                tuple(raw_rels),
+            ).fetchall()
+        else:
+            pending = []
+        if pending:
+            print(f"embedding {len(pending)} raw chunks...", file=sys.stderr)
+        batch: list[tuple[int, str]] = []
+        batch_chars = 0
+
+        def flush() -> int:
+            nonlocal batch, batch_chars
+            if not batch:
+                return 0
+            vectors = embedder([t for _, t in batch], "document")
+            for (chunk_id, _), vec in zip(batch, vectors):
+                blob = array("f", _normalize(vec)).tobytes()
+                conn.execute("UPDATE raw_chunks SET embedding=?, model=? WHERE id=?",
+                             (blob, model, chunk_id))
+            conn.commit()
+            n = len(batch)
+            batch, batch_chars = [], 0
+            return n
+
+        for chunk_id, text in pending:
+            if batch and (len(batch) >= EMBED_BATCH_TEXTS
+                          or batch_chars + len(text) > EMBED_BATCH_CHARS):
+                embedded += flush()
+            batch.append((chunk_id, text))
+            batch_chars += len(text)
+        embedded += flush()
+
+    conn.execute(
+        "INSERT OR REPLACE INTO meta (key, value) VALUES ('raw_last_sync', ?)",
+        (time.strftime("%Y-%m-%dT%H:%M:%S"),),
+    )
+    conn.commit()
+    return {"raw_added": len(added), "raw_changed": len(changed),
+            "embedded": embedded, "reembedded_model": reembedded_model,
+            "raw_files_scanned": len(raw_rels)}
 
 
 # ---------------------------------------------------------------- search
@@ -656,6 +878,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_index = sub.add_parser("index", help="build or refresh the index")
     p_index.add_argument("--full", action="store_true", help="wipe and rebuild from scratch")
 
+    p_index_raw = sub.add_parser(
+        "index-raw",
+        help="embed raw/** sources into the raw tables (thin-page detector input)")
+    p_index_raw.add_argument(
+        "--glob", default=None,
+        help="wiki_root-relative fnmatch to bound the embedded subset "
+             "(e.g. 'raw/papers/*frontier*') — embeds only matching raw sources")
+    p_index_raw.add_argument(
+        "--json", action="store_true", help="emit change counts as JSON")
+
     p_search = sub.add_parser("search", help="query the index")
     p_search.add_argument("query")
     p_search.add_argument("--k", type=int, default=25)
@@ -705,8 +937,28 @@ def main() -> int:
     mode = "hybrid" if embedder else "fts-only"
     db_path = args.db or _default_db(wiki_root)
     conn = open_db(db_path)
-    if embedder:
+    # index-raw owns its own per-vector model id (raw_chunks.model, OD-2) and is
+    # intentionally decoupled from the pages-index model guard — running it with a
+    # different --model must NOT abort (that is how a raw model upgrade is exercised).
+    if embedder and args.command != "index-raw":
         _check_model(conn, args.model)
+
+    if args.command == "index-raw":
+        counts = sync_raw(conn, wiki_root, embedder=embedder,
+                          model=args.model, glob=args.glob)
+        if args.json:
+            print(json.dumps({"mode": mode, "model": args.model,
+                              "glob": args.glob, **counts}, indent=2))
+        else:
+            print(f"raw-indexed: +{counts['raw_added']} ~{counts['raw_changed']} "
+                  f"({counts['raw_files_scanned']} scanned), "
+                  f"{counts['embedded']} chunks embedded, "
+                  f"{counts['reembedded_model']} re-embedded (model change), mode={mode}")
+        if mode == "fts-only":
+            print("VOYAGE_API_KEY unavailable — raw windows recorded but NOT embedded; "
+                  "chunked-recall layer OFF (typed-retention layer still detects)",
+                  file=sys.stderr)
+        return 0
 
     if args.command == "index":
         if args.full:
@@ -763,11 +1015,20 @@ def main() -> int:
         chunks = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
         embedded = conn.execute(
             "SELECT COUNT(*) FROM chunks WHERE embedding IS NOT NULL").fetchone()[0]
+        raw_files = conn.execute("SELECT COUNT(*) FROM raw_files").fetchone()[0]
+        raw_chunks = conn.execute("SELECT COUNT(*) FROM raw_chunks").fetchone()[0]
+        raw_embedded = conn.execute(
+            "SELECT COUNT(*) FROM raw_chunks WHERE embedding IS NOT NULL").fetchone()[0]
+        raw_models = [r[0] for r in conn.execute(
+            "SELECT DISTINCT model FROM raw_chunks WHERE model IS NOT NULL")]
         meta = dict(conn.execute("SELECT key, value FROM meta"))
         print(json.dumps({
             "ready": files > 0, "mode": mode, "db": str(db_path),
             "files": files, "chunks": chunks, "embedded_chunks": embedded,
+            "raw_files": raw_files, "raw_chunks": raw_chunks,
+            "raw_embedded_chunks": raw_embedded, "raw_models": raw_models,
             "model": meta.get("model"), "last_sync": meta.get("last_sync"),
+            "raw_last_sync": meta.get("raw_last_sync"),
         }, indent=2))
         return 0
 

@@ -1,0 +1,310 @@
+# Stratified hand-checked GOLD set for the thin-page detector (OD-1 keystone).
+#
+# Each entry is a REAL (page, raw) pair hand-read by the builder (opus) on
+# 2026-06-19, labelled thin|faithful, stratified by source kind
+# (paper | article | podcast). For thin pages, `missing` lists the SPECIFIC
+# load-bearing signal the page dropped vs its raw (the detector must surface
+# these); for faithful pages, `retained` notes the load-bearing signal the page
+# correctly preserved (the detector must NOT flag these).
+#
+# `split: cal` = calibration (thresholds may be tuned on these);
+# `split: test` = HELD OUT — downstream tasks 2.2/2.3/2.4 MUST NOT calibrate on
+# these; they are the final precision/recall measurement only.
+#
+# `check`:
+#   deep   = page AND raw read in full / near-full; missing items verbatim-verified.
+#   signal = page read + raw load-bearing STRUCTURE scanned (heading/framework
+#            coverage, numeric-density gap); label defensible from that scan.
+#
+# The two empty-half source-page sections (`My take`, `Sources`) and the lead
+# paragraph are EXCLUDED from the compare-set and never count toward thinness
+# (wiki-schema.md): only Substance + Counterpoints + Methodology + Notable quotes.
+#
+# Paths are vault-root-relative. `raw` mirrors the page stem under raw/{origin}/.
+#
+# OD-1 stratification finding: the THINNESS SIGNATURE DIFFERS BY KIND —
+#   * papers go thin by DROPPING SPECIFIC NUMBERS / results / effect sizes
+#     (numbers-kept-but-key-numbers-dropped), while keeping prose;
+#   * podcasts go thin by COLLAPSING NAMED FRAMEWORKS / DEFINITIONS / CONTRARIAN
+#     TAKES into generic gist bullets (the lennys-podcast raws are 6-category
+#     structured extractions — Frameworks, Actionable Principles, Contrarian
+#     Takes, Definitions, Operating Practices, Anti-Patterns — and the thin
+#     pages routinely drop Definitions + Contrarian Takes + Operating Practices);
+#     numbers are rarely the dropped signal here;
+#   * articles (Every/Stratechery/Ben-Evans essays) were mostly FAITHFUL — the
+#     essay form resists collapse better than the dense paper / structured
+#     podcast forms; the thin article cases drop CONCRETE IMPLEMENTATION DETAIL
+#     (directory-naming rules, conflict models, templates) while keeping principles.
+# This is exactly the manufactured-thin (deletion) vs real-thin (under-extraction)
+# distributional-mismatch risk OD-1 names: a checker calibrated only on numeric
+# ablation would miss the podcast framework-collapse class. The silver-ablation
+# generator therefore ablates BOTH numeric AND rule_label/caveat/named_entity/
+# reasoning_chain classes so the synthetic positives cover the podcast signature
+# too; `reasoning_chain` is carried as an UNMEASURED class (OD-6 guardrail bait).
+
+entries:
+  # ===================== PAPERS (kind: paper) =====================
+  - page: 3-resources/knowledge-base/wiki/sources/papers/2026-05-27-why-language-models-hallucinate.md
+    raw:  3-resources/knowledge-base/raw/papers/2026-05-27-why-language-models-hallucinate.md
+    kind: paper
+    label: faithful
+    split: test
+    check: deep
+    retained:
+      - "is-it-valid reduction + the lower bound err >= 2*err_iiv (Corollary 1)"
+      - "singleton-rate bound with the 20%-birthdays worked example (Theorem 2)"
+      - "trigram poor-model example, Corollary 2; DEEPSEEK letter-count diagnosis"
+      - "Observation 1 (binary 0-1 grading rewards guessing); meta-eval of 10 benchmarks (Table 2)"
+      - "author-stated limitations (plausible-strings-only, single-question, false trichotomy)"
+      - "behavioral-calibration fix with the explicit confidence-target scoring rule"
+
+  - page: 3-resources/knowledge-base/wiki/sources/papers/2026-05-01-attention-is-all-you-need.md
+    raw:  3-resources/knowledge-base/raw/papers/2026-05-01-attention-is-all-you-need.md
+    kind: paper
+    label: faithful
+    split: cal
+    check: deep
+    retained:
+      - "28.4 BLEU EN-DE, 41.8 BLEU EN-FR; 3.5 days on 8 P100 GPUs; base ~12h"
+      - "WMT data sizes 4.5M/37K and 36M/32K; Adam betas 0.9/0.98, 4000 warmup steps"
+      - "dropout 0.1, label-smoothing 0.1; ablation single-head -0.9 BLEU (Table 3)"
+      - "author contributions (Shazeer scaled-dot-product/multi-head; Vaswani impl)"
+      - "stated limitation: local-neighborhood self-attention O(n/r) as future work"
+
+  - page: 3-resources/knowledge-base/wiki/sources/papers/2026-05-07-which-economic-tasks-are-performed-with-ai-evidence-from-millions-of-claude-conversations.md
+    raw:  3-resources/knowledge-base/raw/papers/2026-05-07-which-economic-tasks-are-performed-with-ai-evidence-from-millions-of-claude-conversations.md
+    kind: paper
+    label: thin
+    split: cal
+    check: deep
+    missing:
+      - "THE headline result: the 57% augmentation / 43% automation split (the paper's most-cited finding) — appears NOWHERE on the page; Methodology only says 'automation-vs-augmentation labels' without the numbers"
+      - "the 'over four million conversations' figure — page says only 'millions'"
+      - "37.2% Computer/Mathematical share; 10.3% Arts/Design/Media second share"
+      - "the ~11% half-tasks tier (page keeps ~4% and ~36% but drops ~11%)"
+      - "model-type split: ~54% Claude 3.5 Sonnet / ~46% Claude 3 Opus"
+      - "the five collaboration modes (Directive, Feedback Loop, Task Iteration, Learning, Validation) named in Table 1"
+      - "comparison to prior predictions: 90th-wage-percentile forecast; 80%-of-workers/10%-of-tasks forecast vs the empirical ~57%"
+
+  - page: 3-resources/knowledge-base/wiki/sources/papers/2026-05-07-the-rising-costs-of-training-frontier-ai-models.md
+    raw:  3-resources/knowledge-base/raw/papers/2026-05-07-the-rising-costs-of-training-frontier-ai-models.md
+    kind: paper
+    label: faithful
+    split: cal
+    check: deep
+    retained:
+      - "2.4x/year growth (90% CI 2.0x-2.9x); cloud-rental cross-check 2.5x; ex-TPU 3.0x"
+      - "GPT-4 $40M / Gemini Ultra $30M amortized; ~$1B run by 2027; acquisition ~$800M"
+      - "component breakdown 44/29/17/9; R&D staff 29-49% incl equity"
+      - "depreciation r=0.14 OOM/yr; database 796/276/41 models; 142 hw entries / 24 models"
+      - "stated limitations (public-data reliance, neglected infra/data-acquisition costs)"
+
+  - page: 3-resources/knowledge-base/wiki/sources/papers/2026-05-25-the-ai-layoff-trap.md
+    raw:  3-resources/knowledge-base/raw/papers/2026-05-25-the-ai-layoff-trap.md
+    kind: paper
+    label: faithful
+    split: cal
+    check: signal
+    note: "172KB raw compressed to 4.8KB compare-set, but the page is substantive (30 raw headings, core argument + key figures present in Substance/Methodology). Largest ratio gap among the faithful papers — a borderline-faithful anchor for threshold calibration."
+
+  - page: 3-resources/knowledge-base/wiki/sources/papers/2026-05-28-from-model-scaling-to-system-scaling-scaling-the-harness-in-agentic-ai.md
+    raw:  3-resources/knowledge-base/raw/papers/2026-05-28-from-model-scaling-to-system-scaling-scaling-the-harness-in-agentic-ai.md
+    kind: paper
+    label: faithful
+    split: test
+    check: signal
+    note: "4.4KB compare-set vs 51KB raw, 27 headings; directly refactoring-relevant (harness scaling). Substance carries the named scaling argument + the system-vs-model framing. Faithful anchor."
+
+  - page: 3-resources/knowledge-base/wiki/sources/papers/2026-05-10-gradual-disempowerment-systemic-existential-risks-from-incremental-ai-development.md
+    raw:  3-resources/knowledge-base/raw/papers/2026-05-10-gradual-disempowerment-systemic-existential-risks-from-incremental-ai-development.md
+    kind: paper
+    label: faithful
+    split: cal
+    check: signal
+    note: "5.8KB compare-set vs 99KB raw. Substance carries the multi-domain disempowerment thesis + the named mechanisms. Faithful anchor for a large-raw / adequate-page case."
+
+  - page: 3-resources/knowledge-base/wiki/sources/papers/2026-06-01-the-first-law-of-complexodynamics.md
+    raw:  3-resources/knowledge-base/raw/papers/2026-06-01-the-first-law-of-complexodynamics.md
+    kind: paper
+    label: faithful
+    split: cal
+    check: signal
+    note: "Short blog-style paper (16KB raw, 0 structural headings); 2.4KB compare-set proportionate to the source's single-thesis breadth. Faithful by the 'scale depth to source breadth' rule — a SHORT faithful page that the detector must NOT flag merely for being short (false-positive guard)."
+
+  # ===================== ARTICLES (kind: article) =====================
+  - page: 3-resources/knowledge-base/wiki/sources/every/2026-06-06-agent-native-architectures.md
+    raw:  3-resources/knowledge-base/raw/every/2026-06-06-agent-native-architectures.md
+    kind: article
+    label: thin
+    split: cal
+    check: deep
+    page_flagged_reingest: true
+    missing:
+      - "entity-scoped directory + directory-naming conventions (the raw's 'One approach to naming' / 'Directory structure' subsections) — page keeps the principles, drops the concrete rules"
+      - "the full context.md template structure (Who I Am / What I Know About This User / What Exists / Recent Activity / My Guidelines / Current State headings)"
+      - "files-vs-database decision lists ('Use files for...' / 'Use database for...')"
+      - "the conflict model: atomic-writes current-reality + iCloud conflict monitoring"
+      - "completion-signals and model-tier-selection implementation detail (page names them; raw specifies them)"
+
+  - page: 3-resources/knowledge-base/wiki/sources/every/2026-05-27-after-automation.md
+    raw:  3-resources/knowledge-base/raw/every/2026-05-27-after-automation.md
+    kind: article
+    label: faithful
+    split: cal
+    check: signal
+    note: "19/21 raw headings covered; only 'The cycle repeats' / 'Zeno redux' rhetorical sub-beats absent. Essay form, well-distilled. Faithful anchor."
+
+  - page: 3-resources/knowledge-base/wiki/sources/every/2026-06-06-the-boring-businesses-that-will-dominate-the-ai-era.md
+    raw:  3-resources/knowledge-base/raw/every/2026-06-06-the-boring-businesses-that-will-dominate-the-ai-era.md
+    kind: article
+    label: faithful
+    split: test
+    check: signal
+    note: "7/7 raw headings covered, 4.4KB compare-set vs 21KB raw. Faithful anchor."
+
+  - page: 3-resources/knowledge-base/wiki/sources/every/2026-06-06-compound-engineering-how-every-codes-with-agents.md
+    raw:  3-resources/knowledge-base/raw/every/2026-06-06-compound-engineering-how-every-codes-with-agents.md
+    kind: article
+    label: faithful
+    split: cal
+    check: signal
+    note: "4/6 headings (2 non-content); 3.6KB compare-set vs 15KB raw; refactoring-relevant (compound engineering). Core workflow captured. Faithful anchor."
+
+  - page: 3-resources/knowledge-base/wiki/sources/every/2026-06-02-agent-native-product-management.md
+    raw:  3-resources/knowledge-base/raw/every/2026-06-02-agent-native-product-management.md
+    kind: article
+    label: faithful
+    split: cal
+    check: signal
+    note: "4.2KB compare-set vs 17KB raw; refactoring-relevant. Substance carries the agent-native PM principles. Faithful anchor; pairs with the THIN agent-native-architectures for a same-topic thin/faithful contrast."
+
+  - page: 3-resources/knowledge-base/wiki/sources/every/2026-05-10-the-knowledge-economy-is-over.-welcome-to-the-allocation-economy.md
+    raw:  3-resources/knowledge-base/raw/every/2026-05-10-the-knowledge-economy-is-over.-welcome-to-the-allocation-economy.md
+    kind: article
+    label: faithful
+    split: cal
+    check: signal
+    note: "7/7 headings; 2.9KB compare-set vs 11KB raw — proportionate for a single-thesis essay. Faithful anchor (another short-faithful false-positive guard)."
+
+  - page: 3-resources/knowledge-base/wiki/sources/every/2026-06-06-teach-your-ai-to-think-like-a-senior-engineer.md
+    raw:  3-resources/knowledge-base/raw/every/2026-06-06-teach-your-ai-to-think-like-a-senior-engineer.md
+    kind: article
+    label: faithful
+    split: test
+    check: signal
+    note: "2.5KB compare-set vs 9KB raw; short how-to essay, core technique captured. Faithful anchor."
+
+  - page: 3-resources/knowledge-base/wiki/sources/stratechery/the-inference-shift.md
+    raw:  3-resources/knowledge-base/raw/stratechery/the-inference-shift.md
+    kind: article
+    label: faithful
+    split: cal
+    check: signal
+    note: "3/4 headings; 4.9KB compare-set vs 16KB raw. Stratechery analysis, argument preserved. Faithful anchor (origin diversity beyond Every)."
+
+  # ===================== PODCASTS (kind: podcast) =====================
+  - page: 3-resources/knowledge-base/wiki/sources/lennys-podcast/alex-komoroske.md
+    raw:  3-resources/knowledge-base/raw/lennys-podcast/alex-komoroske.md
+    kind: podcast
+    label: thin
+    split: cal
+    check: deep
+    missing:
+      - "the Definitions section: formal definitions of Platform and Ecosystem (raw '## Definitions') — dropped entirely"
+      - "the two Contrarian/Non-Obvious Takes as distinct claims with their 'Conventional view vs This take' framing (Complexity-should-be-embraced; Platforms-must-avoid-over-control)"
+      - "the named Anti-Pattern 'Overcontrolling a Platform Kills Innovation' with its root-cause + lesson"
+      - "page collapses the raw's 15 extracted items across 8 categories into 4 generic Substance bullets"
+
+  - page: 3-resources/knowledge-base/wiki/sources/lennys-podcast/april-dunford.md
+    raw:  3-resources/knowledge-base/raw/lennys-podcast/april-dunford.md
+    kind: podcast
+    label: thin
+    split: cal
+    check: signal
+    missing:
+      - "10 of 37 raw sub-headings uncovered, incl the Frameworks & Mental Models section and 'Champion and Stakeholder Roles in B2B Buying'"
+      - "the Definitions and Operating Practices sections"
+      - "'Use a Conversational Discovery Approach in the Setup' actionable principle"
+
+  - page: 3-resources/knowledge-base/wiki/sources/lennys-podcast/ami-vora.md
+    raw:  3-resources/knowledge-base/raw/lennys-podcast/ami-vora.md
+    kind: podcast
+    label: thin
+    split: test
+    check: signal
+    missing:
+      - "thinnest in the panel: only 8 of 18 raw sub-headings covered (1.7KB compare-set)"
+      - "the Frameworks & Mental Models, Contrarian/Non-Obvious Takes, and Definitions sections"
+      - "'Prioritize by Saying No' and 'Deeply Understand Users' Needs' actionable principles"
+
+  - page: 3-resources/knowledge-base/wiki/sources/lennys-podcast/adriel-frederick.md
+    raw:  3-resources/knowledge-base/raw/lennys-podcast/adriel-frederick.md
+    kind: podcast
+    label: thin
+    split: cal
+    check: signal
+    missing:
+      - "11 of 36 raw sub-headings uncovered, incl Contrarian/Non-Obvious Takes, Definitions, Operating Practices"
+      - "'Set Clear, Memorable Activation Goals' and 'Balance Handling Controversy with Mission Focus' actionable principles"
+
+  - page: 3-resources/knowledge-base/wiki/sources/lennys-podcast/anneka-gupta.md
+    raw:  3-resources/knowledge-base/raw/lennys-podcast/anneka-gupta.md
+    kind: podcast
+    label: thin
+    split: cal
+    check: signal
+    missing:
+      - "4 of 17 raw sub-headings uncovered: Frameworks & Mental Models, Definitions, Operating Practices (the War Stories section is genuinely 'None identified' in the raw — not a real omission)"
+    note: "BORDERLINE thin — fewer dropped sections than the other podcasts; included to give the calibration a near-threshold podcast case."
+
+  - page: 3-resources/knowledge-base/wiki/sources/lennys-podcast/alex-hardimen.md
+    raw:  3-resources/knowledge-base/raw/lennys-podcast/alex-hardimen.md
+    kind: podcast
+    label: thin
+    split: cal
+    check: signal
+    note: "1.9KB compare-set vs 12KB structured raw; same lennys 6-category extraction shape as komoroske/april-dunford. Thin by the established podcast framework-collapse signature."
+    missing:
+      - "Definitions + Operating Practices + Contrarian-Takes sections collapsed into gist Substance bullets (same pattern verified deeply on komoroske)"
+
+  - page: 3-resources/knowledge-base/wiki/sources/lennys-podcast/annie-pearl.md
+    raw:  3-resources/knowledge-base/raw/lennys-podcast/annie-pearl.md
+    kind: podcast
+    label: thin
+    split: test
+    check: signal
+    note: "1.4KB compare-set vs 6.5KB structured raw. Thin by the podcast framework-collapse signature; a smaller-raw thin case for the test split."
+    missing:
+      - "Definitions + Contrarian-Takes sections not surfaced as distinct claims"
+
+  # --- FAITHFUL podcasts: the critical anti-shortcut anchors. The lennys raws
+  #     share the SAME 6-category structured shape as the thin podcasts above, yet
+  #     these pages preserve all of it (Frameworks + Definitions + Contrarian +
+  #     Operating Practices + War Stories) -- proving the thin label is REAL
+  #     thinness, not a 'podcast => thin' kind artifact. Without these, a detector
+  #     could pass the gold set by learning the kind, not the omission.
+  - page: 3-resources/knowledge-base/wiki/sources/lennys-podcast/kenneth-berger.md
+    raw:  3-resources/knowledge-base/raw/lennys-podcast/kenneth-berger.md
+    kind: podcast
+    label: faithful
+    split: cal
+    check: deep
+    retained:
+      - "all 4 Frameworks (ask-for-what-you-want loop, dream-behind-the-complaint, whole-body/hell-yes, internal-family-systems)"
+      - "the 2 Definitions (Integrity-in-asking, Asking-for-what-you-want) — the sections the thin podcasts drop"
+      - "all 3 Contrarian takes (discipline-unsustainable, no-is-data, influence-without-data)"
+      - "the Operating Practices (relationship-design for first 10-20 hires; the fact-feeling-reason feedback formula)"
+      - "the War Story verbatim: three firings at Slack in 2014 with all three distinct reasons"
+
+  - page: 3-resources/knowledge-base/wiki/sources/lennys-podcast/naomi-gleit.md
+    raw:  3-resources/knowledge-base/raw/lennys-podcast/naomi-gleit.md
+    kind: podcast
+    label: faithful
+    split: test
+    check: deep
+    retained:
+      - "all 6 Frameworks incl Growth-Accounting WITH its formula (new + resurrected - stale, 30-day inactive)"
+      - "the '7 friends in 10 days'-style activation metric; employee #29 detail"
+      - "the actionable principles (numbered lists, 24h pre-reads, traffic-light decision matrix, 2-3hr first-party-perspective blocks)"
+      - "the Contrarian take (growth-not-just-growth-teams; PMF did the heavy lifting)"
+      - "a faithful podcast on the TEST split — anti-shortcut coverage in the held-out set too"

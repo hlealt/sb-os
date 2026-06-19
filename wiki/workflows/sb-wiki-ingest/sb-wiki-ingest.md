@@ -164,13 +164,20 @@ Markdown raw sources SKIP this step. For a PDF raw source:
 3. Stem already equals `{title-slug}` → do nothing; proceed to sub-step 4 (text-twin check).
 4. Stem differs AND `raw/{origin}/{title-slug}.pdf` does NOT exist → rename `raw/{origin}/{stem}.pdf` → `raw/{origin}/{title-slug}.pdf` NOW, before the source page is created. The source page (step 2), its `raw:` frontmatter, and every downstream footnote are then born title-named — NO referrer propagation is needed because no page cites this source yet. Use `{title-slug}` as the slug for the rest of the flow.
 5. Collision — `raw/{origin}/{title-slug}.pdf` already exists → this raw duplicates an already-ingested paper. ERROR-halt and ask the user: abort (skip the duplicate) or proceed without renaming. **Silent mode** (keyword present) → apply the Step 1.5 silent override from `extensions/silent-mode.md` (loaded at boot): do NOT halt — RETURN `failed (duplicate raw: {title-slug}.pdf exists)` and ingest nothing.
-6. **Text-twin extraction (non-optional).** After the rename (or no-rename) above, check whether a Markdown twin `raw/{origin}/{title-slug}.md` already exists.
-   - **Twin exists** → skip extraction; proceed to step 2 using the existing twin as the source text.
-   - **Twin absent** → MUST extract a durable text twin using `pypdf`-extraction: write the extracted text to `raw/{origin}/{title-slug}.md`. NEVER delete or replace the PDF — BOTH files MUST be preserved. The source page (step 2) MUST link both:
+6. **Structured text-twin extraction (non-optional).** After the rename (or no-rename) above, build the durable text twin with the table-aware structured extractor — NEVER the lossy `pypdf` path. Run:
+
+   ```bash
+   python {sb_os_path}/wiki/scripts/sb-wiki-pdf-twin.py --pdf raw/{origin}/{title-slug}.pdf --origin {origin} --title "<paper title>" --vault-root <vault-root> [--vision-file <observations.md>] --json
+   ```
+
+   The tool extracts tables as markdown tables (PyMuPDF `find_tables()`) and body text in block reading order (multi-column de-interleaved), then writes the twin to `raw/{origin}/{title-slug}.md`. **Regenerate-in-place:** when a `pypdf` (or any prior) twin already exists at that filename, the tool OVERWRITES it under the SAME filename — every reference (`raw:` frontmatter, footnotes, indexes) is filename-based and resolves unchanged; NO reference rewrite. The twin it produces is the ingest INPUT — step 2 reads it (NOT the native PDF, NOT a separate `.twin.md`).
+   - **Vision-piggyback (spec #2).** You read the PDF natively at step 1. Persist your quantitative figure/chart observations (captions + axis numbers you saw, e.g. `Fig 3: 22%→88% across 5 models`) by writing them to a temp markdown file and passing it as `--vision-file`; the tool appends them under a `## Figures & charts (vision-piggyback)` section of the twin — chart data captured at zero new compute.
+   - **`twin_fidelity` fail-loud (spec #5).** The tool emits `twin_fidelity` in the JSON result and in the twin frontmatter. `twin_fidelity: false` (PyMuPDF returned empty/garbled tables on a page that should carry one, or the PDF is scanned/image-only) → the twin frontmatter carries a loud "untrustworthy — table/chart content NOT checked" banner with `escalate_pages`, and the tool exits 3. Treat the page-set as escalated UNCONDITIONALLY (native-PDF review); NEVER silently clear the paper. Proceed with ingest using the (flagged) twin — escalation rides on the flag, not on aborting.
+   - NEVER delete or replace the PDF — BOTH files MUST be preserved. The source page (step 2) MUST link both:
      - `raw:` frontmatter: `"[[{title-slug}.md]]"` (the Markdown twin)
      - body line `Original PDF: [[{title-slug}.pdf]]` immediately after the frontmatter block (the preserved PDF) — NOT a frontmatter key
 
-The rename changes the FILENAME only — raw content is never edited (immutability governs content, per `../shared/folder-structure.md`). The text-twin extraction writes a NEW file; the PDF is preserved.
+The rename changes the FILENAME only — raw content is never edited. The PDF is the untouchable original; its derived text twin is a REGENERABLE derivative that a better extractor may overwrite from the still-immutable PDF (immutability governs the PDF's content, per `../shared/folder-structure.md` "Stability Rules"). The structured extraction writes/overwrites the twin file; the PDF is preserved.
 
 ### Step 1.7 — Content-duplicate check (all sources)
 
@@ -198,7 +205,17 @@ Write `{wiki_root}/wiki/sources/{origin}/{date}-{slug}.md`. Filename mirrors the
 
 **Substance-bullet granularity discipline.** Bullets MUST name entities/concepts at page-cluster granularity per `../shared/stub-policy.md` § "Page Granularity". Sub-cluster names (variants of a family, properties of a whole, sibling members of a group) appear in prose only — without wikilinks. The bullet writer is responsible for the implicit page-set the bullets define: every wikilinked name in a Substance bullet will trigger the mechanical stub-creation rule downstream in step 5. Cluster first, then write bullets at the chosen granularity.
 
-**Substance coverage discipline.** `Substance` is a DISTILLATION, not a table of contents. Scale its depth to the source's breadth — a single-thesis source stays short; a broad multi-section source (a guide or compendium with many co-equal sections) gets one Substance unit per major section, so a dense source is NEVER thinned to one sentence per section. When the source contains them, these signal classes MUST survive into `Substance`, in compact form: (a) core claims/theses; (b) decision criteria, tests, and when-to-use-X-vs-Y rules — kept AS the rule, not a note that a rule exists; (c) tradeoff/comparison tables — kept as a small table or one-line-per-option list, NEVER collapsed to "the source tabulates X"; (d) concrete specifics — named patterns + their one-line effect, quantified facts, thresholds; (e) author-flagged confidence — routed to `Counterpoints` per `../shared/section-menus.md`. Density, not length, is the lever: a preserved compact table is denser than the prose that omits it. A `Substance` that drops the source's decision criteria or tradeoff tables has failed this discipline.
+**Substance coverage discipline.** `Substance` is a DISTILLATION, not a table of contents. **The binding test is reconstruction:** a reader of `Substance`, WITHOUT the source, can reconstruct every load-bearing claim, decision rule, quantified fact, distinction, and author caveat the source makes. This reconstruction principle — not any fixed checklist — IS the definition: it demands faithful capture of whatever load-bearing kinds a given source carries, INCLUDING kinds not enumerated below. Scale its depth to the source's breadth — a single-thesis source stays short; a broad multi-section source (a guide or compendium with many co-equal sections) gets one Substance unit per major section, so a dense source is NEVER thinned to one sentence per section. Density, not length, is the lever: a preserved compact table is denser than the prose that omits it.
+
+The signal classes below are the COMMON kinds that carry that load — ILLUSTRATIVE EXAMPLES of what reconstruction requires, NOT a closed list. When the source contains them, each MUST survive into `Substance`, in compact form. The examples are tuned for the dominant source type, dense scientific papers:
+
+- (a) **Core claim / thesis + specific contribution** — the research question or hypothesis, and the SPECIFIC contribution that distinguishes this work from prior work (the named delta, never "advances the field").
+- (b) **Method, decision criteria, tests, and when-to-use-X-vs-Y rules** — kept AS the rule or procedure, not a note that one exists; for a paper, the method, dataset, and sample that produced the results.
+- (c) **Quantitative results + tradeoff / comparison tables** — the specific numbers (effect sizes, significance, benchmark scores) and any comparison kept as a small table or one-line-per-option list, NEVER collapsed to "the source tabulates X".
+- (d) **Concrete specifics** — named patterns + their one-line effect, quantified facts, thresholds.
+- (e) **Limitations, threats to validity, and author-flagged confidence** — the author's own caveats, stated limitations, and uncertainty — routed to `Counterpoints` per `../shared/section-menus.md`.
+
+A `Substance` that drops the source's decision criteria, quantified results, tradeoff tables, or author-stated limitations has failed the reconstruction test — as has one that omits a load-bearing kind merely because no example above named it.
 
 Frontmatter per `../shared/frontmatter-schemas.md` Source schema:
 
@@ -538,7 +555,8 @@ End of flow.
 | `<slug>` resolves to multiple raw files | Halt at step 1; ask user to disambiguate. No writes. |
 | PDF `{title-slug}.pdf` already exists at step 1.5 (duplicate raw) | Error-halt; ask abort / proceed-without-rename. Silent: RETURN `failed (duplicate raw: {title-slug}.pdf exists)`. No writes. |
 | Content-duplicate fires at step 1.7 (URL or title matches an already-ingested source) | Error-halt; ask abort / proceed. Silent: RETURN `failed (content-duplicate: duplicate of <existing-raw>)` — sole permitted write: raw index row → `Wiki = Duplicate (of [[<existing-raw>]])`. Never delete the raw. |
-| `pypdf` extraction fails at step 1.5 (text-twin write error) | LOG A WARNING; proceed with native PDF read from step 1 as source text; write the `Original PDF: [[{title-slug}.pdf]]` body line but omit the `raw:` twin link in the source page (no twin was produced). Do NOT abort the ingest. |
+| Structured twin extraction fails at step 1.5 (`sb-wiki-pdf-twin.py` errors / write error) | LOG A WARNING; proceed with native PDF read from step 1 as source text; write the `Original PDF: [[{title-slug}.pdf]]` body line but omit the `raw:` twin link in the source page (no twin was produced). Do NOT abort the ingest. |
+| `sb-wiki-pdf-twin.py` reports `twin_fidelity: false` (exit 3) at step 1.5 | NOT a failure — the twin WAS written. Proceed with ingest using the flagged twin; the page-set in `escalate_pages` is escalated unconditionally for native-PDF review (spec #5). NEVER silently clear the paper. |
 | `<slug>` resolves to multiple raw files (silent mode) | No halt. RETURN summary `failed (slug ambiguous: N matches)`. No writes. |
 | `<slug>` resolves to zero raw files (silent mode) | RETURN summary `failed (slug not found)`. No writes. |
 | `{wiki_root}` cannot be resolved from `sb-os.json` | Halt before step 1; surface error. No writes. |

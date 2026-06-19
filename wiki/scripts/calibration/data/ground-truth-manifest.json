@@ -1,0 +1,3603 @@
+{
+  "schema": "silver-ablation/1",
+  "ablations": [
+    {
+      "schema": "silver-ablation/1",
+      "kind": "paper",
+      "origin": "papers",
+      "source_page": "3-resources/knowledge-base/wiki/sources/papers/2026-05-07-the-rising-costs-of-training-frontier-ai-models.md",
+      "raw_path": "3-resources/knowledge-base/raw/papers/2026-05-07-the-rising-costs-of-training-frontier-ai-models.md",
+      "grade": 0.05,
+      "ablated_page": "3-resources/tools/sb-os/wiki/scripts/calibration/data/ablated/papers__2026-05-07-the-rising-costs-of-training-frontier-ai-models__g05.md",
+      "source_sha256": "d764b416f1e84a21f78d60f6043da0616328d3678697489d4ec3a90c5973e61d",
+      "deleted": [
+        {
+          "cls": "numeric",
+          "text": "2.9x",
+          "section": "Substance",
+          "span": [
+            1144,
+            1148
+          ],
+          "note": "- The headline result: [[ai-training-cost-trends.md]] show the amortized cost of the most compute-intensive training runs growing at 2.4x per year since 2016 (90% CI: 2.0x–2.9x); the cloud-rental approach independently yields a similar 2.5x/year rate, validating the trend.[^1]"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[google-deepmind.md]]",
+          "section": "Substance",
+          "span": [
+            1540,
+            1562
+          ],
+          "note": "google-deepmind.md"
+        },
+        {
+          "cls": "reasoning_chain",
+          "text": "- Implication: only a handful of well-funded companies and governments can finance frontier runs, raising [[ai-economic-concentration.md]] concerns about public oversight and the narrowing range of perspectives at the frontier.[^1]",
+          "section": "Substance",
+          "span": [
+            2928,
+            3159
+          ],
+          "note": ""
+        },
+        {
+          "cls": "caveat",
+          "text": "- **Three cost approaches.** (1) Amortized hardware CapEx + energy — bottom-up depreciation of chip/server/networking costs plus energy; the paper's preferred method. (2) Cloud rental price — price-per-chip-hour × training chip-hours; simpler, ~2x higher on average, used as a robustness cross-check. (3) Total amortized development cost — adds R&D staff compensation and all experiment/evaluation/fine-tuning compute, applied only to four models.[^1]",
+          "section": "Methodology",
+          "span": [
+            3358,
+            3809
+          ],
+          "note": ""
+        },
+        {
+          "cls": "rule_label",
+          "text": "TPU costs.",
+          "section": "Methodology",
+          "span": [
+            4552,
+            4566
+          ],
+          "note": "- **TPU costs.** No public sale prices exist, so [[tensor-processing-unit.md]] cost is the geometric mean of a bill-of-materials low estimate and an equivalent-GPU-price high estimate (~$5,000 per TPU across versions).[^1]"
+        }
+      ],
+      "class_counts": {
+        "numeric": {
+          "eligible": 59,
+          "deleted": 1
+        },
+        "caveat": {
+          "eligible": 4,
+          "deleted": 1
+        },
+        "reasoning_chain": {
+          "eligible": 3,
+          "deleted": 1
+        },
+        "named_entity": {
+          "eligible": 13,
+          "deleted": 1
+        },
+        "rule_label": {
+          "eligible": 5,
+          "deleted": 1
+        }
+      },
+      "label": "thin"
+    },
+    {
+      "schema": "silver-ablation/1",
+      "kind": "paper",
+      "origin": "papers",
+      "source_page": "3-resources/knowledge-base/wiki/sources/papers/2026-05-07-the-rising-costs-of-training-frontier-ai-models.md",
+      "raw_path": "3-resources/knowledge-base/raw/papers/2026-05-07-the-rising-costs-of-training-frontier-ai-models.md",
+      "grade": 0.25,
+      "ablated_page": "3-resources/tools/sb-os/wiki/scripts/calibration/data/ablated/papers__2026-05-07-the-rising-costs-of-training-frontier-ai-models__g25.md",
+      "source_sha256": "d764b416f1e84a21f78d60f6043da0616328d3678697489d4ec3a90c5973e61d",
+      "deleted": [
+        {
+          "cls": "numeric",
+          "text": "2.9x",
+          "section": "Substance",
+          "span": [
+            1144,
+            1148
+          ],
+          "note": "- The headline result: [[ai-training-cost-trends.md]] show the amortized cost of the most compute-intensive training runs growing at 2.4x per year since 2016 (90% CI: 2.0x–2.9x); the cloud-rental approach independently yields a similar 2.5x/year rate, validating the trend.[^1]"
+        },
+        {
+          "cls": "reasoning_chain",
+          "text": "- Excluding Google TPUs (whose costs are estimated rather than priced) raises the growth rate to 3.0x per year, because TPU-trained models carry artificially low hardware costs.[^1]",
+          "section": "Substance",
+          "span": [
+            1250,
+            1431
+          ],
+          "note": ""
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[gpt-4.md]]",
+          "section": "Substance",
+          "span": [
+            1505,
+            1517
+          ],
+          "note": "gpt-4.md"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[google-deepmind.md]]",
+          "section": "Substance",
+          "span": [
+            1540,
+            1562
+          ],
+          "note": "google-deepmind.md"
+        },
+        {
+          "cls": "reasoning_chain",
+          "text": "- The preferred method, [[compute-cost-amortization.md]], spreads depreciated hardware value over the final training run (depreciating at 0.14 orders of magnitude per year, the rate of ML GPU price-performance improvement) rather than counting full purchase price; acquisition cost is one-to-two orders of magnitude higher (GPT-4's hardware cost ~$800M to acquire vs $40M amortized).[^1]",
+          "section": "Substance",
+          "span": [
+            1708,
+            2095
+          ],
+          "note": ""
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[compute-cost-amortization.md]]",
+          "section": "Substance",
+          "span": [
+            1732,
+            1764
+          ],
+          "note": "compute-cost-amortization.md"
+        },
+        {
+          "cls": "caveat",
+          "text": "- Component breakdown of amortized hardware-plus-energy cost: ~44% AI accelerator chips, ~29% rest-of-server, ~17% cluster-level interconnect, ~9% energy — though energy's small cost share understates the rapidly growing power-capacity requirement.[^1]",
+          "section": "Substance",
+          "span": [
+            2096,
+            2348
+          ],
+          "note": ""
+        },
+        {
+          "cls": "numeric",
+          "text": "4",
+          "section": "Substance",
+          "span": [
+            2430,
+            2431
+          ],
+          "note": "- A third, deeper approach for four models ([[gpt-3.md]], [[opt-175b.md]], [[gpt-4.md]], [[gemini-models.md|Gemini Ultra]]) adds R&D staff costs over the whole development process (experiments, evaluation, fine-tuning): R&D staff are 29–49% of total cost with equity included, 19–33% excluding equity"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[gemini-models.md|Gemini Ultra]]",
+          "section": "Substance",
+          "span": [
+            2438,
+            2471
+          ],
+          "note": "gemini-models.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "49",
+          "section": "Substance",
+          "span": [
+            2586,
+            2588
+          ],
+          "note": "- A third, deeper approach for four models ([[gpt-3.md]], [[opt-175b.md]], [[gpt-4.md]], [[gemini-models.md|Gemini Ultra]]) adds R&D staff costs over the whole development process (experiments, evaluation, fine-tuning): R&D staff are 29–49% of total cost with equity included, 19–33% excluding equity"
+        },
+        {
+          "cls": "reasoning_chain",
+          "text": "- Implication: only a handful of well-funded companies and governments can finance frontier runs, raising [[ai-economic-concentration.md]] concerns about public oversight and the narrowing range of perspectives at the frontier.[^1]",
+          "section": "Substance",
+          "span": [
+            2928,
+            3159
+          ],
+          "note": ""
+        },
+        {
+          "cls": "caveat",
+          "text": "- **Three cost approaches.** (1) Amortized hardware CapEx + energy — bottom-up depreciation of chip/server/networking costs plus energy; the paper's preferred method. (2) Cloud rental price — price-per-chip-hour × training chip-hours; simpler, ~2x higher on average, used as a robustness cross-check. (3) Total amortized development cost — adds R&D staff compensation and all experiment/evaluation/fine-tuning compute, applied only to four models.[^1]",
+          "section": "Methodology",
+          "span": [
+            3358,
+            3809
+          ],
+          "note": ""
+        },
+        {
+          "cls": "rule_label",
+          "text": "Three cost approaches.",
+          "section": "Methodology",
+          "span": [
+            3360,
+            3386
+          ],
+          "note": "- **Three cost approaches.** (1) Amortized hardware CapEx + energy — bottom-up depreciation of chip/server/networking costs plus energy; the paper's preferred method. (2) Cloud rental price — price-per-chip-hour × training chip-hours; simpler, ~2x higher on average, used as a robustness cross-check."
+        },
+        {
+          "cls": "numeric",
+          "text": "2x",
+          "section": "Methodology",
+          "span": [
+            3603,
+            3605
+          ],
+          "note": "- **Three cost approaches.** (1) Amortized hardware CapEx + energy — bottom-up depreciation of chip/server/networking costs plus energy; the paper's preferred method. (2) Cloud rental price — price-per-chip-hour × training chip-hours; simpler, ~2x higher on average, used as a robustness cross-check."
+        },
+        {
+          "cls": "caveat",
+          "text": "- **Frontier selection.** Top-10-by-compute-at-release; 41 models qualify. Robustness tested against top-N (N=3,5,20) and quantile/trend-distance alternatives — results are similar except the trend-distance method, which flattens the curve.[^1]",
+          "section": "Methodology",
+          "span": [
+            3810,
+            4054
+          ],
+          "note": ""
+        },
+        {
+          "cls": "rule_label",
+          "text": "Frontier selection.",
+          "section": "Methodology",
+          "span": [
+            3812,
+            3835
+          ],
+          "note": "- **Frontier selection.** Top-10-by-compute-at-release; 41 models qualify. Robustness tested against top-N (N=3,5,20) and quantile/trend-distance alternatives — results are similar except the trend-distance method, which flattens the curve.[^1]"
+        },
+        {
+          "cls": "numeric",
+          "text": "3",
+          "section": "Methodology",
+          "span": [
+            3920,
+            3921
+          ],
+          "note": "- **Frontier selection.** Top-10-by-compute-at-release; 41 models qualify. Robustness tested against top-N (N=3,5,20) and quantile/trend-distance alternatives — results are similar except the trend-distance method, which flattens the curve.[^1]"
+        },
+        {
+          "cls": "rule_label",
+          "text": "Staff cost.",
+          "section": "Methodology",
+          "span": [
+            4297,
+            4312
+          ],
+          "note": "- **Staff cost.** Total annual compensation sampled from log-normal distributions (base salary 90% CI $140K–$160K, equity $35K–$490K, 1.25–1.4x overhead), informed by levels.fyi and aipaygrad.es; FTE workload per contributor sampled at a median ~20%.[^1]"
+        },
+        {
+          "cls": "rule_label",
+          "text": "TPU costs.",
+          "section": "Methodology",
+          "span": [
+            4552,
+            4566
+          ],
+          "note": "- **TPU costs.** No public sale prices exist, so [[tensor-processing-unit.md]] cost is the geometric mean of a bill-of-materials low estimate and an equivalent-GPU-price high estimate (~$5,000 per TPU across versions).[^1]"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[tensor-processing-unit.md]]",
+          "section": "Methodology",
+          "span": [
+            4599,
+            4628
+          ],
+          "note": "tensor-processing-unit.md"
+        },
+        {
+          "cls": "caveat",
+          "text": "- **Limitations the authors state.** Reliance on public data; neglected costs (data-center infrastructure beyond the training cluster, data acquisition); uncertainty from depreciation and pricing assumptions; limited generality of the selected-frontier trend; possible large unpredictable hardware/software efficiency gains.[^1]",
+          "section": "Methodology",
+          "span": [
+            4773,
+            5101
+          ],
+          "note": ""
+        }
+      ],
+      "class_counts": {
+        "numeric": {
+          "eligible": 59,
+          "deleted": 5
+        },
+        "caveat": {
+          "eligible": 4,
+          "deleted": 4
+        },
+        "reasoning_chain": {
+          "eligible": 3,
+          "deleted": 3
+        },
+        "named_entity": {
+          "eligible": 13,
+          "deleted": 5
+        },
+        "rule_label": {
+          "eligible": 5,
+          "deleted": 4
+        }
+      },
+      "label": "thin"
+    },
+    {
+      "schema": "silver-ablation/1",
+      "kind": "paper",
+      "origin": "papers",
+      "source_page": "3-resources/knowledge-base/wiki/sources/papers/2026-05-07-the-rising-costs-of-training-frontier-ai-models.md",
+      "raw_path": "3-resources/knowledge-base/raw/papers/2026-05-07-the-rising-costs-of-training-frontier-ai-models.md",
+      "grade": 0.5,
+      "ablated_page": "3-resources/tools/sb-os/wiki/scripts/calibration/data/ablated/papers__2026-05-07-the-rising-costs-of-training-frontier-ai-models__g50.md",
+      "source_sha256": "d764b416f1e84a21f78d60f6043da0616328d3678697489d4ec3a90c5973e61d",
+      "deleted": [
+        {
+          "cls": "named_entity",
+          "text": "[[frontier-model.md]]",
+          "section": "Substance",
+          "span": [
+            763,
+            784
+          ],
+          "note": "frontier-model.md"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[ai-training-cost-trends.md]]",
+          "section": "Substance",
+          "span": [
+            995,
+            1025
+          ],
+          "note": "ai-training-cost-trends.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "2.4x",
+          "section": "Substance",
+          "span": [
+            1105,
+            1109
+          ],
+          "note": "- The headline result: [[ai-training-cost-trends.md]] show the amortized cost of the most compute-intensive training runs growing at 2.4x per year since 2016 (90% CI: 2.0x–2.9x); the cloud-rental approach independently yields a similar 2.5x/year rate, validating the trend.[^1]"
+        },
+        {
+          "cls": "numeric",
+          "text": "2.9x",
+          "section": "Substance",
+          "span": [
+            1144,
+            1148
+          ],
+          "note": "- The headline result: [[ai-training-cost-trends.md]] show the amortized cost of the most compute-intensive training runs growing at 2.4x per year since 2016 (90% CI: 2.0x–2.9x); the cloud-rental approach independently yields a similar 2.5x/year rate, validating the trend.[^1]"
+        },
+        {
+          "cls": "reasoning_chain",
+          "text": "- Excluding Google TPUs (whose costs are estimated rather than priced) raises the growth rate to 3.0x per year, because TPU-trained models carry artificially low hardware costs.[^1]",
+          "section": "Substance",
+          "span": [
+            1250,
+            1431
+          ],
+          "note": ""
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[openai.md]]",
+          "section": "Substance",
+          "span": [
+            1489,
+            1502
+          ],
+          "note": "openai.md"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[gpt-4.md]]",
+          "section": "Substance",
+          "span": [
+            1505,
+            1517
+          ],
+          "note": "gpt-4.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "$40M",
+          "section": "Substance",
+          "span": [
+            1521,
+            1525
+          ],
+          "note": "- The most expensive publicly announced runs to date are [[openai.md]]'s [[gpt-4.md]] at $40M amortized and [[google-deepmind.md]]'s [[gemini-models.md|Gemini Ultra]] at $30M amortized; extrapolating the 2.4x trend implies a ~$1 billion training run by the start of 2027.[^1]"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[google-deepmind.md]]",
+          "section": "Substance",
+          "span": [
+            1540,
+            1562
+          ],
+          "note": "google-deepmind.md"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[gemini-models.md|Gemini Ultra]]",
+          "section": "Substance",
+          "span": [
+            1565,
+            1598
+          ],
+          "note": "gemini-models.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "$1 billion",
+          "section": "Substance",
+          "span": [
+            1658,
+            1668
+          ],
+          "note": "- The most expensive publicly announced runs to date are [[openai.md]]'s [[gpt-4.md]] at $40M amortized and [[google-deepmind.md]]'s [[gemini-models.md|Gemini Ultra]] at $30M amortized; extrapolating the 2.4x trend implies a ~$1 billion training run by the start of 2027.[^1]"
+        },
+        {
+          "cls": "reasoning_chain",
+          "text": "- The preferred method, [[compute-cost-amortization.md]], spreads depreciated hardware value over the final training run (depreciating at 0.14 orders of magnitude per year, the rate of ML GPU price-performance improvement) rather than counting full purchase price; acquisition cost is one-to-two orders of magnitude higher (GPT-4's hardware cost ~$800M to acquire vs $40M amortized).[^1]",
+          "section": "Substance",
+          "span": [
+            1708,
+            2095
+          ],
+          "note": ""
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[compute-cost-amortization.md]]",
+          "section": "Substance",
+          "span": [
+            1732,
+            1764
+          ],
+          "note": "compute-cost-amortization.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "4",
+          "section": "Substance",
+          "span": [
+            2036,
+            2037
+          ],
+          "note": "- The preferred method, [[compute-cost-amortization.md]], spreads depreciated hardware value over the final training run (depreciating at 0.14 orders of magnitude per year, the rate of ML GPU price-performance improvement) rather than counting full purchase price; acquisition cost is one-to-two orde"
+        },
+        {
+          "cls": "caveat",
+          "text": "- Component breakdown of amortized hardware-plus-energy cost: ~44% AI accelerator chips, ~29% rest-of-server, ~17% cluster-level interconnect, ~9% energy — though energy's small cost share understates the rapidly growing power-capacity requirement.[^1]",
+          "section": "Substance",
+          "span": [
+            2096,
+            2348
+          ],
+          "note": ""
+        },
+        {
+          "cls": "numeric",
+          "text": "9",
+          "section": "Substance",
+          "span": [
+            2240,
+            2241
+          ],
+          "note": "- Component breakdown of amortized hardware-plus-energy cost: ~44% AI accelerator chips, ~29% rest-of-server, ~17% cluster-level interconnect, ~9% energy — though energy's small cost share understates the rapidly growing power-capacity requirement.[^1]"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[gpt-3.md]]",
+          "section": "Substance",
+          "span": [
+            2393,
+            2405
+          ],
+          "note": "gpt-3.md"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[opt-175b.md]]",
+          "section": "Substance",
+          "span": [
+            2407,
+            2422
+          ],
+          "note": "opt-175b.md"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[gpt-4.md]]",
+          "section": "Substance",
+          "span": [
+            2424,
+            2436
+          ],
+          "note": "gpt-4.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "4",
+          "section": "Substance",
+          "span": [
+            2430,
+            2431
+          ],
+          "note": "- A third, deeper approach for four models ([[gpt-3.md]], [[opt-175b.md]], [[gpt-4.md]], [[gemini-models.md|Gemini Ultra]]) adds R&D staff costs over the whole development process (experiments, evaluation, fine-tuning): R&D staff are 29–49% of total cost with equity included, 19–33% excluding equity"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[gemini-models.md|Gemini Ultra]]",
+          "section": "Substance",
+          "span": [
+            2438,
+            2471
+          ],
+          "note": "gemini-models.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "49",
+          "section": "Substance",
+          "span": [
+            2586,
+            2588
+          ],
+          "note": "- A third, deeper approach for four models ([[gpt-3.md]], [[opt-175b.md]], [[gpt-4.md]], [[gemini-models.md|Gemini Ultra]]) adds R&D staff costs over the whole development process (experiments, evaluation, fine-tuning): R&D staff are 29–49% of total cost with equity included, 19–33% excluding equity"
+        },
+        {
+          "cls": "numeric",
+          "text": "19",
+          "section": "Substance",
+          "span": [
+            2626,
+            2628
+          ],
+          "note": "- A third, deeper approach for four models ([[gpt-3.md]], [[opt-175b.md]], [[gpt-4.md]], [[gemini-models.md|Gemini Ultra]]) adds R&D staff costs over the whole development process (experiments, evaluation, fine-tuning): R&D staff are 29–49% of total cost with equity included, 19–33% excluding equity"
+        },
+        {
+          "cls": "numeric",
+          "text": "41",
+          "section": "Substance",
+          "span": [
+            2806,
+            2808
+          ],
+          "note": "- The work draws on Epoch AI's Notable AI Models database (796 models, 276 filtered to the large-scale era, 41 frontier models analyzed) and a custom dataset of 142 historical hardware-price entries across 24 hardware models.[^1]"
+        },
+        {
+          "cls": "reasoning_chain",
+          "text": "- Implication: only a handful of well-funded companies and governments can finance frontier runs, raising [[ai-economic-concentration.md]] concerns about public oversight and the narrowing range of perspectives at the frontier.[^1]",
+          "section": "Substance",
+          "span": [
+            2928,
+            3159
+          ],
+          "note": ""
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[ai-economic-concentration.md]]",
+          "section": "Substance",
+          "span": [
+            3034,
+            3066
+          ],
+          "note": "ai-economic-concentration.md"
+        },
+        {
+          "cls": "caveat",
+          "text": "- **Three cost approaches.** (1) Amortized hardware CapEx + energy — bottom-up depreciation of chip/server/networking costs plus energy; the paper's preferred method. (2) Cloud rental price — price-per-chip-hour × training chip-hours; simpler, ~2x higher on average, used as a robustness cross-check. (3) Total amortized development cost — adds R&D staff compensation and all experiment/evaluation/fine-tuning compute, applied only to four models.[^1]",
+          "section": "Methodology",
+          "span": [
+            3358,
+            3809
+          ],
+          "note": ""
+        },
+        {
+          "cls": "rule_label",
+          "text": "Three cost approaches.",
+          "section": "Methodology",
+          "span": [
+            3360,
+            3386
+          ],
+          "note": "- **Three cost approaches.** (1) Amortized hardware CapEx + energy — bottom-up depreciation of chip/server/networking costs plus energy; the paper's preferred method. (2) Cloud rental price — price-per-chip-hour × training chip-hours; simpler, ~2x higher on average, used as a robustness cross-check."
+        },
+        {
+          "cls": "numeric",
+          "text": "2x",
+          "section": "Methodology",
+          "span": [
+            3603,
+            3605
+          ],
+          "note": "- **Three cost approaches.** (1) Amortized hardware CapEx + energy — bottom-up depreciation of chip/server/networking costs plus energy; the paper's preferred method. (2) Cloud rental price — price-per-chip-hour × training chip-hours; simpler, ~2x higher on average, used as a robustness cross-check."
+        },
+        {
+          "cls": "caveat",
+          "text": "- **Frontier selection.** Top-10-by-compute-at-release; 41 models qualify. Robustness tested against top-N (N=3,5,20) and quantile/trend-distance alternatives — results are similar except the trend-distance method, which flattens the curve.[^1]",
+          "section": "Methodology",
+          "span": [
+            3810,
+            4054
+          ],
+          "note": ""
+        },
+        {
+          "cls": "rule_label",
+          "text": "Frontier selection.",
+          "section": "Methodology",
+          "span": [
+            3812,
+            3835
+          ],
+          "note": "- **Frontier selection.** Top-10-by-compute-at-release; 41 models qualify. Robustness tested against top-N (N=3,5,20) and quantile/trend-distance alternatives — results are similar except the trend-distance method, which flattens the curve.[^1]"
+        },
+        {
+          "cls": "numeric",
+          "text": "3",
+          "section": "Methodology",
+          "span": [
+            3920,
+            3921
+          ],
+          "note": "- **Frontier selection.** Top-10-by-compute-at-release; 41 models qualify. Robustness tested against top-N (N=3,5,20) and quantile/trend-distance alternatives — results are similar except the trend-distance method, which flattens the curve.[^1]"
+        },
+        {
+          "cls": "rule_label",
+          "text": "Amortization.",
+          "section": "Methodology",
+          "span": [
+            4057,
+            4074
+          ],
+          "note": "- **Amortization.** Hardware value depreciates at r=0.14 OOMs/year; amortized cost ≈ start-value-per-chip × (training chip-hours / hours-per-year) × r·ln(10). Chip-hours substitute for separately-estimated training time and chip count.[^1]"
+        },
+        {
+          "cls": "rule_label",
+          "text": "Staff cost.",
+          "section": "Methodology",
+          "span": [
+            4297,
+            4312
+          ],
+          "note": "- **Staff cost.** Total annual compensation sampled from log-normal distributions (base salary 90% CI $140K–$160K, equity $35K–$490K, 1.25–1.4x overhead), informed by levels.fyi and aipaygrad.es; FTE workload per contributor sampled at a median ~20%.[^1]"
+        },
+        {
+          "cls": "numeric",
+          "text": "$160K",
+          "section": "Methodology",
+          "span": [
+            4403,
+            4408
+          ],
+          "note": "- **Staff cost.** Total annual compensation sampled from log-normal distributions (base salary 90% CI $140K–$160K, equity $35K–$490K, 1.25–1.4x overhead), informed by levels.fyi and aipaygrad.es; FTE workload per contributor sampled at a median ~20%.[^1]"
+        },
+        {
+          "cls": "numeric",
+          "text": "1.25",
+          "section": "Methodology",
+          "span": [
+            4429,
+            4433
+          ],
+          "note": "- **Staff cost.** Total annual compensation sampled from log-normal distributions (base salary 90% CI $140K–$160K, equity $35K–$490K, 1.25–1.4x overhead), informed by levels.fyi and aipaygrad.es; FTE workload per contributor sampled at a median ~20%.[^1]"
+        },
+        {
+          "cls": "numeric",
+          "text": "1.4x",
+          "section": "Methodology",
+          "span": [
+            4434,
+            4438
+          ],
+          "note": "- **Staff cost.** Total annual compensation sampled from log-normal distributions (base salary 90% CI $140K–$160K, equity $35K–$490K, 1.25–1.4x overhead), informed by levels.fyi and aipaygrad.es; FTE workload per contributor sampled at a median ~20%.[^1]"
+        },
+        {
+          "cls": "rule_label",
+          "text": "TPU costs.",
+          "section": "Methodology",
+          "span": [
+            4552,
+            4566
+          ],
+          "note": "- **TPU costs.** No public sale prices exist, so [[tensor-processing-unit.md]] cost is the geometric mean of a bill-of-materials low estimate and an equivalent-GPU-price high estimate (~$5,000 per TPU across versions).[^1]"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[tensor-processing-unit.md]]",
+          "section": "Methodology",
+          "span": [
+            4599,
+            4628
+          ],
+          "note": "tensor-processing-unit.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "$5,000",
+          "section": "Methodology",
+          "span": [
+            4736,
+            4742
+          ],
+          "note": "- **TPU costs.** No public sale prices exist, so [[tensor-processing-unit.md]] cost is the geometric mean of a bill-of-materials low estimate and an equivalent-GPU-price high estimate (~$5,000 per TPU across versions).[^1]"
+        },
+        {
+          "cls": "caveat",
+          "text": "- **Limitations the authors state.** Reliance on public data; neglected costs (data-center infrastructure beyond the training cluster, data acquisition); uncertainty from depreciation and pricing assumptions; limited generality of the selected-frontier trend; possible large unpredictable hardware/software efficiency gains.[^1]",
+          "section": "Methodology",
+          "span": [
+            4773,
+            5101
+          ],
+          "note": ""
+        },
+        {
+          "cls": "numeric",
+          "text": "$2.4",
+          "section": "Notable quotes",
+          "span": [
+            5968,
+            5972
+          ],
+          "note": "> \"the amortized cost to train the most compute-intensive models has grown precipitously at a rate of $2."
+        }
+      ],
+      "class_counts": {
+        "numeric": {
+          "eligible": 59,
+          "deleted": 17
+        },
+        "caveat": {
+          "eligible": 4,
+          "deleted": 4
+        },
+        "reasoning_chain": {
+          "eligible": 3,
+          "deleted": 3
+        },
+        "named_entity": {
+          "eligible": 13,
+          "deleted": 13
+        },
+        "rule_label": {
+          "eligible": 5,
+          "deleted": 5
+        }
+      },
+      "label": "thin"
+    },
+    {
+      "schema": "silver-ablation/1",
+      "kind": "paper",
+      "origin": "papers",
+      "source_page": "3-resources/knowledge-base/wiki/sources/papers/2026-05-01-attention-is-all-you-need.md",
+      "raw_path": "3-resources/knowledge-base/raw/papers/2026-05-01-attention-is-all-you-need.md",
+      "grade": 0.05,
+      "ablated_page": "3-resources/tools/sb-os/wiki/scripts/calibration/data/ablated/papers__2026-05-01-attention-is-all-you-need__g05.md",
+      "source_sha256": "7c46e509b08532843c4949113c8be64aa8dd03c4c63117da4e35f9693ed3c77a",
+      "deleted": [
+        {
+          "cls": "named_entity",
+          "text": "[[self-attention.md]]",
+          "section": "Substance",
+          "span": [
+            1017,
+            1038
+          ],
+          "note": "self-attention.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "$1",
+          "section": "Substance",
+          "span": [
+            1393,
+            1395
+          ],
+          "note": "- The core mechanism is [[self-attention.md]] (intra-attention), which relates different positions of a single sequence to compute a representation of that sequence, connecting any two positions with a constant number of operations ($O(1)$ maximum path length) versus $O(n)$ for recurrence.[^1] The p"
+        },
+        {
+          "cls": "caveat",
+          "text": "- **Limitations stated:** the authors flag restricting self-attention to a local neighborhood ($O(n/r)$ path length) as future work for very long sequences, and note interest in extending the architecture to non-text modalities and less-sequential generation.[^1]",
+          "section": "Methodology",
+          "span": [
+            4281,
+            4544
+          ],
+          "note": ""
+        }
+      ],
+      "class_counts": {
+        "numeric": {
+          "eligible": 30,
+          "deleted": 1
+        },
+        "reasoning_chain": {
+          "eligible": 2,
+          "deleted": 0
+        },
+        "named_entity": {
+          "eligible": 8,
+          "deleted": 1
+        },
+        "rule_label": {
+          "eligible": 5,
+          "deleted": 0
+        },
+        "caveat": {
+          "eligible": 1,
+          "deleted": 1
+        }
+      },
+      "label": "thin"
+    },
+    {
+      "schema": "silver-ablation/1",
+      "kind": "paper",
+      "origin": "papers",
+      "source_page": "3-resources/knowledge-base/wiki/sources/papers/2026-05-01-attention-is-all-you-need.md",
+      "raw_path": "3-resources/knowledge-base/raw/papers/2026-05-01-attention-is-all-you-need.md",
+      "grade": 0.25,
+      "ablated_page": "3-resources/tools/sb-os/wiki/scripts/calibration/data/ablated/papers__2026-05-01-attention-is-all-you-need__g25.md",
+      "source_sha256": "7c46e509b08532843c4949113c8be64aa8dd03c4c63117da4e35f9693ed3c77a",
+      "deleted": [
+        {
+          "cls": "named_entity",
+          "text": "[[transformer.md]]",
+          "section": "Substance",
+          "span": [
+            375,
+            393
+          ],
+          "note": "transformer.md"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[self-attention.md]]",
+          "section": "Substance",
+          "span": [
+            1017,
+            1038
+          ],
+          "note": "self-attention.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "$1",
+          "section": "Substance",
+          "span": [
+            1393,
+            1395
+          ],
+          "note": "- The core mechanism is [[self-attention.md]] (intra-attention), which relates different positions of a single sequence to compute a representation of that sequence, connecting any two positions with a constant number of operations ($O(1)$ maximum path length) versus $O(n)$ for recurrence.[^1] The p"
+        },
+        {
+          "cls": "reasoning_chain",
+          "text": "- Introduces [[multi-head-attention.md]]: rather than one attention function, the model projects queries, keys, and values $h=8$ times into lower-dimensional subspaces, runs attention in parallel per head, then concatenates — letting the model jointly attend to information from different representation subspaces at different positions.[^1] Attention is applied three ways: encoder self-attention, masked decoder self-attention (preserving the auto-regressive property), and encoder-decoder attention.[^1]",
+          "section": "Substance",
+          "span": [
+            1511,
+            2017
+          ],
+          "note": ""
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[multi-head-attention.md]]",
+          "section": "Substance",
+          "span": [
+            1524,
+            1551
+          ],
+          "note": "multi-head-attention.md"
+        },
+        {
+          "cls": "reasoning_chain",
+          "text": "- Because the architecture has no recurrence or convolution, it injects sequence-order information via [[positional-encoding.md]] — fixed sinusoidal functions of different frequencies added to the input embeddings; learned positional embeddings produced nearly identical results, but sinusoids were chosen for potential extrapolation to longer sequences.[^1]",
+          "section": "Substance",
+          "span": [
+            2018,
+            2376
+          ],
+          "note": ""
+        },
+        {
+          "cls": "numeric",
+          "text": "2",
+          "section": "Substance",
+          "span": [
+            2509,
+            2510
+          ],
+          "note": "- Achieves new state-of-the-art translation quality at a fraction of prior training cost: 28.4 BLEU on WMT 2014 English-to-German (>2 BLEU over prior best, including ensembles) and 41.8 BLEU single-model on English-to-French, after 3.5 days on eight P100 GPUs.[^1] The base model trains in ~12 hours "
+        },
+        {
+          "cls": "numeric",
+          "text": "25K",
+          "section": "Methodology",
+          "span": [
+            3564,
+            3567
+          ],
+          "note": "- **Task / data:** WMT 2014 English-German (~4.5M sentence pairs, ~37K shared byte-pair vocabulary) and the larger WMT 2014 English-French (36M sentences, 32K word-piece vocabulary); batches grouped by approximate sequence length (~25K source + 25K target tokens each).[^1]"
+        },
+        {
+          "cls": "rule_label",
+          "text": "Optimizer:",
+          "section": "Methodology",
+          "span": [
+            3727,
+            3741
+          ],
+          "note": "- **Optimizer:** Adam ($\\beta_1{=}0.9$, $\\beta_2{=}0.98$) with a warmup-then-inverse-square-root learning-rate schedule (4000 warmup steps).[^1]"
+        },
+        {
+          "cls": "rule_label",
+          "text": "Regularization:",
+          "section": "Methodology",
+          "span": [
+            3872,
+            3891
+          ],
+          "note": "- **Regularization:** residual dropout ($P_{drop}{=}0.1$ base) and label smoothing ($\\epsilon_{ls}{=}0.1$), the latter hurting perplexity but improving accuracy and BLEU.[^1]"
+        },
+        {
+          "cls": "rule_label",
+          "text": "Ablations (Table 3):",
+          "section": "Methodology",
+          "span": [
+            4047,
+            4071
+          ],
+          "note": "- **Ablations (Table 3):** vary attention heads, key/value dimensions, model depth/width, dropout, and positional encoding; single-head attention is 0.9 BLEU worse than the best head count, and too many heads also degrades quality.[^1]"
+        },
+        {
+          "cls": "caveat",
+          "text": "- **Limitations stated:** the authors flag restricting self-attention to a local neighborhood ($O(n/r)$ path length) as future work for very long sequences, and note interest in extending the architecture to non-text modalities and less-sequential generation.[^1]",
+          "section": "Methodology",
+          "span": [
+            4281,
+            4544
+          ],
+          "note": ""
+        }
+      ],
+      "class_counts": {
+        "numeric": {
+          "eligible": 30,
+          "deleted": 3
+        },
+        "reasoning_chain": {
+          "eligible": 2,
+          "deleted": 2
+        },
+        "named_entity": {
+          "eligible": 8,
+          "deleted": 3
+        },
+        "rule_label": {
+          "eligible": 5,
+          "deleted": 3
+        },
+        "caveat": {
+          "eligible": 1,
+          "deleted": 1
+        }
+      },
+      "label": "thin"
+    },
+    {
+      "schema": "silver-ablation/1",
+      "kind": "paper",
+      "origin": "papers",
+      "source_page": "3-resources/knowledge-base/wiki/sources/papers/2026-05-01-attention-is-all-you-need.md",
+      "raw_path": "3-resources/knowledge-base/raw/papers/2026-05-01-attention-is-all-you-need.md",
+      "grade": 0.5,
+      "ablated_page": "3-resources/tools/sb-os/wiki/scripts/calibration/data/ablated/papers__2026-05-01-attention-is-all-you-need__g50.md",
+      "source_sha256": "7c46e509b08532843c4949113c8be64aa8dd03c4c63117da4e35f9693ed3c77a",
+      "deleted": [
+        {
+          "cls": "named_entity",
+          "text": "[[transformer.md]]",
+          "section": "Substance",
+          "span": [
+            375,
+            393
+          ],
+          "note": "transformer.md"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[recurrent-neural-network.md]]",
+          "section": "Substance",
+          "span": [
+            575,
+            606
+          ],
+          "note": "recurrent-neural-network.md"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[encoder-decoder.md]]",
+          "section": "Substance",
+          "span": [
+            753,
+            775
+          ],
+          "note": "encoder-decoder.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "6",
+          "section": "Substance",
+          "span": [
+            789,
+            790
+          ],
+          "note": "- Retains the standard [[encoder-decoder.md]] structure: a 6-layer encoder maps the input symbol sequence to continuous representations, and a 6-layer decoder generates the output one token at a time, auto-regressively consuming previously generated symbols.[^1]"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[self-attention.md]]",
+          "section": "Substance",
+          "span": [
+            1017,
+            1038
+          ],
+          "note": "self-attention.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "1",
+          "section": "Substance",
+          "span": [
+            1229,
+            1230
+          ],
+          "note": "- The core mechanism is [[self-attention.md]] (intra-attention), which relates different positions of a single sequence to compute a representation of that sequence, connecting any two positions with a constant number of operations ($O(1)$ maximum path length) versus $O(n)$ for recurrence.[^1] The p"
+        },
+        {
+          "cls": "numeric",
+          "text": "$1",
+          "section": "Substance",
+          "span": [
+            1393,
+            1395
+          ],
+          "note": "- The core mechanism is [[self-attention.md]] (intra-attention), which relates different positions of a single sequence to compute a representation of that sequence, connecting any two positions with a constant number of operations ($O(1)$ maximum path length) versus $O(n)$ for recurrence.[^1] The p"
+        },
+        {
+          "cls": "reasoning_chain",
+          "text": "- Introduces [[multi-head-attention.md]]: rather than one attention function, the model projects queries, keys, and values $h=8$ times into lower-dimensional subspaces, runs attention in parallel per head, then concatenates — letting the model jointly attend to information from different representation subspaces at different positions.[^1] Attention is applied three ways: encoder self-attention, masked decoder self-attention (preserving the auto-regressive property), and encoder-decoder attention.[^1]",
+          "section": "Substance",
+          "span": [
+            1511,
+            2017
+          ],
+          "note": ""
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[multi-head-attention.md]]",
+          "section": "Substance",
+          "span": [
+            1524,
+            1551
+          ],
+          "note": "multi-head-attention.md"
+        },
+        {
+          "cls": "reasoning_chain",
+          "text": "- Because the architecture has no recurrence or convolution, it injects sequence-order information via [[positional-encoding.md]] — fixed sinusoidal functions of different frequencies added to the input embeddings; learned positional embeddings produced nearly identical results, but sinusoids were chosen for potential extrapolation to longer sequences.[^1]",
+          "section": "Substance",
+          "span": [
+            2018,
+            2376
+          ],
+          "note": ""
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[positional-encoding.md]]",
+          "section": "Substance",
+          "span": [
+            2121,
+            2147
+          ],
+          "note": "positional-encoding.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "2",
+          "section": "Substance",
+          "span": [
+            2509,
+            2510
+          ],
+          "note": "- Achieves new state-of-the-art translation quality at a fraction of prior training cost: 28.4 BLEU on WMT 2014 English-to-German (>2 BLEU over prior best, including ensembles) and 41.8 BLEU single-model on English-to-French, after 3.5 days on eight P100 GPUs.[^1] The base model trains in ~12 hours "
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[noam-shazeer.md]]",
+          "section": "Substance",
+          "span": [
+            3047,
+            3066
+          ],
+          "note": "noam-shazeer.md"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[ashish-vaswani.md]]",
+          "section": "Substance",
+          "span": [
+            3199,
+            3220
+          ],
+          "note": "ashish-vaswani.md"
+        },
+        {
+          "cls": "rule_label",
+          "text": "Task / data:",
+          "section": "Methodology",
+          "span": [
+            3321,
+            3337
+          ],
+          "note": "- **Task / data:** WMT 2014 English-German (~4.5M sentence pairs, ~37K shared byte-pair vocabulary) and the larger WMT 2014 English-French (36M sentences, 32K word-piece vocabulary); batches grouped by approximate sequence length (~25K source + 25K target tokens each).[^1]"
+        },
+        {
+          "cls": "numeric",
+          "text": "32K",
+          "section": "Methodology",
+          "span": [
+            3474,
+            3477
+          ],
+          "note": "- **Task / data:** WMT 2014 English-German (~4.5M sentence pairs, ~37K shared byte-pair vocabulary) and the larger WMT 2014 English-French (36M sentences, 32K word-piece vocabulary); batches grouped by approximate sequence length (~25K source + 25K target tokens each).[^1]"
+        },
+        {
+          "cls": "numeric",
+          "text": "25K",
+          "section": "Methodology",
+          "span": [
+            3564,
+            3567
+          ],
+          "note": "- **Task / data:** WMT 2014 English-German (~4.5M sentence pairs, ~37K shared byte-pair vocabulary) and the larger WMT 2014 English-French (36M sentences, 32K word-piece vocabulary); batches grouped by approximate sequence length (~25K source + 25K target tokens each).[^1]"
+        },
+        {
+          "cls": "rule_label",
+          "text": "Hardware / schedule:",
+          "section": "Methodology",
+          "span": [
+            3595,
+            3619
+          ],
+          "note": "- **Hardware / schedule:** one machine with 8 NVIDIA P100 GPUs; base model 100K steps (~12h), big model 300K steps (~3.5 days).[^1]"
+        },
+        {
+          "cls": "rule_label",
+          "text": "Optimizer:",
+          "section": "Methodology",
+          "span": [
+            3727,
+            3741
+          ],
+          "note": "- **Optimizer:** Adam ($\\beta_1{=}0.9$, $\\beta_2{=}0.98$) with a warmup-then-inverse-square-root learning-rate schedule (4000 warmup steps).[^1]"
+        },
+        {
+          "cls": "rule_label",
+          "text": "Regularization:",
+          "section": "Methodology",
+          "span": [
+            3872,
+            3891
+          ],
+          "note": "- **Regularization:** residual dropout ($P_{drop}{=}0.1$ base) and label smoothing ($\\epsilon_{ls}{=}0.1$), the latter hurting perplexity but improving accuracy and BLEU.[^1]"
+        },
+        {
+          "cls": "rule_label",
+          "text": "Ablations (Table 3):",
+          "section": "Methodology",
+          "span": [
+            4047,
+            4071
+          ],
+          "note": "- **Ablations (Table 3):** vary attention heads, key/value dimensions, model depth/width, dropout, and positional encoding; single-head attention is 0.9 BLEU worse than the best head count, and too many heads also degrades quality.[^1]"
+        },
+        {
+          "cls": "numeric",
+          "text": "0.9",
+          "section": "Methodology",
+          "span": [
+            4194,
+            4197
+          ],
+          "note": "- **Ablations (Table 3):** vary attention heads, key/value dimensions, model depth/width, dropout, and positional encoding; single-head attention is 0.9 BLEU worse than the best head count, and too many heads also degrades quality.[^1]"
+        },
+        {
+          "cls": "caveat",
+          "text": "- **Limitations stated:** the authors flag restricting self-attention to a local neighborhood ($O(n/r)$ path length) as future work for very long sequences, and note interest in extending the architecture to non-text modalities and less-sequential generation.[^1]",
+          "section": "Methodology",
+          "span": [
+            4281,
+            4544
+          ],
+          "note": ""
+        }
+      ],
+      "class_counts": {
+        "numeric": {
+          "eligible": 30,
+          "deleted": 7
+        },
+        "reasoning_chain": {
+          "eligible": 2,
+          "deleted": 2
+        },
+        "named_entity": {
+          "eligible": 8,
+          "deleted": 8
+        },
+        "rule_label": {
+          "eligible": 5,
+          "deleted": 5
+        },
+        "caveat": {
+          "eligible": 1,
+          "deleted": 1
+        }
+      },
+      "label": "thin"
+    },
+    {
+      "schema": "silver-ablation/1",
+      "kind": "paper",
+      "origin": "papers",
+      "source_page": "3-resources/knowledge-base/wiki/sources/papers/2026-05-27-why-language-models-hallucinate.md",
+      "raw_path": "3-resources/knowledge-base/raw/papers/2026-05-27-why-language-models-hallucinate.md",
+      "grade": 0.05,
+      "ablated_page": "3-resources/tools/sb-os/wiki/scripts/calibration/data/ablated/papers__2026-05-27-why-language-models-hallucinate__g05.md",
+      "source_sha256": "91cc3f450a22f68bdd24fd27fc82db4dbe6f4d7f244f4ca06ad577b3f9df5336",
+      "deleted": [
+        {
+          "cls": "numeric",
+          "text": "1",
+          "section": "Substance",
+          "span": [
+            3988,
+            3989
+          ],
+          "note": "- The paper's distinctive claim is [[evaluation-induced-hallucination.md]]: hallucinations survive post-training because the field's primary benchmarks use binary 0-1 grading that awards no credit for \"I don't know\" (IDK), so abstaining is strictly sub-optimal and an overconfident guess maximizes ex"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[calibration.md]]",
+          "section": "Substance",
+          "span": [
+            4712,
+            4730
+          ],
+          "note": "calibration.md"
+        },
+        {
+          "cls": "caveat",
+          "text": "> Like students facing hard exam questions, large language models sometimes guess when uncertain, producing plausible yet incorrect statements instead of admitting uncertainty.",
+          "section": "Notable quotes",
+          "span": [
+            5291,
+            5467
+          ],
+          "note": ""
+        }
+      ],
+      "class_counts": {
+        "numeric": {
+          "eligible": 22,
+          "deleted": 1
+        },
+        "caveat": {
+          "eligible": 5,
+          "deleted": 1
+        },
+        "reasoning_chain": {
+          "eligible": 6,
+          "deleted": 0
+        },
+        "named_entity": {
+          "eligible": 5,
+          "deleted": 1
+        },
+        "rule_label": {
+          "eligible": 5,
+          "deleted": 0
+        }
+      },
+      "label": "thin"
+    },
+    {
+      "schema": "silver-ablation/1",
+      "kind": "paper",
+      "origin": "papers",
+      "source_page": "3-resources/knowledge-base/wiki/sources/papers/2026-05-27-why-language-models-hallucinate.md",
+      "raw_path": "3-resources/knowledge-base/raw/papers/2026-05-27-why-language-models-hallucinate.md",
+      "grade": 0.25,
+      "ablated_page": "3-resources/tools/sb-os/wiki/scripts/calibration/data/ablated/papers__2026-05-27-why-language-models-hallucinate__g25.md",
+      "source_sha256": "91cc3f450a22f68bdd24fd27fc82db4dbe6f4d7f244f4ca06ad577b3f9df5336",
+      "deleted": [
+        {
+          "cls": "caveat",
+          "text": "- The paper's thesis is that language models hallucinate because both the training and the evaluation procedures reward guessing over acknowledging uncertainty; hallucinations originate as ordinary errors in binary classification, not as a mysterious property of neural text generation.[^1]",
+          "section": "Substance",
+          "span": [
+            760,
+            1050
+          ],
+          "note": ""
+        },
+        {
+          "cls": "reasoning_chain",
+          "text": "- The paper's thesis is that language models hallucinate because both the training and the evaluation procedures reward guessing over acknowledging uncertainty; hallucinations originate as ordinary errors in binary classification, not as a mysterious property of neural text generation.[^1]",
+          "section": "Substance",
+          "span": [
+            760,
+            1050
+          ],
+          "note": ""
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[singleton-rate.md]]",
+          "section": "Substance",
+          "span": [
+            2610,
+            2631
+          ],
+          "note": "singleton-rate.md"
+        },
+        {
+          "cls": "reasoning_chain",
+          "text": "- A second error family is \"poor models\": when the model class cannot represent the concept (the paper's worked example is the classic two-word-context trigram model, which must err at least half the time on gendered-pronoun completions, Corollary 2).[^1] Letter-counting failures (\"how many Ds in DEEPSEEK\") are diagnosed as a poor-model / tokenization issue — reasoning models like DeepSeek-R1 count letters reliably because chain-of-thought spells the word out, while token representations (D/EEP/SEE/K) obscure individual characters.[^1] Additional error sources named: computational hardness, distribution shift (out-of-distribution prompts), and GIGO (errors replicated from a noisy corpus).[^1]",
+          "section": "Substance",
+          "span": [
+            2960,
+            3661
+          ],
+          "note": ""
+        },
+        {
+          "cls": "numeric",
+          "text": "1",
+          "section": "Substance",
+          "span": [
+            3988,
+            3989
+          ],
+          "note": "- The paper's distinctive claim is [[evaluation-induced-hallucination.md]]: hallucinations survive post-training because the field's primary benchmarks use binary 0-1 grading that awards no credit for \"I don't know\" (IDK), so abstaining is strictly sub-optimal and an overconfident guess maximizes ex"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[calibration.md]]",
+          "section": "Substance",
+          "span": [
+            4712,
+            4730
+          ],
+          "note": "calibration.md"
+        },
+        {
+          "cls": "caveat",
+          "text": "> Like students facing hard exam questions, large language models sometimes guess when uncertain, producing plausible yet incorrect statements instead of admitting uncertainty.",
+          "section": "Notable quotes",
+          "span": [
+            5291,
+            5467
+          ],
+          "note": ""
+        },
+        {
+          "cls": "caveat",
+          "text": "> Language models are optimized to be good test-takers, and guessing when uncertain improves test performance.",
+          "section": "Notable quotes",
+          "span": [
+            5576,
+            5686
+          ],
+          "note": ""
+        },
+        {
+          "cls": "rule_label",
+          "text": "Type:",
+          "section": "Methodology",
+          "span": [
+            5775,
+            5784
+          ],
+          "note": "- **Type:** Theoretical paper with formal proofs (computational learning theory), plus a small empirical meta-evaluation of benchmark grading and illustrative model probes."
+        },
+        {
+          "cls": "numeric",
+          "text": "50",
+          "section": "Methodology",
+          "span": [
+            6026,
+            6028
+          ],
+          "note": "- **Core formal objects:** the Is-It-Valid (IIV) binary-classification problem (50/50 mixture of valid examples and uniformly random errors); the reduction theorem `err ≥ 2·err_iiv − |V|/|E| − δ` (Corollary 1, generalized with prompts in Theorem 1); the Arbitrary Facts model and singleton-rate bound"
+        },
+        {
+          "cls": "rule_label",
+          "text": "Calibration argument:",
+          "section": "Methodology",
+          "span": [
+            6394,
+            6419
+          ],
+          "note": "- **Calibration argument:** δ (miscalibration at threshold 1/|E|) is shown to equal the magnitude of the loss derivative under probability rescaling, justifying small δ for any model class powerful enough to approximate rescaling under cross-entropy.[^1]"
+        }
+      ],
+      "class_counts": {
+        "numeric": {
+          "eligible": 22,
+          "deleted": 2
+        },
+        "caveat": {
+          "eligible": 5,
+          "deleted": 3
+        },
+        "reasoning_chain": {
+          "eligible": 6,
+          "deleted": 2
+        },
+        "named_entity": {
+          "eligible": 5,
+          "deleted": 2
+        },
+        "rule_label": {
+          "eligible": 5,
+          "deleted": 2
+        }
+      },
+      "label": "thin"
+    },
+    {
+      "schema": "silver-ablation/1",
+      "kind": "paper",
+      "origin": "papers",
+      "source_page": "3-resources/knowledge-base/wiki/sources/papers/2026-05-27-why-language-models-hallucinate.md",
+      "raw_path": "3-resources/knowledge-base/raw/papers/2026-05-27-why-language-models-hallucinate.md",
+      "grade": 0.5,
+      "ablated_page": "3-resources/tools/sb-os/wiki/scripts/calibration/data/ablated/papers__2026-05-27-why-language-models-hallucinate__g50.md",
+      "source_sha256": "91cc3f450a22f68bdd24fd27fc82db4dbe6f4d7f244f4ca06ad577b3f9df5336",
+      "deleted": [
+        {
+          "cls": "caveat",
+          "text": "- The paper's thesis is that language models hallucinate because both the training and the evaluation procedures reward guessing over acknowledging uncertainty; hallucinations originate as ordinary errors in binary classification, not as a mysterious property of neural text generation.[^1]",
+          "section": "Substance",
+          "span": [
+            760,
+            1050
+          ],
+          "note": ""
+        },
+        {
+          "cls": "reasoning_chain",
+          "text": "- The paper's thesis is that language models hallucinate because both the training and the evaluation procedures reward guessing over acknowledging uncertainty; hallucinations originate as ordinary errors in binary classification, not as a mysterious property of neural text generation.[^1]",
+          "section": "Substance",
+          "span": [
+            760,
+            1050
+          ],
+          "note": ""
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[is-it-valid-reduction.md]]",
+          "section": "Substance",
+          "span": [
+            1087,
+            1115
+          ],
+          "note": "is-it-valid-reduction.md"
+        },
+        {
+          "cls": "reasoning_chain",
+          "text": "- The reduction applies generally — to reasoning models, search/retrieval-augmented models, and any architecture — because it does not depend on next-word prediction or the Transformer; it treats the model purely as a probability distribution over strings.[^1] The \"autocomplete\" framing is dismissed as no more significant than the fact that humans also produce one word at a time.[^1]",
+          "section": "Substance",
+          "span": [
+            1569,
+            1955
+          ],
+          "note": ""
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[calibration.md]]",
+          "section": "Substance",
+          "span": [
+            1958,
+            1976
+          ],
+          "note": "calibration.md"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[singleton-rate.md]]",
+          "section": "Substance",
+          "span": [
+            2610,
+            2631
+          ],
+          "note": "singleton-rate.md"
+        },
+        {
+          "cls": "reasoning_chain",
+          "text": "- A second error family is \"poor models\": when the model class cannot represent the concept (the paper's worked example is the classic two-word-context trigram model, which must err at least half the time on gendered-pronoun completions, Corollary 2).[^1] Letter-counting failures (\"how many Ds in DEEPSEEK\") are diagnosed as a poor-model / tokenization issue — reasoning models like DeepSeek-R1 count letters reliably because chain-of-thought spells the word out, while token representations (D/EEP/SEE/K) obscure individual characters.[^1] Additional error sources named: computational hardness, distribution shift (out-of-distribution prompts), and GIGO (errors replicated from a noisy corpus).[^1]",
+          "section": "Substance",
+          "span": [
+            2960,
+            3661
+          ],
+          "note": ""
+        },
+        {
+          "cls": "reasoning_chain",
+          "text": "- The paper's distinctive claim is [[evaluation-induced-hallucination.md]]: hallucinations survive post-training because the field's primary benchmarks use binary 0-1 grading that awards no credit for \"I don't know\" (IDK), so abstaining is strictly sub-optimal and an overconfident guess maximizes expected score (Observation 1).[^1] A meta-evaluation of ten popular benchmarks (GPQA, MMLU-Pro, SWE-bench, MATH, and others) finds the vast majority use binary grading with no IDK credit; therefore adding more hallucination-specific evaluations cannot fix the problem while the dominant evaluations still penalize honesty.[^1]",
+          "section": "Substance",
+          "span": [
+            3662,
+            4287
+          ],
+          "note": ""
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[evaluation-induced-hallucination.md]]",
+          "section": "Substance",
+          "span": [
+            3697,
+            3736
+          ],
+          "note": "evaluation-induced-hallucination.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "1",
+          "section": "Substance",
+          "span": [
+            3988,
+            3989
+          ],
+          "note": "- The paper's distinctive claim is [[evaluation-induced-hallucination.md]]: hallucinations survive post-training because the field's primary benchmarks use binary 0-1 grading that awards no credit for \"I don't know\" (IDK), so abstaining is strictly sub-optimal and an overconfident guess maximizes ex"
+        },
+        {
+          "cls": "numeric",
+          "text": "0",
+          "section": "Substance",
+          "span": [
+            4612,
+            4613
+          ],
+          "note": "- The proposed fix is socio-technical, not a new benchmark: modify the scoring of the mainstream, leaderboard-dominating evaluations to state an explicit confidence target in each question's instructions (e.g., \"answer only if you are >t confident; a wrong answer costs t/(1−t) points, a correct answ"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[calibration.md]]",
+          "section": "Substance",
+          "span": [
+            4712,
+            4730
+          ],
+          "note": "calibration.md"
+        },
+        {
+          "cls": "caveat",
+          "text": "- Limitations the authors flag: the analysis only covers plausible strings (ignores nonsense), models a single factual question rather than open-ended generation, and treats correct/incorrect/IDK as a \"false trichotomy\"; search and reasoning are explicitly not panaceas because binary grading still rewards guessing whenever retrieval fails.[^1]",
+          "section": "Substance",
+          "span": [
+            4925,
+            5270
+          ],
+          "note": ""
+        },
+        {
+          "cls": "caveat",
+          "text": "> Like students facing hard exam questions, large language models sometimes guess when uncertain, producing plausible yet incorrect statements instead of admitting uncertainty.",
+          "section": "Notable quotes",
+          "span": [
+            5291,
+            5467
+          ],
+          "note": ""
+        },
+        {
+          "cls": "caveat",
+          "text": "> Language models are optimized to be good test-takers, and guessing when uncertain improves test performance.",
+          "section": "Notable quotes",
+          "span": [
+            5576,
+            5686
+          ],
+          "note": ""
+        },
+        {
+          "cls": "rule_label",
+          "text": "Type:",
+          "section": "Methodology",
+          "span": [
+            5775,
+            5784
+          ],
+          "note": "- **Type:** Theoretical paper with formal proofs (computational learning theory), plus a small empirical meta-evaluation of benchmark grading and illustrative model probes."
+        },
+        {
+          "cls": "numeric",
+          "text": "50",
+          "section": "Methodology",
+          "span": [
+            6026,
+            6028
+          ],
+          "note": "- **Core formal objects:** the Is-It-Valid (IIV) binary-classification problem (50/50 mixture of valid examples and uniformly random errors); the reduction theorem `err ≥ 2·err_iiv − |V|/|E| − δ` (Corollary 1, generalized with prompts in Theorem 1); the Arbitrary Facts model and singleton-rate bound"
+        },
+        {
+          "cls": "numeric",
+          "text": "1",
+          "section": "Methodology",
+          "span": [
+            6192,
+            6193
+          ],
+          "note": "- **Core formal objects:** the Is-It-Valid (IIV) binary-classification problem (50/50 mixture of valid examples and uniformly random errors); the reduction theorem `err ≥ 2·err_iiv − |V|/|E| − δ` (Corollary 1, generalized with prompts in Theorem 1); the Arbitrary Facts model and singleton-rate bound"
+        },
+        {
+          "cls": "rule_label",
+          "text": "Calibration argument:",
+          "section": "Methodology",
+          "span": [
+            6394,
+            6419
+          ],
+          "note": "- **Calibration argument:** δ (miscalibration at threshold 1/|E|) is shown to equal the magnitude of the loss derivative under probability rescaling, justifying small δ for any model class powerful enough to approximate rescaling under cross-entropy.[^1]"
+        },
+        {
+          "cls": "rule_label",
+          "text": "Empirical illustrations (not the contribution):",
+          "section": "Methodology",
+          "span": [
+            6649,
+            6700
+          ],
+          "note": "- **Empirical illustrations (not the contribution):** repeated probes of state-of-the-art models on the author's birthday, the \"Ds in DEEPSEEK\" count, and Adam Kalai's dissertation title (Table 1) across GPT-4o/ChatGPT, DeepSeek-V3, DeepSeek-R1, Llama, Meta AI, and Claude 3.7 Sonnet; a calibration f"
+        },
+        {
+          "cls": "rule_label",
+          "text": "Meta-evaluation:",
+          "section": "Methodology",
+          "span": [
+            6983,
+            7003
+          ],
+          "note": "- **Meta-evaluation:** Table 2 classifies ten mainstream benchmarks by scoring method, whether grading is binary, and whether IDK earns credit — finding nearly all binary with no IDK credit.[^1]"
+        },
+        {
+          "cls": "caveat",
+          "text": "- **Limitations (author-stated):** plausible-strings-only scope; single-factual-question framing; correct/incorrect/IDK \"false trichotomy\"; search/RAG and reasoning do not escape the incentive problem.[^1]",
+          "section": "Methodology",
+          "span": [
+            7176,
+            7381
+          ],
+          "note": ""
+        }
+      ],
+      "class_counts": {
+        "numeric": {
+          "eligible": 22,
+          "deleted": 4
+        },
+        "caveat": {
+          "eligible": 5,
+          "deleted": 5
+        },
+        "reasoning_chain": {
+          "eligible": 6,
+          "deleted": 4
+        },
+        "named_entity": {
+          "eligible": 5,
+          "deleted": 5
+        },
+        "rule_label": {
+          "eligible": 5,
+          "deleted": 4
+        }
+      },
+      "label": "thin"
+    },
+    {
+      "schema": "silver-ablation/1",
+      "kind": "article",
+      "origin": "every",
+      "source_page": "3-resources/knowledge-base/wiki/sources/every/2026-05-27-after-automation.md",
+      "raw_path": "3-resources/knowledge-base/raw/every/2026-05-27-after-automation.md",
+      "grade": 0.05,
+      "ablated_page": "3-resources/tools/sb-os/wiki/scripts/calibration/data/ablated/every__2026-05-27-after-automation__g05.md",
+      "source_sha256": "6c92703e9e5449f15332e3ff23bb3ea08e3912a8ab629ad5a937c8041520879a",
+      "deleted": [
+        {
+          "cls": "named_entity",
+          "text": "[[codex.md]]",
+          "section": "Substance",
+          "span": [
+            1161,
+            1173
+          ],
+          "note": "codex.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "85",
+          "section": "Substance",
+          "span": [
+            3489,
+            3491
+          ],
+          "note": "- Benchmark context cited: [[humanitys-last-exam.md]] rose from low-single-digits to ~44%; OpenAI's GDPval (see [[gdpval.md]]) put frontier models at ~85% of real economic work and better than human experts on ~40-49% of tasks; [[metr.md]] reported an 80% success rate on 4-hour expert tasks — all fr"
+        }
+      ],
+      "class_counts": {
+        "numeric": {
+          "eligible": 17,
+          "deleted": 1
+        },
+        "rule_label": {
+          "eligible": 2,
+          "deleted": 0
+        },
+        "named_entity": {
+          "eligible": 12,
+          "deleted": 1
+        }
+      },
+      "label": "thin"
+    },
+    {
+      "schema": "silver-ablation/1",
+      "kind": "article",
+      "origin": "every",
+      "source_page": "3-resources/knowledge-base/wiki/sources/every/2026-05-27-after-automation.md",
+      "raw_path": "3-resources/knowledge-base/raw/every/2026-05-27-after-automation.md",
+      "grade": 0.25,
+      "ablated_page": "3-resources/tools/sb-os/wiki/scripts/calibration/data/ablated/every__2026-05-27-after-automation__g25.md",
+      "source_sha256": "6c92703e9e5449f15332e3ff23bb3ea08e3912a8ab629ad5a937c8041520879a",
+      "deleted": [
+        {
+          "cls": "named_entity",
+          "text": "[[every.md]]",
+          "section": "Substance",
+          "span": [
+            419,
+            431
+          ],
+          "note": "every.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "30",
+          "section": "Substance",
+          "span": [
+            619,
+            621
+          ],
+          "note": "- The essay's central paradox: [[every.md]] has automated as much knowledge work as possible (using [[claude-code.md]], [[codex.md]], and in-house agents) yet has *more* expert human work to do than ever — it has not replaced its ~30 employees with agents.[^1]"
+        },
+        {
+          "cls": "rule_label",
+          "text": "agent-as-employee",
+          "section": "Substance",
+          "span": [
+            970,
+            991
+          ],
+          "note": "- Work with agents is settling into two modes: **agent-as-employee** (delegated coworker agents like [[every.md]]'s Claudie/Andy/Viktor and embedded agents like Fin in customer service) and **human-agent collaboration** inside tools like [[codex.md]], [[claude-code.md]], and Claude Cowork that act a"
+        },
+        {
+          "cls": "rule_label",
+          "text": "human-agent collaboration",
+          "section": "Substance",
+          "span": [
+            1113,
+            1142
+          ],
+          "note": "- Work with agents is settling into two modes: **agent-as-employee** (delegated coworker agents like [[every.md]]'s Claudie/Andy/Viktor and embedded agents like Fin in customer service) and **human-agent collaboration** inside tools like [[codex.md]], [[claude-code.md]], and Claude Cowork that act a"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[codex.md]]",
+          "section": "Substance",
+          "span": [
+            1161,
+            1173
+          ],
+          "note": "codex.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "85",
+          "section": "Substance",
+          "span": [
+            3489,
+            3491
+          ],
+          "note": "- Benchmark context cited: [[humanitys-last-exam.md]] rose from low-single-digits to ~44%; OpenAI's GDPval (see [[gdpval.md]]) put frontier models at ~85% of real economic work and better than human experts on ~40-49% of tasks; [[metr.md]] reported an 80% success rate on 4-hour expert tasks — all fr"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[metr.md]]",
+          "section": "Substance",
+          "span": [
+            3566,
+            3577
+          ],
+          "note": "metr.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "100",
+          "section": "Substance",
+          "span": [
+            3878,
+            3881
+          ],
+          "note": "- Coding evidence: on Every's in-house \"Senior Engineer benchmark\" (a first-principles rewrite of a vibe-coded codebase), [[gpt-5.5.md]] scored 62/100 on its best run — ~30 points above Opus 4.7 — which the author reads as crossing toward human-senior-engineer level (high-80s/low-90s) while insistin"
+        }
+      ],
+      "class_counts": {
+        "numeric": {
+          "eligible": 17,
+          "deleted": 3
+        },
+        "rule_label": {
+          "eligible": 2,
+          "deleted": 2
+        },
+        "named_entity": {
+          "eligible": 12,
+          "deleted": 3
+        }
+      },
+      "label": "thin"
+    },
+    {
+      "schema": "silver-ablation/1",
+      "kind": "article",
+      "origin": "every",
+      "source_page": "3-resources/knowledge-base/wiki/sources/every/2026-05-27-after-automation.md",
+      "raw_path": "3-resources/knowledge-base/raw/every/2026-05-27-after-automation.md",
+      "grade": 0.5,
+      "ablated_page": "3-resources/tools/sb-os/wiki/scripts/calibration/data/ablated/every__2026-05-27-after-automation__g50.md",
+      "source_sha256": "6c92703e9e5449f15332e3ff23bb3ea08e3912a8ab629ad5a937c8041520879a",
+      "deleted": [
+        {
+          "cls": "named_entity",
+          "text": "[[every.md]]",
+          "section": "Substance",
+          "span": [
+            419,
+            431
+          ],
+          "note": "every.md"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[claude-code.md]]",
+          "section": "Substance",
+          "span": [
+            488,
+            506
+          ],
+          "note": "claude-code.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "30",
+          "section": "Substance",
+          "span": [
+            619,
+            621
+          ],
+          "note": "- The essay's central paradox: [[every.md]] has automated as much knowledge work as possible (using [[claude-code.md]], [[codex.md]], and in-house agents) yet has *more* expert human work to do than ever — it has not replaced its ~30 employees with agents.[^1]"
+        },
+        {
+          "cls": "rule_label",
+          "text": "agent-as-employee",
+          "section": "Substance",
+          "span": [
+            970,
+            991
+          ],
+          "note": "- Work with agents is settling into two modes: **agent-as-employee** (delegated coworker agents like [[every.md]]'s Claudie/Andy/Viktor and embedded agents like Fin in customer service) and **human-agent collaboration** inside tools like [[codex.md]], [[claude-code.md]], and Claude Cowork that act a"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[every.md]]",
+          "section": "Substance",
+          "span": [
+            1024,
+            1036
+          ],
+          "note": "every.md"
+        },
+        {
+          "cls": "rule_label",
+          "text": "human-agent collaboration",
+          "section": "Substance",
+          "span": [
+            1113,
+            1142
+          ],
+          "note": "- Work with agents is settling into two modes: **agent-as-employee** (delegated coworker agents like [[every.md]]'s Claudie/Andy/Viktor and embedded agents like Fin in customer service) and **human-agent collaboration** inside tools like [[codex.md]], [[claude-code.md]], and Claude Cowork that act a"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[codex.md]]",
+          "section": "Substance",
+          "span": [
+            1161,
+            1173
+          ],
+          "note": "codex.md"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[chart-psychosis.md]]",
+          "section": "Substance",
+          "span": [
+            2215,
+            2237
+          ],
+          "note": "chart-psychosis.md"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[humanitys-last-exam.md]]",
+          "section": "Substance",
+          "span": [
+            3365,
+            3391
+          ],
+          "note": "humanitys-last-exam.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "85",
+          "section": "Substance",
+          "span": [
+            3489,
+            3491
+          ],
+          "note": "- Benchmark context cited: [[humanitys-last-exam.md]] rose from low-single-digits to ~44%; OpenAI's GDPval (see [[gdpval.md]]) put frontier models at ~85% of real economic work and better than human experts on ~40-49% of tasks; [[metr.md]] reported an 80% success rate on 4-hour expert tasks — all fr"
+        },
+        {
+          "cls": "numeric",
+          "text": "49",
+          "section": "Substance",
+          "span": [
+            3552,
+            3554
+          ],
+          "note": "- Benchmark context cited: [[humanitys-last-exam.md]] rose from low-single-digits to ~44%; OpenAI's GDPval (see [[gdpval.md]]) put frontier models at ~85% of real economic work and better than human experts on ~40-49% of tasks; [[metr.md]] reported an 80% success rate on 4-hour expert tasks — all fr"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[metr.md]]",
+          "section": "Substance",
+          "span": [
+            3566,
+            3577
+          ],
+          "note": "metr.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "5.5",
+          "section": "Substance",
+          "span": [
+            3859,
+            3862
+          ],
+          "note": "- Coding evidence: on Every's in-house \"Senior Engineer benchmark\" (a first-principles rewrite of a vibe-coded codebase), [[gpt-5.5.md]] scored 62/100 on its best run — ~30 points above Opus 4.7 — which the author reads as crossing toward human-senior-engineer level (high-80s/low-90s) while insistin"
+        },
+        {
+          "cls": "numeric",
+          "text": "62",
+          "section": "Substance",
+          "span": [
+            3875,
+            3877
+          ],
+          "note": "- Coding evidence: on Every's in-house \"Senior Engineer benchmark\" (a first-principles rewrite of a vibe-coded codebase), [[gpt-5.5.md]] scored 62/100 on its best run — ~30 points above Opus 4.7 — which the author reads as crossing toward human-senior-engineer level (high-80s/low-90s) while insistin"
+        },
+        {
+          "cls": "numeric",
+          "text": "100",
+          "section": "Substance",
+          "span": [
+            3878,
+            3881
+          ],
+          "note": "- Coding evidence: on Every's in-house \"Senior Engineer benchmark\" (a first-principles rewrite of a vibe-coded codebase), [[gpt-5.5.md]] scored 62/100 on its best run — ~30 points above Opus 4.7 — which the author reads as crossing toward human-senior-engineer level (high-80s/low-90s) while insistin"
+        },
+        {
+          "cls": "numeric",
+          "text": "90",
+          "section": "Substance",
+          "span": [
+            4012,
+            4014
+          ],
+          "note": "- Coding evidence: on Every's in-house \"Senior Engineer benchmark\" (a first-principles rewrite of a vibe-coded codebase), [[gpt-5.5.md]] scored 62/100 on its best run — ~30 points above Opus 4.7 — which the author reads as crossing toward human-senior-engineer level (high-80s/low-90s) while insistin"
+        }
+      ],
+      "class_counts": {
+        "numeric": {
+          "eligible": 17,
+          "deleted": 7
+        },
+        "rule_label": {
+          "eligible": 2,
+          "deleted": 2
+        },
+        "named_entity": {
+          "eligible": 12,
+          "deleted": 7
+        }
+      },
+      "label": "thin"
+    },
+    {
+      "schema": "silver-ablation/1",
+      "kind": "article",
+      "origin": "every",
+      "source_page": "3-resources/knowledge-base/wiki/sources/every/2026-06-02-agent-native-product-management.md",
+      "raw_path": "3-resources/knowledge-base/raw/every/2026-06-02-agent-native-product-management.md",
+      "grade": 0.05,
+      "ablated_page": "3-resources/tools/sb-os/wiki/scripts/calibration/data/ablated/every__2026-06-02-agent-native-product-management__g05.md",
+      "source_sha256": "3cec4a025345f89dbe25761acfb2729c8f3b9a91122cede2a3d5073f5b4fc92f",
+      "deleted": [
+        {
+          "cls": "reasoning_chain",
+          "text": "- [[marcus-moretti.md]], a product manager at [[every.md]], argues that [[product-management.md]] is now done in conversation with an agent — in his case [[claude-code.md]] — rather than across dozens of tools: \"the conversation is the work.\" The discipline was born at Procter & Gamble in the 1930s (the accountable \"Brand Man\") and accreted duties over decades (HP's customer-engineering middleman; internet-era UX, agile, A/B testing) until the average company runs 100+ software subscriptions and PMs burn out on interdisciplinary overload.[^1]",
+          "section": "Substance",
+          "span": [
+            466,
+            1014
+          ],
+          "note": ""
+        },
+        {
+          "cls": "numeric",
+          "text": "5",
+          "section": "Substance",
+          "span": [
+            2812,
+            2813
+          ],
+          "note": "- The `ce-product-pulse` skill generates a [[product-pulse.md]]: an on-demand, single-page (~30–40 terminal lines) product-health report with four parts — **headlines** (top bullets), **usage** (engagement, value-realization, conversions, strategy-metric deltas), **system performance** (p50/p95/p99 "
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[claude-code.md]]",
+          "section": "Substance",
+          "span": [
+            3415,
+            3433
+          ],
+          "note": "claude-code.md"
+        }
+      ],
+      "class_counts": {
+        "numeric": {
+          "eligible": 20,
+          "deleted": 1
+        },
+        "rule_label": {
+          "eligible": 11,
+          "deleted": 0
+        },
+        "reasoning_chain": {
+          "eligible": 2,
+          "deleted": 1
+        },
+        "named_entity": {
+          "eligible": 10,
+          "deleted": 1
+        }
+      },
+      "label": "thin"
+    },
+    {
+      "schema": "silver-ablation/1",
+      "kind": "article",
+      "origin": "every",
+      "source_page": "3-resources/knowledge-base/wiki/sources/every/2026-06-02-agent-native-product-management.md",
+      "raw_path": "3-resources/knowledge-base/raw/every/2026-06-02-agent-native-product-management.md",
+      "grade": 0.25,
+      "ablated_page": "3-resources/tools/sb-os/wiki/scripts/calibration/data/ablated/every__2026-06-02-agent-native-product-management__g25.md",
+      "source_sha256": "3cec4a025345f89dbe25761acfb2729c8f3b9a91122cede2a3d5073f5b4fc92f",
+      "deleted": [
+        {
+          "cls": "reasoning_chain",
+          "text": "- [[marcus-moretti.md]], a product manager at [[every.md]], argues that [[product-management.md]] is now done in conversation with an agent — in his case [[claude-code.md]] — rather than across dozens of tools: \"the conversation is the work.\" The discipline was born at Procter & Gamble in the 1930s (the accountable \"Brand Man\") and accreted duties over decades (HP's customer-engineering middleman; internet-era UX, agile, A/B testing) until the average company runs 100+ software subscriptions and PMs burn out on interdisciplinary overload.[^1]",
+          "section": "Substance",
+          "span": [
+            466,
+            1014
+          ],
+          "note": ""
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[marcus-moretti.md]]",
+          "section": "Substance",
+          "span": [
+            468,
+            489
+          ],
+          "note": "marcus-moretti.md"
+        },
+        {
+          "cls": "rule_label",
+          "text": "plan",
+          "section": "Substance",
+          "span": [
+            1159,
+            1167
+          ],
+          "note": "- The work is framed as a plan → ship → review → repeat loop ([[spec-driven-development.md|SDLC]]), with product management concentrated in the **plan** and **review** stages; per [[kieran-klaassen.md]], software has shifted from 20% planning / 80% execution to 80% planning / 20% execution, so the s"
+        },
+        {
+          "cls": "numeric",
+          "text": "80",
+          "section": "Substance",
+          "span": [
+            1277,
+            1279
+          ],
+          "note": "- The work is framed as a plan → ship → review → repeat loop ([[spec-driven-development.md|SDLC]]), with product management concentrated in the **plan** and **review** stages; per [[kieran-klaassen.md]], software has shifted from 20% planning / 80% execution to 80% planning / 20% execution, so the s"
+        },
+        {
+          "cls": "rule_label",
+          "text": "who it's for",
+          "section": "Substance",
+          "span": [
+            1662,
+            1678
+          ],
+          "note": "- The strategy artifact is a `strategy.md` produced by the `ce-strategy` skill, whose structure is taken from Richard Rumelt's *Good Strategy Bad Strategy*. Five required components: **target problem** (recurring, expensive pain), **approach** (one or two sentences of guiding policy — not a goal or "
+        },
+        {
+          "cls": "numeric",
+          "text": "30",
+          "section": "Substance",
+          "span": [
+            2592,
+            2594
+          ],
+          "note": "- The `ce-product-pulse` skill generates a [[product-pulse.md]]: an on-demand, single-page (~30–40 terminal lines) product-health report with four parts — **headlines** (top bullets), **usage** (engagement, value-realization, conversions, strategy-metric deltas), **system performance** (p50/p95/p99 "
+        },
+        {
+          "cls": "rule_label",
+          "text": "headlines",
+          "section": "Substance",
+          "span": [
+            2654,
+            2667
+          ],
+          "note": "- The `ce-product-pulse` skill generates a [[product-pulse.md]]: an on-demand, single-page (~30–40 terminal lines) product-health report with four parts — **headlines** (top bullets), **usage** (engagement, value-realization, conversions, strategy-metric deltas), **system performance** (p50/p95/p99 "
+        },
+        {
+          "cls": "numeric",
+          "text": "5",
+          "section": "Substance",
+          "span": [
+            2812,
+            2813
+          ],
+          "note": "- The `ce-product-pulse` skill generates a [[product-pulse.md]]: an on-demand, single-page (~30–40 terminal lines) product-health report with four parts — **headlines** (top bullets), **usage** (engagement, value-realization, conversions, strategy-metric deltas), **system performance** (p50/p95/p99 "
+        },
+        {
+          "cls": "reasoning_chain",
+          "text": "- Each run saves to `~/pulse-reports/` as dated Markdown, turning the folder into the product's working memory (\"when did this trend start?\"). Pulses run on a cadence via [[claude-code.md]]'s Routines feature (the author runs one daily at 8 a.m.). The agent is instructed to read the report \"like a founder,\" annotate anomalies, and run follow-up queries; by default it flags metrics by common sense and comparison to prior pulses rather than hard thresholds.[^1]",
+          "section": "Substance",
+          "span": [
+            3244,
+            3707
+          ],
+          "note": ""
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[claude-code.md]]",
+          "section": "Substance",
+          "span": [
+            3415,
+            3433
+          ],
+          "note": "claude-code.md"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[compound-engineering-plugin.md]]",
+          "section": "Substance",
+          "span": [
+            3753,
+            3787
+          ],
+          "note": "compound-engineering-plugin.md"
+        }
+      ],
+      "class_counts": {
+        "numeric": {
+          "eligible": 20,
+          "deleted": 3
+        },
+        "rule_label": {
+          "eligible": 11,
+          "deleted": 3
+        },
+        "reasoning_chain": {
+          "eligible": 2,
+          "deleted": 2
+        },
+        "named_entity": {
+          "eligible": 10,
+          "deleted": 3
+        }
+      },
+      "label": "thin"
+    },
+    {
+      "schema": "silver-ablation/1",
+      "kind": "article",
+      "origin": "every",
+      "source_page": "3-resources/knowledge-base/wiki/sources/every/2026-06-02-agent-native-product-management.md",
+      "raw_path": "3-resources/knowledge-base/raw/every/2026-06-02-agent-native-product-management.md",
+      "grade": 0.5,
+      "ablated_page": "3-resources/tools/sb-os/wiki/scripts/calibration/data/ablated/every__2026-06-02-agent-native-product-management__g50.md",
+      "source_sha256": "3cec4a025345f89dbe25761acfb2729c8f3b9a91122cede2a3d5073f5b4fc92f",
+      "deleted": [
+        {
+          "cls": "reasoning_chain",
+          "text": "- [[marcus-moretti.md]], a product manager at [[every.md]], argues that [[product-management.md]] is now done in conversation with an agent — in his case [[claude-code.md]] — rather than across dozens of tools: \"the conversation is the work.\" The discipline was born at Procter & Gamble in the 1930s (the accountable \"Brand Man\") and accreted duties over decades (HP's customer-engineering middleman; internet-era UX, agile, A/B testing) until the average company runs 100+ software subscriptions and PMs burn out on interdisciplinary overload.[^1]",
+          "section": "Substance",
+          "span": [
+            466,
+            1014
+          ],
+          "note": ""
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[marcus-moretti.md]]",
+          "section": "Substance",
+          "span": [
+            468,
+            489
+          ],
+          "note": "marcus-moretti.md"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[every.md]]",
+          "section": "Substance",
+          "span": [
+            512,
+            524
+          ],
+          "note": "every.md"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[product-management.md]]",
+          "section": "Substance",
+          "span": [
+            538,
+            563
+          ],
+          "note": "product-management.md"
+        },
+        {
+          "cls": "rule_label",
+          "text": "plan",
+          "section": "Substance",
+          "span": [
+            1159,
+            1167
+          ],
+          "note": "- The work is framed as a plan → ship → review → repeat loop ([[spec-driven-development.md|SDLC]]), with product management concentrated in the **plan** and **review** stages; per [[kieran-klaassen.md]], software has shifted from 20% planning / 80% execution to 80% planning / 20% execution, so the s"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[kieran-klaassen.md]]",
+          "section": "Substance",
+          "span": [
+            1195,
+            1217
+          ],
+          "note": "kieran-klaassen.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "80",
+          "section": "Substance",
+          "span": [
+            1277,
+            1279
+          ],
+          "note": "- The work is framed as a plan → ship → review → repeat loop ([[spec-driven-development.md|SDLC]]), with product management concentrated in the **plan** and **review** stages; per [[kieran-klaassen.md]], software has shifted from 20% planning / 80% execution to 80% planning / 20% execution, so the s"
+        },
+        {
+          "cls": "rule_label",
+          "text": "who it's for",
+          "section": "Substance",
+          "span": [
+            1662,
+            1678
+          ],
+          "note": "- The strategy artifact is a `strategy.md` produced by the `ce-strategy` skill, whose structure is taken from Richard Rumelt's *Good Strategy Bad Strategy*. Five required components: **target problem** (recurring, expensive pain), **approach** (one or two sentences of guiding policy — not a goal or "
+        },
+        {
+          "cls": "rule_label",
+          "text": "key metrics",
+          "section": "Substance",
+          "span": [
+            1738,
+            1753
+          ],
+          "note": "- The strategy artifact is a `strategy.md` produced by the `ce-strategy` skill, whose structure is taken from Richard Rumelt's *Good Strategy Bad Strategy*. Five required components: **target problem** (recurring, expensive pain), **approach** (one or two sentences of guiding policy — not a goal or "
+        },
+        {
+          "cls": "numeric",
+          "text": "3",
+          "section": "Substance",
+          "span": [
+            1755,
+            1756
+          ],
+          "note": "- The strategy artifact is a `strategy.md` produced by the `ce-strategy` skill, whose structure is taken from Richard Rumelt's *Good Strategy Bad Strategy*. Five required components: **target problem** (recurring, expensive pain), **approach** (one or two sentences of guiding policy — not a goal or "
+        },
+        {
+          "cls": "rule_label",
+          "text": "tracks",
+          "section": "Substance",
+          "span": [
+            1807,
+            1817
+          ],
+          "note": "- The strategy artifact is a `strategy.md` produced by the `ce-strategy` skill, whose structure is taken from Richard Rumelt's *Good Strategy Bad Strategy*. Five required components: **target problem** (recurring, expensive pain), **approach** (one or two sentences of guiding policy — not a goal or "
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[model-context-protocol.md|MCP]]",
+          "section": "Substance",
+          "span": [
+            2208,
+            2241
+          ],
+          "note": "model-context-protocol.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "30",
+          "section": "Substance",
+          "span": [
+            2592,
+            2594
+          ],
+          "note": "- The `ce-product-pulse` skill generates a [[product-pulse.md]]: an on-demand, single-page (~30–40 terminal lines) product-health report with four parts — **headlines** (top bullets), **usage** (engagement, value-realization, conversions, strategy-metric deltas), **system performance** (p50/p95/p99 "
+        },
+        {
+          "cls": "rule_label",
+          "text": "headlines",
+          "section": "Substance",
+          "span": [
+            2654,
+            2667
+          ],
+          "note": "- The `ce-product-pulse` skill generates a [[product-pulse.md]]: an on-demand, single-page (~30–40 terminal lines) product-health report with four parts — **headlines** (top bullets), **usage** (engagement, value-realization, conversions, strategy-metric deltas), **system performance** (p50/p95/p99 "
+        },
+        {
+          "cls": "rule_label",
+          "text": "usage",
+          "section": "Substance",
+          "span": [
+            2683,
+            2692
+          ],
+          "note": "- The `ce-product-pulse` skill generates a [[product-pulse.md]]: an on-demand, single-page (~30–40 terminal lines) product-health report with four parts — **headlines** (top bullets), **usage** (engagement, value-realization, conversions, strategy-metric deltas), **system performance** (p50/p95/p99 "
+        },
+        {
+          "cls": "numeric",
+          "text": "5",
+          "section": "Substance",
+          "span": [
+            2812,
+            2813
+          ],
+          "note": "- The `ce-product-pulse` skill generates a [[product-pulse.md]]: an on-demand, single-page (~30–40 terminal lines) product-health report with four parts — **headlines** (top bullets), **usage** (engagement, value-realization, conversions, strategy-metric deltas), **system performance** (p50/p95/p99 "
+        },
+        {
+          "cls": "numeric",
+          "text": "5",
+          "section": "Substance",
+          "span": [
+            2882,
+            2883
+          ],
+          "note": "- The `ce-product-pulse` skill generates a [[product-pulse.md]]: an on-demand, single-page (~30–40 terminal lines) product-health report with four parts — **headlines** (top bullets), **usage** (engagement, value-realization, conversions, strategy-metric deltas), **system performance** (p50/p95/p99 "
+        },
+        {
+          "cls": "reasoning_chain",
+          "text": "- Each run saves to `~/pulse-reports/` as dated Markdown, turning the folder into the product's working memory (\"when did this trend start?\"). Pulses run on a cadence via [[claude-code.md]]'s Routines feature (the author runs one daily at 8 a.m.). The agent is instructed to read the report \"like a founder,\" annotate anomalies, and run follow-up queries; by default it flags metrics by common sense and comparison to prior pulses rather than hard thresholds.[^1]",
+          "section": "Substance",
+          "span": [
+            3244,
+            3707
+          ],
+          "note": ""
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[claude-code.md]]",
+          "section": "Substance",
+          "span": [
+            3415,
+            3433
+          ],
+          "note": "claude-code.md"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[compound-engineering-plugin.md]]",
+          "section": "Substance",
+          "span": [
+            3753,
+            3787
+          ],
+          "note": "compound-engineering-plugin.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "20",
+          "section": "Notable quotes",
+          "span": [
+            4371,
+            4373
+          ],
+          "note": "- \"Software development has shifted from 20 percent planning and 80 percent execution to 80 percent planning and 20 percent execution.\" (attributed to Kieran Klaassen)[^1]"
+        },
+        {
+          "cls": "numeric",
+          "text": "80",
+          "section": "Notable quotes",
+          "span": [
+            4419,
+            4421
+          ],
+          "note": "- \"Software development has shifted from 20 percent planning and 80 percent execution to 80 percent planning and 20 percent execution.\" (attributed to Kieran Klaassen)[^1]"
+        }
+      ],
+      "class_counts": {
+        "numeric": {
+          "eligible": 20,
+          "deleted": 7
+        },
+        "rule_label": {
+          "eligible": 11,
+          "deleted": 6
+        },
+        "reasoning_chain": {
+          "eligible": 2,
+          "deleted": 2
+        },
+        "named_entity": {
+          "eligible": 10,
+          "deleted": 7
+        }
+      },
+      "label": "thin"
+    },
+    {
+      "schema": "silver-ablation/1",
+      "kind": "article",
+      "origin": "stratechery",
+      "source_page": "3-resources/knowledge-base/wiki/sources/stratechery/the-inference-shift.md",
+      "raw_path": "3-resources/knowledge-base/raw/stratechery/the-inference-shift.md",
+      "grade": 0.05,
+      "ablated_page": "3-resources/tools/sb-os/wiki/scripts/calibration/data/ablated/stratechery__the-inference-shift__g05.md",
+      "source_sha256": "fbe08fc74bb8d1c71843d683281fe87e82ae5ac1a5df1252c02edf8a32f7fe83",
+      "deleted": [
+        {
+          "cls": "numeric",
+          "text": "300MW",
+          "section": "Substance",
+          "span": [
+            1096,
+            1101
+          ],
+          "note": "- [[nvidia.md]]'s GPU advantage rests on three capabilities — high compute for the prefill step, abundant [[high-bandwidth-memory.md]] for the [[kv-cache.md]] and model weights, and chip-to-chip networking to pool memory across chips — and that flexibility lets one GPU fleet do both training and inf"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[jensen-huang.md]]",
+          "section": "Substance",
+          "span": [
+            3347,
+            3366
+          ],
+          "note": "jensen-huang.md"
+        }
+      ],
+      "class_counts": {
+        "numeric": {
+          "eligible": 11,
+          "deleted": 1
+        },
+        "reasoning_chain": {
+          "eligible": 4,
+          "deleted": 0
+        },
+        "named_entity": {
+          "eligible": 24,
+          "deleted": 1
+        }
+      },
+      "label": "thin"
+    },
+    {
+      "schema": "silver-ablation/1",
+      "kind": "article",
+      "origin": "stratechery",
+      "source_page": "3-resources/knowledge-base/wiki/sources/stratechery/the-inference-shift.md",
+      "raw_path": "3-resources/knowledge-base/raw/stratechery/the-inference-shift.md",
+      "grade": 0.25,
+      "ablated_page": "3-resources/tools/sb-os/wiki/scripts/calibration/data/ablated/stratechery__the-inference-shift__g25.md",
+      "source_sha256": "fbe08fc74bb8d1c71843d683281fe87e82ae5ac1a5df1252c02edf8a32f7fe83",
+      "deleted": [
+        {
+          "cls": "reasoning_chain",
+          "text": "- AI compute is becoming heterogeneous rather than GPU-monolithic: while [[gpu.md]] hardware (led by [[nvidia.md]]) has carried both the [[ai-training-workload.md]] and [[ai-inference.md]], the future splits across distinct chip architectures matched to distinct workloads, of which Cerebras' May-2026 IPO (priced up to $150–160/share from $115–125 as demand surged) is one signal.[^1]",
+          "section": "Substance",
+          "span": [
+            327,
+            712
+          ],
+          "note": ""
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[ai-inference.md]]",
+          "section": "Substance",
+          "span": [
+            496,
+            515
+          ],
+          "note": "ai-inference.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "$150",
+          "section": "Substance",
+          "span": [
+            647,
+            651
+          ],
+          "note": "- AI compute is becoming heterogeneous rather than GPU-monolithic: while [[gpu.md]] hardware (led by [[nvidia.md]]) has carried both the [[ai-training-workload.md]] and [[ai-inference.md]], the future splits across distinct chip architectures matched to distinct workloads, of which Cerebras' May-202"
+        },
+        {
+          "cls": "numeric",
+          "text": "125",
+          "section": "Substance",
+          "span": [
+            672,
+            675
+          ],
+          "note": "- AI compute is becoming heterogeneous rather than GPU-monolithic: while [[gpu.md]] hardware (led by [[nvidia.md]]) has carried both the [[ai-training-workload.md]] and [[ai-inference.md]], the future splits across distinct chip architectures matched to distinct workloads, of which Cerebras' May-202"
+        },
+        {
+          "cls": "numeric",
+          "text": "300MW",
+          "section": "Substance",
+          "span": [
+            1096,
+            1101
+          ],
+          "note": "- [[nvidia.md]]'s GPU advantage rests on three capabilities — high compute for the prefill step, abundant [[high-bandwidth-memory.md]] for the [[kv-cache.md]] and model weights, and chip-to-chip networking to pool memory across chips — and that flexibility lets one GPU fleet do both training and inf"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[ai-inference.md]]",
+          "section": "Substance",
+          "span": [
+            1420,
+            1439
+          ],
+          "note": "ai-inference.md"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[groq.md]]",
+          "section": "Substance",
+          "span": [
+            2014,
+            2025
+          ],
+          "note": "groq.md"
+        },
+        {
+          "cls": "reasoning_chain",
+          "text": "- Thompson projects [[agentic-inference.md]] becomes by far the largest market because it scales with compute rather than with humans or time, while [[answer-inference.md]] stays meaningful but relatively small and the [[ai-training-workload.md]] stays [[nvidia.md]]-dominated (high-speed compute, large HBM, high-speed networking).[^1]",
+          "section": "Substance",
+          "span": [
+            2545,
+            2881
+          ],
+          "note": ""
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[jensen-huang.md]]",
+          "section": "Substance",
+          "span": [
+            3347,
+            3366
+          ],
+          "note": "jensen-huang.md"
+        },
+        {
+          "cls": "reasoning_chain",
+          "text": "- \"Maybe the most profound implication of agents that act without humans in the loop ... will be that Moore's Law doesn't matter, and that the way we get more compute is by realizing that the compute we have is already good enough.\"[^1]",
+          "section": "Notable quotes",
+          "span": [
+            3933,
+            4169
+          ],
+          "note": ""
+        }
+      ],
+      "class_counts": {
+        "numeric": {
+          "eligible": 11,
+          "deleted": 3
+        },
+        "reasoning_chain": {
+          "eligible": 4,
+          "deleted": 3
+        },
+        "named_entity": {
+          "eligible": 24,
+          "deleted": 4
+        }
+      },
+      "label": "thin"
+    },
+    {
+      "schema": "silver-ablation/1",
+      "kind": "article",
+      "origin": "stratechery",
+      "source_page": "3-resources/knowledge-base/wiki/sources/stratechery/the-inference-shift.md",
+      "raw_path": "3-resources/knowledge-base/raw/stratechery/the-inference-shift.md",
+      "grade": 0.5,
+      "ablated_page": "3-resources/tools/sb-os/wiki/scripts/calibration/data/ablated/stratechery__the-inference-shift__g50.md",
+      "source_sha256": "fbe08fc74bb8d1c71843d683281fe87e82ae5ac1a5df1252c02edf8a32f7fe83",
+      "deleted": [
+        {
+          "cls": "reasoning_chain",
+          "text": "- AI compute is becoming heterogeneous rather than GPU-monolithic: while [[gpu.md]] hardware (led by [[nvidia.md]]) has carried both the [[ai-training-workload.md]] and [[ai-inference.md]], the future splits across distinct chip architectures matched to distinct workloads, of which Cerebras' May-2026 IPO (priced up to $150–160/share from $115–125 as demand surged) is one signal.[^1]",
+          "section": "Substance",
+          "span": [
+            327,
+            712
+          ],
+          "note": ""
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[gpu.md]]",
+          "section": "Substance",
+          "span": [
+            400,
+            410
+          ],
+          "note": "gpu.md"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[ai-inference.md]]",
+          "section": "Substance",
+          "span": [
+            496,
+            515
+          ],
+          "note": "ai-inference.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "$150",
+          "section": "Substance",
+          "span": [
+            647,
+            651
+          ],
+          "note": "- AI compute is becoming heterogeneous rather than GPU-monolithic: while [[gpu.md]] hardware (led by [[nvidia.md]]) has carried both the [[ai-training-workload.md]] and [[ai-inference.md]], the future splits across distinct chip architectures matched to distinct workloads, of which Cerebras' May-202"
+        },
+        {
+          "cls": "numeric",
+          "text": "125",
+          "section": "Substance",
+          "span": [
+            672,
+            675
+          ],
+          "note": "- AI compute is becoming heterogeneous rather than GPU-monolithic: while [[gpu.md]] hardware (led by [[nvidia.md]]) has carried both the [[ai-training-workload.md]] and [[ai-inference.md]], the future splits across distinct chip architectures matched to distinct workloads, of which Cerebras' May-202"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[kv-cache.md]]",
+          "section": "Substance",
+          "span": [
+            856,
+            871
+          ],
+          "note": "kv-cache.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "1",
+          "section": "Substance",
+          "span": [
+            1073,
+            1074
+          ],
+          "note": "- [[nvidia.md]]'s GPU advantage rests on three capabilities — high compute for the prefill step, abundant [[high-bandwidth-memory.md]] for the [[kv-cache.md]] and model weights, and chip-to-chip networking to pool memory across chips — and that flexibility lets one GPU fleet do both training and inf"
+        },
+        {
+          "cls": "numeric",
+          "text": "300MW",
+          "section": "Substance",
+          "span": [
+            1096,
+            1101
+          ],
+          "note": "- [[nvidia.md]]'s GPU advantage rests on three capabilities — high compute for the prefill step, abundant [[high-bandwidth-memory.md]] for the [[kv-cache.md]] and model weights, and chip-to-chip networking to pool memory across chips — and that flexibility lets one GPU fleet do both training and inf"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[ai-inference.md]]",
+          "section": "Substance",
+          "span": [
+            1420,
+            1439
+          ],
+          "note": "ai-inference.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "3",
+          "section": "Substance",
+          "span": [
+            1529,
+            1530
+          ],
+          "note": "- [[cerebras-systems.md]] takes the opposite approach with the [[wafer-scale-engine-3.md]]: wiring across the wafer's scribe lines makes a whole wafer one chip, yielding 44GB of on-chip SRAM at 21 PB/s — roughly half an H100's memory but ~6,000× its bandwidth — blisteringly fast while model and KV c"
+        },
+        {
+          "cls": "numeric",
+          "text": "44",
+          "section": "Substance",
+          "span": [
+            1615,
+            1617
+          ],
+          "note": "- [[cerebras-systems.md]] takes the opposite approach with the [[wafer-scale-engine-3.md]]: wiring across the wafer's scribe lines makes a whole wafer one chip, yielding 44GB of on-chip SRAM at 21 PB/s — roughly half an H100's memory but ~6,000× its bandwidth — blisteringly fast while model and KV c"
+        },
+        {
+          "cls": "numeric",
+          "text": "21",
+          "section": "Substance",
+          "span": [
+            1639,
+            1641
+          ],
+          "note": "- [[cerebras-systems.md]] takes the opposite approach with the [[wafer-scale-engine-3.md]]: wiring across the wafer's scribe lines makes a whole wafer one chip, yielding 44GB of on-chip SRAM at 21 PB/s — roughly half an H100's memory but ~6,000× its bandwidth — blisteringly fast while model and KV c"
+        },
+        {
+          "cls": "numeric",
+          "text": "6,000",
+          "section": "Substance",
+          "span": [
+            1684,
+            1689
+          ],
+          "note": "- [[cerebras-systems.md]] takes the opposite approach with the [[wafer-scale-engine-3.md]]: wiring across the wafer's scribe lines makes a whole wafer one chip, yielding 44GB of on-chip SRAM at 21 PB/s — roughly half an H100's memory but ~6,000× its bandwidth — blisteringly fast while model and KV c"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[cerebras-systems.md]]",
+          "section": "Substance",
+          "span": [
+            1986,
+            2009
+          ],
+          "note": "cerebras-systems.md"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[groq.md]]",
+          "section": "Substance",
+          "span": [
+            2014,
+            2025
+          ],
+          "note": "groq.md"
+        },
+        {
+          "cls": "reasoning_chain",
+          "text": "- Because agentic work runs without a human waiting, [[agentic-inference.md]] trades speed for capacity: it favors a memory hierarchy (active KV cache, host memory/SSD, databases, embeddings, object stores) wrapped around the model, using slower/cheaper memory such as traditional DRAM and merely \"good enough\" compute — gradually unbundling the [[gpu.md]].[^1]",
+          "section": "Substance",
+          "span": [
+            2183,
+            2544
+          ],
+          "note": ""
+        },
+        {
+          "cls": "reasoning_chain",
+          "text": "- Thompson projects [[agentic-inference.md]] becomes by far the largest market because it scales with compute rather than with humans or time, while [[answer-inference.md]] stays meaningful but relatively small and the [[ai-training-workload.md]] stays [[nvidia.md]]-dominated (high-speed compute, large HBM, high-speed networking).[^1]",
+          "section": "Substance",
+          "span": [
+            2545,
+            2881
+          ],
+          "note": ""
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[answer-inference.md]]",
+          "section": "Substance",
+          "span": [
+            2694,
+            2717
+          ],
+          "note": "answer-inference.md"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[jensen-huang.md]]",
+          "section": "Substance",
+          "span": [
+            3347,
+            3366
+          ],
+          "note": "jensen-huang.md"
+        },
+        {
+          "cls": "reasoning_chain",
+          "text": "- \"Maybe the most profound implication of agents that act without humans in the loop ... will be that Moore's Law doesn't matter, and that the way we get more compute is by realizing that the compute we have is already good enough.\"[^1]",
+          "section": "Notable quotes",
+          "span": [
+            3933,
+            4169
+          ],
+          "note": ""
+        }
+      ],
+      "class_counts": {
+        "numeric": {
+          "eligible": 11,
+          "deleted": 8
+        },
+        "reasoning_chain": {
+          "eligible": 4,
+          "deleted": 4
+        },
+        "named_entity": {
+          "eligible": 24,
+          "deleted": 8
+        }
+      },
+      "label": "thin"
+    },
+    {
+      "schema": "silver-ablation/1",
+      "kind": "podcast",
+      "origin": "lennys-podcast",
+      "source_page": "3-resources/knowledge-base/wiki/sources/lennys-podcast/kenneth-berger.md",
+      "raw_path": "3-resources/knowledge-base/raw/lennys-podcast/kenneth-berger.md",
+      "grade": 0.05,
+      "ablated_page": "3-resources/tools/sb-os/wiki/scripts/calibration/data/ablated/lennys-podcast__kenneth-berger__g05.md",
+      "source_sha256": "d6409905459564c06a459c1badfdc9a0af1bc642436e82bf4fd1a4ba84036bb1",
+      "deleted": [
+        {
+          "cls": "named_entity",
+          "text": "[[asking-for-what-you-want.md]]",
+          "section": "Substance",
+          "span": [
+            450,
+            481
+          ],
+          "note": "asking-for-what-you-want.md"
+        }
+      ],
+      "class_counts": {
+        "numeric": {
+          "eligible": 2,
+          "deleted": 0
+        },
+        "reasoning_chain": {
+          "eligible": 4,
+          "deleted": 0
+        },
+        "named_entity": {
+          "eligible": 4,
+          "deleted": 1
+        }
+      },
+      "label": "thin"
+    },
+    {
+      "schema": "silver-ablation/1",
+      "kind": "podcast",
+      "origin": "lennys-podcast",
+      "source_page": "3-resources/knowledge-base/wiki/sources/lennys-podcast/kenneth-berger.md",
+      "raw_path": "3-resources/knowledge-base/raw/lennys-podcast/kenneth-berger.md",
+      "grade": 0.25,
+      "ablated_page": "3-resources/tools/sb-os/wiki/scripts/calibration/data/ablated/lennys-podcast__kenneth-berger__g25.md",
+      "source_sha256": "d6409905459564c06a459c1badfdc9a0af1bc642436e82bf4fd1a4ba84036bb1",
+      "deleted": [
+        {
+          "cls": "named_entity",
+          "text": "[[asking-for-what-you-want.md]]",
+          "section": "Substance",
+          "span": [
+            450,
+            481
+          ],
+          "note": "asking-for-what-you-want.md"
+        },
+        {
+          "cls": "reasoning_chain",
+          "text": "[[dream-behind-the-complaint.md]] holds that every complaint encodes a deeper desire — unpacking frustration surfaces the aspiration that an effective ask can target.[^1] The [[whole-body-yes.md]] heuristic (also \"hell yes\") treats a request as a genuine \"yes\" only when head, heart, and gut align; anything less is a \"no\" and an invitation to find what would create a true yes — applied to deadlines, commitments, and expectation-setting.[^1] And Berger borrows [[internal-family-systems.md]] to handle internal resistance: naming and validating the parts of oneself (the fearful part, the ambitious part) lets a person embrace fear rather than suppress it when making a hard ask.",
+          "section": "Substance",
+          "span": [
+            1143,
+            1825
+          ],
+          "note": ""
+        },
+        {
+          "cls": "numeric",
+          "text": "10",
+          "section": "Substance",
+          "span": [
+            2543,
+            2545
+          ],
+          "note": "Berger's actionable principles: articulate desires even imperfectly (tune into subtle emotions and complaints, balance realistic against inspiring, hold outcomes loosely); ask intentionally and humbly to preserve relationships; accept the \"no\" as data, not permanent rejection; and lean on relationsh"
+        }
+      ],
+      "class_counts": {
+        "numeric": {
+          "eligible": 2,
+          "deleted": 1
+        },
+        "reasoning_chain": {
+          "eligible": 4,
+          "deleted": 1
+        },
+        "named_entity": {
+          "eligible": 4,
+          "deleted": 1
+        }
+      },
+      "label": "thin"
+    },
+    {
+      "schema": "silver-ablation/1",
+      "kind": "podcast",
+      "origin": "lennys-podcast",
+      "source_page": "3-resources/knowledge-base/wiki/sources/lennys-podcast/kenneth-berger.md",
+      "raw_path": "3-resources/knowledge-base/raw/lennys-podcast/kenneth-berger.md",
+      "grade": 0.5,
+      "ablated_page": "3-resources/tools/sb-os/wiki/scripts/calibration/data/ablated/lennys-podcast__kenneth-berger__g50.md",
+      "source_sha256": "d6409905459564c06a459c1badfdc9a0af1bc642436e82bf4fd1a4ba84036bb1",
+      "deleted": [
+        {
+          "cls": "named_entity",
+          "text": "[[asking-for-what-you-want.md]]",
+          "section": "Substance",
+          "span": [
+            450,
+            481
+          ],
+          "note": "asking-for-what-you-want.md"
+        },
+        {
+          "cls": "reasoning_chain",
+          "text": "[[dream-behind-the-complaint.md]] holds that every complaint encodes a deeper desire — unpacking frustration surfaces the aspiration that an effective ask can target.[^1] The [[whole-body-yes.md]] heuristic (also \"hell yes\") treats a request as a genuine \"yes\" only when head, heart, and gut align; anything less is a \"no\" and an invitation to find what would create a true yes — applied to deadlines, commitments, and expectation-setting.[^1] And Berger borrows [[internal-family-systems.md]] to handle internal resistance: naming and validating the parts of oneself (the fearful part, the ambitious part) lets a person embrace fear rather than suppress it when making a hard ask.",
+          "section": "Substance",
+          "span": [
+            1143,
+            1825
+          ],
+          "note": ""
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[whole-body-yes.md]]",
+          "section": "Substance",
+          "span": [
+            1319,
+            1340
+          ],
+          "note": "whole-body-yes.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "10",
+          "section": "Substance",
+          "span": [
+            2543,
+            2545
+          ],
+          "note": "Berger's actionable principles: articulate desires even imperfectly (tune into subtle emotions and complaints, balance realistic against inspiring, hold outcomes loosely); ask intentionally and humbly to preserve relationships; accept the \"no\" as data, not permanent rejection; and lean on relationsh"
+        },
+        {
+          "cls": "numeric",
+          "text": "20",
+          "section": "Substance",
+          "span": [
+            2546,
+            2548
+          ],
+          "note": "Berger's actionable principles: articulate desires even imperfectly (tune into subtle emotions and complaints, balance realistic against inspiring, hold outcomes loosely); ask intentionally and humbly to preserve relationships; accept the \"no\" as data, not permanent rejection; and lean on relationsh"
+        }
+      ],
+      "class_counts": {
+        "numeric": {
+          "eligible": 2,
+          "deleted": 2
+        },
+        "reasoning_chain": {
+          "eligible": 4,
+          "deleted": 1
+        },
+        "named_entity": {
+          "eligible": 4,
+          "deleted": 2
+        }
+      },
+      "label": "thin"
+    },
+    {
+      "schema": "silver-ablation/1",
+      "kind": "podcast",
+      "origin": "lennys-podcast",
+      "source_page": "3-resources/knowledge-base/wiki/sources/lennys-podcast/naomi-gleit.md",
+      "raw_path": "3-resources/knowledge-base/raw/lennys-podcast/naomi-gleit.md",
+      "grade": 0.05,
+      "ablated_page": "3-resources/tools/sb-os/wiki/scripts/calibration/data/ablated/lennys-podcast__naomi-gleit__g05.md",
+      "source_sha256": "d5cc6e82c68b2d5e0a5f58a3ee1a5352e6cc6f2095753fd2e9a4a173b4b6b85e",
+      "deleted": [
+        {
+          "cls": "named_entity",
+          "text": "[[extreme-clarity.md]]",
+          "section": "Substance",
+          "span": [
+            1379,
+            1401
+          ],
+          "note": "extreme-clarity.md"
+        }
+      ],
+      "class_counts": {
+        "numeric": {
+          "eligible": 8,
+          "deleted": 0
+        },
+        "named_entity": {
+          "eligible": 7,
+          "deleted": 1
+        }
+      },
+      "label": "thin"
+    },
+    {
+      "schema": "silver-ablation/1",
+      "kind": "podcast",
+      "origin": "lennys-podcast",
+      "source_page": "3-resources/knowledge-base/wiki/sources/lennys-podcast/naomi-gleit.md",
+      "raw_path": "3-resources/knowledge-base/raw/lennys-podcast/naomi-gleit.md",
+      "grade": 0.25,
+      "ablated_page": "3-resources/tools/sb-os/wiki/scripts/calibration/data/ablated/lennys-podcast__naomi-gleit__g25.md",
+      "source_sha256": "d5cc6e82c68b2d5e0a5f58a3ee1a5352e6cc6f2095753fd2e9a4a173b4b6b85e",
+      "deleted": [
+        {
+          "cls": "named_entity",
+          "text": "[[meta.md]]",
+          "section": "Substance",
+          "span": [
+            522,
+            533
+          ],
+          "note": "meta.md"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[extreme-clarity.md]]",
+          "section": "Substance",
+          "span": [
+            1379,
+            1401
+          ],
+          "note": "extreme-clarity.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "2",
+          "section": "Substance",
+          "span": [
+            2390,
+            2391
+          ],
+          "note": "- Career and personal principles: persist until you get in (she did informal PM work before the title); block 2–3-hour unscheduled time with sparring partners to form a first-party perspective; \"stand up into your fear\" (commit decisively); and treat consistent exercise as training for life.[^1]"
+        },
+        {
+          "cls": "numeric",
+          "text": "3",
+          "section": "Substance",
+          "span": [
+            2392,
+            2393
+          ],
+          "note": "- Career and personal principles: persist until you get in (she did informal PM work before the title); block 2–3-hour unscheduled time with sparring partners to form a first-party perspective; \"stand up into your fear\" (commit decisively); and treat consistent exercise as training for life.[^1]"
+        }
+      ],
+      "class_counts": {
+        "numeric": {
+          "eligible": 8,
+          "deleted": 2
+        },
+        "named_entity": {
+          "eligible": 7,
+          "deleted": 2
+        }
+      },
+      "label": "thin"
+    },
+    {
+      "schema": "silver-ablation/1",
+      "kind": "podcast",
+      "origin": "lennys-podcast",
+      "source_page": "3-resources/knowledge-base/wiki/sources/lennys-podcast/naomi-gleit.md",
+      "raw_path": "3-resources/knowledge-base/raw/lennys-podcast/naomi-gleit.md",
+      "grade": 0.5,
+      "ablated_page": "3-resources/tools/sb-os/wiki/scripts/calibration/data/ablated/lennys-podcast__naomi-gleit__g50.md",
+      "source_sha256": "d5cc6e82c68b2d5e0a5f58a3ee1a5352e6cc6f2095753fd2e9a4a173b4b6b85e",
+      "deleted": [
+        {
+          "cls": "named_entity",
+          "text": "[[meta.md]]",
+          "section": "Substance",
+          "span": [
+            522,
+            533
+          ],
+          "note": "meta.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "29",
+          "section": "Substance",
+          "span": [
+            545,
+            547
+          ],
+          "note": "- [[naomi-gleit.md]] (head of product at [[meta.md]], employee #29, longest-serving exec after Mark Zuckerberg) ran early Facebook growth via [[growth-accounting.md]] — net daily growth = new users + resurrected users (returning after inactivity) − stale users (inactive 30 days) — shifting focus fro"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[understand-work.md]]",
+          "section": "Substance",
+          "span": [
+            867,
+            889
+          ],
+          "note": "understand-work.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "7",
+          "section": "Substance",
+          "span": [
+            1181,
+            1182
+          ],
+          "note": "- A clear shared activation metric (Facebook's \"7 friends in 10 days\"-style milestone that correlates with retention) gives teams a single rallying growth target — even if the exact number is imperfect.[^1]"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[extreme-clarity.md]]",
+          "section": "Substance",
+          "span": [
+            1379,
+            1401
+          ],
+          "note": "extreme-clarity.md"
+        },
+        {
+          "cls": "named_entity",
+          "text": "[[canonical-everything.md]]",
+          "section": "Substance",
+          "span": [
+            1642,
+            1669
+          ],
+          "note": "canonical-everything.md"
+        },
+        {
+          "cls": "numeric",
+          "text": "2",
+          "section": "Substance",
+          "span": [
+            2390,
+            2391
+          ],
+          "note": "- Career and personal principles: persist until you get in (she did informal PM work before the title); block 2–3-hour unscheduled time with sparring partners to form a first-party perspective; \"stand up into your fear\" (commit decisively); and treat consistent exercise as training for life.[^1]"
+        },
+        {
+          "cls": "numeric",
+          "text": "3",
+          "section": "Substance",
+          "span": [
+            2392,
+            2393
+          ],
+          "note": "- Career and personal principles: persist until you get in (she did informal PM work before the title); block 2–3-hour unscheduled time with sparring partners to form a first-party perspective; \"stand up into your fear\" (commit decisively); and treat consistent exercise as training for life.[^1]"
+        }
+      ],
+      "class_counts": {
+        "numeric": {
+          "eligible": 8,
+          "deleted": 4
+        },
+        "named_entity": {
+          "eligible": 7,
+          "deleted": 4
+        }
+      },
+      "label": "thin"
+    }
+  ],
+  "gold": [
+    {
+      "page": "3-resources/knowledge-base/wiki/sources/papers/2026-05-27-why-language-models-hallucinate.md",
+      "raw": "3-resources/knowledge-base/raw/papers/2026-05-27-why-language-models-hallucinate.md",
+      "kind": "paper",
+      "label": "faithful",
+      "split": "test",
+      "check": "deep",
+      "retained": [
+        "is-it-valid reduction + the lower bound err >= 2*err_iiv (Corollary 1)",
+        "singleton-rate bound with the 20%-birthdays worked example (Theorem 2)",
+        "trigram poor-model example, Corollary 2; DEEPSEEK letter-count diagnosis",
+        "Observation 1 (binary 0-1 grading rewards guessing); meta-eval of 10 benchmarks (Table 2)",
+        "author-stated limitations (plausible-strings-only, single-question, false trichotomy)",
+        "behavioral-calibration fix with the explicit confidence-target scoring rule"
+      ]
+    },
+    {
+      "page": "3-resources/knowledge-base/wiki/sources/papers/2026-05-01-attention-is-all-you-need.md",
+      "raw": "3-resources/knowledge-base/raw/papers/2026-05-01-attention-is-all-you-need.md",
+      "kind": "paper",
+      "label": "faithful",
+      "split": "cal",
+      "check": "deep",
+      "retained": [
+        "28.4 BLEU EN-DE, 41.8 BLEU EN-FR; 3.5 days on 8 P100 GPUs; base ~12h",
+        "WMT data sizes 4.5M/37K and 36M/32K; Adam betas 0.9/0.98, 4000 warmup steps",
+        "dropout 0.1, label-smoothing 0.1; ablation single-head -0.9 BLEU (Table 3)",
+        "author contributions (Shazeer scaled-dot-product/multi-head; Vaswani impl)",
+        "stated limitation: local-neighborhood self-attention O(n/r) as future work"
+      ]
+    },
+    {
+      "page": "3-resources/knowledge-base/wiki/sources/papers/2026-05-07-which-economic-tasks-are-performed-with-ai-evidence-from-millions-of-claude-conversations.md",
+      "raw": "3-resources/knowledge-base/raw/papers/2026-05-07-which-economic-tasks-are-performed-with-ai-evidence-from-millions-of-claude-conversations.md",
+      "kind": "paper",
+      "label": "thin",
+      "split": "cal",
+      "check": "deep",
+      "missing": [
+        "THE headline result: the 57% augmentation / 43% automation split (the paper's most-cited finding) — appears NOWHERE on the page; Methodology only says 'automation-vs-augmentation labels' without the numbers",
+        "the 'over four million conversations' figure — page says only 'millions'",
+        "37.2% Computer/Mathematical share; 10.3% Arts/Design/Media second share",
+        "the ~11% half-tasks tier (page keeps ~4% and ~36% but drops ~11%)",
+        "model-type split: ~54% Claude 3.5 Sonnet / ~46% Claude 3 Opus",
+        "the five collaboration modes (Directive, Feedback Loop, Task Iteration, Learning, Validation) named in Table 1",
+        "comparison to prior predictions: 90th-wage-percentile forecast; 80%-of-workers/10%-of-tasks forecast vs the empirical ~57%"
+      ]
+    },
+    {
+      "page": "3-resources/knowledge-base/wiki/sources/papers/2026-05-07-the-rising-costs-of-training-frontier-ai-models.md",
+      "raw": "3-resources/knowledge-base/raw/papers/2026-05-07-the-rising-costs-of-training-frontier-ai-models.md",
+      "kind": "paper",
+      "label": "faithful",
+      "split": "cal",
+      "check": "deep",
+      "retained": [
+        "2.4x/year growth (90% CI 2.0x-2.9x); cloud-rental cross-check 2.5x; ex-TPU 3.0x",
+        "GPT-4 $40M / Gemini Ultra $30M amortized; ~$1B run by 2027; acquisition ~$800M",
+        "component breakdown 44/29/17/9; R&D staff 29-49% incl equity",
+        "depreciation r=0.14 OOM/yr; database 796/276/41 models; 142 hw entries / 24 models",
+        "stated limitations (public-data reliance, neglected infra/data-acquisition costs)"
+      ]
+    },
+    {
+      "page": "3-resources/knowledge-base/wiki/sources/papers/2026-05-25-the-ai-layoff-trap.md",
+      "raw": "3-resources/knowledge-base/raw/papers/2026-05-25-the-ai-layoff-trap.md",
+      "kind": "paper",
+      "label": "faithful",
+      "split": "cal",
+      "check": "signal",
+      "note": "172KB raw compressed to 4.8KB compare-set, but the page is substantive (30 raw headings, core argument + key figures present in Substance/Methodology). Largest ratio gap among the faithful papers — a borderline-faithful anchor for threshold calibration."
+    },
+    {
+      "page": "3-resources/knowledge-base/wiki/sources/papers/2026-05-28-from-model-scaling-to-system-scaling-scaling-the-harness-in-agentic-ai.md",
+      "raw": "3-resources/knowledge-base/raw/papers/2026-05-28-from-model-scaling-to-system-scaling-scaling-the-harness-in-agentic-ai.md",
+      "kind": "paper",
+      "label": "faithful",
+      "split": "test",
+      "check": "signal",
+      "note": "4.4KB compare-set vs 51KB raw, 27 headings; directly refactoring-relevant (harness scaling). Substance carries the named scaling argument + the system-vs-model framing. Faithful anchor."
+    },
+    {
+      "page": "3-resources/knowledge-base/wiki/sources/papers/2026-05-10-gradual-disempowerment-systemic-existential-risks-from-incremental-ai-development.md",
+      "raw": "3-resources/knowledge-base/raw/papers/2026-05-10-gradual-disempowerment-systemic-existential-risks-from-incremental-ai-development.md",
+      "kind": "paper",
+      "label": "faithful",
+      "split": "cal",
+      "check": "signal",
+      "note": "5.8KB compare-set vs 99KB raw. Substance carries the multi-domain disempowerment thesis + the named mechanisms. Faithful anchor for a large-raw / adequate-page case."
+    },
+    {
+      "page": "3-resources/knowledge-base/wiki/sources/papers/2026-06-01-the-first-law-of-complexodynamics.md",
+      "raw": "3-resources/knowledge-base/raw/papers/2026-06-01-the-first-law-of-complexodynamics.md",
+      "kind": "paper",
+      "label": "faithful",
+      "split": "cal",
+      "check": "signal",
+      "note": "Short blog-style paper (16KB raw, 0 structural headings); 2.4KB compare-set proportionate to the source's single-thesis breadth. Faithful by the 'scale depth to source breadth' rule — a SHORT faithful page that the detector must NOT flag merely for being short (false-positive guard)."
+    },
+    {
+      "page": "3-resources/knowledge-base/wiki/sources/every/2026-06-06-agent-native-architectures.md",
+      "raw": "3-resources/knowledge-base/raw/every/2026-06-06-agent-native-architectures.md",
+      "kind": "article",
+      "label": "thin",
+      "split": "cal",
+      "check": "deep",
+      "missing": [
+        "entity-scoped directory + directory-naming conventions (the raw's 'One approach to naming' / 'Directory structure' subsections) — page keeps the principles, drops the concrete rules",
+        "the full context.md template structure (Who I Am / What I Know About This User / What Exists / Recent Activity / My Guidelines / Current State headings)",
+        "files-vs-database decision lists ('Use files for...' / 'Use database for...')",
+        "the conflict model: atomic-writes current-reality + iCloud conflict monitoring",
+        "completion-signals and model-tier-selection implementation detail (page names them; raw specifies them)"
+      ],
+      "page_flagged_reingest": true
+    },
+    {
+      "page": "3-resources/knowledge-base/wiki/sources/every/2026-05-27-after-automation.md",
+      "raw": "3-resources/knowledge-base/raw/every/2026-05-27-after-automation.md",
+      "kind": "article",
+      "label": "faithful",
+      "split": "cal",
+      "check": "signal",
+      "note": "19/21 raw headings covered; only 'The cycle repeats' / 'Zeno redux' rhetorical sub-beats absent. Essay form, well-distilled. Faithful anchor."
+    },
+    {
+      "page": "3-resources/knowledge-base/wiki/sources/every/2026-06-06-the-boring-businesses-that-will-dominate-the-ai-era.md",
+      "raw": "3-resources/knowledge-base/raw/every/2026-06-06-the-boring-businesses-that-will-dominate-the-ai-era.md",
+      "kind": "article",
+      "label": "faithful",
+      "split": "test",
+      "check": "signal",
+      "note": "7/7 raw headings covered, 4.4KB compare-set vs 21KB raw. Faithful anchor."
+    },
+    {
+      "page": "3-resources/knowledge-base/wiki/sources/every/2026-06-06-compound-engineering-how-every-codes-with-agents.md",
+      "raw": "3-resources/knowledge-base/raw/every/2026-06-06-compound-engineering-how-every-codes-with-agents.md",
+      "kind": "article",
+      "label": "faithful",
+      "split": "cal",
+      "check": "signal",
+      "note": "4/6 headings (2 non-content); 3.6KB compare-set vs 15KB raw; refactoring-relevant (compound engineering). Core workflow captured. Faithful anchor."
+    },
+    {
+      "page": "3-resources/knowledge-base/wiki/sources/every/2026-06-02-agent-native-product-management.md",
+      "raw": "3-resources/knowledge-base/raw/every/2026-06-02-agent-native-product-management.md",
+      "kind": "article",
+      "label": "faithful",
+      "split": "cal",
+      "check": "signal",
+      "note": "4.2KB compare-set vs 17KB raw; refactoring-relevant. Substance carries the agent-native PM principles. Faithful anchor; pairs with the THIN agent-native-architectures for a same-topic thin/faithful contrast."
+    },
+    {
+      "page": "3-resources/knowledge-base/wiki/sources/every/2026-05-10-the-knowledge-economy-is-over.-welcome-to-the-allocation-economy.md",
+      "raw": "3-resources/knowledge-base/raw/every/2026-05-10-the-knowledge-economy-is-over.-welcome-to-the-allocation-economy.md",
+      "kind": "article",
+      "label": "faithful",
+      "split": "cal",
+      "check": "signal",
+      "note": "7/7 headings; 2.9KB compare-set vs 11KB raw — proportionate for a single-thesis essay. Faithful anchor (another short-faithful false-positive guard)."
+    },
+    {
+      "page": "3-resources/knowledge-base/wiki/sources/every/2026-06-06-teach-your-ai-to-think-like-a-senior-engineer.md",
+      "raw": "3-resources/knowledge-base/raw/every/2026-06-06-teach-your-ai-to-think-like-a-senior-engineer.md",
+      "kind": "article",
+      "label": "faithful",
+      "split": "test",
+      "check": "signal",
+      "note": "2.5KB compare-set vs 9KB raw; short how-to essay, core technique captured. Faithful anchor."
+    },
+    {
+      "page": "3-resources/knowledge-base/wiki/sources/stratechery/the-inference-shift.md",
+      "raw": "3-resources/knowledge-base/raw/stratechery/the-inference-shift.md",
+      "kind": "article",
+      "label": "faithful",
+      "split": "cal",
+      "check": "signal",
+      "note": "3/4 headings; 4.9KB compare-set vs 16KB raw. Stratechery analysis, argument preserved. Faithful anchor (origin diversity beyond Every)."
+    },
+    {
+      "page": "3-resources/knowledge-base/wiki/sources/lennys-podcast/alex-komoroske.md",
+      "raw": "3-resources/knowledge-base/raw/lennys-podcast/alex-komoroske.md",
+      "kind": "podcast",
+      "label": "thin",
+      "split": "cal",
+      "check": "deep",
+      "missing": [
+        "the Definitions section: formal definitions of Platform and Ecosystem (raw '## Definitions') — dropped entirely",
+        "the two Contrarian/Non-Obvious Takes as distinct claims with their 'Conventional view vs This take' framing (Complexity-should-be-embraced; Platforms-must-avoid-over-control)",
+        "the named Anti-Pattern 'Overcontrolling a Platform Kills Innovation' with its root-cause + lesson",
+        "page collapses the raw's 15 extracted items across 8 categories into 4 generic Substance bullets"
+      ]
+    },
+    {
+      "page": "3-resources/knowledge-base/wiki/sources/lennys-podcast/april-dunford.md",
+      "raw": "3-resources/knowledge-base/raw/lennys-podcast/april-dunford.md",
+      "kind": "podcast",
+      "label": "thin",
+      "split": "cal",
+      "check": "signal",
+      "missing": [
+        "10 of 37 raw sub-headings uncovered, incl the Frameworks & Mental Models section and 'Champion and Stakeholder Roles in B2B Buying'",
+        "the Definitions and Operating Practices sections",
+        "'Use a Conversational Discovery Approach in the Setup' actionable principle"
+      ]
+    },
+    {
+      "page": "3-resources/knowledge-base/wiki/sources/lennys-podcast/ami-vora.md",
+      "raw": "3-resources/knowledge-base/raw/lennys-podcast/ami-vora.md",
+      "kind": "podcast",
+      "label": "thin",
+      "split": "test",
+      "check": "signal",
+      "missing": [
+        "thinnest in the panel: only 8 of 18 raw sub-headings covered (1.7KB compare-set)",
+        "the Frameworks & Mental Models, Contrarian/Non-Obvious Takes, and Definitions sections",
+        "'Prioritize by Saying No' and 'Deeply Understand Users' Needs' actionable principles"
+      ]
+    },
+    {
+      "page": "3-resources/knowledge-base/wiki/sources/lennys-podcast/adriel-frederick.md",
+      "raw": "3-resources/knowledge-base/raw/lennys-podcast/adriel-frederick.md",
+      "kind": "podcast",
+      "label": "thin",
+      "split": "cal",
+      "check": "signal",
+      "missing": [
+        "11 of 36 raw sub-headings uncovered, incl Contrarian/Non-Obvious Takes, Definitions, Operating Practices",
+        "'Set Clear, Memorable Activation Goals' and 'Balance Handling Controversy with Mission Focus' actionable principles"
+      ]
+    },
+    {
+      "page": "3-resources/knowledge-base/wiki/sources/lennys-podcast/anneka-gupta.md",
+      "raw": "3-resources/knowledge-base/raw/lennys-podcast/anneka-gupta.md",
+      "kind": "podcast",
+      "label": "thin",
+      "split": "cal",
+      "check": "signal",
+      "missing": [
+        "4 of 17 raw sub-headings uncovered: Frameworks & Mental Models, Definitions, Operating Practices (the War Stories section is genuinely 'None identified' in the raw — not a real omission)"
+      ],
+      "note": "BORDERLINE thin — fewer dropped sections than the other podcasts; included to give the calibration a near-threshold podcast case."
+    },
+    {
+      "page": "3-resources/knowledge-base/wiki/sources/lennys-podcast/alex-hardimen.md",
+      "raw": "3-resources/knowledge-base/raw/lennys-podcast/alex-hardimen.md",
+      "kind": "podcast",
+      "label": "thin",
+      "split": "cal",
+      "check": "signal",
+      "missing": [
+        "Definitions + Operating Practices + Contrarian-Takes sections collapsed into gist Substance bullets (same pattern verified deeply on komoroske)"
+      ],
+      "note": "1.9KB compare-set vs 12KB structured raw; same lennys 6-category extraction shape as komoroske/april-dunford. Thin by the established podcast framework-collapse signature."
+    },
+    {
+      "page": "3-resources/knowledge-base/wiki/sources/lennys-podcast/annie-pearl.md",
+      "raw": "3-resources/knowledge-base/raw/lennys-podcast/annie-pearl.md",
+      "kind": "podcast",
+      "label": "thin",
+      "split": "test",
+      "check": "signal",
+      "missing": [
+        "Definitions + Contrarian-Takes sections not surfaced as distinct claims"
+      ],
+      "note": "1.4KB compare-set vs 6.5KB structured raw. Thin by the podcast framework-collapse signature; a smaller-raw thin case for the test split."
+    },
+    {
+      "page": "3-resources/knowledge-base/wiki/sources/lennys-podcast/kenneth-berger.md",
+      "raw": "3-resources/knowledge-base/raw/lennys-podcast/kenneth-berger.md",
+      "kind": "podcast",
+      "label": "faithful",
+      "split": "cal",
+      "check": "deep",
+      "retained": [
+        "all 4 Frameworks (ask-for-what-you-want loop, dream-behind-the-complaint, whole-body/hell-yes, internal-family-systems)",
+        "the 2 Definitions (Integrity-in-asking, Asking-for-what-you-want) — the sections the thin podcasts drop",
+        "all 3 Contrarian takes (discipline-unsustainable, no-is-data, influence-without-data)",
+        "the Operating Practices (relationship-design for first 10-20 hires; the fact-feeling-reason feedback formula)",
+        "the War Story verbatim: three firings at Slack in 2014 with all three distinct reasons"
+      ]
+    },
+    {
+      "page": "3-resources/knowledge-base/wiki/sources/lennys-podcast/naomi-gleit.md",
+      "raw": "3-resources/knowledge-base/raw/lennys-podcast/naomi-gleit.md",
+      "kind": "podcast",
+      "label": "faithful",
+      "split": "test",
+      "check": "deep",
+      "retained": [
+        "all 6 Frameworks incl Growth-Accounting WITH its formula (new + resurrected - stale, 30-day inactive)",
+        "the '7 friends in 10 days'-style activation metric; employee #29 detail",
+        "the actionable principles (numbered lists, 24h pre-reads, traffic-light decision matrix, 2-3hr first-party-perspective blocks)",
+        "the Contrarian take (growth-not-just-growth-teams; PMF did the heavy lifting)",
+        "a faithful podcast on the TEST split — anti-shortcut coverage in the held-out set too"
+      ]
+    }
+  ]
+}

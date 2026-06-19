@@ -28,7 +28,7 @@ A raw **PDF** filename MUST equal the kebab-slug of the paper's actual title. Cr
 | Mirrored source page | `{title-slug}.md` (existing mirror rule) |
 | Title source | The title printed on the document; the raw index `Title` column is the maintained record lint compares against |
 | Collision | If `{title-slug}.pdf` already exists, NEVER overwrite — duplicate raw; ingest halts, lint flags for merge/delete |
-| Immutability | Rename changes the filename only; raw content is never edited |
+| Immutability | A rename changes the filename only; the PDF's content is never edited. **Twin exception (OD-3):** a PDF's derived text twin (`{title-slug}.md`) MAY be REGENERATED from the still-immutable PDF by a better extractor — overwritten in place under the same filename. The PDF is the untouchable original; the twin is a regenerable derivative. |
 
 ### Title-slug algorithm
 

@@ -156,6 +156,12 @@
           "target": ".claude/commands/sb-wiki-ingest-all.md"
         },
         {
+          "name": "sb-wiki-reingest",
+          "module": "wiki",
+          "source_template": "wiki/commands/sb-wiki-reingest.md",
+          "target": ".claude/commands/sb-wiki-reingest.md"
+        },
+        {
           "name": "sb-wiki-lint",
           "module": "wiki",
           "source_template": "wiki/commands/sb-wiki-lint.md",

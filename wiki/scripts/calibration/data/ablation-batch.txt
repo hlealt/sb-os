@@ -1,0 +1,26 @@
+# Silver-ablation input batch — one vault-relative page path per line.
+# These are FAITHFUL pages (verified in the gold set) chosen as ablation sources:
+# ablating a verified-faithful page yields a KNOWN-THIN fixture whose ground truth
+# is exact. Spanning all three kinds so the synthetic positives cover each
+# thinness signature (papers: numeric drop; podcasts: framework/definition drop;
+# articles: implementation-detail drop). The generator deletes the real
+# failure-mode signal classes at 5% / 25% / 50% grades (graded for OD-7 worst-first
+# ranking validation by task 2.4).
+#
+# Output fixtures land under data/ablated/ (a calibration dir — NEVER the live wiki
+# corpus; the generator refuses to write into wiki/ or raw/).
+
+# ---- papers (numeric-dense; the strongest T2/T3 calibration source) ----
+3-resources/knowledge-base/wiki/sources/papers/2026-05-07-the-rising-costs-of-training-frontier-ai-models.md
+3-resources/knowledge-base/wiki/sources/papers/2026-05-01-attention-is-all-you-need.md
+3-resources/knowledge-base/wiki/sources/papers/2026-05-27-why-language-models-hallucinate.md
+
+# ---- articles (essay form; rule_label + named_entity + reasoning_chain signal) ----
+3-resources/knowledge-base/wiki/sources/every/2026-05-27-after-automation.md
+3-resources/knowledge-base/wiki/sources/every/2026-06-02-agent-native-product-management.md
+3-resources/knowledge-base/wiki/sources/stratechery/the-inference-shift.md
+
+# ---- podcasts (faithful ones; their rule_label/named_entity density makes them
+#      good T4/T5 calibration once ablated) ----
+3-resources/knowledge-base/wiki/sources/lennys-podcast/kenneth-berger.md
+3-resources/knowledge-base/wiki/sources/lennys-podcast/naomi-gleit.md
