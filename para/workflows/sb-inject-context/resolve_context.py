@@ -1,9 +1,9 @@
 r"""
-resolve_context.py — deterministic context-injection resolver for sb-os.
+resolve_context.py — drives sb-os context injection deterministically.
 
-Replaces the agent-reasoned "resolve path -> probe -> load" steps of the
-`sb-workflow-context` rule with one deterministic call. Given an execution
-surface (a skill name OR a workflow step file), this script:
+The auto-firing hook calls this; schema and path-resolution contract:
+`para/docs/context-injection-schema.md`. Given an execution surface (a skill
+name, a command name, OR a workflow step file), this script:
 
   1. Resolves the surface's context-YAML path (reads `user_context_root` and
      `sb_os_path` from `sb-os.json` at the vault root — NEVER hardcoded).
@@ -131,9 +131,9 @@ def resolve_step_yaml(vault_root, ucr, sb_os_path, step_file):
     """Mirror a workflow step file to its context YAML under user_context_root.
 
     Returns (yaml_path, error). The step file's path relative to its workflow
-    root is reused verbatim (only .md -> .yaml), per the sb-workflow-context
-    Path Resolution. Workflow roots: .user/workflows/ and each
-    {sb_os_path}/<module>/workflows/.
+    root is reused verbatim (only .md -> .yaml), per the Path Resolution in
+    `para/docs/context-injection-schema.md`. Workflow roots: .user/workflows/
+    and each {sb_os_path}/<module>/workflows/.
     """
     step = Path(step_file)
     if not step.is_absolute():
