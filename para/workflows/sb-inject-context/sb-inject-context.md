@@ -7,6 +7,15 @@ description: Interactive CRUD for skill and workflow-step context injection entr
 
 Manage user-specific context entries for workflow steps. Creates, updates, and deletes YAML context files under the configured user-context root (resolved from `sb-os.json` → `user_context_root`; default `.user/context/`).
 
+The files this command writes are READ at runtime by the deterministic resolver `resolve_context.py` (driven by the `sb-workflow-context` rule). To stay in sync, ALWAYS locate a surface's YAML with the resolver instead of computing the path by hand:
+
+```
+python {sb_os_path}/para/workflows/sb-inject-context/resolve_context.py --surface skill --name <skill-name> --path-only
+python {sb_os_path}/para/workflows/sb-inject-context/resolve_context.py --surface step  --file <step-file-path> --path-only
+```
+
+It prints the exact YAML path (whether or not it exists yet) — the single source of truth both this command and the runtime gate share. Emit standard YAML (the resolver parses with a real YAML library); a malformed file the agent hand-writes will be reported as `CANNOT PARSE` at runtime.
+
 **sb-vault-ops exemption:** Context YAML files are structured data validated by this command's own schema (`.claude/rules/sb-workflow-context.md`). This command is the authoritative interface — sb-vault-ops is not needed for context YAML CRUD operations.
 
 ## Entry Point
@@ -35,15 +44,16 @@ A context entry targets one of two surfaces — a **skill** or a **workflow step
 
 ### 2. Check existing context
 
-Resolve the context YAML path per the surface (matches `.claude/rules/sb-workflow-context.md` Path Resolution), prepending `{user_context_root}` (resolved from `sb-os.json`):
+Resolve the context YAML path with the resolver (single source of truth — do NOT compute it by hand):
 
-- **Skill** → `{user_context_root}/skills/{skill-name}.yaml`
-- **Workflow step** → take the workflow file's path relative to its workflow root (e.g., `sb-{name}/step-01-boot.md`), swap `.md` → `.yaml`
+```
+python {sb_os_path}/para/workflows/sb-inject-context/resolve_context.py --surface <skill|step> <--name <skill-name> | --file <step-file-path>> --path-only
+```
 
-Then:
+The printed path is the target. Then:
 
 - If the YAML file exists → show current entries and offer to append
-- If not → will create new file
+- If not → will create new file at that path
 
 ### 3. Define entry
 

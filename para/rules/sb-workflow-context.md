@@ -4,16 +4,16 @@
 
 ## Pre-Action Gate
 
-Before executing ANY instruction in a workflow step file, OR running the body of a skill you just invoked, you MUST:
+Before executing ANY instruction in a workflow step file, OR running the body of a skill you just invoked, you MUST run the deterministic resolver and act on its output. NEVER compute the YAML path, probe, or load sources by hand — the resolver does all three in one call.
 
 | Step | Requirement |
 |------|-------------|
-| 1. Resolve | Compute the YAML path per Path Resolution below. NEVER hardcode `user_context_root` — read `sb-os.json`. |
-| 2. Probe | Attempt to read the resolved YAML. File not found → skip silently and proceed to step 4. |
-| 3. Process | If the file exists, process its `context:` entries top-to-bottom — load sources, apply each `instruction` — BEFORE any of the surface's native logic runs. |
+| 1. Identify | Identify the surface and its identifier: the skill NAME, or the workflow step FILE you are about to execute. |
+| 2. Resolve + load (one call) | Run `python {sb_os_path}/para/workflows/sb-inject-context/resolve_context.py --surface skill --name <skill-name>` (skill) OR `… --surface step --file <step-file-path>` (workflow step). The resolver reads `user_context_root` from `sb-os.json`, resolves the YAML path, probes it, and PRINTS the loaded context — entry by entry, each `instruction` with its loaded content or `AGENT ACTION` — or the single line `NO CONTEXT`. |
+| 3. Act | `NO CONTEXT` → proceed to step 4. Otherwise apply each printed entry's `instruction` to its printed content or `AGENT ACTION`, in the printed order, BEFORE the surface's native logic. A `CANNOT PARSE <file>: …` line (exit 3) → surface that file to the user and proceed with native logic only — never abort the surface. |
 | 4. Execute | Only now act on the workflow step file's, or the skill's, own instructions. |
 
-The gate fires PER EXECUTION SURFACE — every time you load a new workflow step `.md`, AND every time you invoke a skill, re-check. A single run may cross many surfaces; each gets its own gate.
+The gate fires PER EXECUTION SURFACE — every time you load a new workflow step `.md`, AND every time you invoke a skill, re-run the resolver. A single run may cross many surfaces; each gets its own call.
 
 The gate does NOT fire when merely reading a workflow file or a skill for reference, exploration, or analysis (no execution = no gate).
 
@@ -37,17 +37,20 @@ If you catch ANY of these thoughts, you are about to violate this rule. Delete t
 
 | Thought | Action |
 |---------|--------|
-| "This workflow is single-file, no per-step context needed" | STOP. Single-file workflows still have a YAML at `{user_context_root}/{workflow-name}/{workflow-name}.yaml`. Probe it. |
-| "I already loaded the YAML earlier in the session" | STOP. The gate fires per step file load, not once per session. Re-probe. |
-| "The step looks self-contained, the YAML probably doesn't apply" | STOP. The YAML's existence — not your judgment of relevance — decides. Probe it. |
-| "I'll execute the step now and check the YAML if something seems missing" | STOP. The YAML's `instruction` may add behaviors the step file never mentions. Probe FIRST. |
-| "There's no `.user/context/` folder visible in the repo" | STOP. Probe the resolved path anyway — graceful skip on file-not-found is the correct outcome, not preemptive skip. |
-| "The user just wants the result fast — gate adds latency" | STOP. The gate is one file read. Speed is not a waiver. |
-| "I'm just invoking a skill, not running a workflow — the gate doesn't apply" | STOP. Skill invocation is an execution surface. Probe `{user_context_root}/skills/{skill-name}.yaml` before the skill body runs. |
+| "This workflow is single-file, no per-step context needed" | STOP. Run the resolver anyway — it returns `NO CONTEXT` if none exists, and the loaded entries if one does. Your judgment does not replace the call. |
+| "I already ran the resolver earlier in the session" | STOP. The gate fires per surface load, not once per session. Re-run it. |
+| "The step looks self-contained, the YAML probably doesn't apply" | STOP. The resolver's output — not your judgment of relevance — decides. Run it. |
+| "I'll execute the step now and run the resolver if something seems missing" | STOP. A loaded `instruction` may add behaviors the step file never mentions. Run the resolver FIRST. |
+| "There's no `.user/context/` folder visible in the repo" | STOP. Run the resolver anyway — `NO CONTEXT` is the correct graceful outcome, not a preemptive skip. |
+| "The user just wants the result fast — gate adds latency" | STOP. The gate is one script call. Speed is not a waiver. |
+| "I'm just invoking a skill, not running a workflow — the gate doesn't apply" | STOP. Skill invocation is an execution surface. Run `… --surface skill --name <skill-name>` before the skill body runs. |
+| "I'll just read the YAML myself instead of running the script" | STOP. Hand path-resolution + parsing is exactly what the resolver removes. Run the script; it is the single source of truth for both. |
 
 ## Path Resolution
 
-Both surfaces resolve a YAML under a single `user_context_root`. Read `sb-os.json` at the vault root and extract the `user_context_root` field; if `sb-os.json` is missing or `user_context_root` is unset, use the default `.user/context/`. The base path MUST always be resolved through `sb-os.json` — never hardcoded in any agent reasoning, prompt, or downstream tool call.
+The resolver (`resolve_context.py`) implements this mapping — it is the single source of truth for path resolution at runtime, and the `sb-inject-context` command consumes the same logic via `--path-only` to locate the file it creates or edits. This section documents the contract the resolver implements; the agent NEVER computes it by hand.
+
+Both surfaces resolve a YAML under a single `user_context_root`. The resolver reads `sb-os.json` at the vault root and extracts the `user_context_root` field; if `sb-os.json` is missing or `user_context_root` is unset, it uses the default `.user/context/`. The base path is ALWAYS resolved through `sb-os.json` — never hardcoded.
 
 ### Workflow step files
 
@@ -105,13 +108,14 @@ Each YAML file contains a list of entries under a top-level `context:` key. Ever
 
 ## Processing Rules
 
-- Entries are processed sequentially in document order (top-to-bottom)
-- `mode: read` — resolve the source, load content, follow `instruction`
-- `mode: write` — the entry defines an output destination; follow `instruction` to create/write content there
-- `mode: read-write` — load existing content AND write back per `instruction`
-- If a source cannot be resolved (file not found, script fails, URL unreachable), log a warning and continue to the next entry — never abort the workflow step
-- If the YAML file exists but contains invalid syntax, log a warning and skip context injection entirely for that step — proceed with native workflow logic only
+The resolver does the loading and prints entries in document order; the agent applies each `instruction` to what the resolver printed:
+
+- Entries are printed and applied in document order (top-to-bottom).
+- `type: text` and `type: file` (read / read-write) that resolve to an existing file — the resolver prints the loaded content; apply the `instruction` to it. (`read-write` adds a write-back note — load, act, write back per `instruction`.)
+- `type: script` / `url` / `mcp`, `mode: write`, and any `file` whose path/glob does NOT resolve as-is (placeholders) — the resolver prints these as a labelled `AGENT ACTION` rather than content; perform the action and apply the `instruction`. Script args / placeholder paths must be substituted by the agent before running or loading.
+- A source the resolver could not load (missing personal file) is reported, not fatal — continue to the next entry.
+- `CANNOT PARSE` (invalid YAML, exit 3) — surface the named file and proceed with native logic only; never abort the surface.
 
 ## Limitations
 
-- Sub-agents launched via the Agent tool do not inherit rules. If a sub-agent needs user context, the parent agent must pass relevant information in the sub-agent's prompt.
+- Sub-agents launched via the Agent tool do not inherit rules. If a sub-agent needs user context, the parent agent MUST either pass the resolver's printed output in the sub-agent's prompt, or instruct the sub-agent to run `resolve_context.py` for its surface.
