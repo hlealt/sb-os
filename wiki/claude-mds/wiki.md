@@ -80,7 +80,7 @@ Five operations cover the wiki lifecycle.
 | Component | Type | Invoked by | Purpose |
 |-----------|------|------------|---------|
 | `/sb-wiki-ingest <slug>` | Slash command | User | Distill a raw source into wiki pages |
-| `/sb-wiki-reingest [targets]` | Slash command | User | Cleanly RE-ingest an already-ingested source — preview-gated source-page delete → rebuild via `/sb-wiki-ingest-all` → OD-6 no-worse gate → re-evaluate linked concept/entity pages → strip `#reingest`. Deletes files (preview-gated); adds no lint or commit of its own (ingest-all owns those) |
+| `/sb-wiki-ingest-healing [targets]` | Slash command | User (on-demand), AND auto-fired after every PDF first-ingest | HEAL a thin or lossy already-ingested source: an agent re-reads the source (the **original PDF** for a PDF) and EDITS the page in place to the reconstruction standard — augmenting the agent-authored sections, preserving `My take` + every human edit byte-identical, never deleting or rebuilding — then propagates the recovered substance to the linked concept/entity/topic pages and strips `#reingest`. On-demand previews before its own single commit; PDF auto-heal is hands-off (PROBATIONARY) and rides the first-ingest commit. NO AI judge, NO no-worse gate, NO thin-page detector, NO LLM-API — the healing pass is the sole quality check |
 | `sb-wiki-create-topic` | Skill (auto-discovered) | Agent mid-ingest, OR auto-fired when user expresses topic-creation intent | Create a topic page from a candidate or fresh proposal |
 | `/sb-wiki-lint` | Slash command | User | Health check + index maintenance for `raw/` and `wiki/` |
 | `/sb-wiki-query <question>` | Slash command | User | Synthesize an answer from wiki + optionally file the result back |
@@ -179,33 +179,14 @@ A PDF's derived **text twin** (`{title-slug}.md`, the ingest INPUT) is built at 
 
 ---
 
-## Thin-Page Detector — Calibration Harness
+## Calibration / Gold Set — labeled page-fidelity dataset
 
-The thin-page detector (the checker that flags a source page that silently dropped key detail from its raw) is calibrated on a fixed ground-truth set under `wiki/scripts/calibration/`. The harness is the keystone every detector threshold depends on (a weak set makes all thresholds wobble together). Two halves, merged into one consumable manifest `wiki/scripts/calibration/data/ground-truth-manifest.json`:
+A fixed labeled dataset under `wiki/scripts/calibration/` of KNOWN-THIN and faithful `(page, raw)` pairs with exact ground truth — built to calibrate the thin-page detector (since RETIRED; see Behavior Changes), KEPT to measure whether a healing pass recovers dropped detail. Two halves, merged into one consumable manifest `wiki/scripts/calibration/data/ground-truth-manifest.json`:
 
-- **Silver-ablation** (`silver_ablation.py`) — turns a faithful `(page, raw)` pair into KNOWN-THIN fixtures by DELETING real failure-mode signal classes (specific numbers, table rows, rule/framework labels, named entities, author caveats, reasoning chains — never random sentences) and emits the exact removed-item ground truth. Graded (5% / 25% / 50%, strictly monotone) so worst-first severity ranking is validatable. Deletes ONLY from the detector compare-set (`Substance` + `Counterpoints` + `Methodology` + `Notable quotes`). Fixtures are provenance-stamped `DO NOT INGEST` and the generator REFUSES to write under `wiki/` or `raw/` — they are calibration fixtures, NOT corpus.
-- **Stratified gold set** (`data/gold-set.yaml`, validated + merged by `build_gold_set.py`) — ~25 real hand-checked `(page, raw)` pairs, labelled thin/faithful with the specific missing items, stratified by source kind (paper / article / podcast), with a HELD-OUT test split that thresholds are never tuned on.
+- **Silver-ablation** (`silver_ablation.py`) — turns a faithful `(page, raw)` pair into KNOWN-THIN fixtures by DELETING real failure-mode signal classes (specific numbers, table rows, rule/framework labels, named entities, author caveats, reasoning chains — never random sentences) and emits the exact removed-item ground truth. Graded (5% / 25% / 50%, strictly monotone). Deletes ONLY from the page sections `Substance` + `Counterpoints` + `Methodology` + `Notable quotes`. Fixtures are provenance-stamped `DO NOT INGEST` and the generator REFUSES to write under `wiki/` or `raw/` — they are calibration fixtures, NOT corpus.
+- **Stratified gold set** (`data/gold-set.yaml`, validated + merged by `build_gold_set.py`) — ~25 real hand-checked `(page, raw)` pairs, labelled thin/faithful with the specific missing items, stratified by source kind (paper / article / podcast), with a HELD-OUT test split.
 
-Consumers (the detector layers + the `/sb-wiki-reingest` no-worse gate) read the manifest through `load_manifest.py`, which enforces the cal/test split discipline. The `calibration/data/` tree is derived calibration data — the installer never touches it and lint never walks it. Format + reproduce steps: `wiki/scripts/calibration/README.md`.
-
-### Detector layers (the thin-page checker)
-
-The checker that flags a source page that silently dropped key detail runs as a LADDER of `wiki/scripts/` tools (NOT installed components — tools, like the calibration scripts). Cheap deterministic layers run first; only flagged pages (and all papers) reach the expensive LLM/NLI top layer:
-
-| Layer | Tool | What it does |
-|-------|------|--------------|
-| 1a typed-retention | `thin_detector_typed.py` | Embedding-free, LLM-free regex+set-math. Per-class retention (T2 numeric / T3 table-row / T4 rule-label / T5 named-entity / T6 caveat) + the missing-atom packet. The FLOOR — still detects when `VOYAGE_API_KEY` is absent. Compares structured-page vs structured-page. |
-| 1b chunked recall | `thin_detector_density.py` | Layer-0 density priors (routing) + Layer-1b char-weighted `uncovered_mass` over fixed raw windows (reuses indexed page vectors; OFF when no key). Catches WHOLESALE omission; `UNCOVERED_COSINE=0.76` is a PROVISIONAL severity signal, never a standalone verdict (D-4 cosine-blindness is MEASURED — thin-vs-faithful delta ~0.04). |
-| 2 composite + escalation | `thin_detector_composite.py` | OR-of-thresholds (flag if ANY signal trips its recall-biased cut, NOT a fitted blend — OD-4) PLUS unconditional escalation of every `kind==paper` and every `twin_fidelity==false` page. Produces a WORST-FIRST ranked suspect queue (OD-7; per-run `--cap`, default 100) and a 5% random non-flagged audit. Thresholds calibrated on `gold_cal()`+ablations ONLY (never `gold_test()`). |
-| 3 adversarial judge | `thin_detector_composite.py` (`judge`) | A STRONG general AI (claude-opus-4-8) with FRESH context, prompted ADVERSARIALLY (hunt omissions, default "missing" on doubt), fed the STRUCTURED packet (missing atoms + uncovered windows + raw context + native PDF page numbers) — NEVER the whole page (D-2). `--judge anthropic` fires when an LLM key resolves; `--judge stub` exercises the packet path otherwise. The real LLM call is the ingest pipeline's runtime dependency. |
-
-**The composite is the front door** — run `thin_detector_composite.py rank` to produce the queue; each flagged page's `packet` feeds the judge. **ALWAYS pass an explicit SCRATCH `--db`** for detection runs (Layer-1b embeds the page's raw into whatever `--db` resolves to — never populate the LIVE index).
-
-### OD-6 re-ingest no-worse gate
-
-`thin_detector_reingest_gate.py` is the acceptance gate `/sb-wiki-reingest` calls to decide whether a re-done page may replace the old one. "Better" = the re-do is ≥ the old on EVERY measured retention class (T2–T6) AND on `uncovered_mass` AND clears a minimum improvement delta; papers/borderline calls add the adversarial AI no-loss confirm (the gate returns `needs_ai_confirm`; the caller drives the judge). **OD-6 guardrail:** a re-do can be worse on a signal class the mechanical checker does NOT yet measure (the calibration set seeds `reasoning_chain` for exactly this) — when the re-ingest pipeline declares such a loss, the gate SURFACES the gap and ADDS that class to the measured set, never silently passing.
-
-`/sb-wiki-reingest` is the command that consumes this gate (workflow `wiki/workflows/sb-wiki-reingest/`). It deletes ONLY the target's source page (preview-gated), rebuilds it through `/sb-wiki-ingest-all` (which owns the lint heal + the single commit — re-ingest adds neither), gates each re-do here, and RE-EVALUATES linked concept/entity pages (never blindly preserves a thin first-ingest entity). Per-kind min-delta: papers `0.25`, articles/podcasts `0.15`. When the AI no-loss confirm is required but no Anthropic key + `anthropic` SDK resolves, re-ingest degrades to the mechanical verdict + an explicit `AI confirm deferred` note (never a silent pass) and surfaces the page as conditionally accepted for the owner to decide.
+The manifest is read through `load_manifest.py`, which enforces the cal/test split discipline. The `calibration/data/` tree is derived data — the installer never touches it and lint never walks it. Format + reproduce steps: `wiki/scripts/calibration/README.md`.
 
 ---
 

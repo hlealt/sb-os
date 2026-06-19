@@ -168,10 +168,10 @@
           "target": ".claude/commands/sb-wiki-ingest-all.md"
         },
         {
-          "name": "sb-wiki-reingest",
+          "name": "sb-wiki-ingest-healing",
           "module": "wiki",
-          "source_template": "wiki/commands/sb-wiki-reingest.md",
-          "target": ".claude/commands/sb-wiki-reingest.md"
+          "source_template": "wiki/commands/sb-wiki-ingest-healing.md",
+          "target": ".claude/commands/sb-wiki-ingest-healing.md"
         },
         {
           "name": "sb-wiki-lint",

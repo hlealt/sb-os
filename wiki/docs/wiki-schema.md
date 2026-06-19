@@ -394,7 +394,7 @@ Required: `Sources`.
 
 | Section | When to include |
 |---------|-----------------|
-| `Substance` | Distilled synthesis of the source (NOT a table of contents) — usually included. Depth scales to source breadth; every load-bearing signal class present survives in compact form (core claims; decision criteria / tests; tradeoff & comparison tables kept AS compact tables; quantified specifics; named patterns + their effect). Operational rule: `/sb-wiki-ingest` Step 2 "Substance coverage discipline" |
+| `Substance` | Distilled synthesis of the source (NOT a table of contents) — usually included. Binding test is reconstruction: a reader of `Substance`, WITHOUT the source, can reconstruct every load-bearing claim, decision rule, quantified fact, distinction, and author caveat it makes — the signal classes below (core claims; decision criteria / tests; tradeoff & comparison tables kept AS compact tables; quantified specifics; named patterns + their effect) are illustrative of that load, NOT a closed list. Depth scales to source breadth. Operational rule: `/sb-wiki-ingest` Step 2 "Substance coverage discipline" |
 | `Notable quotes` | Verbatim quotations only — kept distinct from `Substance` for MECE (paraphrase vs. verbatim) |
 | `Connections` | Wiki pages this updates / contradicts; each connection states *why* (one clause); usually included |
 | `Methodology` | For studies, papers — the method, dataset, sample, limitations |

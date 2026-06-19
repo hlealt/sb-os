@@ -32,7 +32,11 @@ a vision-capable read at Step 1. Pass its quantitative figure/chart observations
 markdown file via ``--vision-file``; the tool appends them verbatim under a
 ``## Figures & charts (vision-piggyback)`` section of the twin. This captures
 chart data at zero new compute and beats OCR (the agent reads rendered pixels;
-OCR reads degraded ones).
+OCR reads degraded ones). When ``--vision-file`` is OMITTED, vision stays
+best-effort but the omission is never silent — the twin carries a visible
+``> [!note]`` marker that vision was not supplied and figure/chart numbers were
+not captured (the original PDF is preserved beside the twin, so a later pass can
+still recover the figure values).
 
 twin_fidelity fail-loud flag (spec Behavior #5): if PyMuPDF returns empty/garbled
 tables on a page that SHOULD have them — detected by a per-page table-signal
@@ -42,7 +46,11 @@ the twin is marked ``twin_fidelity: false`` in its frontmatter with a loud
 "untrustworthy — table/chart content NOT checked" banner and the offending pages
 are listed for unconditional escalation. The tool NEVER silently clears such a
 paper: it writes the flag, lists the suspect pages, and returns a non-zero
-``escalate`` field in --json. Twin-blind extraction may never look "done".
+``escalate`` field in --json. The escalated page list (``escalate_pages`` in the
+frontmatter + the banner reasons) is numbered in FILE ORDER (page 1 = the first
+page in the PDF file), which may differ from the printed page label by the
+cover-page offset; both surfaces say so, so a reviewer opens by file position,
+not the printed number. Twin-blind extraction may never look "done".
 
 Determinism: PyMuPDF is pure-Python, fast, no ML model, no OCR — the default
 extraction is deterministic for a given PDF + library version. ``marker`` (OCR)
@@ -645,7 +653,15 @@ def _render_twin(slug: str, title: str, pdf_path: Path, result: TwinResult,
     if result.marker_cleared_pages:
         front.append(f"marker_cleared_pages: {result.marker_cleared_pages}")
     if not result.twin_fidelity:
-        front.append(f"escalate_pages: {result.suspect_pages}")
+        # escalate_pages are FILE-ORDER page numbers (page 1 = first page in the PDF
+        # file); they may differ from the printed page label by the cover-page offset.
+        # The inline YAML comment travels with the value so a reviewer who reads the
+        # page-set straight from the frontmatter sees the caveat (YAML parsers drop it).
+        front.append(
+            f"escalate_pages: {result.suspect_pages}  "
+            "# file order (page 1 = first PDF page; may differ from the printed page "
+            "label by the cover-page offset)"
+        )
     front.append("---")
 
     parts = ["\n".join(front), ""]
@@ -664,6 +680,14 @@ def _render_twin(slug: str, title: str, pdf_path: Path, result: TwinResult,
         )
         for r in result.fidelity_reasons:
             parts.append(f"> - {r}")
+        # The page numbers in the reasons above (and in `escalate_pages`) are FILE
+        # ORDER — label them so a reviewer does not open the wrong page (1.2-c).
+        parts.append(
+            "> - Page numbers above are FILE ORDER (page 1 = the first page in the PDF "
+            "file) and may differ from the printed page label by the cover-page offset "
+            "— open these pages by their position in the file, not by the printed page "
+            "number."
+        )
         parts.append("")
 
     if title:
@@ -732,6 +756,19 @@ def _render_twin(slug: str, title: str, pdf_path: Path, result: TwinResult,
         )
         parts.append("")
         parts.append(vision_text.strip())
+        parts.append("")
+    else:
+        # No vision read supplied (no --vision-file). Vision is best-effort, but the
+        # omission MUST be visible — a chart-borne result could otherwise ingest
+        # "successfully" while silently missing its numbers (1.2-d). Emit a one-line
+        # note so the gap is on the page, never silent (the original PDF is
+        # preserved beside the twin, so the values stay recoverable).
+        parts.append("")
+        parts.append(
+            "> [!note] Vision read not supplied (no `--vision-file`) — figure/chart "
+            "numbers in this PDF were NOT captured into this twin. If a key result "
+            "lives in a figure, read it from the original PDF."
+        )
         parts.append("")
 
     return "\n".join(parts).rstrip() + "\n"
