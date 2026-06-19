@@ -33,7 +33,7 @@ import stat
 from pathlib import Path
 from typing import Iterable
 
-from . import cli, finance, loaders, manifest, markers
+from . import cli, finance, hooks, loaders, manifest, markers
 
 
 # ---------------------------------------------------------------------------
@@ -52,6 +52,13 @@ TEMPLATES: tuple[tuple[str, str], ...] = loaders.manifest_templates()
 
 WIKI_MODULE_NAME = "wiki"
 FINANCE_MODULE_NAME = "finance"
+
+# Component key (decision D10) gating the context-injection hook wiring. The key
+# lives in the always-installed `core` module, so it is INCLUDED by default and
+# EXCLUDED only when this literal string appears in the target's
+# `excluded_components` (sb-os.json). The manifest record for it is registered in
+# Phase 3 — this phase gates purely on `excluded_components` membership.
+CONTEXT_HOOK_COMPONENT = "context-injection-hook"
 
 
 def _module_has_wiki_artifacts(modules: dict, selected: list[str] | tuple[str, ...]) -> bool:
@@ -560,6 +567,16 @@ def _execute_fresh(
         modules_scoped, excluded_components
     ):
         _copy_rule(sb_os_root, target_root, source_rel, filename, sb_os_loader_path, created)
+
+    # Context-injection hook — wire BOTH entries into .claude/settings.local.json
+    # when the context-injection-hook component is INCLUDED (decision D7/D10);
+    # strip them when it is EXCLUDED. Gated purely on excluded_components
+    # membership (Phase 3 registers the manifest record).
+    if CONTEXT_HOOK_COMPONENT in excluded_components:
+        _changed, msg = hooks.remove_context_hook(target_root)
+    else:
+        _changed, msg = hooks.sync_context_hook(target_root, sb_os_loader_path)
+    print(cli.dim(f"  {msg}"))
 
     # Templates — install-if-missing (preserves user customizations across re-runs)
     for source_rel, target_rel in loaders.manifest_templates(

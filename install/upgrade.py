@@ -31,10 +31,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Iterable
 
-from . import cli, finance, loaders, manifest, markers
+from . import cli, finance, hooks, loaders, manifest, markers
 from .fresh import (
     CANONICAL_SB_OS_REL,
     CLAUDE_MD_MAP,
+    CONTEXT_HOOK_COMPONENT,
     FINANCE_MODULE_NAME,
     WIKI_CLAUDE_MD_SOURCE,
     _module_has_wiki_artifacts,
@@ -475,6 +476,21 @@ def _execute_upgrade(
         after = dest.read_text(encoding="utf-8") if dest.is_file() else None
         if after != before:
             changed.append(dest.relative_to(target_root).as_posix())
+
+    # Context-injection hook — wire/unwire BOTH entries in
+    # .claude/settings.local.json based on whether the context-injection-hook
+    # component is excluded (decision D7/D10). Runs AFTER _clear_orphans (called
+    # in run_upgrade) and BEFORE the rule rewrite below. Routed through _track so
+    # the upgrade summary reports the hook changed/unchanged and a re-run reports
+    # it as 0-changed.
+    settings_dest = target_root / ".claude" / "settings.local.json"
+    if CONTEXT_HOOK_COMPONENT in excluded_components:
+        _track(settings_dest, lambda: hooks.remove_context_hook(target_root))
+    else:
+        _track(
+            settings_dest,
+            lambda: hooks.sync_context_hook(target_root, sb_os_loader_path),
+        )
 
     # Marker-block replacements.
     for source_rel, dest_rel in CLAUDE_MD_MAP:
