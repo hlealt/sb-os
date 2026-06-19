@@ -34,8 +34,18 @@ the agent must APPLY each entry's instruction to its content/action before the
 surface's native logic runs.
 
 Usage:
-    python resolve_context.py --surface skill --name <skill-name> [opts]
-    python resolve_context.py --surface step  --file <path-to-step.md> [opts]
+    python resolve_context.py --surface skill   --name <skill-name>     [opts]
+    python resolve_context.py --surface command --name <command-name>   [opts]
+    python resolve_context.py --surface step    --file <path-to-step.md> [opts]
+    python resolve_context.py --hook   # read a hook event from stdin (fail-soft)
+
+The --hook mode reads a Claude Code hook event JSON from stdin, derives the
+surface from it (a PreToolUse Skill event -> skill surface; a PostToolUse Read
+of a workflow-step .md / a .claude/commands/{name}.md / a .claude/skills/{name}/
+SKILL.md -> step/command/skill surface), and prints the matching injected
+context as a `{"hookSpecificOutput":{"hookEventName":...,"additionalContext":...}}`
+envelope. Any non-surface event, missing/empty YAML, or error -> no stdout,
+exit 0. The hook NEVER blocks or errors a tool call.
 
 Options:
     --vault-root PATH    Vault root (default: auto-detect by walking up from the
@@ -111,6 +121,10 @@ def load_config(vault_root):
 # --------------------------------------------------------------------------- #
 def resolve_skill_yaml(vault_root, ucr, name):
     return (vault_root / ucr / "skills" / f"{name}.yaml").resolve()
+
+
+def resolve_command_yaml(vault_root, ucr, name):
+    return (vault_root / ucr / "commands" / f"{name}.yaml").resolve()
 
 
 def resolve_step_yaml(vault_root, ucr, sb_os_path, step_file):
@@ -370,15 +384,164 @@ def _under(p, root):
 
 
 # --------------------------------------------------------------------------- #
+# YAML -> records (shared by the CLI surfaces and the hook mode)
+# --------------------------------------------------------------------------- #
+def load_records(vault_root, yaml_path):
+    """Probe + parse a resolved context YAML and build its records.
+
+    Returns (status, payload):
+      ("none",  None)     -> missing file, or no/empty `context:` entries
+      ("parse", reason)   -> the file exists but cannot be parsed
+      ("ok",    records)  -> a list of build_record() dicts (possibly empty
+                             only if every entry was non-dict, treated as none)
+    """
+    if not yaml_path.exists():
+        return ("none", None)
+    try:
+        doc = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as e:
+        return ("parse", str(e).replace("\n", " "))
+    entries = (doc or {}).get("context") if isinstance(doc, dict) else None
+    if not entries:
+        return ("none", None)
+    records = [build_record(vault_root, e) for e in entries if isinstance(e, dict)]
+    return ("ok", records)
+
+
+# --------------------------------------------------------------------------- #
+# Hook mode
+# --------------------------------------------------------------------------- #
+def _extract_skill_name(event):
+    """Best-effort skill-name extraction from a PreToolUse Skill event.
+
+    The exact location of the skill name in a Claude Code `Skill` tool event is
+    not contractually documented, so check BOTH the tool_input keys (the
+    documented home for a tool's arguments) AND a few tool_name-adjacent
+    top-level fields, defensively, in priority order. First non-empty wins."""
+    ti = event.get("tool_input")
+    if isinstance(ti, dict):
+        # `skill_name` is the documented key (Claude Code hooks reference);
+        # the others are defensive fallbacks against schema drift.
+        for key in ("skill_name", "skill", "name", "command"):
+            val = ti.get(key)
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+    # tool_name-adjacent fallbacks (top-level), in case the harness lifts it out.
+    for key in ("skill", "skill_name", "name"):
+        val = event.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    return None
+
+
+def _classify_read_path(vault_root, ucr, sb_os_path, file_path):
+    """Classify a Read'd file path into a context surface.
+
+    Returns (surface, yaml_path, surface_label) or (None, None, None) when the
+    path is not a workflow-step / command / skill surface (the silent-exit gate).
+    """
+    fp = Path(file_path)
+    if not fp.is_absolute():
+        fp = (vault_root / fp)
+    fp = fp.resolve()
+    name = fp.name
+
+    # 1. Slash-command source: **/.claude/commands/{name}.md
+    parts = fp.parts
+    if name.endswith(".md") and ".claude" in parts:
+        idx = parts.index(".claude")
+        if idx + 1 < len(parts) and parts[idx + 1] == "commands" and fp.parent.name == "commands":
+            cmd = fp.stem
+            return ("command", resolve_command_yaml(vault_root, ucr, cmd),
+                    "command %s" % cmd)
+        # 2. Skill source: **/.claude/skills/{name}/SKILL.md
+        if name == "SKILL.md" and idx + 1 < len(parts) and parts[idx + 1] == "skills":
+            skill = fp.parent.name
+            return ("skill", resolve_skill_yaml(vault_root, ucr, skill),
+                    "skill %s" % skill)
+
+    # 3. Workflow-step file under a known workflow root, ending .md
+    if name.endswith(".md"):
+        yaml_path, err = resolve_step_yaml(vault_root, ucr, sb_os_path, str(fp))
+        if not err and yaml_path is not None:
+            return ("step", yaml_path, "step %s" % file_path)
+
+    return (None, None, None)
+
+
+def run_hook():
+    """Read a Claude Code hook event from stdin, emit injected context for a
+    recognised surface, and ALWAYS exit 0 (fail-soft). Any error -> silent 0."""
+    try:
+        raw = sys.stdin.read()
+        event = json.loads(raw)
+        if not isinstance(event, dict):
+            return 0
+
+        event_name = event.get("hook_event_name")
+        tool_name = event.get("tool_name")
+
+        vault_root = find_vault_root(None)
+        ucr, sb_os_path = load_config(vault_root)
+
+        yaml_path = None
+        surface_label = None
+
+        if event_name == "PreToolUse" and tool_name == "Skill":
+            skill = _extract_skill_name(event)
+            if not skill:
+                return 0
+            yaml_path = resolve_skill_yaml(vault_root, ucr, skill)
+            surface_label = "skill %s" % skill
+        elif event_name == "PostToolUse" and tool_name == "Read":
+            ti = event.get("tool_input")
+            file_path = ti.get("file_path") if isinstance(ti, dict) else None
+            if not file_path:
+                return 0
+            _surface, yaml_path, surface_label = _classify_read_path(
+                vault_root, ucr, sb_os_path, file_path
+            )
+            if yaml_path is None:
+                return 0  # not a context surface -> silent
+        else:
+            return 0  # any other event/tool -> silent
+
+        status, payload = load_records(vault_root, yaml_path)
+        if status != "ok" or not payload:
+            return 0  # NO CONTEXT / CANNOT PARSE / no usable entries -> no stdout
+
+        rendered = render_text(surface_label, yaml_path, payload, vault_root)
+        print(json.dumps(
+            {"hookSpecificOutput": {
+                "hookEventName": event_name,
+                "additionalContext": rendered,
+            }},
+            ensure_ascii=False,
+        ))
+        return 0
+    except Exception:
+        # A hook must NEVER block or error a tool call. Swallow everything.
+        return 0
+
+
+# --------------------------------------------------------------------------- #
 # Main
 # --------------------------------------------------------------------------- #
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Deterministic sb-os context-injection resolver.")
-    ap.add_argument("--surface", required=True, choices=["skill", "step"])
-    ap.add_argument("--name", help="skill name (with --surface skill)")
+    ap.add_argument("--surface", choices=["skill", "step", "command"],
+                    help="execution surface (required unless --hook)")
+    ap.add_argument("--name", help="skill/command name (with --surface skill|command)")
     ap.add_argument("--file", help="workflow step .md path (with --surface step)")
     ap.add_argument("--vault-root", help="vault root override (test seam)")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
+    ap.add_argument(
+        "--hook",
+        action="store_true",
+        help="run as a Claude Code hook: read a hook event JSON from stdin, "
+        "derive the surface from it, and print the matching injected context "
+        "as a hookSpecificOutput envelope. Always exits 0 (fail-soft).",
+    )
     ap.add_argument(
         "--path-only",
         action="store_true",
@@ -394,6 +557,14 @@ def main(argv=None):
     except (AttributeError, ValueError):
         pass
 
+    # Exactly one of {--hook, --surface} drives the run.
+    if args.hook:
+        if args.surface:
+            ap.error("--hook and --surface are mutually exclusive")
+        return run_hook()
+    if not args.surface:
+        ap.error("one of --surface {skill,step,command} or --hook is required")
+
     vault_root = find_vault_root(args.vault_root)
     ucr, sb_os_path = load_config(vault_root)
 
@@ -402,6 +573,11 @@ def main(argv=None):
             ap.error("--surface skill requires --name")
         yaml_path = resolve_skill_yaml(vault_root, ucr, args.name)
         surface_label = "skill %s" % args.name
+    elif args.surface == "command":
+        if not args.name:
+            ap.error("--surface command requires --name")
+        yaml_path = resolve_command_yaml(vault_root, ucr, args.name)
+        surface_label = "command %s" % args.name
     else:
         if not args.file:
             ap.error("--surface step requires --file")
@@ -422,25 +598,18 @@ def main(argv=None):
               if args.json else out)
         return 0
 
-    if not yaml_path.exists():
+    status, payload = load_records(vault_root, yaml_path)
+    if status == "none":
         print(json.dumps({"status": "none"}) if args.json else "NO CONTEXT")
         return 0
-
-    try:
-        doc = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
-    except yaml.YAMLError as e:
-        reason = str(e).replace("\n", " ")
+    if status == "parse":
+        reason = payload
         msg = "CANNOT PARSE %s: %s" % (yaml_path, reason)
         print(json.dumps({"status": "parse_error", "source": str(yaml_path),
                           "reason": reason}, ensure_ascii=False) if args.json else msg)
         return 3
 
-    entries = (doc or {}).get("context") if isinstance(doc, dict) else None
-    if not entries:
-        print(json.dumps({"status": "none"}) if args.json else "NO CONTEXT")
-        return 0
-
-    records = [build_record(vault_root, e) for e in entries if isinstance(e, dict)]
+    records = payload
     if args.json:
         print(render_json(surface_label, yaml_path, records, vault_root))
     else:
