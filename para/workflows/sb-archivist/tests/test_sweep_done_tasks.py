@@ -8,6 +8,7 @@ creation, CRLF/LF preservation, and byte-for-byte block fidelity.
 """
 
 import sys
+import json
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -422,3 +423,117 @@ def test_failsafe_skips_undecodable_source_whole(tmp_path):
     assert "unreadable source" in _reasons(report)
     # bytes untouched
     assert foo.read_bytes() == raw
+
+
+# --------------------------------------------------------------------------- #
+# Author-side write-time validation: validate_completion_line / --validate-line
+# Reuses routed_date / valid_iso_date, so an author-side CONFORMING is exactly a
+# sweepable block — author-side and sweep-side enforcement can never drift.
+# --------------------------------------------------------------------------- #
+
+def test_validate_conforming_line():
+    r = sw.validate_completion_line("- [x] Do thing ✅ 2026-06-18", TODAY)
+    assert r["status"] == "conforming"
+    assert r["date"] == "2026-06-18"
+    assert r["reason"] is None
+
+
+def test_validate_no_date_is_violation():
+    r = sw.validate_completion_line("- [x] Do thing", TODAY)
+    assert r["status"] == "violation"
+    assert "no valid" in r["reason"]
+
+
+def test_validate_no_space_before_date_is_violation():
+    r = sw.validate_completion_line("- [x] Do thing ✅2026-06-18", TODAY)
+    assert r["status"] == "violation"
+
+
+def test_validate_unpadded_date_is_violation():
+    r = sw.validate_completion_line("- [x] Do thing ✅ 2026-6-1", TODAY)
+    assert r["status"] == "violation"
+
+
+def test_validate_impossible_calendar_date_is_violation():
+    r = sw.validate_completion_line("- [x] Do thing ✅ 2026-13-40", TODAY)
+    assert r["status"] == "violation"
+
+
+def test_validate_multiple_distinct_dates_is_violation():
+    r = sw.validate_completion_line(
+        "- [x] did then redid ✅ 2026-06-18 again ✅ 2026-06-15", TODAY)
+    assert r["status"] == "violation"
+    assert "multiple distinct" in r["reason"]
+
+
+def test_validate_same_date_twice_is_conforming():
+    r = sw.validate_completion_line(
+        "- [x] belt and braces ✅ 2026-06-18 (done ✅ 2026-06-18)", TODAY)
+    assert r["status"] == "conforming"
+    assert r["date"] == "2026-06-18"
+
+
+def test_validate_indented_subtask_is_not_a_task():
+    r = sw.validate_completion_line("  - [x] nested done ✅ 2026-06-18", TODAY)
+    assert r["status"] == "not-a-task"
+
+
+def test_validate_open_checkbox_is_not_a_task():
+    r = sw.validate_completion_line("- [ ] still open", TODAY)
+    assert r["status"] == "not-a-task"
+
+
+def test_validate_non_checkbox_bullet_is_not_a_task():
+    r = sw.validate_completion_line("- _Ref:_ a continuation bullet", TODAY)
+    assert r["status"] == "not-a-task"
+
+
+def test_validate_column0_strikethrough_crossref_no_date_is_violation():
+    """The dumb-validator boundary: a column-0 `- [x]` strikethrough relocation
+    cross-ref (no ✅ date) is reported VIOLATION — the checker cannot tell it from
+    a forgotten-date completion. The workflow protects such lines by NOT
+    validating them (it fires only on a genuine completion)."""
+    line = "- [x] ~~Build the thing~~ — **MOVED 2026-06-18 → Phase 1**"
+    r = sw.validate_completion_line(line, TODAY)
+    assert r["status"] == "violation"
+    assert "no valid" in r["reason"]
+
+
+def test_validate_trailing_newline_ignored():
+    r = sw.validate_completion_line("- [x] Do thing ✅ 2026-06-18\n", TODAY)
+    assert r["status"] == "conforming"
+
+
+def test_validate_line_cli_exit_codes():
+    """main() returns 0 / 1 / 2 for conforming / violation / not-a-task. The `=`
+    form is required so a value beginning with `-` is not parsed as a flag."""
+    assert sw.main(["--validate-line=- [x] Good ✅ 2026-06-18"]) == 0
+    assert sw.main(["--validate-line=- [x] Bad, no date"]) == 1
+    assert sw.main(["--validate-line=  - [x] indented ✅ 2026-06-18"]) == 2
+
+
+def test_validate_line_cli_json_output(capsys):
+    rc = sw.main(["--validate-line=- [x] Good ✅ 2026-06-18", "--json"])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["status"] == "conforming"
+    assert out["date"] == "2026-06-18"
+    assert out["line"] == "- [x] Good ✅ 2026-06-18"
+
+
+def test_validate_line_mode_does_not_touch_vault(tmp_path):
+    """--validate-line is side-effect-free: a stale work-log is NOT rolled over,
+    no archive is created, no source is swept."""
+    vault, state, archive = make_vault(tmp_path)
+    stale = "---\ndate: 2026-06-17\n---\n\n# Work Log — 2026-06-17\n\n## Completed\n"
+    (state / "work-log.md").write_text(stale, encoding="utf-8", newline="")
+    foo = vault / "1-projects" / "p" / "p-tasks.md"
+    write_bytes(foo, "# p\n\n- [x] Task ✅ 2026-06-18\n", crlf=False)
+
+    rc = sw.main(["--vault-path", str(vault), "--today", TODAY,
+                  "--validate-line=- [x] Task ✅ 2026-06-18"])
+    assert rc == 0
+    # vault untouched: stale work-log not rolled over, no archive, source intact
+    assert (state / "work-log.md").read_text(encoding="utf-8") == stale
+    assert list(archive.iterdir()) == []
+    assert "- [x] Task ✅ 2026-06-18" in foo.read_text(encoding="utf-8")

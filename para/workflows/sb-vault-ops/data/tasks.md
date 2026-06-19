@@ -32,6 +32,24 @@ Trailing prose after the date is allowed (`✅ 2026-04-01 — note…`) and does
 
 **Author takeaway:** a completed task with no `✅` date, or a malformed/ambiguous one, will NOT be swept and WILL be reported as a skip — it stays in the file until corrected. This is intentional: it guarantees the sweep can never move or drop content it cannot route. Column-0 `- [x]` checklist items that are NOT work-log tasks (e.g. domain tracking checkboxes without a `✅` date) are safely left in place by this same rule.
 
+### Write-Time Validation (enforced on completion — BLOCK)
+
+When this skill **completes a task** — writes a new `- [x] … ✅ YYYY-MM-DD` line, or flips an existing `- [ ]` to `- [x]` and appends `✅ YYYY-MM-DD` — it MUST validate that exact line against the Sweep Contract above BEFORE finalizing the write, by running the sweep's own checker:
+
+```
+python {sb_os_path}/para/workflows/sb-archivist/sweep_done_tasks.py --validate-line="<the completed task line>"
+```
+
+`{sb_os_path}` resolves from `sb-os.json`. Use the `=` form shown — a value starting with `-` is otherwise parsed as a flag. Gate on the EXIT CODE (encoding-independent):
+
+| Exit | Verdict | Action |
+|------|---------|--------|
+| `0` | `CONFORMING` | Line satisfies the contract and will sweep cleanly. Finalize the write. |
+| `1` | `VIOLATION: <reason>` | Column-0 `- [x]` but the `✅` date is missing, malformed (no space, unpadded, impossible calendar date), or ambiguous (two distinct dates). **BLOCK** — do NOT finalize. Correct the line per `<reason>` and re-run until exit `0`. |
+| `2` | `NOT-A-TASK: <reason>` | Line is not a column-0 `- [x] ` top-level task. If you intended a top-level completion, the line is mis-formed (leading whitespace, or not `- [x] `) — fix it to column 0 and re-validate. |
+
+Invoke ONLY on a genuine completion. Do NOT validate indented subtasks, `~~strikethrough~~` relocation cross-refs, or domain tracking checkboxes — those are never sweep targets and carry no `✅` date by design; the checker sees only the line and would wrongly flag a column-0 one as a `VIOLATION`. The completion operation is the trigger; nothing else.
+
 ## Sub-bullets
 
 ### Context prefixes
@@ -106,7 +124,7 @@ Tasks live under `####` headings in `{name}-tasks.md`.
 | Creation | No date = backlog (appears in "No Date" on Home) |
 | Recurrence | `🔁` on the line — always appears in "Today" |
 | Execution | Agent starting work on a task MUST append `#wip` to the end of the task line, and MUST remove `#wip` when execution ends (completed or stopped). Marks work-in-progress; dashboards render it as a WIP pill |
-| Completion | `[x]` + `✅ YYYY-MM-DD` at end |
+| Completion | `[x]` + `✅ YYYY-MM-DD` at end. Validate the line per § Sweep Contract → Write-Time Validation and BLOCK a non-conforming completion |
 | Cleanup | Weekly review deletes completed tasks. Git preserves history. Stale `#wip` on tasks with no active execution is removed |
 
 ## Progressive Enrichment

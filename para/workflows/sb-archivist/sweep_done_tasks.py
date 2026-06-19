@@ -34,6 +34,7 @@ Usage:
     python sweep_done_tasks.py [--vault-path PATH] [--rollover-only]
                                [--dry-run] [--json] [--today YYYY-MM-DD]
                                [--template PATH]
+    python sweep_done_tasks.py --validate-line "<task line>" [--json]
 
 Options:
     --vault-path PATH   Vault root (default: current directory).
@@ -44,9 +45,22 @@ Options:
     --today YYYY-MM-DD  Override "today" (default: system date) — for testing.
     --template PATH     Work-log template (default: the repo template located
                         relative to this script).
+    --validate-line S   Author-side contract check (no rollover, no sweep): test a
+                        single completed-task line S against the SAME Sweep
+                        Contract the sweep enforces, REUSING routed_date /
+                        valid_iso_date so author-side and sweep-side can never
+                        drift. Prints the verdict and exits 0 = CONFORMING, 1 =
+                        VIOLATION (column-0 `- [x]` but missing / malformed /
+                        ambiguous ✅ date), 2 = NOT-A-TASK (not a column-0
+                        `- [x] ` line — indented subtask or non-checkbox).
+                        Consumed by `sb-vault-ops` to BLOCK a non-conforming
+                        completion at write time. Pass S with the `=` form
+                        (`--validate-line="- [x] … ✅ 2026-06-19"`) so a value
+                        beginning with `-` is not parsed as a flag.
 
 Default action (no --rollover-only): day-rollover (idempotent) then the sweep.
-Exit code 0 on success; non-zero on an unrecoverable error.
+Exit code 0 on success (or the validate-line verdict code); non-zero on an
+unrecoverable error.
 """
 
 import os
@@ -119,6 +133,46 @@ def routed_date(task_line, today):
     if len(distinct) > 1:
         return None, f"multiple distinct ✅ dates: {sorted(distinct)}"
     return valid[0], None
+
+
+def validate_completion_line(task_line, today):
+    """Author-side contract check for ONE completed-task line — the write-time
+    twin of the sweep's routing decision.
+
+    Returns a dict {status, reason, date}. Reuses the SAME checks the sweep keys
+    on — DONE_RE for rule 1 (column-0 `- [x] `), routed_date/valid_iso_date for
+    rules 2-3 (single calendar-valid ✅ date) — so an author-side CONFORMING
+    GUARANTEES the sweep can route the block; the two can never drift. Rule 4
+    (file is valid UTF-8) is file-level and not applicable to a single line.
+
+    The line is checked AS GIVEN: trailing CR/LF are ignored, but leading
+    whitespace is significant — it is what makes a line an indented child.
+
+      status == "conforming"  column-0 `- [x] ` + exactly one calendar-valid
+                              `✅ YYYY-MM-DD`; the block will sweep cleanly.
+      status == "violation"   column-0 `- [x] ` but the ✅ date is missing,
+                              malformed, or ambiguous (reason says which) — the
+                              unsweepable done-task this guard exists to catch.
+      status == "not-a-task"  not a column-0 `- [x] ` top-level task (indented
+                              subtask or non-checkbox); the sweep ignores it by
+                              rule 1, so the contract does not apply.
+
+    The validator is intentionally dumb: a column-0 `- [x]` with no ✅ date is a
+    `violation` whether it is a forgotten-date completion OR a legitimate
+    `~~strikethrough~~` relocation cross-ref / tracking checkbox. Distinguishing
+    those is the CALLER's job — `sb-vault-ops` invokes this ONLY on a genuine
+    completion, never on subtasks, cross-refs, or tracking checkboxes.
+    """
+    line = task_line.rstrip("\r\n")
+    if not DONE_RE.match(line):
+        return {"status": "not-a-task",
+                "reason": "not a column-0 '- [x] ' top-level task "
+                          "(rule 1: indented subtasks and non-checkbox lines are never sweep targets)",
+                "date": None}
+    date, reason = routed_date(line, today)
+    if reason is not None:
+        return {"status": "violation", "reason": reason, "date": None}
+    return {"status": "conforming", "reason": None, "date": date}
 
 
 def default_template_path():
@@ -500,7 +554,26 @@ def main(argv=None):
     p.add_argument("--json", action="store_true", help="Emit JSON report")
     p.add_argument("--today", default=None, help="Override today (YYYY-MM-DD), for testing")
     p.add_argument("--template", default=None, help="Work-log template path override")
+    p.add_argument("--validate-line", default=None, metavar="S",
+                   help="Author-side contract check of a single completed-task line; "
+                        "exits 0 conforming / 1 violation / 2 not-a-task. No rollover, no sweep.")
     args = p.parse_args(argv)
+
+    # Author-side contract check (no rollover, no sweep). `sb-vault-ops` calls this
+    # to BLOCK a non-conforming completion at write time, against the SAME checks
+    # the sweep keys on — so an author-side CONFORMING guarantees a clean sweep.
+    if args.validate_line is not None:
+        today = args.today or datetime.date.today().isoformat()
+        result = validate_completion_line(args.validate_line, today)
+        if args.json:
+            print(json.dumps({"line": args.validate_line, **result}, ensure_ascii=False))
+        elif result["status"] == "conforming":
+            print(f"CONFORMING — routes to ✅ {result['date']}")
+        elif result["status"] == "violation":
+            print(f"VIOLATION: {result['reason']}")
+        else:
+            print(f"NOT-A-TASK: {result['reason']}")
+        return {"conforming": 0, "violation": 1, "not-a-task": 2}[result["status"]]
 
     vault = Path(args.vault_path).resolve()
     state_dir = vault / ".user" / "runtime" / "state"
