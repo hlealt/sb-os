@@ -67,7 +67,7 @@
           "source": "para/rules/sb-workflow-context.md",
           "target": ".claude/rules/sb-workflow-context.md",
           "mode": "copy",
-          "description": "YAML context injection on workflow steps from user_context_root."
+          "description": "YAML context injection on workflow steps and skill invocations from user_context_root."
         },
         {
           "name": "sb-source-of-truth",

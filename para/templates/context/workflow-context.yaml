@@ -1,7 +1,8 @@
-# Context injection manifest for: [workflow step name]
-# Place at: {user_context_root}/{workflow-path}/{step-name}.yaml
+# Context injection manifest for: [skill name OR workflow step name]
+# Place at: {user_context_root}/skills/{skill-name}.yaml          (skill target)
+#       or: {user_context_root}/{workflow-path}/{step-name}.yaml  (workflow-step target)
 # (default user_context_root: .user/context/; configured in sb-os.json)
-# See sb-os/rules/sb-workflow-context.md for full schema reference.
+# See sb-os/rules/sb-workflow-context.md for full schema reference (both surfaces).
 
 context:
   # --- type: file (read) ---

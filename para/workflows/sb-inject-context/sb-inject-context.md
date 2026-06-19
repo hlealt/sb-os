@@ -1,6 +1,6 @@
 ---
 name: sb-inject-context
-description: Interactive CRUD for workflow context injection entries
+description: Interactive CRUD for skill and workflow-step context injection entries
 ---
 
 # Context Injection Manager
@@ -27,15 +27,20 @@ Context Injection Manager
 
 ### 1. Resolve target
 
-Ask the user which workflow and where in it they want to inject context. The user will describe this in natural language (e.g., "this workflow, right before it reads my daily tasks").
+A context entry targets one of two surfaces — a **skill** or a **workflow step**. Determine which from the user's description; if unclear, ask: "Inject this into a skill (applies whenever that skill is invoked) or a specific workflow step?"
 
-Read the workflow's entry point and step files to understand its flow, then map the user's description to the correct step file. Confirm: "That maps to `step-02-{name}.md` — the step where {what it does}. Correct?"
+**Skill target:** the user names a skill (e.g., "the `rbtv-safe-move` skill"). Confirm the exact skill name. The context applies every time that skill is invoked.
 
-If ambiguous, describe 2-3 candidate steps by what they do (not by filename) and ask the user to pick.
+**Workflow-step target:** ask which workflow and where in it they want to inject context. The user will describe this in natural language (e.g., "this workflow, right before it reads my daily tasks"). Read the workflow's entry point and step files to understand its flow, then map the user's description to the correct step file. Confirm: "That maps to `step-02-{name}.md` — the step where {what it does}. Correct?" If ambiguous, describe 2-3 candidate steps by what they do (not by filename) and ask the user to pick.
 
 ### 2. Check existing context
 
-Resolve the context YAML path: take the workflow file's path relative to its workflow root (e.g., `sb-{name}/step-01-boot.md`), swap `.md` → `.yaml`, prepend `{user_context_root}` (resolved from `sb-os.json`).
+Resolve the context YAML path per the surface (matches `.claude/rules/sb-workflow-context.md` Path Resolution), prepending `{user_context_root}` (resolved from `sb-os.json`):
+
+- **Skill** → `{user_context_root}/skills/{skill-name}.yaml`
+- **Workflow step** → take the workflow file's path relative to its workflow root (e.g., `sb-{name}/step-01-boot.md`), swap `.md` → `.yaml`
+
+Then:
 
 - If the YAML file exists → show current entries and offer to append
 - If not → will create new file
@@ -105,7 +110,7 @@ Ask: "Add this entry? [Y/N]"
 
 ### 6. Write
 
-- If directory `{user_context_root}/{workflow-path}/` does not exist → create it
+- If the YAML's parent directory does not exist → create it (`{user_context_root}/skills/` for a skill, `{user_context_root}/{workflow-path}/` for a workflow step)
 - If YAML file exists → append entry under existing `context:` key
 - If YAML file does not exist → create with `context:` key and this entry
 - Reference the template at `{sb_os_path}/para/templates/context/workflow-context.yaml` for structure
@@ -122,7 +127,7 @@ Ask: "Add another entry to this file? [Y/N]"
 
 ### 1. Resolve target
 
-Same as Create step 1 — ask the user which workflow and where, resolve to the correct step file.
+Same as Create step 1 — determine the surface (skill or workflow step) and resolve to its YAML path.
 
 ### 2. Load existing entries
 
@@ -151,7 +156,7 @@ Show the updated entry. Ask for confirmation. Write back to the YAML file.
 
 ### 1. Resolve target
 
-Same as Create step 1 — ask the user which workflow and where, resolve to the correct step file.
+Same as Create step 1 — determine the surface (skill or workflow step) and resolve to its YAML path.
 
 ### 2. Load existing entries
 
@@ -171,5 +176,5 @@ Remove the entry from the YAML file. If the file becomes empty (no entries under
 
 - All YAML output MUST follow the schema in `.claude/rules/sb-workflow-context.md`
 - Entries are appended at the end of the `context:` list (processing order = document order)
-- When creating new files, include a comment header: `# Context for: [workflow] / [step]`
+- When creating new files, include a comment header: `# Context for: skill [skill-name]` (skill target) or `# Context for: [workflow] / [step]` (workflow-step target)
 - Never modify workflow step files — this command manages only user-context YAML files under `{user_context_root}`
