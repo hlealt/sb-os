@@ -38,7 +38,7 @@ Shippable components live under per-module folders at the repo root: `para/` (PA
 | Architecture doc is the spec | Behavior changes require updating `docs/architecture.md` first |
 | Marker-block protocol | Managed CLAUDE.mds use `<!-- sb:start v=1 -->...<!-- sb:end -->` markers. Content inside is owned by sb-os; outside is preserved on every install run |
 | `user_context_root` is configurable | Components that read user context resolve the path from `sb-os.json` via the manifest module — never hardcoded |
-| Settings.json is user-managed | The installer never creates or modifies `.claude/settings.json` in a target vault. Hooks ship as documented snippets in `docs/hooks.md` |
+| settings.json is user-managed; settings.local.json gets the context-injection hook | The installer never creates or modifies `.claude/settings.json`. It DOES auto-wire the context-injection hook into `.claude/settings.local.json` (sentinel `"__sb__": "sb:context-injection"`, two entries: PreToolUse/Skill + PostToolUse/Read calling `resolve_context.py --hook`; removable via `excluded_components: ["context-injection-hook"]`). Other hooks ship as documented snippets in `docs/hooks.md` |
 | Workflow directory contents | Each workflow directory contains ONLY step files, data, scripts, and templates — no README, no design docs |
 | Documentation home | Documentation about a component lives in `docs/`, not alongside the component |
 

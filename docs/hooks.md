@@ -1,6 +1,6 @@
 # Hooks
 
-Reference snippets for Claude Code hooks that complement sb-os. The sb-os installer **never** writes to `.claude/settings.json` — paste these snippets into your own settings.json manually.
+Reference snippets for Claude Code hooks that complement sb-os. The installer **auto-wires the context-injection hook** into `.claude/settings.local.json` (see [Auto-installed hook](#auto-installed-hook-context-injection) below). All other snippets in this document remain user-managed — paste them into your own `settings.json` manually.
 
 ---
 
@@ -133,14 +133,43 @@ sh "$REPO_ROOT/hooks/pre-commit-doc-currency" || exit $?
 
 ---
 
-## Maintenance
+## Auto-installed hook: context-injection
 
-These hooks are user-managed. sb-os will never modify your `settings.json`. Re-run `python install.py` after editing settings.json — the upgrade does not touch your hooks.
+The context-injection hook is the ONE hook sb-os auto-wires into a target vault. The installer writes it into `.claude/settings.local.json` (the `.local.` variant, not `settings.json` proper) on every fresh install and upgrade.
 
-If you remove sb-os from a vault, delete the corresponding hook entries by hand.
+### What it does
+
+The hook fires `para/workflows/sb-inject-context/resolve_context.py --hook` to inject per-surface user context automatically — replacing the retired `sb-workflow-context` rule. It installs two entries:
+
+| Event | Matcher | Effect |
+|-------|---------|--------|
+| `PreToolUse` | `Skill` | Fires before any skill invocation; injects the skill's YAML context before the skill body runs |
+| `PostToolUse` | `Read` | Fires after every file read inside a workflow or skill; injects step-level user context |
+
+Both entries call `python "$CLAUDE_PROJECT_DIR/{sb_os_path}/para/workflows/sb-inject-context/resolve_context.py" --hook`, substituting `{sb_os_path}` with the path recorded in `sb-os.json`.
+
+Schema and YAML contract reference: `para/docs/context-injection-schema.md`.
+
+### Sentinel and idempotence
+
+Each installed entry carries `"__sb__": "sb:context-injection"` as a sentinel key. The installer uses this sentinel (plus a command-path-signature fallback) to identify and manage its own entries — adding them on install, removing them on uninstall. Foreign keys and entries in `settings.local.json` are preserved unchanged. Re-running `python install.py` is idempotent.
+
+### Opt out
+
+Add `"context-injection-hook"` to `excluded_components` in the target vault's `sb-os.json`:
+
+```json
+{
+  "excluded_components": ["context-injection-hook"]
+}
+```
+
+On the next `python install.py` run, the installer calls `remove_context_hook` and strips the two sentinel-tagged entries from `settings.local.json`.
 
 ---
 
-## Status
+## Maintenance
 
-Hook auto-write into `.claude/settings.json` is deferred to v2 — see [`known-issues.md`](./known-issues.md) for the current row tracking this. The v1 contract is documented snippets only; users opt in by pasting.
+The example snippets above (§1–§5) are user-managed — sb-os will never modify your `settings.json`. Add or remove them by hand. The context-injection hook in `settings.local.json` is the sole exception: it is managed by the installer and should be controlled via `excluded_components`, not edited by hand.
+
+If you remove sb-os from a vault, delete any remaining hook entries in `settings.local.json` by hand (or run `python install.py` with `excluded_components: ["context-injection-hook"]` first to let the installer strip them cleanly).

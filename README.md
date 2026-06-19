@@ -6,7 +6,7 @@
 
 sb-os installs an opinionated structure into an Obsidian vault — PARA folders, periodic notes, a workbench layer for code repos, an optional wiki — and ships a set of `/sb-*` slash commands and Claude Code skills that operate against that structure. After install, your agents know where things go, how to capture content, how to run reviews, and how to keep the vault structurally consistent.
 
-The convention is opinionated; the content is yours. sb-os never writes inside `.user/`, never touches `.claude/settings.json`, and never owns your `Home.md`.
+The convention is opinionated; the content is yours. sb-os never writes inside `.user/`, and never owns your `Home.md`. It does auto-wire one hook into `.claude/settings.local.json` (the context-injection hook — see [`docs/hooks.md`](./docs/hooks.md#auto-installed-hook-context-injection)); `.claude/settings.json` proper is never touched.
 
 ## Who is it for?
 
@@ -169,7 +169,7 @@ Two principles govern what is yours and what is sb-os's:
 
 Thin loaders in `.claude/skills/` and `.claude/commands/`, and rule copies in `.claude/rules/sb-*.md`, are rewritten on every install. **Edit the source in this repo, not the installed copy.** Re-run `python install.py` after editing.
 
-`.claude/settings.json` is user-managed. The installer never creates or modifies it. See [`docs/hooks.md`](./docs/hooks.md) for snippets to paste in.
+`.claude/settings.json` is user-managed — the installer never creates or modifies it. See [`docs/hooks.md`](./docs/hooks.md) for snippets to paste in. The installer DOES auto-wire the context-injection hook into `.claude/settings.local.json` (sentinel-tagged, removable via `excluded_components`; details in [`docs/hooks.md`](./docs/hooks.md#auto-installed-hook-context-injection) and `para/docs/context-injection-schema.md`).
 
 ### Your Home.md is yours
 
@@ -204,7 +204,7 @@ Some components ship in this repo but carry `"stale": true` in `install/module-m
 - **Thin loaders.** Skills and commands installed into `.claude/` are short files that point back to this repo via the path recorded in `sb-os.json`. No content duplication.
 - **Rule exception.** Rule files are copied as content, not loaders, because rules load passively into Claude's context and indirection is unreliable.
 - **Marker blocks.** Managed CLAUDE.mds use `<!-- sb:start v=1 -->...<!-- sb:end -->`. Content inside is rewritten on every install run; content outside is preserved verbatim.
-- **Settings.json is user-managed.** The installer never creates or modifies `.claude/settings.json`. Hooks ship as snippets in [`docs/hooks.md`](./docs/hooks.md).
+- **Settings.json is user-managed; settings.local.json gets the context-injection hook.** The installer never creates or modifies `.claude/settings.json`. Other hooks ship as snippets in [`docs/hooks.md`](./docs/hooks.md). The context-injection hook is auto-wired into `.claude/settings.local.json` (sentinel `"__sb__": "sb:context-injection"`, removable via `excluded_components`); it fires `resolve_context.py --hook` automatically on Skill (PreToolUse) and Read (PostToolUse), injecting per-surface user context without manual setup. Schema: `para/docs/context-injection-schema.md`.
 - **Wiki search is semantic-first when available, grep floor always.** Retrieval is tiered: with a Voyage key available (`VOYAGE_API_KEY` env var, or a `VOYAGE_API_KEY=...` line in `.user/config/env/.env` at the vault root — the standard home for local API keys, gitignored, with a tracked `.env.example` for new machines), `sb-wiki-search.py` gives agents hybrid semantic+keyword search over your wiki (local SQLite index, self-syncing, read-only) — and it runs on every `/sb-wiki-query` plus inside ingest (near-duplicate stub detection, topic-update and answer-scan candidates). Without a key it runs keyword-only with zero API calls; without the helper at all, everything falls back to leaf indexes + ripgrep — exactly the old behavior. The semantic tier is never a required dependency, never decides a mechanical rule's fire, and raw sources are always grep-only.
 - **Templates are install-if-missing.** Periodic-note templates copy on fresh install and on upgrade only when the target file does not exist. Your customizations survive upgrades.
 
