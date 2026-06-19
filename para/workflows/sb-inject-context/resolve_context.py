@@ -223,6 +223,8 @@ def build_record(vault_root, entry):
         "kind": None,        # "content" | "action"
         "content": None,     # loaded corpus (kind == content)
         "sources": [],       # provenance file list (kind == content)
+        "partial": False,    # True when only `sections` were loaded, not the whole file
+        "section_names": [], # the sections loaded (kind == content, partial)
         "action": None,      # agent-action descriptor (kind == action)
     }
 
@@ -245,6 +247,8 @@ def build_record(vault_root, entry):
                 rec["sources"].append(str(p.relative_to(vault_root)).replace("\\", "/"))
             rec["kind"] = "content"
             rec["content"] = "\n\n".join(parts)
+            rec["partial"] = bool(sections)
+            rec["section_names"] = list(sections) if sections else []
             if mode == "read-write":
                 rec["writeback"] = entry.get("path", "")
             return rec
@@ -322,14 +326,22 @@ def render_text(surface_label, yaml_path, records, vault_root):
         out.append("    instruction:")
         out.append(_indent(rec["instruction"]))
         if rec["kind"] == "content":
-            if rec["sources"]:
-                out.append("    content (loaded from %s):" % ", ".join(rec["sources"]))
+            srcs = ", ".join(rec["sources"])
+            if rec.get("writeback"):
+                out.append("    content — current contents of %s (mode: read-write; "
+                           "edit this and write back to that path):" % rec["writeback"])
+            elif rec["sources"] and rec.get("partial"):
+                out.append("    content — sections %s of %s (PARTIAL — only these "
+                           "sections are loaded; re-read the file for anything outside "
+                           "them; the path is for editing/reference):"
+                           % (rec["section_names"], srcs))
+            elif rec["sources"]:
+                out.append("    content — full file %s (already loaded in full; no need "
+                           "to re-read it; the path is informative, for editing/reference "
+                           "only):" % srcs)
             else:
                 out.append("    content:")
             out.append(_indent(rec["content"]))
-            if rec.get("writeback"):
-                out.append("    write-back required (mode: read-write) to: %s"
-                            % rec["writeback"])
         else:
             a = rec["action"]
             out.append("    AGENT ACTION — %s:" % a["verb"])
