@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "description": "sb-os component manifest. Declarative source of truth for every shippable component the installer renders into a target vault. Edit this file to add, remove, or rename a component; loaders.py reads from here. Components are grouped into modules; each component declares a `module` field naming the on-disk module folder (`para` or `wiki`) that owns its source. Source paths under `source` and `source_template` are relative to the sb-os repo root and MUST start with the module folder name. The `wiki` module is atomic — selecting it installs all of its components AND creates the wiki folder + wiki CLAUDE.md; deselecting it skips all of them. Component kinds: skills/commands/rules are rewritten on every install (loader and rule-copy semantics). Templates use install-if-missing semantics — they are copied on fresh install, AND on upgrade only when the target file does not exist. Templates are never overwritten so user customizations are preserved across upgrades.",
   "modules": {
     "core": {
@@ -67,7 +67,9 @@
           "source": "para/rules/sb-workflow-context.md",
           "target": ".claude/rules/sb-workflow-context.md",
           "mode": "copy",
-          "description": "YAML context injection on workflow steps and skill invocations from user_context_root."
+          "description": "YAML context injection on workflow steps and skill invocations from user_context_root.",
+          "stale": true,
+          "stale_reason": "Superseded by the auto-firing context-injection hook (install/hooks.py) — the rule's manual 'run the resolver' nag is redundant now that the hook fires resolve_context.py automatically. Rule source removed in the rule-removal phase."
         },
         {
           "name": "sb-source-of-truth",
@@ -114,6 +116,16 @@
           "source": "para/templates/periodic-notes/Quarterly.md",
           "target": ".user/config/templates/periodic-notes/Quarterly.md",
           "description": "Obsidian quarterly note template (install-if-missing)."
+        }
+      ],
+      "hooks": [
+        {
+          "name": "context-injection-hook",
+          "module": "para",
+          "kind": "settings-hook",
+          "target": ".claude/settings.local.json",
+          "excludable": true,
+          "description": "Auto-fires resolve_context.py --hook on Skill (PreToolUse) and Read (PostToolUse) to inject per-surface user context. Wired into .claude/settings.local.json by install/hooks.py (NOT a rendered file); excludable via excluded_components key 'context-injection-hook'."
         }
       ]
     },
