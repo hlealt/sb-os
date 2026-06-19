@@ -21,6 +21,8 @@ CLI:
         [--out PATH]                    # explicit twin output path (overrides origin/title)
         [--vision-file PATH]            # markdown with the agent's figure/chart observations
         [--vault-root PATH]             # auto-detected (walk up for sb-os.json) if omitted
+        [--marker]                      # enable the OCR secondary fallback on suspect pages (OD-3)
+        [--marker-cmd PATH]             # path to marker_single (else $SB_MARKER_CMD / sibling .venv-marker / PATH)
         [--dry-run]                     # print the twin to stdout; write nothing
         [--json]                        # emit a machine-readable result object on stderr/last line
 
@@ -42,9 +44,18 @@ are listed for unconditional escalation. The tool NEVER silently clears such a
 paper: it writes the flag, lists the suspect pages, and returns a non-zero
 ``escalate`` field in --json. Twin-blind extraction may never look "done".
 
-Determinism: PyMuPDF is pure-Python, fast, no ML model, no OCR — the extraction
-is deterministic for a given PDF + library version. ``marker`` (OCR) is DEFERRED
-(OD-3 secondary) and is NOT invoked here.
+Determinism: PyMuPDF is pure-Python, fast, no ML model, no OCR — the default
+extraction is deterministic for a given PDF + library version. ``marker`` (OCR)
+is the OD-3 SECONDARY fallback, OFF by default and enabled with ``--marker``: when
+PyMuPDF returns no table on a page whose layout signals one (a twin_fidelity
+suspect page), marker re-reads JUST those pages and recovers their borderless
+tables. marker runs in its OWN venv (heavy: torch + OCR models) — this script
+shells out to it and NEVER imports it, and never passes ``--use_llm`` (the
+fallback is fully local: no LLM-API call), so the default path stays pure-PyMuPDF
++ deterministic. When marker reviews a flagged page and finds NO table either, the
+page is an OCR-confirmed false positive (both readers agree) and its escalation is
+lifted — recorded in ``marker_cleared_pages``, never silent. A page marker could
+not review (venv absent / error) stays escalated. See ``--marker`` / ``--marker-cmd``.
 """
 
 from __future__ import annotations
@@ -54,7 +65,10 @@ import contextlib
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -183,6 +197,12 @@ class TwinResult:
     fidelity_reasons: list = field(default_factory=list)
     regenerated_in_place: bool = False
     wrote: bool = False
+    twin_extractor: str = "pymupdf"
+    marker_status: str = "not-requested"     # not-requested | applied | unavailable | error
+    marker_detail: str = ""
+    marker_recovered_pages: list = field(default_factory=list)   # 1-based pages marker recovered a table on
+    marker_cleared_pages: list = field(default_factory=list)     # 1-based pages marker OCR-reviewed + found NO table (false positives, escalation lifted)
+    marker_tables: dict = field(default_factory=dict)            # 1-based page -> [(caption, table_md)]
 
     def to_dict(self) -> dict:
         return {
@@ -196,6 +216,11 @@ class TwinResult:
             "fidelity_reasons": self.fidelity_reasons,
             "regenerated_in_place": self.regenerated_in_place,
             "wrote": self.wrote,
+            "twin_extractor": self.twin_extractor,
+            "marker_fallback": self.marker_status,
+            "marker_recovered_pages": self.marker_recovered_pages,
+            "marker_cleared_pages": self.marker_cleared_pages,
+            "marker_detail": self.marker_detail,
             # `escalate` is the loud machine flag: a low-fidelity twin MUST be
             # escalated unconditionally (spec #5). Never silently cleared.
             "escalate": (not self.twin_fidelity),
@@ -290,7 +315,159 @@ def _assess_page(page, page_text: str, n_tables: int) -> PageReport:
     )
 
 
-def build_twin_markdown(pdf_path: Path, title: str, vision_text: str = "") -> tuple[str, TwinResult]:
+# ---------------------------------------------------------------------------
+# marker (OCR) secondary fallback (OD-3) — opt-in via --marker.
+#
+# Fires ONLY on twin_fidelity suspect pages (a page whose layout signals a table
+# but PyMuPDF's find_tables() returned none — typically a BORDERLESS table). marker
+# re-reads just those pages with its OCR + table model and recovers the grid PyMuPDF
+# could not. It runs in its OWN venv (heavy: torch + OCR models); this script shells
+# out to it and never imports it, and NEVER passes --use_llm, so the default path is
+# untouched (pure PyMuPDF, deterministic) and the fallback is fully local — no
+# LLM-API call. A page marker cannot recover stays escalated (fail-loud preserved).
+# ---------------------------------------------------------------------------
+
+# A unique page-break token handed to marker's --page_separator so the paginated
+# output can be split back into per-page blocks. marker emits "{<0-based-page>}<sep>"
+# before each page, so the page id travels WITH the separator.
+_MARKER_PAGE_SEP = "===SB_MARKER_PAGE_BREAK==="
+_MARKER_PAGE_RE = re.compile(r"\{(\d+)\}" + re.escape(_MARKER_PAGE_SEP))
+_MARKER_TIMEOUT_S = 1800  # CPU OCR on the flagged pages, no GPU — generous ceiling
+
+
+def _resolve_marker_cmd(explicit: Optional[str] = None) -> Optional[str]:
+    """Resolve the ``marker_single`` executable, or None if unavailable.
+
+    Order: explicit ``--marker-cmd`` → ``$SB_MARKER_CMD`` → the ``.venv-marker``
+    sibling of THIS script (the conventional isolated install) → ``PATH``.
+    """
+    candidates: list = []
+    if explicit:
+        candidates.append(Path(explicit))
+    env = os.environ.get("SB_MARKER_CMD")
+    if env:
+        candidates.append(Path(env))
+    here = Path(__file__).resolve().parent
+    candidates.append(here / ".venv-marker" / "Scripts" / "marker_single.exe")  # Windows
+    candidates.append(here / ".venv-marker" / "bin" / "marker_single")          # POSIX
+    for c in candidates:
+        if c.exists():
+            return str(c)
+    return shutil.which("marker_single")
+
+
+def _is_table_row(line: str) -> bool:
+    s = line.strip()
+    return s.startswith("|") and s.endswith("|") and s.count("|") >= 2
+
+
+def _is_table_divider(line: str) -> bool:
+    """A GFM header divider row, e.g. ``|----|:--:|``."""
+    s = line.strip()
+    if not (s.startswith("|") and s.endswith("|")):
+        return False
+    cells = [c.strip() for c in s.strip("|").split("|")]
+    return bool(cells) and all(c and set(c) <= set("-:") for c in cells)
+
+
+def _extract_gfm_tables(block: str) -> list:
+    """Return [(caption, table_markdown), ...] for every GFM table in ``block``.
+
+    A table = a row line immediately followed by a divider line, then its
+    consecutive row lines. A ``Table N`` caption on the nearest non-blank line
+    above is captured for context.
+    """
+    lines = block.splitlines()
+    out: list = []
+    i, n = 0, len(lines)
+    while i < n:
+        if _is_table_row(lines[i]) and i + 1 < n and _is_table_divider(lines[i + 1]):
+            start = i
+            j = i + 2
+            while j < n and _is_table_row(lines[j]):
+                j += 1
+            caption = ""
+            k = start - 1
+            while k >= 0 and not lines[k].strip():
+                k -= 1
+            if k >= 0 and re.search(r"\bTable\s+\d+", lines[k], re.IGNORECASE):
+                caption = lines[k].strip()
+            out.append((caption, "\n".join(lines[start:j])))
+            i = j
+        else:
+            i += 1
+    return out
+
+
+def _parse_marker_pages(md: str) -> dict:
+    """Split marker's paginated markdown into ``{0-based-page-id: block}``."""
+    pages: dict = {}
+    matches = list(_MARKER_PAGE_RE.finditer(md))
+    for idx, m in enumerate(matches):
+        pid = int(m.group(1))
+        start = m.end()
+        end = matches[idx + 1].start() if idx + 1 < len(matches) else len(md)
+        pages[pid] = md[start:end]
+    return pages
+
+
+def _run_marker_fallback(pdf_path: Path, suspect_pages: list,
+                         marker_cmd: str) -> tuple:
+    """Run marker on the suspect pages; recover their tables.
+
+    Returns ``(recovered, status, detail)`` where ``recovered`` maps a 1-based
+    page number to ``[(caption, table_md), ...]`` for pages marker found a table
+    on. ``status`` ∈ {applied, error}. Never raises — a failure returns an empty
+    map + an ``error`` status so the caller keeps those pages escalated.
+    """
+    page_ids = sorted(p - 1 for p in suspect_pages)        # marker is 0-based
+    page_range = ",".join(str(p) for p in page_ids)
+    tmp = tempfile.mkdtemp(prefix="sb-marker-")
+    try:
+        cmd = [
+            marker_cmd, str(pdf_path),
+            "--page_range", page_range,
+            "--output_format", "markdown",
+            "--paginate_output",
+            "--page_separator", _MARKER_PAGE_SEP,
+            "--disable_image_extraction",
+            "--disable_multiprocessing",
+            "--output_dir", tmp,
+        ]
+        # text=True alone decodes the child's output with the Windows locale
+        # codec (cp1252), which crashes the capture thread on marker's UTF-8
+        # output (em-dashes, π/⊕, box-drawing). Pin UTF-8 + replace so capture
+        # is robust regardless of what marker prints.
+        proc = subprocess.run(cmd, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace",
+                              timeout=_MARKER_TIMEOUT_S)
+        if proc.returncode != 0:
+            tail = (proc.stderr or proc.stdout or "").strip().splitlines()
+            return {}, "error", "marker exited %d: %s" % (
+                proc.returncode, tail[-1] if tail else "no output")
+        mds = sorted(Path(tmp).glob("**/*.md"))
+        if not mds:
+            return {}, "error", "marker produced no markdown output"
+        pages = _parse_marker_pages(mds[0].read_text(encoding="utf-8"))
+        recovered: dict = {}
+        for p in suspect_pages:
+            tables = _extract_gfm_tables(pages.get(p - 1, ""))
+            if tables:
+                recovered[p] = tables
+        detail = "marker recovered tables on pages %s of suspect %s" % (
+            sorted(recovered), suspect_pages)
+        return recovered, "applied", detail
+    except subprocess.TimeoutExpired:
+        return {}, "error", "marker timed out after %ds" % _MARKER_TIMEOUT_S
+    except Exception as exc:                                   # noqa: BLE001
+        return {}, "error", "marker fallback failed: %s" % exc
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def build_twin_markdown(pdf_path: Path, title: str, vision_text: str = "",
+                        use_marker: bool = False,
+                        marker_cmd: Optional[str] = None) -> tuple:
     """Extract the structured twin markdown for ``pdf_path``; return (markdown, result).
 
     Imports ``fitz`` lazily so the module loads even where PyMuPDF is absent
@@ -306,8 +483,8 @@ def build_twin_markdown(pdf_path: Path, title: str, vision_text: str = "") -> tu
     slug = _title_slug(title) if title else _title_slug(pdf_path.stem)
     doc = fitz.open(str(pdf_path))
 
-    body_parts: list[str] = []
-    page_reports: list[PageReport] = []
+    body_parts: list = []
+    page_reports: list = []
     total_tables = 0
     total_chars = 0
 
@@ -326,7 +503,7 @@ def build_twin_markdown(pdf_path: Path, title: str, vision_text: str = "") -> tu
             except Exception:
                 tables = []
             usable = 0
-            table_md_chunks: list[str] = []
+            table_md_chunks: list = []
             for t in tables:
                 try:
                     rows = t.extract()
@@ -350,26 +527,83 @@ def build_twin_markdown(pdf_path: Path, title: str, vision_text: str = "") -> tu
 
     doc.close()
 
-    # ---- twin_fidelity assessment (fail loud) ----
-    suspect_pages: list[int] = []
-    reasons: list[str] = []
-    for r in page_reports:
-        if r.table_expected and r.n_tables == 0:
-            suspect_pages.append(r.index + 1)  # 1-based for humans
-    if suspect_pages:
-        reasons.append(
-            f"PyMuPDF find_tables() returned NO usable table on {len(suspect_pages)} "
-            f"page(s) whose layout signals a table: pages {suspect_pages}"
+    # ---- twin_fidelity assessment (fail loud) + marker OCR fallback (OD-3) ----
+    # Pages PyMuPDF could not table-parse though the layout signals a table.
+    table_suspect = [r.index + 1 for r in page_reports if r.table_expected and r.n_tables == 0]
+    doc_thin = total_chars < _DOC_TEXT_MIN_CHARS
+    # The page-set to escalate (and to hand marker): the table-suspect pages, or —
+    # for a near-empty (scanned/image-only) PDF with no table signal — every page.
+    suspect_pages = list(table_suspect)
+    if doc_thin and not suspect_pages:
+        suspect_pages = list(range(1, len(page_reports) + 1))
+
+    # marker (OCR) SECONDARY fallback — opt-in (--marker), fires ONLY on suspect
+    # pages. Recovers borderless tables PyMuPDF cannot grid. Runs in its own venv
+    # via subprocess; never imported here; never uses an LLM (no --use_llm).
+    marker_status = "not-requested"
+    marker_detail = ""
+    marker_recovered: dict = {}
+    if use_marker and suspect_pages:
+        cmd = _resolve_marker_cmd(marker_cmd)
+        if not cmd:
+            marker_status = "unavailable"
+            marker_detail = (
+                "marker fallback requested (--marker) but no marker_single was found "
+                "(checked --marker-cmd, $SB_MARKER_CMD, sibling .venv-marker, PATH); "
+                "suspect pages left escalated"
+            )
+        else:
+            marker_recovered, marker_status, marker_detail = _run_marker_fallback(
+                pdf_path, suspect_pages, cmd
+            )
+
+    recovered_pages = sorted(marker_recovered)
+
+    # OCR-confirmed false positives: a TABLE-suspect page that marker REVIEWED and
+    # found NO table on. Two independent readers (PyMuPDF + marker OCR) agree there
+    # is no table → the layout heuristic over-flagged it (e.g. a page that only
+    # *mentions* "Table 2" in prose) → lift the escalation. Only when marker
+    # actually ran (status 'applied'); a page marker could not review stays
+    # escalated (fail-loud preserved). The clear is RECORDED, never silent.
+    marker_reviewed = set(suspect_pages) if marker_status == "applied" else set()
+    ocr_cleared_pages = sorted(
+        p for p in table_suspect
+        if p in marker_reviewed and p not in marker_recovered
+    )
+    marker_resolved = set(marker_recovered) | set(ocr_cleared_pages)
+    # Table-suspect pages marker neither recovered nor reviewed-as-empty (i.e.
+    # marker did not run / errored) still escalate.
+    remaining_table_suspect = [p for p in table_suspect if p not in marker_resolved]
+
+    reasons: list = []
+    escalate: set = set(remaining_table_suspect)
+    if remaining_table_suspect:
+        note = (
+            f"PyMuPDF find_tables() returned NO usable table on "
+            f"{len(remaining_table_suspect)} page(s) whose layout signals a table: "
+            f"pages {remaining_table_suspect}"
         )
-    if total_chars < _DOC_TEXT_MIN_CHARS:
+        ctx = []
+        if recovered_pages:
+            ctx.append(f"marker recovered {recovered_pages}")
+        if ocr_cleared_pages:
+            ctx.append(f"marker OCR-cleared {ocr_cleared_pages} (no table)")
+        if marker_status in ("unavailable", "error"):
+            ctx.append(f"marker {marker_status} — these pages NOT OCR-reviewed")
+        if ctx:
+            note += " (" + "; ".join(ctx) + ")"
+        reasons.append(note)
+    if doc_thin:
         reasons.append(
             f"document extracted only {total_chars} chars of text "
             f"(< {_DOC_TEXT_MIN_CHARS}) — likely scanned / image-only PDF"
         )
-        if doc.page_count and not suspect_pages:
-            # whole-doc thinness still escalates every page
-            suspect_pages = list(range(1, doc.page_count + 1))
+        # A scanned doc's TEXT is missing everywhere — escalate every page not at
+        # least partially recovered by marker. (The OCR-cleared rule above is
+        # table-only; it never lifts a thin-doc page.)
+        escalate |= {p for p in range(1, len(page_reports) + 1) if p not in marker_recovered}
     twin_fidelity = not reasons
+    suspect_pages = sorted(escalate)
 
     result = TwinResult(
         out_path=None,
@@ -380,6 +614,12 @@ def build_twin_markdown(pdf_path: Path, title: str, vision_text: str = "") -> tu
         twin_fidelity=twin_fidelity,
         suspect_pages=suspect_pages,
         fidelity_reasons=reasons,
+        twin_extractor=("pymupdf+marker" if (marker_recovered or ocr_cleared_pages) else "pymupdf"),
+        marker_status=marker_status,
+        marker_detail=marker_detail,
+        marker_recovered_pages=recovered_pages,
+        marker_cleared_pages=ocr_cleared_pages,
+        marker_tables=marker_recovered,
     )
 
     md = _render_twin(slug, title, pdf_path, result, body_parts, vision_text)
@@ -387,17 +627,23 @@ def build_twin_markdown(pdf_path: Path, title: str, vision_text: str = "") -> tu
 
 
 def _render_twin(slug: str, title: str, pdf_path: Path, result: TwinResult,
-                 body_parts: list[str], vision_text: str) -> str:
+                 body_parts: list, vision_text: str) -> str:
     """Assemble the full twin markdown (frontmatter + body + tables + vision)."""
     front = [
         "---",
-        f"twin_extractor: pymupdf",
+        f"twin_extractor: {result.twin_extractor}",
         f"twin_fidelity: {'true' if result.twin_fidelity else 'false'}",
         f"twin_generated: {date.today().isoformat()}",
         f"source_pdf: {pdf_path.name}",
         f"pages: {result.page_count}",
         f"tables_extracted: {result.total_tables}",
     ]
+    if result.marker_status != "not-requested":
+        front.append(f"marker_fallback: {result.marker_status}")
+    if result.marker_recovered_pages:
+        front.append(f"marker_recovered_pages: {result.marker_recovered_pages}")
+    if result.marker_cleared_pages:
+        front.append(f"marker_cleared_pages: {result.marker_cleared_pages}")
     if not result.twin_fidelity:
         front.append(f"escalate_pages: {result.suspect_pages}")
     front.append("---")
@@ -425,6 +671,54 @@ def _render_twin(slug: str, title: str, pdf_path: Path, result: TwinResult,
         parts.append("")
 
     parts.append("\n\n".join(body_parts))
+
+    # marker OCR review — visible audit of what the OCR pass did (recovered tables
+    # and/or lifted false-positive escalations). Never silent.
+    if result.marker_status == "applied" and (result.marker_recovered_pages or result.marker_cleared_pages):
+        bits = []
+        if result.marker_recovered_pages:
+            bits.append(f"recovered borderless tables on pages {result.marker_recovered_pages}")
+        if result.marker_cleared_pages:
+            bits.append(
+                f"OCR-reviewed pages {result.marker_cleared_pages} and found NO table "
+                f"(layout heuristic over-flagged them — escalation lifted)"
+            )
+        parts.append("")
+        parts.append("> [!note] marker OCR fallback: " + "; ".join(bits) + ".")
+        parts.append("")
+
+    # marker OCR fallback — recovered borderless tables (OD-3 secondary).
+    if result.marker_tables:
+        parts.append("")
+        parts.append("---")
+        parts.append("")
+        parts.append("## Tables recovered by `marker` (OCR fallback)")
+        parts.append("")
+        parts.append(
+            "<!-- These tables sit on pages PyMuPDF could not grid (borderless / no "
+            "rule lines). Recovered by the marker OCR fallback (OD-3 secondary), run "
+            "ONLY on those suspect pages. This twin IS the ingest input, so the tables "
+            "below reach the wiki page. -->"
+        )
+        for pg in sorted(result.marker_tables):
+            for cap, tbl in result.marker_tables[pg]:
+                parts.append("")
+                parts.append(f"**Table (page {pg}) — recovered by marker OCR fallback**")
+                if cap:
+                    parts.append("")
+                    parts.append(f"*{cap}*")
+                parts.append("")
+                parts.append(tbl)
+        parts.append("")
+
+    # marker fallback status note when requested but it did NOT fully succeed
+    # (fail-loud: the owner must see that the fallback was asked for and could not run).
+    if result.marker_status in ("unavailable", "error"):
+        parts.append("")
+        parts.append(
+            f"> [!warning] marker OCR fallback {result.marker_status}: {result.marker_detail}"
+        )
+        parts.append("")
 
     if vision_text.strip():
         parts.append("")
@@ -476,6 +770,12 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--vision-file", default=None,
                    help="Markdown file with the agent's figure/chart observations (vision-piggyback).")
     p.add_argument("--vault-root", default=None, help="Vault root (auto-detected via sb-os.json if omitted).")
+    p.add_argument("--marker", action="store_true",
+                   help="Enable the marker OCR SECONDARY fallback (OD-3): on suspect pages "
+                        "(layout signals a table but PyMuPDF found none), run marker to recover "
+                        "the borderless table. Heavy (own venv: torch + OCR models); off by default.")
+    p.add_argument("--marker-cmd", default=None,
+                   help="Path to marker_single (overrides $SB_MARKER_CMD and the sibling .venv-marker).")
     p.add_argument("--dry-run", action="store_true", help="Print the twin to stdout; write nothing.")
     p.add_argument("--json", action="store_true", help="Print the result object as JSON (last stdout line).")
     return p
@@ -496,7 +796,10 @@ def main(argv: Optional[list] = None) -> int:
             return 2
         vision_text = vf.read_text(encoding="utf-8")
 
-    md, result = build_twin_markdown(pdf_path, args.title, vision_text)
+    md, result = build_twin_markdown(
+        pdf_path, args.title, vision_text,
+        use_marker=args.marker, marker_cmd=args.marker_cmd,
+    )
 
     if args.dry_run:
         sys.stdout.write(md)
@@ -523,6 +826,9 @@ def main(argv: Optional[list] = None) -> int:
         print(f"twin {action}: {out_path}")
         print(f"  pages={result.page_count} tables={result.total_tables} "
               f"text_chars={result.total_text_chars} twin_fidelity={result.twin_fidelity} [{verdict}]")
+        if result.marker_status != "not-requested":
+            print(f"  marker: {result.marker_status} — recovered pages {result.marker_recovered_pages}"
+                  + (f"; {result.marker_detail}" if result.marker_detail else ""))
         if not result.twin_fidelity:
             for r in result.fidelity_reasons:
                 print(f"  ! {r}")

@@ -3,6 +3,7 @@ __pycache__/
 *.pyo
 .venv/
 venv/
+.venv-marker/
 .env
 .DS_Store
 Thumbs.db
