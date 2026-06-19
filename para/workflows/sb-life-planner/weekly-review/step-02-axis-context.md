@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Complete the week's picture: check which life axes the user did not cover in the retrospective and read therapy/psychiatry session context. Process context injection per `sb-workflow-context.md` before proceeding.
+Complete the week's picture: check which life axes the user did not cover in the retrospective and read therapy/psychiatry session context. Context injection loads automatically via the hook.
 
 ## Execution
 

@@ -9,7 +9,7 @@ stepId: boot
 
 ## Bootstrap (first-run companion check)
 
-On invocation, before applying any other rule. Resolve the profile YAML path the SAME way `.claude/rules/sb-workflow-context.md` resolves it — read `user_context_root` from `sb-os.json` at the vault root, then append this step file's workflow-relative path with `.md` swapped to `.yaml`: `{user_context_root}/sb-tutor/step-01-boot.yaml`. NEVER hardcode the `.user/context/...` literal — always resolve through `sb-os.json`. Call the resolved file `{profile_yaml}` below.
+On invocation, before applying any other rule. Resolve the profile YAML path the SAME way `para/docs/context-injection-schema.md` defines it — read `user_context_root` from `sb-os.json` at the vault root, then append this step file's workflow-relative path with `.md` swapped to `.yaml`: `{user_context_root}/sb-tutor/step-01-boot.yaml`. NEVER hardcode the `.user/context/...` literal — always resolve through `sb-os.json`. Call the resolved file `{profile_yaml}` below.
 
 This bootstrap has TWO independent first-run gates against `{profile_yaml}`. Run both, in order. Each writes a DISTINCT entry and is keyed on the PRESENCE OF ITS OWN ENTRY — never on mere file existence, because `{profile_yaml}` may already exist (carrying other entries) while this step's own entry is still absent.
 
@@ -20,11 +20,11 @@ This bootstrap has TWO independent first-run gates against `{profile_yaml}`. Run
    a. Greet the student briefly and explain: "Before we start, I need to know two paths. These are saved once and reused on every future tutoring session."
    b. Ask: "Where should I look for study topics when you don't bring one? (Path to a markdown file, e.g., `2-areas/{your-area}/learning-topics.md`. If you don't have one yet, type `none` and I'll just ask you for the topic each time.)"
    c. Ask: "Where should I write session summaries when a learning agenda completes? (Path to a directory inside your vault. If you'd rather see summaries only in chat, type `none`.)"
-   d. APPEND to `{profile_yaml}` (create the file with a top-level `context:` list if it does not yet exist) the user's two answers, using the schema from `.claude/rules/sb-workflow-context.md` (entries: `Study topics fallback` (read), `Session summary destination` (write)). If the user typed `none` for either, omit that entry entirely. NEVER rewrite or remove any pre-existing entry while appending.
+   d. APPEND to `{profile_yaml}` (create the file with a top-level `context:` list if it does not yet exist) the user's two answers, using the schema from `para/docs/context-injection-schema.md` (entries: `Study topics fallback` (read), `Session summary destination` (write)). If the user typed `none` for either, omit that entry entirely. NEVER rewrite or remove any pre-existing entry while appending.
 
 **Gate B — learning-style profile.** Keyed on the step's OWN `pref.learning.profile` entry:
 
-1. If `{profile_yaml}` already contains a `pref.learning.profile` entry: Gate B is satisfied — skip elicitation. The `sb-workflow-context` mechanism injects it on every future run. Do NOT re-run the diagnostic. Do NOT read or modify any existing entry here.
+1. If `{profile_yaml}` already contains a `pref.learning.profile` entry: Gate B is satisfied — skip elicitation. The context-injection hook injects it automatically on every future run. Do NOT re-run the diagnostic. Do NOT read or modify any existing entry here.
 2. If no `pref.learning.profile` entry is present (first profiling run — independent of whether other entries exist):
    a. Tell the student: "One more first-run setup — a quick learning-style check so I can adapt how I teach you. Saved once, reused every session."
    b. Run the diagnostic from `3-resources/tools/prompts/learning-style-assessor.md`: present its 10 scenario-based questions to identify the student's primary and secondary learning modalities and environment needs. Keep it brief — gather answers, then synthesize.
@@ -94,7 +94,7 @@ Apply ONLY when the tutor is invoked with NO topic (Standard Flow entry branch).
    - **Open questions** (FIRST — studying one can retire it): read `{wiki_root}/open-gaps.md`. If absent, fall back to `{wiki_root}/questions.md`. Each row's question text is one candidate.
    - **Topics:** read `{wiki_root}/wiki/topics/topics.md` (a `| File | Scope |` index). Each row's scope is one candidate.
    - **Theses** (FINANCE-GATED): only when `wiki_extensions` contains `finance`, read `{wiki_root}/wiki/theses/theses.md` (a `| File | Description |` index); each row's description is one candidate. When `finance` is absent, omit thesis candidates SILENTLY.
-3. **Load the static list.** This is the `Study topics fallback` context entry (it injects the user's `learning-topics.md`), already surfaced by the `sb-workflow-context` mechanism. AUGMENT it — NEVER replace it. If the static list is `none`/absent, present wiki candidates only.
+3. **Load the static list.** This is the `Study topics fallback` context entry (it injects the user's `learning-topics.md`), already surfaced automatically by the context-injection hook. AUGMENT it — NEVER replace it. If the static list is `none`/absent, present wiki candidates only.
 4. **Present ONE merged menu.** Group candidates by kind and label each group; order the groups: open questions → topics → theses → static list. Cap each kind at ~5 candidates (ordering and caps are empirical and tunable). Combine the wiki candidates with the static-list entries into a single menu and ask what the student wants to learn today.
 5. **Edge cases.** Empty wiki (no questions/topics/theses) ⇒ present the static list ONLY — never worse than today. BOTH empty (no wiki candidates AND static list `none`/absent) ⇒ ask the student for a topic. A student pick flows into R3 as a normal brought topic (Standard Flow from step 2).
 

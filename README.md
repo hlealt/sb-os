@@ -197,7 +197,7 @@ Some components ship in this repo but carry `"stale": true` in `install/module-m
 
 | Component | Module | Why retired |
 |---|---|---|
-| `sb-user-preferences` (rule) | core | Superseded by host CLAUDE.md prefs (cross-cutting) + per-workflow context-injection via `sb-workflow-context` (workflow-scoped). The always-on monolithic loader cost context on every turn for content most turns don't need. |
+| `sb-user-preferences` (rule) | core | Superseded by host CLAUDE.md prefs (cross-cutting) + per-workflow context-injection fired automatically by the context-injection hook (workflow-scoped; schema: `para/docs/context-injection-schema.md`). The always-on monolithic loader cost context on every turn for content most turns don't need. |
 
 ## Architecture notes
 

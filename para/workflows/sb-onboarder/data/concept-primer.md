@@ -115,7 +115,7 @@ A YAML entry can inject:
 | `text` | Inline content baked into the YAML | A short reminder or instruction |
 | `mcp` | Calls an MCP server tool | A Gmail search, a calendar query |
 
-Each entry has a `mode` (`read`, `write`, `read-write`) and an `instruction` field telling the agent what to do with the loaded content. Schema reference: `.claude/rules/sb-workflow-context.md`.
+Each entry has a `mode` (`read`, `write`, `read-write`) and an `instruction` field telling the agent what to do with the loaded content. Schema reference: `para/docs/context-injection-schema.md`.
 
 **Why this matters:** the same `sb-life-planner` workflow runs differently for every user — one injects their Google Calendar via MCP, another injects a static list of life areas, another runs a script to pull project status from a database. The workflow does not change. Only the YAML changes.
 
@@ -123,7 +123,7 @@ Each entry has a `mode` (`read`, `write`, `read-write`) and an `instruction` fie
 
 You can also write the YAML by hand at the matching path if you prefer. Either way, the next workflow run picks it up automatically. No workflow edit, no redeploy.
 
-Full rule and schema: `.claude/rules/sb-workflow-context.md`. Command: `/sb-inject-context`.
+Full schema and path resolution: `para/docs/context-injection-schema.md`. Command: `/sb-inject-context`.
 
 ---
 

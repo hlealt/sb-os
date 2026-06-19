@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Propose the entire week's plan at once, adjust in batch with the user, and write everything to the vault after confirmation. When this step ends, the Home is already 100% correct. Process context injection per `sb-workflow-context.md` before proceeding.
+Propose the entire week's plan at once, adjust in batch with the user, and write everything to the vault after confirmation. When this step ends, the Home is already 100% correct. Context injection loads automatically via the hook.
 
 ## Fundamental rule
 

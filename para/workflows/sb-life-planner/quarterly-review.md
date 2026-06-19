@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Close the ending quarter and set strategic intentions for the next one. Produces strategic-tier objectives, goals, traps, and an intentions list that surfaces on the Home page. Scope: all life areas. Process context injection per `sb-workflow-context.md` before proceeding.
+Close the ending quarter and set strategic intentions for the next one. Produces strategic-tier objectives, goals, traps, and an intentions list that surfaces on the Home page. Scope: all life areas. Context injection loads automatically via the hook.
 
 ## Output document
 

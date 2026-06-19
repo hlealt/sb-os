@@ -15,7 +15,7 @@ Micro-file architecture for sb-os. These conventions govern all system component
 
 ## Context Separation (`sb-` Components)
 
-`sb-` prefixed components must be user-agnostic — no personal paths, names, or routing inside the component file. User-specific content lives in YAML files at the user-context root (resolved from `sb-os.json` → `user_context_root`, default `.user/context/`) and is injected per the `sb-workflow-context` rule. Applies to both creating and editing `sb-` components.
+`sb-` prefixed components must be user-agnostic — no personal paths, names, or routing inside the component file. User-specific content lives in YAML files at the user-context root (resolved from `sb-os.json` → `user_context_root`, default `.user/context/`) and is injected automatically by the context-injection hook (schema: `para/docs/context-injection-schema.md`). Applies to both creating and editing `sb-` components.
 
 | User-specific (extract to YAML) | Component-native (keep in file) |
 |---------------------------------|---------------------------------|

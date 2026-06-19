@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Close the ending month and set intentions for the next one. Produces objectives, goals, traps, and an intentions list that surfaces on the Home page. Scope: all life areas (work, health, family, personal). Process context injection per `sb-workflow-context.md` before proceeding.
+Close the ending month and set intentions for the next one. Produces objectives, goals, traps, and an intentions list that surfaces on the Home page. Scope: all life areas (work, health, family, personal). Context injection loads automatically via the hook.
 
 ## Output document
 

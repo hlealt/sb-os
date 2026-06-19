@@ -47,7 +47,7 @@ ME_GATE         = {SHARED_DIR}/me_gate.py
 AUDIT_LIB       = {SHARED_DIR}/lib/audit.py
 ```
 
-User-specific data (the user's tool registry path, schema-manifest paths, source patterns) is NOT hardcoded here — it is injected at runtime via `sb-workflow-context` from `.user/context/tool-builder/tool-builder.yaml`. This workflow file contains only generic sb-os logic.
+User-specific data (the user's tool registry path, schema-manifest paths, source patterns) is NOT hardcoded here — it is injected at runtime by the context-injection hook from `.user/context/tool-builder/tool-builder.yaml` (schema: `para/docs/context-injection-schema.md`). This workflow file contains only generic sb-os logic.
 
 ---
 

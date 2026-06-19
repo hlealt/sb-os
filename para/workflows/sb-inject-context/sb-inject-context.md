@@ -7,7 +7,7 @@ description: Interactive CRUD for skill and workflow-step context injection entr
 
 Manage user-specific context entries for workflow steps. Creates, updates, and deletes YAML context files under the configured user-context root (resolved from `sb-os.json` → `user_context_root`; default `.user/context/`).
 
-The files this command writes are READ at runtime by the deterministic resolver `resolve_context.py` (driven by the `sb-workflow-context` rule). To stay in sync, ALWAYS locate a surface's YAML with the resolver instead of computing the path by hand:
+The files this command writes are READ at runtime by the deterministic resolver `resolve_context.py`, fired automatically via the installed Claude Code hook (`install/hooks.py`; `resolve_context.py --hook`). Schema and path-resolution contract: `para/docs/context-injection-schema.md`. To stay in sync, ALWAYS locate a surface's YAML with the resolver instead of computing the path by hand:
 
 ```
 python {sb_os_path}/para/workflows/sb-inject-context/resolve_context.py --surface skill --name <skill-name> --path-only
@@ -16,7 +16,7 @@ python {sb_os_path}/para/workflows/sb-inject-context/resolve_context.py --surfac
 
 It prints the exact YAML path (whether or not it exists yet) — the single source of truth both this command and the runtime gate share. Emit standard YAML (the resolver parses with a real YAML library); a malformed file the agent hand-writes will be reported as `CANNOT PARSE` at runtime.
 
-**sb-vault-ops exemption:** Context YAML files are structured data validated by this command's own schema (`.claude/rules/sb-workflow-context.md`). This command is the authoritative interface — sb-vault-ops is not needed for context YAML CRUD operations.
+**sb-vault-ops exemption:** Context YAML files are structured data validated by this command's own schema (`para/docs/context-injection-schema.md`). This command is the authoritative interface — sb-vault-ops is not needed for context YAML CRUD operations.
 
 ## Entry Point
 
@@ -184,7 +184,7 @@ Remove the entry from the YAML file. If the file becomes empty (no entries under
 
 ## Rules
 
-- All YAML output MUST follow the schema in `.claude/rules/sb-workflow-context.md`
+- All YAML output MUST follow the schema in `para/docs/context-injection-schema.md`
 - Entries are appended at the end of the `context:` list (processing order = document order)
 - When creating new files, include a comment header: `# Context for: skill [skill-name]` (skill target) or `# Context for: [workflow] / [step]` (workflow-step target)
 - Never modify workflow step files — this command manages only user-context YAML files under `{user_context_root}`

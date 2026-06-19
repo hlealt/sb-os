@@ -24,7 +24,7 @@ If no row matches, the handler falls back to: read `{sb_os_path}/CLAUDE.md`, `{s
 | `rbtv`, `business plugin`, `coaching` | `{sb_os_path}/README.md` (RBTV section, if present) — fallback: tell user to visit RBTV repo |
 | `marker block`, `managed claude.md` | `{sb_os_path}/docs/architecture.md` |
 | `user_context_root`, `.user`, `personal extensions` | `{sb_os_path}/docs/architecture.md`, `{sb_os_path}/CLAUDE.md` |
-| `context injection`, `yaml context`, `workflow context`, `personalize workflow`, `inject data`, `sb-inject-context` | `{sb_os_path}/para/rules/sb-workflow-context.md`, `{sb_os_path}/para/workflows/sb-inject-context/sb-inject-context.md`, `{sb_os_path}/para/workflows/sb-onboarder/data/concept-primer.md` (Context injection section) |
+| `context injection`, `yaml context`, `workflow context`, `personalize workflow`, `inject data`, `sb-inject-context` | `{sb_os_path}/para/docs/context-injection-schema.md`, `{sb_os_path}/para/workflows/sb-inject-context/sb-inject-context.md`, `{sb_os_path}/para/workflows/sb-onboarder/data/concept-primer.md` (Context injection section) |
 | `naming`, `kebab-case`, `prefixes` | `{sb_os_path}/CLAUDE.md`, `{sb_os_path}/docs/component-prefixes.md` |
 
 ---

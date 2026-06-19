@@ -47,7 +47,7 @@ DOC_CURRENCY_MANIFEST = 3-resources/tools/sb-os/finance/docs/doc-currency-manife
 AUDIT_LIB            = {SCRIPTS_DIR}/shared/lib/audit.py
 ```
 
-User-specific data (the user's actual doc paths if relocated, additional doc surfaces a user wants kept current, project-specific living docs) is NOT hardcoded here — it is injected at runtime via `sb-workflow-context` from `.user/context/doc-maintainer/doc-maintainer.yaml`. This workflow file contains only generic sb-os logic. (`{DATA_FLOW_MAP}` points at this vault's foundation artifact by default; a different install supplies its own data-flow-map path through that YAML.)
+User-specific data (the user's actual doc paths if relocated, additional doc surfaces a user wants kept current, project-specific living docs) is NOT hardcoded here — it is injected at runtime by the context-injection hook from `.user/context/doc-maintainer/doc-maintainer.yaml` (schema: `para/docs/context-injection-schema.md`). This workflow file contains only generic sb-os logic. (`{DATA_FLOW_MAP}` points at this vault's foundation artifact by default; a different install supplies its own data-flow-map path through that YAML.)
 
 ---
 

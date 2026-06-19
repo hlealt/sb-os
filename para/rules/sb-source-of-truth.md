@@ -15,7 +15,7 @@ Before EVERY write (Edit, Write, MultiEdit, Bash redirect, etc.) whose target pa
 |------|----------|--------|-------|
 | 1. Target | Does the path match `.claude/{rules,skills,commands,agents}/sb-*` or any file under `{sb_os_path}/`? | Continue to step 2 | Gate does not apply — proceed |
 | 2. Installed copy? | Is the path under `.claude/` (i.e., an installer-generated loader or copy)? | STOP. Reroute to `{sb_os_path}/{module}/...` per the canonical-locations table below. NEVER edit `.claude/` directly. | Continue to step 3 |
-| 3. Personalization? | Does the change encode user-specific data, routing, content, axes, profiles, or behavior that another sb-os user would NOT want? | STOP. Reroute to `.user/` — specifically `{user_context_root}/{workflow-name}/{...}.yaml` for workflow-scoped personalization (per `sb-workflow-context`), or another `.user/` location for non-workflow personalization. NEVER add user-specific content to sb-os source. | Continue to step 4 |
+| 3. Personalization? | Does the change encode user-specific data, routing, content, axes, profiles, or behavior that another sb-os user would NOT want? | STOP. Reroute to `.user/` — specifically `{user_context_root}/{workflow-name}/{...}.yaml` for workflow-scoped personalization (injected automatically by the context-injection hook; schema: `para/docs/context-injection-schema.md`), or another `.user/` location for non-workflow personalization. NEVER add user-specific content to sb-os source. | Continue to step 4 |
 | 4. Behavior or schema change? | Is the change a generic improvement to sb-os behavior, schema, docs, or rule wording that benefits every installer? | Proceed with the edit at the canonical sb-os source path. | STOP. If it is neither personalization nor a generic improvement, ask the user where it belongs before writing. |
 
 The gate fires PER WRITE — every Edit/Write/MultiEdit call against an installer-relevant path triggers a fresh gate.
@@ -43,11 +43,11 @@ sb-os ships generic behavior. User-specific behavior lives in `.user/`. The spli
 | Change type | Route to | Example |
 |-------------|----------|---------|
 | Generic behavior, schema, doc, or rule wording change | `{sb_os_path}/{module}/...` (sb-os source) | Tightening a Pre-Action Gate; renaming a workflow step |
-| User-specific instructions for an existing sb-os workflow (axes, content classifiers, routing rules, evaluation criteria) | `{user_context_root}/{workflow-name}/{...}.yaml` (per `sb-workflow-context`) | Tecer-relevance evaluation in `sb-wiki-ingest`; learning-topics capture |
+| User-specific instructions for an existing sb-os workflow (axes, content classifiers, routing rules, evaluation criteria) | `{user_context_root}/{workflow-name}/{...}.yaml` (injected automatically by the context-injection hook; schema: `para/docs/context-injection-schema.md`) | Tecer-relevance evaluation in `sb-wiki-ingest`; learning-topics capture |
 | User profile, preferences, glossary, credentials | `.user/profile/`, `.user/docs/`, `.user/state/` | Personal name glossary; review state |
 | User-only workflow that does not ship with sb-os | `.user/workflows/{name}/` plus matching `.claude/` thin loader | accountant, mentor, sb-life-planner |
 
-If the temptation is "let me bake my preference into the sb-os rule/workflow," the answer is almost always: write a YAML under `{user_context_root}/` instead. The workflow-context-injection rule (`sb-workflow-context`) is the supported extension point.
+If the temptation is "let me bake my preference into the sb-os rule/workflow," the answer is almost always: write a YAML under `{user_context_root}/` instead. The context-injection hook is the supported extension point — it fires the resolver automatically (schema: `para/docs/context-injection-schema.md`).
 
 ## Why
 
@@ -67,7 +67,7 @@ If you catch ANY of these thoughts, you are about to violate this rule.
 | "It's just a small personal tweak — no one else will notice" | STOP. sb-os is open-source. Every personalization in source is a leak into other vaults. |
 | "I'll edit sb-os now and port to `.user/` later" | STOP. "Later" means "never." Reroute now. |
 | "The install hasn't run yet, so editing `.claude/` is safe this once" | STOP. The next install will run. Reroute now. |
-| "There's no matching `.user/context/` directory yet" | STOP. Create it. The graceful-skip semantics in `sb-workflow-context` mean an empty path is fine; what is NOT fine is leaking personalization upstream. |
+| "There's no matching `.user/context/` directory yet" | STOP. Create it. The context-injection resolver's graceful-skip semantics (it returns `NO CONTEXT`) mean an empty path is fine; what is NOT fine is leaking personalization upstream. |
 
 ## After Editing
 

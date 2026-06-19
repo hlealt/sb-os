@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Distribute daily note content to the correct vault files, ensuring NO item is left behind. Uses the inventories produced by sub-agents in Step 01. Process context injection per `sb-workflow-context.md` before proceeding.
+Distribute daily note content to the correct vault files, ensuring NO item is left behind. Uses the inventories produced by sub-agents in Step 01. Context injection loads automatically via the hook.
 
 ## Principle: Verifiable completeness
 

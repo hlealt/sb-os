@@ -173,8 +173,8 @@ class TestModuleAwareLoaders(unittest.TestCase):
     def test_stale_rules_excluded_from_manifest_rules(self) -> None:
         rule_names = {fn for fn, _mod in loaders.manifest_rules()}
         self.assertNotIn("sb-user-preferences.md", rule_names)
+        self.assertNotIn("sb-workflow-context.md", rule_names)
         # non-stale core rules are still shipped
-        self.assertIn("sb-workflow-context.md", rule_names)
         self.assertIn("sb-source-of-truth.md", rule_names)
 
 

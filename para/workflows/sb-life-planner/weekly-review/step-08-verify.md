@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Rigorous cross-verification: plan <-> vault <-> priorities <-> session log. Record the plan in the weekly note. Archive the session log. Process context injection per `sb-workflow-context.md` before proceeding.
+Rigorous cross-verification: plan <-> vault <-> priorities <-> session log. Record the plan in the weekly note. Archive the session log. Context injection loads automatically via the hook.
 
 ## Execution
 

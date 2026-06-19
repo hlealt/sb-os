@@ -6,7 +6,7 @@ Define what a good week would look like — clean reflection, without bias from 
 
 ## Principle: Clean Room
 
-The agent does NOT load any vault read-context before this step. Write-mode context injection still applies per `sb-workflow-context.md`. The only input is:
+The agent does NOT load any vault read-context before this step. Write-mode context injection loads automatically via the hook. The only input is:
 - The retrospective from step 01 (accomplishments, blockers, learnings)
 - What the user brings from memory
 

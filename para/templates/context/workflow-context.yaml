@@ -1,8 +1,30 @@
-# Context injection manifest for: [skill name OR workflow step name]
-# Place at: {user_context_root}/skills/{skill-name}.yaml          (skill target)
-#       or: {user_context_root}/{workflow-path}/{step-name}.yaml  (workflow-step target)
-# (default user_context_root: .user/context/; configured in sb-os.json)
-# See sb-os/rules/sb-workflow-context.md for full schema reference (both surfaces).
+# Context injection manifest for a skill, workflow step, or command.
+# Firing is AUTOMATIC via the installed Claude Code hook (install/hooks.py wires it;
+# resolve_context.py --hook) — no agent runs the resolver by hand.
+#
+# Three surfaces, each resolved under user_context_root (default .user/context/, set in sb-os.json):
+#   skill         -> {user_context_root}/skills/{skill-name}.yaml
+#   workflow step -> {user_context_root}/{workflow-path}/{step-name}.yaml
+#   command       -> {user_context_root}/commands/{command-name}.yaml
+#
+# Entry schema (top-level `context:` list; one entry per source):
+#   name        (required, all)        human-readable label
+#   type        (required, all)        file | script | url | text | mcp
+#   mode        (optional, all)        read (default) | write | read-write
+#   instruction (required, all)        what the agent must do with the loaded content
+#   path        (file, script)         vault-relative file/dir path
+#   glob        (file)                 glob to match files within `path`
+#   select      (file)                 latest | all
+#   count       (file)                 max files (with select: latest)
+#   sections    (file)                 list of heading names to extract
+#   command     (script)              executable path
+#   args        (script)              list of CLI args
+#   url         (url)                  URL to fetch
+#   content     (text)                inline text
+#   server,tool (mcp)                 MCP server + tool names
+#   params      (mcp)                 MCP tool params object
+#
+# Full schema, path resolution, and processing rules: para/docs/context-injection-schema.md
 
 context:
   # --- type: file (read) ---
