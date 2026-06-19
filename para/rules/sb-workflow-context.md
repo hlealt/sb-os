@@ -28,7 +28,7 @@ A "workflow root" is any directory that contains workflow definitions. Two roots
 
 | Root | Holds |
 |------|-------|
-| sb-os repo per-module workflows directories (`{sb_os_path}/{module}/workflows/`, where `{module}` is `para` or `wiki`) | Shippable sb-os workflows installed via the sb-os installer |
+| sb-os repo per-module workflows directories (`{sb_os_path}/{module}/workflows/`, where `{module}` is `para`, `wiki`, or `finance`) | Shippable sb-os workflows installed via the sb-os installer |
 | Personal workflows directory (e.g., `.user/workflows/`) | User-owned workflows that ship with the vault but not with sb-os (accountant, mentor, sb-life-planner, therapy-summarizer, etc.) |
 
 ## Red Flags — STOP and Run the Gate
