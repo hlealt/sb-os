@@ -65,6 +65,8 @@ If you keep an archivist workflow that logs edits to a work log, fire it after `
 
 ### 3. Inject user context on prompt submit
 
+> **SUPERSEDED — do NOT install.** This is the historical MANUAL `UserPromptSubmit` snippet from before context-injection was auto-wired. It is now replaced by the [Auto-installed hook: context-injection](#auto-installed-hook-context-injection) below, which the installer wires into `.claude/settings.local.json` (sentinel `"__sb__": "sb:context-injection"`) on every `python install.py` run. Do NOT install this snippet alongside the auto hook — it is retained only as a reference for the old manual approach.
+
 Run `sb-inject-context` on every user prompt so the configured `user_context_root` is consulted for the active workflow step:
 
 ```json
