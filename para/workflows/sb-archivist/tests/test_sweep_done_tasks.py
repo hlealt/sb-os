@@ -426,6 +426,107 @@ def test_failsafe_skips_undecodable_source_whole(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# Targeted sweep: --only filter + per-file breakdown
+# --------------------------------------------------------------------------- #
+
+def _two_source_vault(tmp_path):
+    """A vault with two task files, each holding one today-done task."""
+    vault, state, archive = make_vault(tmp_path)
+    fresh_today_worklog(state)
+    foo = vault / "1-projects" / "foo" / "foo-tasks.md"
+    write_bytes(foo, "# foo\n\n- [x] Foo task ✅ 2026-06-18\n", crlf=False)
+    bar = vault / "2-areas" / "bar" / "bar-tasks.md"
+    write_bytes(bar, "# bar\n\n- [x] Bar task ✅ 2026-06-18\n", crlf=False)
+    return vault, state, archive, foo, bar
+
+
+def test_only_sweeps_just_the_named_file(tmp_path):
+    """--only NAMED sweeps only that file; every other task file is untouched."""
+    vault, state, archive, foo, bar = _two_source_vault(tmp_path)
+    bar_before = bar.read_text(encoding="utf-8")
+
+    rc = run(vault, "--only", "1-projects/foo/foo-tasks.md")
+    assert rc == 0
+
+    # foo swept, bar byte-for-byte untouched
+    assert "Foo task" not in foo.read_text(encoding="utf-8")
+    assert bar.read_text(encoding="utf-8") == bar_before
+    today_log = (state / "work-log.md").read_text(encoding="utf-8")
+    assert "Foo task" in today_log
+    assert "Bar task" not in today_log
+
+
+def test_only_accepts_multiple_comma_separated_paths(tmp_path):
+    vault, state, archive, foo, bar = _two_source_vault(tmp_path)
+    rc = run(vault, "--only",
+             "1-projects/foo/foo-tasks.md,2-areas/bar/bar-tasks.md")
+    assert rc == 0
+    today_log = (state / "work-log.md").read_text(encoding="utf-8")
+    assert "Foo task" in today_log
+    assert "Bar task" in today_log
+
+
+def test_only_normalizes_backslashes_and_dot_slash(tmp_path):
+    vault, state, archive, foo, bar = _two_source_vault(tmp_path)
+    rc = run(vault, "--only", r"./1-projects\foo\foo-tasks.md")
+    assert rc == 0
+    assert "Foo task" not in foo.read_text(encoding="utf-8")
+    assert bar.read_text(encoding="utf-8").count("Bar task") == 1
+
+
+def test_only_unmatched_path_fails_loud(tmp_path):
+    """An --only path matching no task file exits 2 and sweeps nothing."""
+    vault, state, archive, foo, bar = _two_source_vault(tmp_path)
+    foo_before = foo.read_text(encoding="utf-8")
+    bar_before = bar.read_text(encoding="utf-8")
+
+    rc = run(vault, "--only", "1-projects/nope/nope-tasks.md")
+    assert rc == 2
+    # nothing swept from either real source
+    assert foo.read_text(encoding="utf-8") == foo_before
+    assert bar.read_text(encoding="utf-8") == bar_before
+
+
+def test_only_valid_file_with_no_done_tasks_is_not_an_error(tmp_path):
+    """A real task file that simply holds no done tasks resolves and sweeps 0."""
+    vault, state, archive = make_vault(tmp_path)
+    fresh_today_worklog(state)
+    foo = vault / "1-projects" / "foo" / "foo-tasks.md"
+    src = "# foo\n\n- [ ] only open here\n"
+    write_bytes(foo, src, crlf=False)
+
+    rc = run(vault, "--only", "1-projects/foo/foo-tasks.md")
+    assert rc == 0
+    assert foo.read_text(encoding="utf-8") == src
+
+
+def test_per_source_breakdown_in_report(tmp_path):
+    vault, state, archive, foo, bar = _two_source_vault(tmp_path)
+    report = run_sweep(vault, dry_run=True)
+    ps = report["per_source"]
+    assert ps["1-projects/foo/foo-tasks.md"]["swept"] == 1
+    assert ps["1-projects/foo/foo-tasks.md"]["targets"] == ["work-log.md"]
+    assert ps["2-areas/bar/bar-tasks.md"]["swept"] == 1
+
+
+def test_per_source_breakdown_in_text_report(tmp_path):
+    vault, state, archive, foo, bar = _two_source_vault(tmp_path)
+    report = run_sweep(vault, dry_run=True)
+    text = sw.format_text_report(("noop", {"date": TODAY}), report)
+    assert "per-file breakdown" in text
+    assert "1-projects/foo/foo-tasks.md: 1 sweepable → work-log.md" in text
+
+
+def test_only_full_sweep_unchanged_when_absent(tmp_path):
+    """No --only -> both files swept (no regression)."""
+    vault, state, archive, foo, bar = _two_source_vault(tmp_path)
+    rc = run(vault)
+    assert rc == 0
+    assert "Foo task" not in foo.read_text(encoding="utf-8")
+    assert "Bar task" not in bar.read_text(encoding="utf-8")
+
+
+# --------------------------------------------------------------------------- #
 # Author-side write-time validation: validate_completion_line / --validate-line
 # Reuses routed_date / valid_iso_date, so an author-side CONFORMING is exactly a
 # sweepable block — author-side and sweep-side enforcement can never drift.

@@ -32,14 +32,22 @@ is the invariant: on ANY routing doubt the sweep refuses to remove content.
 
 Usage:
     python sweep_done_tasks.py [--vault-path PATH] [--rollover-only]
-                               [--dry-run] [--json] [--today YYYY-MM-DD]
-                               [--template PATH]
+                               [--only P] [--dry-run] [--json]
+                               [--today YYYY-MM-DD] [--template PATH]
     python sweep_done_tasks.py --validate-line "<task line>" [--json]
 
 Options:
     --vault-path PATH   Vault root (default: current directory).
     --rollover-only     Perform day-rollover only; skip the sweep
                         (workflow step 2 on runs that document session work).
+    --only P            Comma-separated vault-relative task-file path(s) to sweep
+                        (e.g. `1-projects/foo/foo-tasks.md,2-areas/bar/bar-tasks.md`).
+                        Default: every `*-tasks.md` under the scan dirs. An
+                        unmatched path is a fail-loud error (exit 2) — never a
+                        silent no-op. Each `--dry-run` report (text + `--json`)
+                        carries a per-file breakdown (`per_source`) of sweepable
+                        counts + routed work-logs to choose targets from.
+                        Ignored with `--rollover-only`.
     --dry-run           Report intended actions; write nothing.
     --json              Emit a machine-readable JSON report instead of text.
     --today YYYY-MM-DD  Override "today" (default: system date) — for testing.
@@ -304,6 +312,33 @@ def discover_sources(vault):
     return sorted(sources)
 
 
+def resolve_only(vault, only_values):
+    """Normalize and validate `--only` target paths against discovered sources.
+
+    only_values: list of user-supplied path strings (vault-relative). Each is
+    normalized (backslashes -> '/', a leading './' dropped) and matched against
+    the discovered `*-tasks.md` set. Returns (set_of_rel_paths, None) on success,
+    or (None, error_message) when ANY value matches no discovered source —
+    fail-loud, so a typo'd or non-existent target can never silently sweep
+    nothing (or, worse, be misread as "everything"). A valid task file that
+    simply holds no done tasks is NOT an error: it resolves and sweeps zero.
+    """
+    discovered = set(discover_sources(vault))
+    resolved, unmatched = [], []
+    for raw in only_values:
+        rel = raw.strip().replace("\\", "/")
+        if rel.startswith("./"):
+            rel = rel[2:]
+        if rel in discovered:
+            resolved.append(rel)
+        else:
+            unmatched.append(raw)
+    if unmatched:
+        return None, ("--only: no matching task file under "
+                      f"{'/ or '.join(SCAN_DIRS)}/ for: {', '.join(unmatched)}")
+    return set(resolved), None
+
+
 def extract_blocks(lines, today):
     """From a source file's lines, return (blocks, remove_ranges, skips).
 
@@ -423,15 +458,28 @@ def append_to_worklog(path, groups, today, now_hm):
     return appended
 
 
-def sweep(vault, state_dir, archive_dir, today, now_hm, dry_run):
-    """Run the Done-Task Sweep. Returns a report dict."""
+def sweep(vault, state_dir, archive_dir, today, now_hm, dry_run, only=None):
+    """Run the Done-Task Sweep. Returns a report dict.
+
+    only: when not None, a set of vault-relative task-file paths to restrict the
+    sweep to (from `resolve_only`); every other discovered `*-tasks.md` is left
+    untouched. None (the default) sweeps every discovered source.
+    """
     sources = discover_sources(vault)
+    if only is not None:
+        sources = [s for s in sources if s in only]
 
     # target_path -> ordered list of (basename, relpath, date, [block_text,...])
     by_target = OrderedDict()
     source_removals = OrderedDict()   # rel -> (lines, remove_ranges)
     total_blocks = 0
     skipped = []                      # [{source, task, reason}, ...] (fail-safe)
+    # rel -> {"swept": int, "skipped": int, "targets": [log-name, ...]} — the
+    # per-file breakdown the workflow surfaces so the owner can choose targets.
+    per_source = OrderedDict()
+
+    def log_name(date):
+        return "work-log.md" if date == today else f"{date}-work-log.md"
 
     for rel in sources:
         fpath = vault / rel
@@ -442,10 +490,20 @@ def sweep(vault, state_dir, archive_dir, today, now_hm, dry_run):
             # Cannot safely read the file -> skip it whole, touch nothing.
             skipped.append({"source": rel, "task": None,
                             "reason": f"unreadable source ({type(e).__name__}); file left untouched"})
+            per_source[rel] = {"swept": 0, "skipped": 1, "targets": []}
             continue
         blocks, remove_ranges, file_skips = extract_blocks(lines, today)
         for task_line, reason in file_skips:
             skipped.append({"source": rel, "task": task_line, "reason": reason})
+        if blocks or file_skips:
+            targets = []
+            for _bt, date in blocks:
+                ln = log_name(date)
+                if ln not in targets:
+                    targets.append(ln)
+            per_source[rel] = {"swept": len(blocks),
+                               "skipped": len(file_skips),
+                               "targets": sorted(targets)}
         if not blocks:
             continue
         basename = Path(rel).stem
@@ -464,6 +522,7 @@ def sweep(vault, state_dir, archive_dir, today, now_hm, dry_run):
         "tasks_skipped": len(skipped),
         "skipped": skipped,
         "sources_cleaned": list(source_removals.keys()),
+        "per_source": dict(per_source),
         "worklogs_written": [],
         "appended_per_target": {},
     }
@@ -535,6 +594,15 @@ def format_text_report(rollover, sweep_report):
         else:
             lines.append(f"{prefix} {n} task(s) from {srcs} source file(s) "
                          f"into {logs} work-log(s)")
+        # Per-file breakdown — shown on dry-run so the owner can choose targets
+        # to pass back via --only. Normal runs stay one-line.
+        per_source = sweep_report.get("per_source", {})
+        if sweep_report.get("dry_run") and per_source:
+            lines.append("[sweep] per-file breakdown (pass chosen path(s) to --only):")
+            for rel, info in per_source.items():
+                tgt = ", ".join(info["targets"]) if info["targets"] else "—"
+                extra = f", {info['skipped']} skipped" if info["skipped"] else ""
+                lines.append(f"  - {rel}: {info['swept']} sweepable → {tgt}{extra}")
         skips = sweep_report.get("skipped", [])
         if skips:
             lines.append(f"[sweep] SKIPPED {len(skips)} unparseable/ambiguous "
@@ -550,6 +618,10 @@ def main(argv=None):
     p.add_argument("--vault-path", default=".", help="Vault root (default: current dir)")
     p.add_argument("--rollover-only", action="store_true",
                    help="Day-rollover only; skip the sweep")
+    p.add_argument("--only", default=None, metavar="P",
+                   help="Comma-separated vault-relative task-file path(s) to sweep "
+                        "(e.g. 1-projects/foo/foo-tasks.md). Default: every *-tasks.md "
+                        "under 1-projects/ and 2-areas/. An unmatched path is an error.")
     p.add_argument("--dry-run", action="store_true", help="Report only; write nothing")
     p.add_argument("--json", action="store_true", help="Emit JSON report")
     p.add_argument("--today", default=None, help="Override today (YYYY-MM-DD), for testing")
@@ -589,10 +661,18 @@ def main(argv=None):
         print(f"error: template not found: {template_path}", file=sys.stderr)
         return 2
 
+    only = None
+    if not args.rollover_only and args.only is not None:
+        only_values = [v for v in args.only.split(",") if v.strip()]
+        only, err = resolve_only(vault, only_values)
+        if err is not None:
+            print(f"error: {err}", file=sys.stderr)
+            return 2
+
     rollover = day_rollover(state_dir, archive_dir, template_path, today, now_hm, args.dry_run)
     sweep_report = None
     if not args.rollover_only:
-        sweep_report = sweep(vault, state_dir, archive_dir, today, now_hm, args.dry_run)
+        sweep_report = sweep(vault, state_dir, archive_dir, today, now_hm, args.dry_run, only=only)
 
     if args.json:
         print(json.dumps({"rollover": {"action": rollover[0], **rollover[1]},

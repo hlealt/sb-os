@@ -49,15 +49,27 @@ Document all work done in this conversation into the work-log file. Capture the 
 
 Runs ONLY when step 3 found no documentable session work. Never run both this sweep and steps 4–6 in the same invocation.
 
-Run the archivist script (resolve `{sb_os_path}` from `sb-os.json`):
+Resolve `{sb_os_path}` from `sb-os.json`. Run the sweep in two stages — a check stage that surfaces what would be swept, then a targeted act stage on the files the user chooses.
+
+**Stage 1 — check (always dry-run first).** Run:
 
 ```
-python {sb_os_path}/para/workflows/sb-archivist/sweep_done_tasks.py --vault-path "." --json
+python {sb_os_path}/para/workflows/sb-archivist/sweep_done_tasks.py --vault-path "." --dry-run --json
 ```
 
-It performs day-rollover (idempotent) then the sweep: every top-level `- [x]` task in `*-tasks.md` under `1-projects/` and `2-areas/` is extracted verbatim, routed by its `✅ YYYY-MM-DD` marker (today → `work-log.md`, earlier → `{date}-work-log.md` in the archive), appended under a `### Swept from [[{file-name}]] ({vault-relative-path})` group inside the target's `## Completed` section (deduplicated by task line; missing archive files created with frontmatter + `# Work Log` heading + `## Completed`), and removed from the source. Each block is preserved byte-for-byte, each source file's line endings are kept, and a checked item nested under an open `- [ ]` parent is never swept.
+Read the `sweep.per_source` map — one entry per task file holding done tasks, each with its sweepable count, skipped count, and routed work-log(s). Present these to the user as a numbered list (file → sweepable count → target log). If `per_source` is empty, report "no done tasks to sweep" and stop. Ask which files to sweep: all, or a chosen subset.
 
-Add `--dry-run` first to preview routing without writing. Report the result in chat in one line: tasks swept, source files cleaned, work-logs written.
+**Stage 2 — act (targeted).** Run the chosen subset by passing their vault-relative paths to `--only` (comma-separated, exact paths from `per_source` keys); omit `--only` to sweep all:
+
+```
+python {sb_os_path}/para/workflows/sb-archivist/sweep_done_tasks.py --vault-path "." --json --only "1-projects/foo/foo-tasks.md,2-areas/bar/bar-tasks.md"
+```
+
+An `--only` path that matches no task file exits 2 with an error — pass paths verbatim from the Stage-1 keys.
+
+Both stages perform day-rollover (idempotent) then the sweep: every top-level `- [x]` task in `*-tasks.md` under `1-projects/` and `2-areas/` (within the chosen scope) is extracted verbatim, routed by its `✅ YYYY-MM-DD` marker (today → `work-log.md`, earlier → `{date}-work-log.md` in the archive), appended under a `### Swept from [[{file-name}]] ({vault-relative-path})` group inside the target's `## Completed` section (deduplicated by task line; missing archive files created with frontmatter + `# Work Log` heading + `## Completed`), and removed from the source. Each block is preserved byte-for-byte, each source file's line endings are kept, and a checked item nested under an open `- [ ]` parent is never swept.
+
+Report the act-stage result in chat in one line: tasks swept, source files cleaned, work-logs written.
 
 ## What NOT to do
 
