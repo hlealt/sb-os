@@ -27,6 +27,7 @@ Pure stdlib (pathlib, shutil).
 """
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import stat
@@ -194,6 +195,37 @@ def _canonical_clone_path(target_root: Path) -> Path:
     return (target_root / CANONICAL_SB_OS_REL).resolve()
 
 
+def _is_live_install(src: Path) -> bool:
+    """True when ``src`` is the sb-os repo of an EXISTING installed vault.
+
+    Detected when some ancestor of ``src`` holds an ``sb-os.json`` manifest
+    whose ``sb_os_path`` resolves back to ``src``. Such a repo is the live
+    framework source of a working vault — relocating a fresh install must NEVER
+    ``rmtree`` it, or that vault loses its sb-os. A throwaway bootstrap clone
+    (the intended, safe-to-remove case) has no such manifest above it, so this
+    returns False and normal cleanup proceeds. See the hazard note in
+    ``_relocate_sb_os_clone``.
+    """
+    src = src.resolve()
+    for ancestor in (src, *src.parents):
+        manifest_path = ancestor / "sb-os.json"
+        if not manifest_path.is_file():
+            continue
+        try:
+            data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        rel = data.get("sb_os_path")
+        if not rel:
+            continue
+        try:
+            if (ancestor / rel).resolve() == src:
+                return True
+        except (OSError, ValueError):
+            continue
+    return False
+
+
 def _relocate_sb_os_clone(sb_os_root: Path, target_root: Path) -> None:
     """Move the running sb-os clone into ``{target}/3-resources/tools/sb-os/``.
 
@@ -206,6 +238,19 @@ def _relocate_sb_os_clone(sb_os_root: Path, target_root: Path) -> None:
       the original is removed.
     * Tolerates a partial removal of the original — Windows file locks on
       ``.pyc`` cache files are common and harmless after the copy succeeds.
+
+    HAZARD GUARD: ``rmtree`` of ``src`` is destructive. It is SAFE only for a
+    throwaway bootstrap clone. Two cases must never delete the original:
+      1. ``src`` is a parent of the canonical path (``src_contains_canonical``)
+         — deleting it would destroy the target vault root.
+      2. ``src`` is the LIVE sb-os repo of an existing installed vault
+         (``_is_live_install``) — e.g. the user ran the installer from their
+         working vault's ``3-resources/tools/sb-os`` while targeting a SEPARATE
+         external vault. Deleting it would break that working vault. (Cold
+         verifiers historically dodged this only by running from a throwaway
+         copy.)
+    In both cases the clone is COPIED into the new target so the install works,
+    the original is PRESERVED, and a loud warning is printed.
     """
     canonical = _canonical_clone_path(target_root)
     src = sb_os_root.resolve()
@@ -247,10 +292,15 @@ def _relocate_sb_os_clone(sb_os_root: Path, target_root: Path) -> None:
     except ValueError:
         ignore_fn = shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo")
 
+    # Live-install guard: if src is the sb-os repo of an existing installed
+    # vault, deleting it would break that vault — preserve it like the
+    # src_contains_canonical case.
+    live_install = _is_live_install(src)
+
     shutil.copytree(src, canonical, ignore=ignore_fn)
     removal_failed: Exception | None = None
-    if src_contains_canonical:
-        removal_failed = None  # cannot rmtree src — it is the vault root
+    if src_contains_canonical or live_install:
+        removal_failed = None  # cannot rmtree src — would destroy a live vault
     else:
         try:
             # On Windows, rmtree fails with WinError 32 if the process's cwd
@@ -268,6 +318,13 @@ def _relocate_sb_os_clone(sb_os_root: Path, target_root: Path) -> None:
     if src_contains_canonical:
         print(cli.dim(
             "  Original not removed: it is a parent of the canonical path."
+        ))
+    elif live_install:
+        print(cli.yellow(
+            "  Original NOT removed: it is the live sb-os repo of an existing\n"
+            "  installed vault (an sb-os.json above it points at this path).\n"
+            "  Deleting it would break that vault. The clone was COPIED into the\n"
+            f"  new target; remove {src} yourself ONLY if you intended to move it."
         ))
     elif removal_failed is not None:
         print(cli.yellow(
