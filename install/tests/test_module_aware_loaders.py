@@ -61,7 +61,8 @@ class TestModuleAwareLoaders(unittest.TestCase):
         self.assertEqual(
             cmds["sb-wiki-ingest-all"],
             "Backfill the wiki: ingest every non-ingested raw source via "
-            "batched Opus subagents, then lint.",
+            "one sub-agent per source (Sonnet by default, Opus for sources "
+            "over 30k tokens), run strictly sequentially, then lint.",
         )
 
     def test_missing_module_raises(self) -> None:
