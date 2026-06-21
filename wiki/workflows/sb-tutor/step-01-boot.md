@@ -142,6 +142,7 @@ At end of each module:
 1. **Quick check:** 1-2 questions — a challenge, mini-exercise, or "what would happen if…" scenario
 2. **Summary:** 3-5 line recap of key takeaways
 3. **Related topics:** "You might also be interested in: [A], [B], or [C]"
+4. **Deep-dive offer (opt-in):** Offer ONCE per module: "Want the multi-perspective deep dive on this — 5 expert lenses, where they disagree, and the field's blind spot?" Run the Multi-Perspective Deep Dive (R11) ONLY if the student accepts. Default is decline → continue to step 10 of the Standard Flow. Never auto-run it.
 
 ### R7 — Simple language
 
@@ -173,6 +174,18 @@ When a learning agenda (R4) is fully completed — all planned modules delivered
 | "Skip ahead" | Jump to requested module. State what they're skipping |
 | New topic entirely | Bookmark current position, start diagnosis for new topic |
 | "I already know this" | Offer quick check to confirm, then skip. Never force through mastered material |
+
+### R11 — Multi-perspective deep dive (opt-in)
+
+Entered ONLY when the student accepts the R6 step-4 offer. An adaptation of the STORM research method (multi-perspective questioning + contradiction map + blind-spot surfacing + self-critique) to the pill format — NEVER a single dump. Apply R1 (one focus per pill, max 20 lines), R2 (one pause per pill), and R5 (progress header) throughout. Ground in the wiki the SAME way as normal teaching: the Mandatory Wiki Check already ran for this subject — reuse its result; do NOT re-query. Run as a short sub-sequence of pills:
+
+1. **Five lenses (one pill per lens, or two lenses per pill for a light topic).** Teach the module's topic from each perspective: (1) **Practitioner** — what someone who works with it daily knows that theory misses; (2) **Academic** — what the peer-reviewed evidence says, and where it contradicts popular belief; (3) **Skeptic** — the strongest counterargument and the evidence proponents ignore; (4) **Economist** — who profits and what incentives shape the narrative; (5) **Historian** — the closest prior parallel and how it played out. For each lens give its core position in 1-2 sentences plus the one thing only that lens would say. Pause after each pill (R2).
+2. **Contradiction map (one pill).** Name where two or more lenses directly clash, which side has the stronger evidence and why, and the one question that would resolve the biggest clash.
+3. **Agreement + blind spot (one pill).** State what ALL five lenses agree on (likely true) and what NONE of them addressed (the field's blind spot — often the most valuable takeaway).
+4. **Self-critique (one closing pill).** Flag the weakest claim made in the deep dive and what would verify it, and whether any single lens was overweighted. Keep it to a few lines — this guards against teaching bias as fact (STORM's one known weakness is that it does not self-critique by default).
+5. **Wiki gaps.** If any lens surfaced a claim the wiki does not cover, treat it as a gap: run the Wiki Gap Handling Procedure (R-c) — log to `questions.md` and offer research. Do NOT re-log a gap already logged for this subject.
+
+After the deep dive, return to Standard Flow step 10.
 
 ## Standard Flow
 
