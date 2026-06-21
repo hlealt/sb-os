@@ -1558,7 +1558,10 @@ def title_slug(title: str) -> str:
     """Kebab-slug per naming-convention.md § Title-slug algorithm."""
     slug = title.lower()
     slug = re.sub(r"[\s+/:–—]+", "-", slug)
-    slug = re.sub(r"[?!,.\"'()\[\]‘’“”]", "", slug)
+    # Step 3: remove "? ! , . " ' ( ) [ ]" AND any other punctuation. Separators
+    # are already mapped to "-" above, so anything left that is not a lowercase
+    # letter, digit, or hyphen (e.g. "#", "&", ";", "@") is punctuation to drop.
+    slug = re.sub(r"[^a-z0-9-]", "", slug)
     slug = re.sub(r"-{2,}", "-", slug)
     return slug.strip("-")
 
