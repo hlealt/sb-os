@@ -187,6 +187,10 @@ Entered ONLY when the student accepts the R6 step-4 offer. An adaptation of the 
 
 After the deep dive, return to Standard Flow step 10.
 
+### R12 — Visual library page
+
+At each module checkpoint (R6) and at session close (R9), ALSO create or update this topic's visual library page — follow `./library-protocol.md` (CREATE/UPDATE mode). It persists the R3 starting level + the lesson's sources into a Lumen HTML page (diagrams, charts, an interactive concept map, a quick-check) plus a knowledge-map index the student opens in a browser. This is ADDITIONAL to the R9 study-note markdown (which still feeds the wiki) — never a replacement. Author only the page-source per the schema; the builder renders the HTML. Enrich requests route via Activation to `./library-protocol.md` ENRICH mode.
+
 ## Standard Flow
 
 **Entry branch — no topic brought:** When invoked with NO topic, FIRST run the No-Topic Menu Procedure above; the student's pick then enters this flow at step 2.
