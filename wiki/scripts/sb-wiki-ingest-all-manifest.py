@@ -38,7 +38,8 @@ logging.getLogger("PyPDF2").setLevel(logging.ERROR)
 CHARS_PER_TOKEN = 4
 DEFAULT_EXCLUDE = {"assets", "_assets"}
 NON_SOURCE_FILES = {"AGENTS.md", "CLAUDE.md", "QWEN.md", "README.md"}
-OPUS_TOKEN_THRESHOLD = 30_000
+OPUS_TOKEN_THRESHOLD = 5_000
+SIZE_KEYWORDS = {"large", "small"}
 
 
 def _fspath(path: Path) -> str:
@@ -127,10 +128,12 @@ def duplicate_rows(origin_dir: Path) -> set[str]:
 
 
 def assign_model(token_estimate: int | None) -> str:
-    """Per-file model: Sonnet by default; Opus only when the source exceeds
-    OPUS_TOKEN_THRESHOLD tokens, or when its size is unknown (a PDF with no
-    extractable text) — the conservative default for an un-estimable source."""
-    if token_estimate is None or token_estimate > OPUS_TOKEN_THRESHOLD:
+    """Per-file model: Sonnet for small sources; Opus when the source reaches
+    or exceeds OPUS_TOKEN_THRESHOLD tokens, or when its size is unknown (a PDF
+    with no extractable text) — the conservative default for an un-estimable
+    source. The same threshold defines the `large`/`small` size buckets: a
+    `large` source is exactly one assign_model() routes to Opus; `small`, Sonnet."""
+    if token_estimate is None or token_estimate >= OPUS_TOKEN_THRESHOLD:
         return "opus"
     return "sonnet"
 
@@ -155,6 +158,53 @@ def build_plan(items: list[dict]) -> list[dict]:
         }
         for index, item in enumerate(ordered)
     ]
+
+
+def extract_size_filter(targets: list[str]) -> tuple[str | None, list[str], str | None]:
+    """Pull a `large`/`small` size keyword out of the positional targets.
+
+    Returns (size_filter, remaining_targets, error). `large` scopes the run to
+    sources Opus would ingest (>= OPUS_TOKEN_THRESHOLD, or un-estimable); `small`
+    to the Sonnet bucket (< OPUS_TOKEN_THRESHOLD). At most one keyword is allowed
+    and it is removed from the target list so the rest classify normally.
+    """
+    size_filter: str | None = None
+    remaining: list[str] = []
+    for token in targets:
+        low = token.lower()
+        if low in SIZE_KEYWORDS:
+            if size_filter and size_filter != low:
+                return None, [], "pass at most one size keyword ('large' or 'small')"
+            size_filter = low
+        else:
+            remaining.append(token)
+    return size_filter, remaining, None
+
+
+def apply_size_filter(payload: dict, size_filter: str) -> dict:
+    """Restrict an already-collected payload to one size bucket, in place.
+
+    Keeps only items whose assign_model() matches the bucket (`large` -> opus,
+    `small` -> sonnet), then recomputes `origins` and the affected totals. The
+    informational `raw_total`/`ingested`/`duplicates` describe the full corpus
+    and are left untouched; `size_excluded` records how many missing sources the
+    keyword dropped from this run.
+    """
+    keep_model = "opus" if size_filter == "large" else "sonnet"
+    kept = [it for it in payload["items"]
+            if assign_model(it["token_estimate"]) == keep_model]
+    excluded = len(payload["items"]) - len(kept)
+    origins: dict[str, dict[str, int]] = {}
+    for it in kept:
+        bucket = origins.setdefault(it["origin"], {"missing": 0, "token_sum": 0})
+        bucket["missing"] += 1
+        bucket["token_sum"] += it["token_estimate"] or 0
+    payload["items"] = kept
+    payload["origins"] = origins
+    payload["totals"]["missing"] = len(kept)
+    payload["totals"]["origins_with_missing"] = len(origins)
+    payload["totals"]["size_excluded"] = excluded
+    return payload
 
 
 def collect(wiki_root: Path, exclude: set[str], only_origin: str | None) -> dict:
@@ -432,7 +482,11 @@ def main() -> int:
         "targets",
         nargs="*",
         help="an origin folder name (single bare token) OR one-or-more raw "
-             "filenames/paths to ingest; empty = every not-yet-ingested source",
+             "filenames/paths to ingest; empty = every not-yet-ingested source. "
+             "A bare 'large' or 'small' keyword scopes the run by size: 'large' "
+             "= sources Opus would ingest (>= the opus token threshold or "
+             "un-estimable), 'small' = the Sonnet bucket. It composes with an "
+             "origin (e.g. 'every large').",
     )
     parser.add_argument("--vault-root", type=Path, default=Path.cwd())
     parser.add_argument("--report", type=Path, help="optional JSON report path")
@@ -457,18 +511,31 @@ def main() -> int:
     wiki_root = resolve_wiki_root(vault_root)
     exclude = {o.strip() for o in args.exclude_origins.split(",") if o.strip()}
 
+    # Pull any size keyword ('large'/'small') out first; the rest classify as
+    # origin/file/all. The keyword scopes WHICH sources run, never their model.
+    size_filter, targets, size_error = extract_size_filter(args.targets)
+    if size_error:
+        print(f"ERROR: {size_error}.", file=sys.stderr)
+        return 2
+
     # Resolve the run mode. --origin is the legacy explicit form; positional
     # targets are classified deterministically (origin folder vs. file list).
     if args.origin:
-        if args.targets:
+        if targets:
             print("ERROR: pass either positional targets OR --origin, not both.",
                   file=sys.stderr)
             return 2
         mode, only_origin, selected, errors = "origin", args.origin, None, []
     else:
         index, origin_names = raw_index(wiki_root, exclude)
+        if size_filter and size_filter in origin_names:
+            print(
+                f"ERROR: '{size_filter}' is both a size keyword and an origin "
+                f"folder. Use '--origin {size_filter}' to target the origin.",
+                file=sys.stderr)
+            return 2
         mode, only_origin, selected, errors = classify_targets(
-            args.targets, origin_names, index, vault_root, wiki_root)
+            targets, origin_names, index, vault_root, wiki_root)
 
     if errors:
         report_target_errors(errors, wiki_root / "raw")
@@ -479,6 +546,9 @@ def main() -> int:
     else:
         payload = collect(wiki_root, exclude, only_origin)
     payload["mode"] = mode
+    payload["size_filter"] = size_filter
+    if size_filter:
+        apply_size_filter(payload, size_filter)
 
     if not args.no_plan:
         files = build_plan(payload["items"])

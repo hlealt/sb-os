@@ -1,6 +1,6 @@
 ---
 name: sb-wiki-ingest-all
-description: Backfill the wiki — ingest every not-yet-ingested raw source (Markdown + PDF) by dispatching one sub-agent per source (Sonnet by default, Opus for sources over 30k tokens) that each run /sb-wiki-ingest non-interactively, strictly sequentially, then auto-run /sb-wiki-lint.
+description: Backfill the wiki — ingest every not-yet-ingested raw source (Markdown + PDF) by dispatching one sub-agent per source (Sonnet for small sources, Opus for sources at or above 5k tokens) that each run /sb-wiki-ingest non-interactively, strictly sequentially, then auto-run /sb-wiki-lint. A bare `large`/`small` keyword scopes the run by size.
 ---
 
 # sb-wiki-ingest-all
@@ -21,7 +21,7 @@ Each subagent runs the unmodified `sb-wiki-ingest` workflow per source. This orc
 
 ## Invocation
 
-`/sb-wiki-ingest-all [origin | file …]`. The manifest script (Step 1) classifies the argument(s) deterministically — forward whatever the user typed as positional targets; NEVER pre-decide the mode yourself.
+`/sb-wiki-ingest-all [origin | file …] [large | small]`. The manifest script (Step 1) classifies the argument(s) deterministically — forward whatever the user typed as positional targets; NEVER pre-decide the mode yourself.
 
 | Argument shape | Run mode (`mode` field in the manifest) |
 |----------------|------------------------------------------|
@@ -29,7 +29,16 @@ Each subagent runs the unmodified `sb-wiki-ingest` workflow per source. This orc
 | one bare token naming an origin folder (no `.md`/`.pdf` extension, no path separator), e.g. `lennys-podcast` | `origin` — scope to that origin's missing sources |
 | one-or-more raw filenames/paths (`.md`/`.pdf`, `origin/file`, or a path), or two-or-more tokens | `files` — ingest exactly those files; already-ingested ones are skipped |
 
-A single bare token naming BOTH an origin folder AND a raw-file stem, an unresolvable target, or a bare name matching multiple raw files → the script exits non-zero with an actionable message and ingests nothing. Surface the message and STOP — never guess.
+**Size scope (optional).** A bare `large` or `small` keyword anywhere in the arguments scopes the run by source size — it is pulled out of the targets before mode classification, so it composes with any of the modes above:
+
+| Keyword | Scopes the run to |
+|---------|-------------------|
+| `large` | only sources Opus would ingest — `token_estimate` ≥ `OPUS_TOKEN_THRESHOLD` (default 5,000) or un-estimable |
+| `small` | only the Sonnet bucket — `token_estimate` < `OPUS_TOKEN_THRESHOLD` |
+
+Examples: `large` → all missing ≥5k sources; `small` → all missing <5k sources; `every large` → only `every`'s ≥5k sources. The size boundary is the SAME number as the model split, so `large` is always the Opus set and `small` the Sonnet set.
+
+A single bare token naming BOTH an origin folder AND a raw-file stem, an unresolvable target, a bare name matching multiple raw files, two size keywords, or a size keyword that collides with an origin folder of that name (use `--origin <name>` for the origin) → the script exits non-zero with an actionable message and ingests nothing. Surface the message and STOP — never guess.
 
 ## Contracts
 
@@ -38,7 +47,7 @@ A single bare token naming BOTH an origin folder AND a raw-file stem, an unresol
 | One source per sub-agent | Each not-yet-ingested source is dispatched to its OWN sub-agent — sources are NEVER batched together. A fresh, undiluted context per source is the whole point: a multi-source context thins the synthesis of dense sources. |
 | Strictly sequential | Sub-agents run ONE AT A TIME — never two concurrently. The orchestrator dispatches the next source only after the current one finishes. This removes every cross-worker write collision (no two workers ever touch the same entity/concept/topic page at once) and every duplicate-stub race. |
 | Non-interactive ingest | Subagents invoke `/sb-wiki-ingest silent <slug>` per file; that mode owns every checkpoint auto-resolution. NO subagent ever pauses for user input. |
-| Model | Per file, from the manifest plan: **sonnet** by default, **opus** only when that file's `token_estimate` exceeds 30,000 (or is unknown). The script computes this — NEVER override it by judgment. |
+| Model | Per file, from the manifest plan: **sonnet** for small sources, **opus** when that file's `token_estimate` reaches or exceeds the script's `OPUS_TOKEN_THRESHOLD` (default 5,000) or is unknown. The script computes this — NEVER override it by judgment. The same threshold defines the `large`/`small` size buckets (Size scope below). |
 | No mid-run topic pages | Subagents NEVER create topic pages mid-run — every proposed topic is deferred (the `candidate-topic` persists for the final lint pass). Topic-UPDATE resolution is owned by `/sb-wiki-ingest silent` (firm updates auto-apply append-only; speculative updates and proposed answers reject — see that mode's silent override); this caller NEVER re-states or overrides those defaults. Topic-page creation and cross-origin duplicate healing happen after, via the final lint pass. |
 | Single git commit | NO git command runs during ingestion — subagents NEVER git-commit, and the orchestrator NEVER commits per source or per file. The orchestrator creates EXACTLY ONE git commit at the end of the run (step 6). Per-file status `committed` means staged FILE changes written to disk, never git. |
 
@@ -57,7 +66,8 @@ If the script exits non-zero, it printed an actionable error to stderr (origin/f
 - `mode` — `all` | `origin` | `files`, the classification the script applied. Echo it in the run's opening status so the user sees what was targeted.
 - `totals` + `origins{}` — discovery counts. If `totals.missing` is 0, STOP: report "wiki fully ingested" (`all`/`origin` mode) or "all listed files already ingested" (`files` mode — `skipped_ingested[]` names them); note `totals.duplicates` if non-zero. Raw files whose index row is `Wiki = Duplicate (…)` are already excluded by the script (`duplicate_files[]` lists them — surface the list in the final report).
 - `skipped_ingested[]` (`files` mode only) — listed files already having a wiki page, dropped from this run. Echo the count in the opening status.
-- `plan.files[]` — the flat, ordered, ONE-file-per-sub-agent dispatch list. Each entry carries `index`, `origin`, `filename`, `path`, `token_estimate`, and `model` (`sonnet`, or `opus` when `token_estimate` > 30,000 or is unknown). Dispatch these in order, one at a time.
+- `plan.files[]` — the flat, ordered, ONE-file-per-sub-agent dispatch list. Each entry carries `index`, `origin`, `filename`, `path`, `token_estimate`, and `model` (`sonnet`, or `opus` when `token_estimate` ≥ 5,000 or is unknown). Dispatch these in order, one at a time.
+- `size_filter` — `large` | `small` | `null`, echoing any size keyword applied. When set, `totals.size_excluded` is the count of missing sources the keyword dropped from this run; echo the scope in the opening status.
 
 ### Step 2 — Adopt the plan
 
@@ -110,7 +120,7 @@ A conductor verifies the close-out by checking: (a) git shows no uncommitted wik
 
 ## Subagent dispatch prompt
 
-Fill `<file>` with the single source filename and dispatch with `subagent_type: general-purpose`, `model:` the file's planned model from the plan (`sonnet`, or `opus` for >30k-token sources):
+Fill `<file>` with the single source filename and dispatch with `subagent_type: general-purpose`, `model:` the file's planned model from the plan (`sonnet`, or `opus` for ≥5k-token sources):
 
 ```
 Ingest this one raw wiki source:
