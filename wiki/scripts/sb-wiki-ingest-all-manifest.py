@@ -20,6 +20,15 @@ A raw file is "ingested" when its source page exists at
 `Wiki = Duplicate (…)` are confirmed content-duplicates and are SKIPPED
 (reported under `duplicates`, never targeted). This script only reads — it
 never writes wiki content.
+
+--healing INVERTS the selection: instead of the missing raw sources, it targets
+ALREADY-ingested SOURCE PAGES (under wiki/sources/**), resolved in the
+source-page namespace (a page's stem need NOT match its raw filename) and each
+estimated from the raw its `raw:` frontmatter names. It builds the same flat,
+ordered, model-routed plan over them — backing the orchestrated path of
+`/sb-wiki-ingest-healing` (>=2 targets): one sub-agent per source at the SAME
+Sonnet/Opus split as ingest-all. A page ref that resolves to no page is reported
+under `skipped_not_ingested` and never halts the run.
 """
 
 from __future__ import annotations
@@ -450,6 +459,116 @@ def collect_selection(wiki_root: Path, selected: list[dict]) -> dict:
     }
 
 
+def estimate_source_page(wiki_root: Path, origin: str, page_path: Path) -> int | None:
+    """Token estimate for a SOURCE PAGE — from the raw its `raw:` frontmatter
+    names (a page's stem need NOT match its raw filename, so the raw cannot be
+    found by stem). PDF raw → page-text estimate; markdown raw → chars//4. None
+    when the raw is missing or un-estimable (→ Opus, the conservative default)."""
+    m = re.search(r'raw:\s*"?\[\[([^\]]+)\]\]"?', read_text(page_path))
+    if not m:
+        return None
+    raw = wiki_root / "raw" / origin / m.group(1).strip()
+    if not raw.exists():
+        return None
+    if raw.suffix.lower() == ".pdf":
+        return estimate_pdf_tokens(raw)
+    return len(read_text(raw)) // CHARS_PER_TOKEN
+
+
+def collect_healing(wiki_root: Path, exclude: set[str], targets: list[str]) -> dict:
+    """Healing manifest — targets are SOURCE PAGES under `wiki/sources/**`,
+    resolved in the SOURCE-PAGE namespace (a page's stem need NOT match its raw
+    filename) and each estimated from the raw its `raw:` frontmatter names.
+
+    No targets → every ingested page (`all`). A single bare origin token → that
+    origin's pages (`origin`). Otherwise an explicit list of `origin/stem[.md]`
+    page refs (a bare origin token in the list expands to its pages); a ref that
+    resolves to no page lands in `skipped_not_ingested` and NEVER halts the run
+    (a heal of 200+ pages must not die on one stale ref). There is NO
+    heal-everything mode — empty targets are rejected by main(), since the wiki
+    is never fully re-healed. Same payload shape as collect()/collect_selection(),
+    plus `mode`."""
+    sources_root = wiki_root / "wiki" / "sources"
+
+    # Page universe: {(origin, stem): page_path}, leaf indexes excluded.
+    universe: dict[tuple[str, str], Path] = {}
+    origin_dirs: set[str] = set()
+    if sources_root.is_dir():
+        for od in sorted(p for p in sources_root.iterdir()
+                         if p.is_dir() and p.name not in exclude):
+            origin_dirs.add(od.name)
+            for sp in sorted(od.glob("*.md")):
+                if sp.stem != od.name:                      # skip the leaf index
+                    universe[(od.name, sp.stem)] = sp
+
+    skipped_not_ingested: list[str] = []
+
+    def is_bare(tok: str) -> bool:
+        return (Path(tok).suffix.lower() not in HAS_EXT
+                and "/" not in tok and "\\" not in tok)
+
+    if len(targets) == 1 and is_bare(targets[0]) and targets[0] in origin_dirs:
+        mode = "origin"
+        only = targets[0]
+        selected = sorted((k, v) for k, v in universe.items() if k[0] == only)
+    else:
+        mode = "files"        # empty targets → no selection (main() rejects empty)
+        chosen: dict[tuple[str, str], Path] = {}
+        for tok in targets:
+            norm = tok.replace("\\", "/").strip("/")
+            if is_bare(norm) and norm in origin_dirs:          # bare origin → expand
+                for key, page in universe.items():
+                    if key[0] == norm:
+                        chosen[key] = page
+                continue
+            parts = norm.split("/")
+            stem = Path(parts[-1]).stem
+            origin = parts[-2] if len(parts) >= 2 else None
+            if origin is not None and (origin, stem) in universe:
+                chosen[(origin, stem)] = universe[(origin, stem)]
+            else:
+                cands = [(k, v) for k, v in universe.items()
+                         if k[1] == stem and (origin is None or k[0] == origin)]
+                if len(cands) == 1:
+                    chosen[cands[0][0]] = cands[0][1]
+                else:                                          # 0 or ambiguous → skip
+                    skipped_not_ingested.append(tok)
+        selected = sorted(chosen.items())
+
+    items: list[dict] = []
+    origins: dict[str, dict[str, int]] = {}
+    for (origin, stem), page_path in selected:
+        tokens = estimate_source_page(wiki_root, origin, page_path)
+        items.append({
+            "path": page_path.relative_to(wiki_root.parent).as_posix(),
+            "origin": origin,
+            "filename": f"{stem}.md",
+            "stem": stem,
+            "is_pdf": False,
+            "title": stem,
+            "date": filename_date(f"{stem}.md"),
+            "token_estimate": tokens,
+        })
+        bucket = origins.setdefault(origin, {"missing": 0, "token_sum": 0})
+        bucket["missing"] += 1
+        bucket["token_sum"] += tokens or 0
+
+    return {
+        "totals": {
+            "origins_with_missing": len(origins),
+            "raw_total": len(universe),
+            "ingested": len(universe),
+            "duplicates": 0,
+            "missing": len(items),
+        },
+        "duplicate_files": [],
+        "skipped_not_ingested": skipped_not_ingested,
+        "origins": origins,
+        "items": items,
+        "mode": mode,
+    }
+
+
 def report_target_errors(errors: list, raw_root: Path) -> None:
     """Print human-readable, actionable messages for classify_targets errors."""
     for err in errors:
@@ -505,6 +624,15 @@ def main() -> int:
         action="store_true",
         help="omit the per-file model dispatch plan (manifest only)",
     )
+    parser.add_argument(
+        "--healing",
+        action="store_true",
+        help="INVERT selection: target already-ingested SOURCE PAGES (resolved "
+             "in the source-page namespace, estimated via each page's raw: "
+             "frontmatter) and plan a heal over them — backs the orchestrated "
+             "path of /sb-wiki-ingest-healing. Same Sonnet/Opus split. REQUIRES "
+             "targets (origin or source-page refs); no heal-everything mode.",
+    )
     args = parser.parse_args()
 
     vault_root = args.vault_root.resolve()
@@ -518,34 +646,51 @@ def main() -> int:
         print(f"ERROR: {size_error}.", file=sys.stderr)
         return 2
 
-    # Resolve the run mode. --origin is the legacy explicit form; positional
+    # Resolve the run mode. Healing resolves SOURCE PAGES (its own namespace);
+    # ingest resolves raw files. --origin is the legacy explicit form; positional
     # targets are classified deterministically (origin folder vs. file list).
-    if args.origin:
-        if targets:
+    if args.healing:
+        if args.origin and targets:
             print("ERROR: pass either positional targets OR --origin, not both.",
                   file=sys.stderr)
             return 2
-        mode, only_origin, selected, errors = "origin", args.origin, None, []
-    else:
-        index, origin_names = raw_index(wiki_root, exclude)
-        if size_filter and size_filter in origin_names:
-            print(
-                f"ERROR: '{size_filter}' is both a size keyword and an origin "
-                f"folder. Use '--origin {size_filter}' to target the origin.",
-                file=sys.stderr)
+        if not targets and not args.origin:
+            print("ERROR: --healing requires targets (an origin, source-page "
+                  "refs, or the #reingest set the healing workflow passes). "
+                  "There is no heal-everything mode — the wiki is never fully "
+                  "re-healed.", file=sys.stderr)
             return 2
-        mode, only_origin, selected, errors = classify_targets(
-            targets, origin_names, index, vault_root, wiki_root)
-
-    if errors:
-        report_target_errors(errors, wiki_root / "raw")
-        return 2
-
-    if mode == "files":
-        payload = collect_selection(wiki_root, selected)
+        payload = collect_healing(wiki_root, exclude,
+                                  [args.origin] if args.origin else targets)
     else:
-        payload = collect(wiki_root, exclude, only_origin)
-    payload["mode"] = mode
+        if args.origin:
+            if targets:
+                print("ERROR: pass either positional targets OR --origin, not both.",
+                      file=sys.stderr)
+                return 2
+            mode, only_origin, selected, errors = "origin", args.origin, None, []
+        else:
+            index, origin_names = raw_index(wiki_root, exclude)
+            if size_filter and size_filter in origin_names:
+                print(
+                    f"ERROR: '{size_filter}' is both a size keyword and an origin "
+                    f"folder. Use '--origin {size_filter}' to target the origin.",
+                    file=sys.stderr)
+                return 2
+            mode, only_origin, selected, errors = classify_targets(
+                targets, origin_names, index, vault_root, wiki_root)
+
+        if errors:
+            report_target_errors(errors, wiki_root / "raw")
+            return 2
+
+        if mode == "files":
+            payload = collect_selection(wiki_root, selected)
+        else:
+            payload = collect(wiki_root, exclude, only_origin)
+        payload["mode"] = mode
+
+    payload["healing"] = args.healing
     payload["size_filter"] = size_filter
     if size_filter:
         apply_size_filter(payload, size_filter)
