@@ -12,7 +12,7 @@ Usage:
 Schema: see learning-library/page-source-schema.md.
 """
 from __future__ import annotations
-import argparse, html, json, math, re, sys
+import argparse, html, json, math, re, sys, urllib.parse
 from pathlib import Path
 
 try:
@@ -51,23 +51,27 @@ def md_html(text: str) -> str:
 
 
 def apply_glossary(htext: str, glossary: dict, done=None) -> str:
-    """Wrap the FIRST text occurrence of each glossary term in a clickable span.
-    Apply ONLY to prose HTML — NEVER to SVG/special-block HTML (a <button> inside an
-    SVG <text> renders blank, e.g. a glossary term that matches a graph node label)."""
+    """Wrap the FIRST text occurrence of each glossary term in a highlighted span whose
+    plain-language definition shows as a hover/focus tooltip (rendered by .gloss::after).
+    Apply ONLY to prose HTML — NEVER to SVG/special-block HTML (an inline span inside an
+    SVG <text> renders blank, e.g. a glossary term that matches a graph node label).
+    The inserted <span> (definition and all) is parked at a TAG index so later terms never
+    match inside it — a glossary definition often contains another glossary term, and
+    wrapping that would corrupt the data-def attribute."""
     if not glossary:
         return htext
     if done is None:
         done = set()
-    parts = re.split(r"(<[^>]+>)", htext)  # odd indices are tags
+    parts = re.split(r"(<[^>]+>)", htext)  # even indices = text outside tags; odd = tags (skipped)
     for term, definition in glossary.items():
+        if term.lower() in done:
+            continue
         pat = re.compile(r"\b(" + re.escape(term) + r")\b", re.IGNORECASE)
         for i in range(0, len(parts), 2):
-            if term.lower() in done:
-                break
-            if pat.search(parts[i]):
-                parts[i] = pat.sub(
-                    lambda m: f'<button class="gloss" data-def="{esc(definition)}">{m.group(1)}</button>',
-                    parts[i], count=1)
+            m = pat.search(parts[i])
+            if m:
+                span = f'<span class="gloss" tabindex="0" data-def="{esc(definition)}">{m.group(1)}</span>'
+                parts[i:i + 1] = [parts[i][:m.start()], span, parts[i][m.end():]]  # span -> tag (odd) index
                 done.add(term.lower())
                 break
     return "".join(parts)
@@ -86,35 +90,37 @@ def parse_source(path: Path):
     return meta, body
 
 
-def split_sections(body: str):
-    """Return [(title, id, [segments])]. Segments: ('md',text) | ('special',kind,html)."""
+def split_sections(body: str, glossary: dict):
+    """Return [(title, id, [segments])]. Segments: ('md',text) | ('special',kind,html).
+    glossary is threaded to the special renderers so a graph node/edge explanation
+    (shown in the click-to-explain panel) gets the same highlighted hover tooltips as prose."""
     out = []
     for block in re.split(r"^##\s+", body, flags=re.MULTILINE)[1:]:
         line, _, rest = block.partition("\n")
         title = line.strip()
-        out.append((title, slugify(title), parse_segments(rest)))
+        out.append((title, slugify(title), parse_segments(rest, glossary)))
     return out
 
 
-def parse_segments(text: str):
+def parse_segments(text: str, glossary: dict):
     segs, pos = [], 0
     for m in FENCE.finditer(text):
         if m.group(1).lower() not in SPECIAL:
             continue  # leave code fences in the md stream
         if text[pos:m.start()].strip():
             segs.append(("md", text[pos:m.start()]))
-        segs.append(("special", m.group(1).lower(), render_special(m.group(1).lower(), m.group(2))))
+        segs.append(("special", m.group(1).lower(), render_special(m.group(1).lower(), m.group(2), glossary)))
         pos = m.end()
     if text[pos:].strip():
         segs.append(("md", text[pos:]))
     return segs
 
 
-def render_special(kind: str, content: str) -> str:
+def render_special(kind: str, content: str, glossary: dict) -> str:
     if kind == "deeper":
         first, _, rest = content.partition("\n")
         return (f'<details class="deeper"><summary>{esc(first.strip())}</summary>'
-                f'<div class="dbody">{md_html(rest.strip())}</div></details>')
+                f'<div class="dbody">{apply_glossary(md_html(rest.strip()), glossary)}</div></details>')
     try:  # one malformed block must NOT fail the whole page
         spec = yaml.safe_load(content) or {}
     except yaml.YAMLError as e:
@@ -122,7 +128,7 @@ def render_special(kind: str, content: str) -> str:
         return (f'<div class="callout warn"><span class="ic">&#9650;</span><div>This <b>{esc(kind)}</b> block '
                 f'could not be rendered (YAML error: {esc(msg)}). Quote any value containing <code>:</code> or <code>#</code>.</div></div>')
     if kind == "graph":
-        return render_graph(spec)
+        return render_graph(spec, glossary)
     if kind == "chart":
         return render_chart(spec)
     if kind == "quiz":
@@ -131,9 +137,13 @@ def render_special(kind: str, content: str) -> str:
 
 
 # ---------- visuals ----------
-def render_graph(spec: dict) -> str:
+def render_graph(spec: dict, glossary: dict) -> str:
     # Full-width graph (detail panel BELOW it) so labels have room; nodes are text-sized
     # PILLS (no overflow); viewBox sized near display width so text scales ~1:1.
+    # Node/edge descs may carry glossary <span> markup; data-desc DOUBLE-encodes it
+    # (esc of already-rendered HTML) so app.js getAttribute()+innerHTML restores live HTML
+    # — a jargon term inside a click-to-explain panel is itself hover-defined. SVG node
+    # LABELS stay glossary-free (a <span> inside <text> renders blank).
     nodes = spec.get("nodes", []) or []
     edges = spec.get("edges", []) or []
     W, H, cx, cy = 760, 430, 380, 210
@@ -156,7 +166,7 @@ def render_graph(spec: dict) -> str:
         wl = len(label) * 6.4 + 12
         svg.append(
             f'<g class="iedge" tabindex="0" role="button" data-kind="Edge" '
-            f'data-title="{esc(label)}" data-desc="{esc(e.get("desc",""))}">'
+            f'data-title="{esc(label)}" data-desc="{esc(apply_glossary(esc(e.get("desc","")), glossary))}">'
             f'<line class="hit" x1="{a[0]:.0f}" y1="{a[1]:.0f}" x2="{b[0]:.0f}" y2="{b[1]:.0f}"/>'
             f'<line class="vis" x1="{a[0]:.0f}" y1="{a[1]:.0f}" x2="{b[0]:.0f}" y2="{b[1]:.0f}"/>'
             f'<rect class="elbg" x="{mx-wl/2:.0f}" y="{my-9:.0f}" width="{wl:.0f}" height="17" rx="5"/>'
@@ -168,7 +178,7 @@ def render_graph(spec: dict) -> str:
         cls = "inode k" if nd.get("hi") else "inode"
         svg.append(
             f'<g class="{cls}" tabindex="0" role="button" data-kind="{esc(nd.get("kind","Node"))}" '
-            f'data-title="{esc(label)}" data-desc="{esc(nd.get("desc",""))}">'
+            f'data-title="{esc(label)}" data-desc="{esc(apply_glossary(esc(nd.get("desc","")), glossary))}">'
             f'<rect x="{x-w/2:.0f}" y="{y-17:.0f}" width="{w:.0f}" height="34" rx="17"/>'
             f'<text x="{x:.0f}" y="{y+5:.0f}" text-anchor="middle">{esc(label)}</text></g>')
     svg.append("</svg>")
@@ -250,7 +260,34 @@ def _status_cls(s):
     return "k" if s.startswith("k") else "h" if s.startswith("h") else "n"
 
 
-def build_rail(meta):
+def find_vault_name(start: Path):
+    """Walk up from the library path to the vault root (the dir holding sb-os.json) and
+    return its folder name = the Obsidian vault name. None if no vault root is found."""
+    for d in [start, *start.parents]:
+        if (d / "sb-os.json").is_file():
+            return d.name
+    return None
+
+
+def wiki_source_html(entry, vault_name):
+    """Render one wiki source. With a recorded page reference + a known vault, the subject
+    hyperlinks to that wiki note in Obsidian, resolved BY NOTE NAME (survives the wiki
+    moving folders): obsidian://open?vault=<vault>&file=<note>. Plain subject text otherwise.
+    Accepts a plain string (subject, no link) or a dict {subject, page}."""
+    if isinstance(entry, dict):
+        subject = entry.get("subject") or entry.get("title") or entry.get("name") or ""
+        page = entry.get("page") or entry.get("path") or entry.get("note")
+    else:
+        subject, page = str(entry), None
+    if page and vault_name:
+        note = Path(str(page)).stem  # link by NAME, not folder path
+        href = ("obsidian://open?vault=" + urllib.parse.quote(vault_name)
+                + "&file=" + urllib.parse.quote(note))
+        return f'<a href="{esc(href)}">{esc(subject)}</a>'
+    return esc(subject)
+
+
+def build_rail(meta, vault_name):
     boxes = []
     boxes.append('<div class="box"><h3>Where you are <span class="tag">in this topic</span></h3>'
                  '<div class="tprog"><i id="tprog"></i></div><nav class="toc" id="toc"></nav></div>')
@@ -282,7 +319,8 @@ def build_rail(meta):
     if src:
         rows = []
         if src.get("wiki"):
-            rows.append(f'<div class="src"><span class="k">Wiki</span> {" &#183; ".join(esc(w) for w in src["wiki"])}</div>')
+            wiki_html = " &#183; ".join(wiki_source_html(w, vault_name) for w in src["wiki"])
+            rows.append(f'<div class="src"><span class="k">Wiki</span> {wiki_html}</div>')
         for it in src.get("internet", []) or []:
             rows.append(f'<div class="src"><span class="k">Internet</span> <a href="{esc(it.get("url","#"))}">{esc(it.get("title",""))}</a></div>')
         if src.get("training"):
@@ -295,8 +333,8 @@ PAGE = """<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>{title} — Learning Library</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<style>{css}</style></head><body data-topic="{topic_attr}">
-<div id="bar"></div><div id="pop"></div>
+<style>{css}</style></head><body data-topic="{topic_attr}" data-source="{source_attr}">
+<div id="bar"></div>
 <svg width="0" height="0"><defs>
 <marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6" fill="#8A7DF5"/></marker>
 <marker id="ar2" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6" fill="#8A7DF5"/></marker></defs></svg>
@@ -308,9 +346,9 @@ PAGE = """<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <div class="toast" id="toast">copied</div><script>{js}</script></body></html>"""
 
 
-def build_page(meta, css, js):
-    sections = split_sections(meta["_body"])
+def build_page(meta, css, js, source_rel, vault_name):
     glossary = meta.get("glossary") or {}
+    sections = split_sections(meta["_body"], glossary)
     sec_html = "".join(build_section(t, sid, segs, glossary) for t, sid, segs in sections)
     sub = []
     if meta.get("date"):
@@ -319,7 +357,8 @@ def build_page(meta, css, js):
         sub.append(f'GOAL: {esc(meta["goal"])}')
     eyebrow = f'Topic &#183; {len(sections)} section' + ("s" if len(sections) != 1 else "")
     return PAGE.format(title=esc(meta["title"]), topic_attr=esc(meta["title"]), css=css, js=js,
-                       eyebrow=eyebrow, sub=" &#183; ".join(sub), sections=sec_html, rail=build_rail(meta))
+                       source_attr=esc(source_rel), eyebrow=eyebrow, sub=" &#183; ".join(sub),
+                       sections=sec_html, rail=build_rail(meta, vault_name))
 
 
 INDEX = """<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
@@ -390,6 +429,7 @@ def main():
     args = ap.parse_args()
 
     root = Path(args.library_root).resolve()
+    vault_name = find_vault_name(root)
     topics_dir, pages_dir = root / "topics", root / "pages"
     pages_dir.mkdir(parents=True, exist_ok=True)
     css = (ASSETS / "styles.css").read_text(encoding="utf-8")
@@ -403,7 +443,7 @@ def main():
             all_meta.append(meta)
             if args.topic and meta["slug"] != args.topic:
                 continue
-            (pages_dir / f'{meta["slug"]}.html').write_text(build_page(meta, css, js), encoding="utf-8")
+            (pages_dir / f'{meta["slug"]}.html').write_text(build_page(meta, css, js, f"topics/{src.name}", vault_name), encoding="utf-8")
             built.append(meta["slug"])
         except Exception as e:  # one bad source never kills the build
             errors.append({"file": src.name, "error": f"{type(e).__name__}: {e}"})

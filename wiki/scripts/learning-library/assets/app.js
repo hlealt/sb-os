@@ -49,15 +49,8 @@
     });
   });
 
-  /* glossary popover */
-  var pop=document.getElementById('pop'), popOpen=false;
-  if(pop){
-    document.querySelectorAll('.gloss').forEach(function(gl){
-      gl.addEventListener('click',function(e){e.stopPropagation(); pop.innerHTML=gl.getAttribute('data-def'); pop.classList.add('show'); popOpen=true;
-        var r=gl.getBoundingClientRect(); pop.style.left=(window.scrollX+r.left)+'px'; pop.style.top=(window.scrollY+r.bottom+8)+'px';});
-    });
-    document.addEventListener('click',function(){if(popOpen){pop.classList.remove('show'); popOpen=false;}});
-  }
+  /* glossary terms show their plain-language definition via a CSS hover/focus tooltip
+     (.gloss::after = attr(data-def)) — no JS needed; works for prose + the graph detail panel. */
 
   /* step-through (GraphRAG-style). Reads steps from a JSON script tag if present. */
   document.querySelectorAll('.stepper').forEach(function(st){
@@ -84,8 +77,8 @@
     });
   });
 
-  /* hover-to-copy: builds a /sb-tutor expand prompt for the item */
-  var toast=document.getElementById('toast'), TOPIC=document.body.getAttribute('data-topic')||'';
+  /* hover-to-copy: builds a PRECISE /sb-tutor expand prompt — page-source filepath + section anchor-id + title */
+  var toast=document.getElementById('toast'), TOPIC=document.body.getAttribute('data-topic')||'', SOURCE=document.body.getAttribute('data-source')||'';
   function copyText(t){
     if(navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(t);
     return new Promise(function(res,rej){var ta=document.createElement('textarea'); ta.value=t; ta.style.position='fixed'; ta.style.opacity='0';
@@ -96,7 +89,8 @@
     b.setAttribute('aria-label','Copy a /sb-tutor prompt to expand this item');
     b.addEventListener('click',function(e){e.stopPropagation();
       var item=el.getAttribute('data-item')|| (el.querySelector('h2')?el.querySelector('h2').textContent.trim():'');
-      var txt='/sb-tutor expand the item ['+item+'] of the topic ['+TOPIC+']. ';
+      var anchor=el.id||'';
+      var txt='/sb-tutor expand the item ['+item+'] of the topic ['+TOPIC+'] (source: '+SOURCE+', section: #'+anchor+'). ';
       copyText(txt).then(function(){b.textContent='✓ copied';
         if(toast){toast.textContent='copied: '+txt.slice(0,46)+'…'; toast.classList.add('show');}
         setTimeout(function(){b.textContent='⧉ copy'; if(toast) toast.classList.remove('show');},1700);});

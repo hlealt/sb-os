@@ -17,13 +17,15 @@ terms:                                       # the R3 knowledge probe — "where
   - property graph:heard
   - graphRAG:new
 sources:                                     # "light sources" — where teaching was grounded
-  wiki: [Graph Databases, Knowledge Graphs]  # wiki pages used, BY SUBJECT (never filenames)
+  wiki:                                       # wiki pages used; DISPLAY by subject. Add `page:` (the wiki note's name or path) and the builder hyperlinks the subject to that note in Obsidian — resolved by note NAME, so the link survives the wiki moving folders. A plain string still works (subject, no link).
+    - {subject: Graph Databases, page: graph-databases}
+    - {subject: Knowledge Graphs, page: knowledge-graphs}
   internet:
     - {title: "Neo4j — What is a graph database?", url: "https://..."}
   training: "graph theory, query languages"  # one line on the training-data substrate
 related:                                      # "related topics — learn next" + map edges
   - {title: Markov Chains, slug: markov-chains, why: "the math of traversal"}
-glossary:                                     # optional — first occurrence of each term becomes click-for-definition
+glossary:                                     # define EVERY technical term in PLAIN language (no jargon) — builder highlights each + shows a hover/focus tooltip, in prose AND graph click-to-explain panels
   node: "an entity the graph stores — a 'thing' with a label and properties."
 ---
 ```
