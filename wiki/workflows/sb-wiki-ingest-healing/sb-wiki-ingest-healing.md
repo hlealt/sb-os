@@ -66,7 +66,7 @@ Run from the vault root with the active interpreter. The manifest script CLASSIF
 python {sb_os_path}/wiki/scripts/sb-wiki-ingest-all-manifest.py --report {wiki_root}/healing-manifest.json [targets…]
 ```
 
-- **No args (`#reingest` mode):** do NOT call the manifest with empty targets. First collect every page under `{wiki_root}/wiki/sources/**` whose frontmatter `tags:` contains `reingest` (grep the sources tree for `#reingest` OR a `reingest` tag entry). For each hit: a LEAF INDEX (`{origin}.md`) contributes its whole origin (pass the bare origin name); a SOURCE PAGE contributes its own `origin/stem.md`. De-dup, then pass the union as positional targets to the manifest script. Record the set of tagged leaf indexes — Step 5 strips their marks. If zero `#reingest` marks exist, STOP: "no `#reingest` targets".
+- **No args (`#reingest` mode):** do NOT call the manifest with empty targets. First collect every page under `{wiki_root}/wiki/sources/**` whose frontmatter `tags:` contains `reingest` (grep the sources tree for `#reingest` OR a `reingest` tag entry). For each hit: a LEAF INDEX (`{origin}.md`) contributes its whole origin (pass the bare origin name); a SOURCE PAGE contributes its own `origin/stem.md`. De-dup, then pass the union as positional targets to the manifest script. Record which pages and leaf indexes carried `#reingest` — Step 5 strips the mark from every page healed and from the leaf index of every origin healed. If zero `#reingest` marks exist, STOP: "no `#reingest` targets".
 - **Explicit args:** forward them VERBATIM as positional targets.
 
 If the script exits non-zero it printed an actionable error (origin/file collision, unresolvable target, bare name matching multiple files). Surface it and STOP — never guess.
@@ -109,7 +109,12 @@ Append-only protection (`{sb_os_path}/wiki/workflows/shared/stub-policy.md` § "
 
 ### Step 5 — Strip `#reingest` + close-out
 
-For every leaf index that carried a `#reingest` mark consumed this run (the `#reingest`-mode set from Step 1), remove the `#reingest` tag from its frontmatter `tags:` (and any inline `#reingest`). Explicit-arg and auto-heal runs have no marks to strip — skip this for them.
+Strip the `#reingest` mark from everything this run healed, so healed sources leave the triage queue. For each page healed this run, remove the `#reingest` tag (the frontmatter `tags:` entry AND any inline `#reingest`) wherever it sits:
+
+- the healed SOURCE PAGE itself, if it carries the mark (the dashboard's per-file ♻️ button tags individual source pages), and
+- the LEAF INDEX `{origin}.md` of every origin whose sources were healed, if it carries the mark (the per-origin ♻️ button tags the leaf index).
+
+This applies on BOTH no-args (`#reingest`-mode) and explicit-arg runs — an explicit-arg heal of a source the owner tagged in the dashboard must still clear that mark. The PDF auto-heal run is the ONLY exception: it heals a just-ingested page that carries no mark and commits nothing of its own — skip the strip for it.
 
 Tell the owner to re-run the triage generator so the dashboard reflects the cleared marks: `python {wiki_root or dashboards path}/wiki-reingest-triage.gen.py` (the triage source of `#reingest` marks is `3-resources/obsidian-dashboards/wiki-reingest-triage.md`; if its generator is not present yet, just note that the marks were stripped).
 
