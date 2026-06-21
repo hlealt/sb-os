@@ -18,6 +18,7 @@ The builder owns layout/sizing/table-styling/diagram-fit. YOU own content qualit
 3. **Interactive-light — `desc`s are mandatory.** EVERY node AND edge in a `graph` block carries a `desc` (its click-to-explain text). A graph without descs is half-built.
 4. **YAML-safe blocks.** Inside `graph`/`chart`/`quiz` YAML, QUOTE any value containing `:`, `#`, or quote marks (single-quote it; double any inner apostrophe). One unquoted colon breaks the block.
 5. **Author markdown only; scale to the topic.** Never write HTML/CSS/JS (the builder renders everything). Use as many sections as the topic needs — the page adapts to density.
+6. **Macro visible, micro collapsed.** A section's MAIN substance — its key points, the list/table/limits that ARE the section — stays VISIBLE (sections render expanded). NEVER hide a section's core content inside a single `deeper`. Use `deeper` ONLY for optional micro-detail behind a point (a derivation, an edge case, a tangent). Test: if expanding one collapsed block reveals the section's actual content, you mis-used `deeper` — promote it to visible body.
 
 ## CREATE / UPDATE mode
 
