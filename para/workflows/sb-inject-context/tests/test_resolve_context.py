@@ -495,3 +495,89 @@ def test_clear_orphans_deletes_deselected_rule_keeps_others(tmp_path):
     assert foreign.exists(), "foreign (non-manifest) rule must be preserved"
     if kept_file is not None:
         assert kept_file.exists(), "kept (selected) sb rule must be preserved"
+
+
+# =========================================================================== #
+# Criterion 15 — upgrade orphan-deletes an installed sb rule REMOVED from the
+#   manifest ENTIRELY while its owning module stays selected — the gap that
+#   _clear_orphans (de-selection only) and find_orphaned_loaders (commands +
+#   skills only, never rules) both miss. find_orphaned_rules + the upgrade
+#   wiring close it. A kept manifest rule, a foreign rbtv rule, and an excluded
+#   sb rule all survive (bounded blast radius: .claude/rules/sb-*.md only).
+# =========================================================================== #
+
+def test_find_orphaned_rules_deletes_manifest_removed_rule_keeps_others(tmp_path):
+    target = tmp_path
+    rules_dir = target / ".claude" / "rules"
+    rules_dir.mkdir(parents=True, exist_ok=True)
+
+    # The "known" universe = every rule target the live manifest declares (all
+    # modules, stale included). Read from the real helper so the test stays
+    # valid as the manifest evolves.
+    known = upgrade._all_manifest_rule_targets()
+    assert known, "manifest must declare at least one rule for this test"
+
+    # A real manifest rule laid down on disk must be PRESERVED — still declared.
+    kept_rel = sorted(known)[0]
+    kept_file = target / kept_rel
+    kept_file.parent.mkdir(parents=True, exist_ok=True)
+    kept_file.write_text("kept sb rule", encoding="utf-8")
+
+    # An sb rule whose manifest entry was removed ENTIRELY (module still
+    # selected) — the gap this closes. Name guaranteed absent from the manifest.
+    removed = rules_dir / "sb-removed-from-manifest.md"
+    removed.write_text("orphaned sb rule body", encoding="utf-8")
+    removed_rel = removed.relative_to(target).as_posix()
+    assert removed_rel not in known
+
+    # A foreign rule (no sb- prefix) is never sb-owned -> never flagged.
+    foreign = rules_dir / "rbtv-some-rule.md"
+    foreign.write_text("rbtv owns this", encoding="utf-8")
+
+    # An sb rule the user explicitly excluded -> protected, never deleted.
+    excluded_sb = rules_dir / "sb-user-excluded.md"
+    excluded_sb.write_text("excluded by user signal", encoding="utf-8")
+    excluded_rel = excluded_sb.relative_to(target).as_posix()
+
+    orphans = loaders.find_orphaned_rules(
+        target,
+        known_rule_targets=known,
+        excluded={excluded_rel},
+    )
+
+    assert removed_rel in orphans, "manifest-removed sb rule must be flagged"
+    assert kept_rel not in orphans, "kept (declared) sb rule must NOT be flagged"
+    assert foreign.relative_to(target).as_posix() not in orphans, (
+        "foreign rbtv rule must NOT be flagged"
+    )
+    assert excluded_rel not in orphans, "excluded sb rule must NOT be flagged"
+
+    # Pruning deletes ONLY the orphan; everything else survives (bounded blast).
+    upgrade._prune_orphaned_rules(target, orphans)
+    assert not removed.exists(), "orphaned sb rule should be deleted"
+    assert kept_file.exists(), "kept sb rule must be preserved"
+    assert foreign.exists(), "foreign rbtv rule must be preserved"
+    assert excluded_sb.exists(), "excluded sb rule must be preserved"
+
+
+# =========================================================================== #
+# Criterion 16 — the planned deletion of a manifest-removed rule is surfaced in
+#   the upgrade plan (owner sees every deletion before the confirm prompt).
+# =========================================================================== #
+
+def test_build_upgrade_plan_surfaces_orphaned_rule_deletion(tmp_path):
+    plan = upgrade.build_upgrade_plan(
+        wiki_root="3-resources/knowledge-base/wiki",
+        user_context_root=".user/context/",
+        selected_modules=(),
+        excluded_components=set(),
+        install_wiki=False,
+        orphaned_rules=[".claude/rules/sb-removed-from-manifest.md"],
+    )
+    deletions = [
+        a for a in plan.actions
+        if a.category == "delete"
+        and a.target == ".claude/rules/sb-removed-from-manifest.md"
+    ]
+    assert len(deletions) == 1, "orphaned rule deletion must appear once in the plan"
+    assert "rule removed while module stays selected" in deletions[0].detail

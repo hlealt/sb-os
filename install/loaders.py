@@ -373,6 +373,56 @@ def find_orphaned_loaders(
     return sorted(orphans)
 
 
+#: Filename prefix marking a rule file as sb-os-shipped. Rule files install
+#: verbatim (no ``Read and execute`` directive to key on like skill/command
+#: loaders), so the reserved ``sb-`` prefix is the ownership signal — every
+#: shippable sb-os component carries it (architecture, Component Naming).
+_SB_RULE_PREFIX = "sb-"
+
+
+def find_orphaned_rules(
+    target_root: Path | str,
+    known_rule_targets: set[str],
+    excluded: set[str] | None = None,
+) -> list[str]:
+    """Return vault-relative paths of installed sb-os rules with no manifest entry.
+
+    Scans ``.claude/rules/sb-*.md``. A file is an orphan when ALL hold:
+
+    * its filename carries the reserved ``sb-`` prefix — rules install verbatim
+      with no embedded source pointer (unlike skill/command thin loaders), so
+      the prefix is the only ownership signal; ``rbtv-*`` and user rules are
+      never flagged;
+    * its vault-relative path is absent from ``known_rule_targets`` (every rule
+      target the manifest declares across ALL modules, stale entries included —
+      a stale rule is pruned by the selection-aware ``_clear_orphans`` path, so
+      treating it as "known" here keeps the two paths from double-handling it);
+    * its vault-relative path is absent from ``excluded`` — exclusion is an
+      explicit user signal, never deleted.
+
+    The companion to ``find_orphaned_loaders`` for the rules surface that
+    function never scans: it catches a rule removed from the manifest ENTIRELY
+    while its owning module stays selected (de-selection and the stale flag are
+    already covered by ``_clear_orphans``). Returns a sorted list of
+    forward-slash vault-relative paths. Pure scan — no deletion happens here.
+    """
+    root = Path(target_root)
+    excluded = excluded or set()
+    rules_dir = root / ".claude" / "rules"
+    if not rules_dir.is_dir():
+        return []
+
+    orphans: list[str] = []
+    for path in rules_dir.glob(f"{_SB_RULE_PREFIX}*.md"):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(root).as_posix()
+        if rel in known_rule_targets or rel in excluded:
+            continue
+        orphans.append(rel)
+    return sorted(orphans)
+
+
 def _normalize_sb_os_path(sb_os_path: str | Path) -> str:
     """Return a forward-slash path without leading/trailing slash.
 

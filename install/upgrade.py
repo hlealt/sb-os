@@ -110,12 +110,23 @@ def run_upgrade(
         known_targets=_all_manifest_loader_targets(),
         excluded=set(excluded),
     )
+    # ----- Scan for orphaned rules (removed from manifest entirely) ---
+    # Rules are not thin loaders, so find_orphaned_loaders never sees them.
+    # This catches a rule whose manifest entry was dropped while its owning
+    # module stays selected — de-selection + the stale flag are handled by
+    # _clear_orphans below.
+    orphaned_rules = loaders.find_orphaned_rules(
+        target_root,
+        known_rule_targets=_all_manifest_rule_targets(),
+        excluded=set(excluded),
+    )
 
     # ----- Build plan + confirm ---------------------------------------
     plan = build_upgrade_plan(
         wiki_root, user_context_root, selected, set(excluded), install_wiki,
         finance_dashboard_html_path=finance_html_path,
         orphaned_loaders=orphaned_loaders,
+        orphaned_rules=orphaned_rules,
     )
     cli.print_plan(plan.actions)
     print(
@@ -135,6 +146,7 @@ def run_upgrade(
     try:
         _clear_orphans(target_root, selected, set(excluded))
         _prune_orphaned_loaders(target_root, orphaned_loaders)
+        _prune_orphaned_rules(target_root, orphaned_rules)
         changed = _execute_upgrade(
             target_root=target_root,
             sb_os_root=sb_os_root,
@@ -284,6 +296,37 @@ def _all_manifest_loader_targets() -> set[str]:
     return out
 
 
+def _all_manifest_rule_targets() -> set[str]:
+    """Return every rule ``target`` across ALL modules, stale entries included.
+
+    The rule orphan scan's "known" universe: any rule the manifest currently
+    declares (stale too) is handled by the selection-aware ``_clear_orphans``
+    path; only rule files absent from this set can be orphans left behind by a
+    manifest removal. Mirrors ``_all_manifest_loader_targets`` for rules.
+    """
+    out: set[str] = set()
+    for mod in loaders.manifest_modules().values():
+        for entry in mod.get("rules", []):
+            target = entry.get("target", "")
+            if target:
+                out.add(target.replace("\\", "/"))
+    return out
+
+
+def _prune_orphaned_rules(target_root: Path, orphans: Iterable[str]) -> None:
+    """Delete orphaned rule files found by ``loaders.find_orphaned_rules``.
+
+    Rules live flat in ``.claude/rules/`` — no enclosing per-component
+    directory to clean up (unlike skill loaders), so this only unlinks each
+    file. The ``is_file`` guard makes a double-delete (already removed by
+    ``_clear_orphans``) a harmless no-op.
+    """
+    for rel in orphans:
+        f = target_root / rel
+        if f.is_file():
+            f.unlink()
+
+
 def _prune_orphaned_loaders(target_root: Path, orphans: Iterable[str]) -> None:
     """Delete orphaned loader files found by ``loaders.find_orphaned_loaders``.
 
@@ -366,12 +409,14 @@ def build_upgrade_plan(
     install_wiki: bool = True,
     finance_dashboard_html_path: str = cli.DEFAULT_FINANCE_DASHBOARD_HTML_PATH,
     orphaned_loaders: Iterable[str] = (),
+    orphaned_rules: Iterable[str] = (),
 ) -> cli.Plan:
     """Build the planned-action list for an upgrade. Pure — no FS writes.
 
-    ``orphaned_loaders`` is the pre-computed scan result from
-    ``loaders.find_orphaned_loaders`` — surfaced in the plan so the user sees
-    every planned deletion before the confirm prompt (architecture §6).
+    ``orphaned_loaders`` and ``orphaned_rules`` are the pre-computed scan
+    results from ``loaders.find_orphaned_loaders`` / ``find_orphaned_rules`` —
+    surfaced in the plan so the user sees every planned deletion before the
+    confirm prompt (architecture §6).
     """
     plan = cli.Plan()
     modules_scoped = loaders.select_modules(selected_modules)
@@ -385,6 +430,12 @@ def build_upgrade_plan(
             category="delete",
             target=rel,
             detail="delete orphaned loader (no manifest entry: component renamed or removed)",
+        ))
+    for rel in orphaned_rules:
+        plan.add(cli.Action(
+            category="delete",
+            target=rel,
+            detail="delete orphaned rule (no manifest entry: rule removed while module stays selected)",
         ))
 
     for source_rel, dest_rel in CLAUDE_MD_MAP:
