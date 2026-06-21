@@ -50,12 +50,15 @@ def md_html(text: str) -> str:
     return h
 
 
-def apply_glossary(htext: str, glossary: dict) -> str:
-    """Wrap the FIRST text-node occurrence of each glossary term in a clickable span."""
+def apply_glossary(htext: str, glossary: dict, done=None) -> str:
+    """Wrap the FIRST text occurrence of each glossary term in a clickable span.
+    Apply ONLY to prose HTML — NEVER to SVG/special-block HTML (a <button> inside an
+    SVG <text> renders blank, e.g. a glossary term that matches a graph node label)."""
     if not glossary:
         return htext
+    if done is None:
+        done = set()
     parts = re.split(r"(<[^>]+>)", htext)  # odd indices are tags
-    done = set()
     for term, definition in glossary.items():
         pat = re.compile(r"\b(" + re.escape(term) + r")\b", re.IGNORECASE)
         for i in range(0, len(parts), 2):
@@ -179,7 +182,8 @@ def render_graph(spec: dict) -> str:
 def render_chart(spec: dict) -> str:
     xs = spec.get("x", []) or []
     series = spec.get("series", []) or []
-    W, H, x0, x1, y0, y1 = 470, 320, 66, 448, 64, 250  # viewBox ~ display width (capped 480) → text scales ~1:1
+    xlabel = spec.get("xlabel", "x"); ylabel = spec.get("ylabel", "value")
+    W, H, x0, x1, y0, y1 = 820, 430, 78, 792, 70, 360  # full-width viewBox → fills the column, text scales ~1:1
     allv = [v for s in series for v in (s.get("values") or [])]
     maxv = max(allv) if allv else 1
     px = lambda i: x0 + (x1 - x0) * (i / max(len(xs) - 1, 1))
@@ -188,26 +192,28 @@ def render_chart(spec: dict) -> str:
            f'<line class="ax" x1="{x0}" y1="{y1}" x2="{x1}" y2="{y1}"/>',
            f'<line class="ax" x1="{x0}" y1="{y0}" x2="{x0}" y2="{y1}"/>']
     for i, xv in enumerate(xs):
-        svg.append(f'<text class="axl" x="{px(i):.0f}" y="{y1+18:.0f}" text-anchor="middle">{esc(xv)}</text>')
+        svg.append(f'<text class="axl" x="{px(i):.0f}" y="{y1+24:.0f}" text-anchor="middle">{esc(xv)}</text>')
     if spec.get("xlabel"):
-        svg.append(f'<text class="axt" x="{(x0+x1)//2}" y="{H-8}" text-anchor="middle">{esc(spec["xlabel"])} &#8594;</text>')
+        svg.append(f'<text class="axt" x="{(x0+x1)//2}" y="{H-10}" text-anchor="middle">{esc(xlabel)} &#8594;</text>')
     if spec.get("ylabel"):
-        svg.append(f'<text class="axt" x="16" y="{(y0+y1)//2}" transform="rotate(-90 16 {(y0+y1)//2})" text-anchor="middle">{esc(spec["ylabel"])}</text>')
-    lx = x0  # top legend (replaces overlapping inline end-labels)
+        svg.append(f'<text class="axt" x="22" y="{(y0+y1)//2}" transform="rotate(-90 22 {(y0+y1)//2})" text-anchor="middle">{esc(ylabel)}</text>')
+    lx = x0  # top legend
     for s in series:
         nm = s.get("name", "")
-        svg.append(f'<rect x="{lx}" y="30" width="12" height="12" rx="3" fill="{esc(s.get("color","#5B4FE0"))}"/>'
-                   f'<text class="leg" x="{lx+17}" y="40">{esc(nm)}</text>')
-        lx += int(36 + len(nm) * 6.6)
+        svg.append(f'<rect x="{lx}" y="34" width="13" height="13" rx="3" fill="{esc(s.get("color","#5B4FE0"))}"/>'
+                   f'<text class="leg" x="{lx+19}" y="45">{esc(nm)}</text>')
+        lx += int(42 + len(nm) * 7.2)
     for s in series:
         vals = s.get("values") or []
         color = esc(s.get("color", "#5B4FE0"))
+        nm = s.get("name", "")
         pts = " ".join(f"{px(i):.0f},{py(v):.0f}" for i, v in enumerate(vals))
         svg.append(f'<polyline fill="none" stroke="{color}" stroke-width="2.5" points="{pts}"/>')
         for i, v in enumerate(vals):
-            label = xs[i] if i < len(xs) else i
-            svg.append(f'<circle class="pt" cx="{px(i):.0f}" cy="{py(v):.0f}" r="5" fill="{color}">'
-                       f'<title>{esc(s.get("name",""))} &#183; {esc(label)}: {esc(v)}</title></circle>')
+            xval = xs[i] if i < len(xs) else i
+            tip = f"{nm}: {ylabel} = {v} at {xlabel} = {xval}"  # self-explanatory (axis-labelled)
+            svg.append(f'<circle class="pt" cx="{px(i):.0f}" cy="{py(v):.0f}" r="6" fill="{color}">'
+                       f'<title>{esc(tip)}</title></circle>')
     svg.append("</svg>")
     return (f'<div class="viz chartviz"><div class="hint">Hover the dots for exact values</div>'
             f'{"".join(svg)}<div class="vcap">{esc(spec.get("caption",""))}</div></div>')
@@ -224,22 +230,16 @@ def render_quiz(spec: dict) -> str:
 
 # ---------- section + rail + page ----------
 def build_section(title, sid, segments, glossary):
-    specials = [s for s in segments if s[0] == "special"]
-    kinds = [s[1] for s in specials]
-    md_segs = [s for s in segments if s[0] == "md" and s[1].strip()]
-    has_table = any(re.search(r"^\s*\|?[ :|-]*-{3,}[ :|-]*\|", t, re.M) for _, t in md_segs)
-    if kinds == ["chart"] and md_segs and not has_table:  # tables need full width — don't cram into a split column
-        left = "".join(md_html(t) for _, t in md_segs)
-        inner = f'<div class="split"><div>{left}</div>{specials[0][2]}</div>'
-    else:
-        parts = []
-        for seg in segments:
-            if seg[0] == "md" and seg[1].strip():
-                parts.append(md_html(seg[1]))
-            elif seg[0] == "special":
-                parts.append(seg[2])
-        inner = "".join(parts)
-    inner = apply_glossary(inner, glossary)
+    # Render blocks in document order, full-width (visuals own the horizontal space).
+    # Glossary links prose ONLY (shared `done` = once per section) — never the SVG/special HTML.
+    done = set()
+    parts = []
+    for seg in segments:
+        if seg[0] == "md" and seg[1].strip():
+            parts.append(apply_glossary(md_html(seg[1]), glossary, done))
+        elif seg[0] == "special":
+            parts.append(seg[2])
+    inner = "".join(parts)
     return (f'<section class="item" id="s-{sid}" data-toc="{esc(title)}" data-item="{esc(title)}">'
             f'<button class="sechead" aria-expanded="true"><span class="chev">&#9662;</span>'
             f'<h2>{esc(title)}</h2></button><div class="secbody">{inner}</div></section>')

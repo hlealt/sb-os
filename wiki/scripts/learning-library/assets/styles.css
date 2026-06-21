@@ -37,7 +37,7 @@ main{padding:34px 0 90px}
 .sechead{display:flex;align-items:center;gap:11px;width:100%;background:none;border:0;cursor:pointer;padding:18px 78px 18px 0;text-align:left;color:var(--ink)}
 .sechead .chev{color:var(--violet);font-size:13px;transition:transform .18s}.item.collapsed .chev{transform:rotate(-90deg)}.sechead h2{font-weight:600;font-size:25px}
 .secbody{padding-bottom:20px}.item.collapsed .secbody{display:none}
-.secbody p{margin:.25em 0 .7em;color:#33364F}.secbody b,.secbody strong{color:var(--violet)}.secbody ul,.secbody ol{color:#33364F}
+.secbody p{margin:.25em 0 .7em;color:#33364F;max-width:74ch}.secbody b,.secbody strong{color:var(--violet)}.secbody ul,.secbody ol{color:#33364F;max-width:74ch}
 .secbody h3{font-size:17px;font-weight:600;margin:14px 0 4px}
 .copybtn{position:absolute;top:18px;right:18px;opacity:0;transform:translateY(-2px);transition:opacity .15s,transform .15s;font-family:"Space Grotesk";font-size:11px;font-weight:600;background:var(--violet);color:#fff;border:0;border-radius:18px;padding:6px 13px;cursor:pointer;box-shadow:0 6px 16px -6px rgba(91,79,224,.8);z-index:2}
 .item:hover .copybtn,.copybtn:focus-visible{opacity:1;transform:translateY(0);outline:none}
@@ -66,7 +66,7 @@ main{padding:34px 0 90px}
 #pop{position:absolute;max-width:260px;background:var(--ink);color:#fff;font-size:12.5px;line-height:1.45;padding:10px 12px;border-radius:10px;z-index:80;box-shadow:0 14px 30px -10px rgba(24,26,48,.6);opacity:0;pointer-events:none;transition:opacity .12s}#pop.show{opacity:1}#pop b{color:#C9C2FF}
 
 /* chart */
-.ax{stroke:#C9CCE0;stroke-width:1}.axl{fill:var(--ink-soft);font-family:"Space Mono";font-size:12px}.axt{fill:var(--ink-soft);font-family:"Space Mono";font-size:12px}.leg{fill:var(--ink);font-family:"Space Grotesk";font-weight:500;font-size:12px}.pt{cursor:pointer}.viz.chartviz{max-width:480px}
+.ax{stroke:#C9CCE0;stroke-width:1}.axl{fill:var(--ink-soft);font-family:"Space Mono";font-size:13px}.axt{fill:var(--ink-soft);font-family:"Space Mono";font-size:13px}.leg{fill:var(--ink);font-family:"Space Grotesk";font-weight:500;font-size:13px}.pt{cursor:pointer}
 
 /* stepper */
 .stagesvg .sg{transition:.2s}.stagesvg .sg circle{fill:var(--tint);stroke:var(--violet);stroke-width:2}
