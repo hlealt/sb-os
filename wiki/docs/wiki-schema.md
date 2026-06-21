@@ -533,7 +533,7 @@ Speculative-tier fires are heuristic in confidence — semantic membership when 
 | Confirmation bar (fire condition) | A returned topic page fires ONLY when the agent reads the hit's `Scope` + section headings (≤5 bounded partial reads) and confirms the source's `Substance` carries a **citable factual claim that extends that topic's scope**. Thematic resemblance with NO citable claim → NO fire (nothing to propose). The firm/semantic boundary is never crossed: a semantic hit is NEVER promoted to firm. |
 | Cap | Maximum 2 fires per ingest, ranked by helper score (descending). Overflow drops silently — re-detected by future ingests or the backfill. |
 | Dedupe (apply in order) | (1) **firm wins** — suppress any topic already in this run's firm `candidate-topic-updates`; (2) **no double-presentation** — suppress any topic already surfaced in this run's speculative set; (3) **citation-dedupe** — suppress when the topic's `Sources` already cites this source (raw or source-page wikilink): the mechanical "already contains the information" proxy; (4) **artifact/ledger-dedupe** — suppress (source, topic) pairs already pending in, or rejected-ledgered by, `{wiki_root}/pending-topic-updates.md` (below). |
-| Interactive posture | Surfaced in a NEW `SEMANTIC TOPIC UPDATES (source-level, default reject)` Stage-1 block (omit when empty). Explicit `accept N` applies via the same Step 4.5 append-only apply-semantics (sole authority); omission rejects. |
+| Interactive posture | Surfaced in a NEW `SEMANTIC TOPIC UPDATES (source-level, default reject)` Stage-1 block (omit when empty). Explicit `accept SEMN` (or `accept everything`) applies via the same Step 4.5 append-only apply-semantics (sole authority); omission rejects. |
 | Silent posture | **QUEUE** — append each fire to `{wiki_root}/pending-topic-updates.md`; NEVER apply unattended, NEVER drop. One `Flags` audit line per queued row. |
 
 **The artifact — `{wiki_root}/pending-topic-updates.md`.** Root-level sibling of `questions.md` / `open-gaps.md` / `purpose.md` — NOT a wiki page, NOT raw, outside both lint subtrees and outside the search-index scope (`wiki/**` only); zero lint/search-script changes needed. Two sections:
@@ -541,7 +541,7 @@ Speculative-tier fires are heuristic in confidence — semantic membership when 
 | Section | Content |
 |---------|---------|
 | Pending rows | One row per (source page, topic) pair: `source page` \| `target topic` \| `signal` (`semantic: <score>`, or the firm match-type for a backfill-found firm gap) \| `proposed section` \| `proposed bullet + citation` \| `Match` \| `Rel` \| `Decision` cell (blank = pending; owner marks `accept` / `reject`). The `Match`/`Rel` triage columns are NATIVE to the backfill scan (adopted per the p3-checkpoint2 ADX-8 ruling, decisions.md 2026-06-11): **`Match`** = the firm row's rarest shared concept + its source document-frequency in parentheses (e.g. `agentic-coding (3)`) — `—` for a pure slug/related-only row or a semantic row; **`Rel`** = `specific` or `weak`, where `weak` flags a hub-concept match (rarest shared concept appears in ≥ the relevance threshold's worth of sources, default 25). **`Rel` is ADVISORY** — a `weak` firm row is NEVER dropped or auto-rejected (firm tier is total-coverage); the flag pre-triages owner review and seeds the strongest→weakest within-topic sort. The relevance is computed by the gather subcommand (`update-backfill-gather`, `relevance` field per firm candidate); the firm-tier coverage gate (`update-backfill-reconcile`) guarantees every gather firm pair is drafted or citation-accounted before the artifact is written. |
-| Rejected ledger | A second section listing (source, topic) pairs explicitly DECLINED — by interactive `reject N` (firm OR semantic row) or by artifact review. Both the semantic arm's dedupe and the backfill suppress ledgered pairs (no-renag). Applied pairs need no ledger entry — once applied the topic cites the source and citation-dedupe self-suppresses them. |
+| Rejected ledger | A second section listing (source, topic) pairs explicitly DECLINED — by interactive `reject FN`/`reject SEMN` (firm OR semantic row) or by artifact review. Both the semantic arm's dedupe and the backfill suppress ledgered pairs (no-renag). Applied pairs need no ledger entry — once applied the topic cites the source and citation-dedupe self-suppresses them. |
 
 Appends are dedupe-keyed by pair identity — silent ingests append (via the lock-guarded `wiki/scripts/sb-wiki-shared-append.py append-row`, so parallel bulk workers never clobber a queued row), the backfill regenerates/merges, no duplicate row is ever written. An explicit interactive `reject N` on a firm or semantic update row appends that (source, topic) pair to the rejected ledger; OMISSION-defaults (a plain `accept-all` that never reviewed a semantic row) NEVER ledger — the backfill stays their safety net. The file is created with a minimal header on first write if absent.
 
@@ -957,7 +957,7 @@ Two invocations: `/sb-wiki-ingest <slug>` (default, interactive) and `/sb-wiki-i
 | 7 | Update raw index: `Wiki = Yes`. **Tier-specific rule:** raw-index ROW missing → CREATE it; raw-index FILE missing → LOG A WARNING and do NOT create (lint owns raw-index files); wiki-sources index FILE missing → CREATE with header (step 8 responsibility). | Agent |
 | 8 | Update wiki sources index (`What it says` filled; `My take` set to `pending` — populated post Stage 2 per the three-state rule). Index FILE missing → CREATE with header row. | Agent |
 | 9 | Append `candidate-topic` entries to `logs/topics.md` and `candidate-mention` entries to `logs/mentions.md` when triggered (the actionable queues), each via the lock-guarded `wiki/scripts/sb-wiki-shared-append.py append-block` (collision-safe for parallel bulk workers — see § Concurrency safety under `/sb-wiki-ingest-all`). NO `ingest` / `concept-created` / `entity-created` / `topic-updated` entries — created pages and updates are recorded by the pages themselves | Agent |
-| 10 | **Stage 1 checkpoint**: present structured table + PROPOSED TOPICS block + the topic-update blocks (`TOPIC UPDATES (firm — applied on commit; reject N to skip)`, `SEMANTIC TOPIC UPDATES (source-level, default reject)`, `SPECULATIVE TOPIC UPDATES`, `PROPOSED ANSWERS` — each omit-when-empty); the user accepts-all / rejects N / aborts file changes; per topic: accept (agent invokes `sb-wiki-create-topic` skill now) / defer (keeps as candidate in log). GENUINE firm topic-update rows apply on commit (any committing response applies them minus explicit `reject N`; `abort` rolls back everything); semantic / speculative / proposed-answer rows default-reject (explicit `accept N` applies via Step 4.5). An explicit `reject N` on a firm or semantic row ledgers that (source, topic) pair in `{wiki_root}/pending-topic-updates.md` (no-renag); omission-defaults never ledger. Approved changes commit before Stage 2 begins. | Agent + User |
+| 10 | **Stage 1 checkpoint**: present structured table + PROPOSED TOPICS block + the topic-update blocks (`TOPIC UPDATES (firm — applied on commit; reject FN to skip)`, `SEMANTIC TOPIC UPDATES (source-level, default reject)`, `SPECULATIVE TOPIC UPDATES`, `PROPOSED ANSWERS` — each omit-when-empty); decision rows carry tier-prefixed IDs (`T`/`F`/`SEM`/`S`/`A`); file rows stay bare numbers. The user accepts-all / rejects N / aborts file changes, OR `accept everything` (commit + accept every block at once, optionally `… except <IDs>`); per topic: accept TN (agent invokes `sb-wiki-create-topic` skill now) / defer TN (keeps as candidate in log). GENUINE firm topic-update rows apply on commit (any committing response applies them minus explicit `reject FN`; `abort` rolls back everything); semantic / speculative / proposed-answer rows default-reject (explicit `accept SEMN`/`accept SN`/`accept AN`, or `accept everything`, applies via Step 4.5). An explicit `reject FN`/`reject SEMN` on a firm or semantic row ledgers that (source, topic) pair in `{wiki_root}/pending-topic-updates.md` (no-renag); omission-defaults never ledger. Approved changes commit before Stage 2 begins. | Agent + User |
 | 11 | **Stage 2 checkpoint** (optional, post-commit): present reflection prompt after approved changes are committed. The user can ignore it, decline it, or answer with freeform reflection content in any order. The agent routes content by intent — `My take` → the source page `My take` section; questions / dive-deepers → `{wiki_root}/questions.md` entries (`seeded-by:` this source) — writes the routed content, and syncs the `My take` column to the wiki sources index. | Agent + User |
 
 **No mid-flow user input during steps 1–9.** All user interaction happens at steps 10–11.
@@ -995,40 +995,42 @@ INGEST PREVIEW — <source slug>
 | 7 | wiki/sources/blog-cloudflare/blog-cloudflare.md | row added | new entry |
 
 PROPOSED TOPICS:
-| # | name | trigger | sources |
-|---|------|---------|---------|
-| 1 | mcp-debate | contradiction (same-scope-opposing) | [[2026-XX-XX-code-mode-mcp.md]], [[2026-XX-XX-bye-bye-mcp.md]] |
+| ID | name | trigger | sources |
+|----|------|---------|---------|
+| T1 | mcp-debate | contradiction (same-scope-opposing) | [[2026-XX-XX-code-mode-mcp.md]], [[2026-XX-XX-bye-bye-mcp.md]] |
 
-TOPIC UPDATES (firm — applied on commit; reject N to skip):
-| # | topic | match | proposed change |
-|---|-------|-------|-----------------|
-| 1 | [[mcp-evolution.md]] | key-concept overlap ([[model-context-protocol.md]]) | + bullet under "Timeline" + citation |
+TOPIC UPDATES (firm — applied on commit; reject FN to skip):
+| ID | topic | match | proposed change |
+|----|-------|-------|-----------------|
+| F1 | [[mcp-evolution.md]] | key-concept overlap ([[model-context-protocol.md]]) | + bullet under "Timeline" + citation |
 
 SEMANTIC TOPIC UPDATES (source-level, default reject):
-| # | topic | signal | proposed change |
-|---|-------|--------|-----------------|
-| 1 | [[agentic-tooling.md]] | semantic: 0.71 | + bullet under "Key concepts" + citation |
+| ID | topic | signal | proposed change |
+|----|-------|--------|-----------------|
+| SEM1 | [[agentic-tooling.md]] | semantic: 0.71 | + bullet under "Key concepts" + citation |
 
 SPECULATIVE TOPIC UPDATES (low-confidence, default reject):
-| # | topic | overlap | proposed change |
-|---|-------|---------|-----------------|
-| 1 | [[ai-capability-skepticism.md]] | tokens: bottleneck, intelligence ([[marginal-returns-to-intelligence.md]]) | + bullet under "Key positions / Angles" + citation |
+| ID | topic | overlap | proposed change |
+|----|-------|---------|-----------------|
+| S1 | [[ai-capability-skepticism.md]] | tokens: bottleneck, intelligence ([[marginal-returns-to-intelligence.md]]) | + bullet under "Key positions / Angles" + citation |
 
+Accept EVERYTHING: accept everything (commit all file changes + accept every proposed item in every block below); exclude with accept everything except <IDs> (e.g. "accept everything except S1, F4")
 File changes: accept-all | reject N (e.g. "reject 3,4") | abort
-Topic decisions: accept N (creates now) | defer N (logs as candidate) | (default: defer all)
-Firm topic updates: applied on commit | reject N (skip — ledgers the pair) | (default: apply all)
-Semantic topic updates: accept N (applies append-only update) | reject N (skip — ledgers the pair) | (default: reject all)
-Speculative updates: accept N (applies append-only update) | reject N (skip) | (default: reject all)
+Topic decisions: accept TN (creates now) | defer TN (logs as candidate) | (default: defer all)
+Firm topic updates: applied on commit | reject FN (skip — ledgers the pair) | (default: apply all)
+Semantic topic updates: accept SEMN (applies append-only update) | reject SEMN (skip — ledgers the pair) | (default: reject all)
+Speculative updates: accept SN (applies append-only update) | reject SN (skip) | (default: reject all)
 ```
 
 - `accept-all`: all file changes commit immediately; then the agent presents Stage 2 as an optional post-commit prompt.
 - `reject N`: the agent rolls back the listed numbered items only (deletes new files, reverts edits, removes log entries scoped to those changes). Other changes commit immediately. The `Wiki = Yes` row update may be downgraded to `Wiki = Partial` if the source page itself is not rejected but downstream pages were. If the source page remains committed, the agent presents Stage 2 as an optional post-commit prompt.
 - `abort`: the agent rolls back everything. Raw index `Wiki` stays `No`. The source page is not created.
-- Topic `accept N`: agent invokes the `sb-wiki-create-topic` skill mid-run with the proposed topic name; the skill removes the promoted `candidate-topic` entry from the log (the topic page is now the record).
-- Topic `defer N`: candidate-topic entry persists in log; the user may promote later by expressing intent (auto-fires the `sb-wiki-create-topic` skill).
-- Firm topic update — APPLIED ON COMMIT: any committing response (`accept-all`, or `reject N` of other rows) applies every GENUINE firm topic-update row per "Existing topic updates" §, minus rows the user explicitly `reject N`s; `abort` rolls back everything. No log entry — the page records its own content. (Answer-origin firm entries are excluded — they live in PROPOSED ANSWERS, default-reject.)
-- Firm topic update `reject N`: no change to the topic page; APPEND the (source, topic) pair to the rejected ledger in `{wiki_root}/pending-topic-updates.md` (no-renag — the backfill never re-proposes it). No log entry.
-- Semantic update `accept N` (default reject when omitted): agent applies the append-only update per "Existing topic updates" §; an explicit `reject N` appends the (source, topic) pair to the rejected ledger; an omission-default reject does NOT ledger. No log entry.
+- `accept everything` (optionally `accept everything except <IDs>`): a single committing response that ACCEPTS every proposed item across every block — commits all file changes (as `accept-all`), creates every PROPOSED TOPIC (as `accept TN`), and applies every firm/semantic/speculative TOPIC UPDATE and every PROPOSED ANSWER (as `accept FN`/`accept SEMN`/`accept SN`/`accept AN`). Any ID listed after `except` is REMOVED from the accept set and takes its block's normal default instead (topic → defer; firm → reject-and-ledger; semantic/speculative/answer → reject), ledgering exactly as the equivalent explicit per-row reject would. IDs are the tier-prefixed row IDs shown in the preview (`T`/`F`/`SEM`/`S`/`A`); bare numbers refer to file-change rows. Then present Stage 2 as with `accept-all`. This verb is an explicit opt-in that overrides the per-tier default-reject of the semantic/speculative/answer blocks; omitting it preserves every default. (Silent mode never reaches this checkpoint — its fixed defaults are unaffected.)
+- Topic `accept TN`: agent invokes the `sb-wiki-create-topic` skill mid-run with the proposed topic name; the skill removes the promoted `candidate-topic` entry from the log (the topic page is now the record).
+- Topic `defer TN`: candidate-topic entry persists in log; the user may promote later by expressing intent (auto-fires the `sb-wiki-create-topic` skill).
+- Firm topic update — APPLIED ON COMMIT: any committing response (`accept-all`, `accept everything`, or `reject FN` of other rows) applies every GENUINE firm topic-update row per "Existing topic updates" §, minus rows the user explicitly `reject FN`s; `abort` rolls back everything. No log entry — the page records its own content. (Answer-origin firm entries are excluded — they live in PROPOSED ANSWERS, default-reject.)
+- Firm topic update `reject FN`: no change to the topic page; APPEND the (source, topic) pair to the rejected ledger in `{wiki_root}/pending-topic-updates.md` (no-renag — the backfill never re-proposes it). No log entry.
+- Semantic update `accept SEMN` (default reject when omitted): agent applies the append-only update per "Existing topic updates" §; an explicit `reject SEMN` appends the (source, topic) pair to the rejected ledger; an omission-default reject does NOT ledger. No log entry.
 
 #### Stage 2 checkpoint format
 
@@ -1068,11 +1070,11 @@ The default (interactive) mode is the behavior specified throughout this section
 | Decision point | Default mode | Silent override |
 |----------------|--------------|-----------------|
 | Stage 1 file changes (step 10) | User chooses `accept-all` / `reject N` / `abort` | Auto `accept-all` — commit every staged file change. NEVER `reject`, NEVER `abort`. |
-| Proposed topics (step 10 PROPOSED TOPICS) | User picks `accept N` / `defer N` (default defer all) | `defer` ALL — every `candidate-topic` log entry persists; NEVER invoke `sb-wiki-create-topic` mid-run. |
-| Firm topic updates (step 10 `TOPIC UPDATES (firm …)` block — genuine firm-tier entries ONLY; answer-origin entries excluded, see PROPOSED ANSWERS row) | Genuine firm rows apply on Stage-1 commit; explicit `reject N` vetoes a row | **`accept` ALL — APPLY each via the step-4.5 append-only machinery** (append the `[^N]: [[<raw-filename>]]` footnote + the staged body bullet under the topic-shape-appropriate section; bump `last-touched`; append-only protection NEVER overwrites existing prose). Write ONE audit record per applied update into the summary `Flags` field. This was the v5 silent-mode change — interactive mode now applies firm on commit too. The firm tier is mechanical (wikilink/slug match, no semantic "feels relevant"), so unattended apply stays safe. |
-| Semantic topic updates (step 10 SEMANTIC TOPIC UPDATES) | User picks `accept N` / `reject N` (default reject all) | **QUEUE all** — append each to `{wiki_root}/pending-topic-updates.md` via the lock-guarded `wiki/scripts/sb-wiki-shared-append.py append-row` (dedupe-keyed by (source, topic) pair; per-file lock so parallel bulk workers never clobber a queued row; create the file with a minimal header if absent); ONE `Flags` line per queued row; NEVER apply unattended, NEVER drop. |
-| Speculative topic updates (step 10 SPECULATIVE TOPIC UPDATES) | User picks `accept N` / `reject N` (default reject all) | `reject` ALL. Write ONE audit record per rejected speculative update into `Flags`. NEVER apply unattended. |
-| Proposed answers (step 10 PROPOSED ANSWERS — both homes; INCLUDES answer-origin firm entries staged by Step 3·7c) | User picks `accept N` / `reject N` (default reject all) | `reject` ALL. Write ONE audit record per rejected proposed answer into `Flags`. NEVER apply unattended (no `questions.md` `answer:` accretion; no topic-home strike-and-fold). |
+| Proposed topics (step 10 PROPOSED TOPICS) | User picks `accept TN` / `defer TN` (default defer all) | `defer` ALL — every `candidate-topic` log entry persists; NEVER invoke `sb-wiki-create-topic` mid-run. |
+| Firm topic updates (step 10 `TOPIC UPDATES (firm …)` block — genuine firm-tier entries ONLY; answer-origin entries excluded, see PROPOSED ANSWERS row) | Genuine firm rows apply on Stage-1 commit; explicit `reject FN` vetoes a row | **`accept` ALL — APPLY each via the step-4.5 append-only machinery** (append the `[^N]: [[<raw-filename>]]` footnote + the staged body bullet under the topic-shape-appropriate section; bump `last-touched`; append-only protection NEVER overwrites existing prose). Write ONE audit record per applied update into the summary `Flags` field. This was the v5 silent-mode change — interactive mode now applies firm on commit too. The firm tier is mechanical (wikilink/slug match, no semantic "feels relevant"), so unattended apply stays safe. |
+| Semantic topic updates (step 10 SEMANTIC TOPIC UPDATES) | User picks `accept SEMN` / `reject SEMN` (default reject all) | **QUEUE all** — append each to `{wiki_root}/pending-topic-updates.md` via the lock-guarded `wiki/scripts/sb-wiki-shared-append.py append-row` (dedupe-keyed by (source, topic) pair; per-file lock so parallel bulk workers never clobber a queued row; create the file with a minimal header if absent); ONE `Flags` line per queued row; NEVER apply unattended, NEVER drop. |
+| Speculative topic updates (step 10 SPECULATIVE TOPIC UPDATES) | User picks `accept SN` / `reject SN` (default reject all) | `reject` ALL. Write ONE audit record per rejected speculative update into `Flags`. NEVER apply unattended. |
+| Proposed answers (step 10 PROPOSED ANSWERS — both homes; INCLUDES answer-origin firm entries staged by Step 3·7c) | User picks `accept AN` / `reject AN` (default reject all) | `reject` ALL. Write ONE audit record per rejected proposed answer into `Flags`. NEVER apply unattended (no `questions.md` `answer:` accretion; no topic-home strike-and-fold). |
 | Stage 2 reflection (step 11) | Optional post-commit prompt | SKIPPED entirely — never presented, never awaited. The source page user-half stays empty shells; the wiki sources index `My take` cell stays `pending` (set at step 8). |
 | Mid-flow HALT | A `<slug>` resolving to multiple raw files HALTS at step 1 for disambiguation | No HALT — see slug-resolution rule below. |
 

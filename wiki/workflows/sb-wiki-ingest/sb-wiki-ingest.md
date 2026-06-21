@@ -319,7 +319,7 @@ For each page in `existing-pages`:
 
 ### Step 4.5 — Stage existing topic-update proposals
 
-Process ALL THREE tiers built at step 3: `candidate-topic-updates` (firm), `candidate-topic-updates-speculative` (speculative), and `candidate-topic-updates-semantic` (semantic source-level, clause 7d). The staging logic is identical for all three — each produces staged proposals applied through the SAME apply-semantics (sub-step 3 below — the sole authority; never fork a second apply path). The tiers are surfaced in SEPARATE blocks at Stage 1 (`TOPIC UPDATES (firm — applied on commit; reject N to skip)` for firm, `SEMANTIC TOPIC UPDATES (source-level, default reject)` for semantic, `SPECULATIVE TOPIC UPDATES` for speculative).
+Process ALL THREE tiers built at step 3: `candidate-topic-updates` (firm), `candidate-topic-updates-speculative` (speculative), and `candidate-topic-updates-semantic` (semantic source-level, clause 7d). The staging logic is identical for all three — each produces staged proposals applied through the SAME apply-semantics (sub-step 3 below — the sole authority; never fork a second apply path). The tiers are surfaced in SEPARATE blocks at Stage 1 (`TOPIC UPDATES (firm — applied on commit; reject FN to skip)` for firm, `SEMANTIC TOPIC UPDATES (source-level, default reject)` for semantic, `SPECULATIVE TOPIC UPDATES` for speculative).
 
 For each entry in ANY tier:
 
@@ -335,9 +335,9 @@ For each entry in ANY tier:
    - Frontmatter: `last-touched: <today>`.
    - **Apply-semantics (sole authority — Step 10 accept rows point here).** On user accept, apply the three staged changes above as APPEND-ONLY edits: append the footnote `[^N]: [[<raw-filename>]]` to `Sources`; append the staged body bullet under its section with an inline `[^N]` marker; bump `last-touched: <today>`. Append-only protection per `../shared/stub-policy.md` "Append-Only Protection" applies — NEVER overwrite existing prose. No log entry — the topic page records its own updated content.
 4. Surface the staged proposal at Stage 1 (step 10) in the block matching its tier, each with its posture:
-   - **Firm** (`candidate-topic-updates`) → `TOPIC UPDATES (firm — applied on commit; reject N to skip)` — GENUINE firm rows apply on the Stage-1 commit; the user vetoes a row with explicit `reject N`.
-   - **Semantic** (`candidate-topic-updates-semantic`) → `SEMANTIC TOPIC UPDATES (source-level, default reject)` — default reject; the user must explicitly `accept N` to apply.
-   - **Speculative** (`candidate-topic-updates-speculative`) → `SPECULATIVE TOPIC UPDATES` — default reject; explicit `accept N` to apply.
+   - **Firm** (`candidate-topic-updates`) → `TOPIC UPDATES (firm — applied on commit; reject FN to skip)` — GENUINE firm rows apply on the Stage-1 commit; the user vetoes a row with explicit `reject FN`.
+   - **Semantic** (`candidate-topic-updates-semantic`) → `SEMANTIC TOPIC UPDATES (source-level, default reject)` — default reject; the user must explicitly `accept SEMN` (or `accept everything`) to apply.
+   - **Speculative** (`candidate-topic-updates-speculative`) → `SPECULATIVE TOPIC UPDATES` — default reject; explicit `accept SN` (or `accept everything`) to apply.
    **EXCEPTION — answer-origin firm entries:** a firm `candidate-topic-updates` entry staged by Step 3·7c (an answer to a topic's `Open questions` line) is surfaced in the `PROPOSED ANSWERS` block at Step 10 instead — SUPPRESS it from the firm `TOPIC UPDATES` block so the same resolution is never presented twice, and it keeps the PROPOSED ANSWERS default-reject posture (NEVER applies on commit). Its staged change additionally includes the strike of the matched `Open questions` line, and accepting its `PROPOSED ANSWERS` row applies this same staged update.
 
 This step prepares but does NOT write. Apply happens at step 10 commit, only for accepted rows.
@@ -434,38 +434,39 @@ INGEST PREVIEW — <source slug>   [purpose: in-focus | peripheral | ⚠ off-pur
 | 7 | wiki/sources/<origin>/<origin>.md | row added | new entry |
 
 PROPOSED TOPICS:
-| # | name | trigger | sources |
-|---|------|---------|---------|
-| 1 | <topic-slug> | <contradiction (same-scope-opposing) | evolution | cross-application> | [[<src1>]], [[<src2>]] |
+| ID | name | trigger | sources |
+|----|------|---------|---------|
+| T1 | <topic-slug> | <contradiction (same-scope-opposing) | evolution | cross-application> | [[<src1>]], [[<src2>]] |
 
-TOPIC UPDATES (firm — applied on commit; reject N to skip):
-| # | topic | match | proposed change |
-|---|-------|-------|-----------------|
-| 1 | [[<topic-slug>.md]] | <key-concept overlap | related overlap | slug match> ([[<matched-page>]]) | + bullet under "<section-name>" + citation |
+TOPIC UPDATES (firm — applied on commit; reject FN to skip):
+| ID | topic | match | proposed change |
+|----|-------|-------|-----------------|
+| F1 | [[<topic-slug>.md]] | <key-concept overlap | related overlap | slug match> ([[<matched-page>]]) | + bullet under "<section-name>" + citation |
 
 SEMANTIC TOPIC UPDATES (source-level, default reject):
-| # | topic | signal | proposed change |
-|---|-------|--------|-----------------|
-| 1 | [[<topic-slug>.md]] | semantic: <score> | + bullet under "<section-name>" + citation |
+| ID | topic | signal | proposed change |
+|----|-------|--------|-----------------|
+| SEM1 | [[<topic-slug>.md]] | semantic: <score> | + bullet under "<section-name>" + citation |
 
 SPECULATIVE TOPIC UPDATES (low-confidence, default reject):
-| # | topic | overlap | proposed change |
-|---|-------|---------|-----------------|
-| 1 | [[<topic-slug>.md]] | tokens: <token1>, <token2> ([[<new-stub-slug>.md]]) | + bullet under "<section-name>" + citation |
-| 2 | [[<topic-slug>.md]] | semantic: <score> ([[<new-stub-slug>.md]]) | + bullet under "<section-name>" + citation |
+| ID | topic | overlap | proposed change |
+|----|-------|---------|-----------------|
+| S1 | [[<topic-slug>.md]] | tokens: <token1>, <token2> ([[<new-stub-slug>.md]]) | + bullet under "<section-name>" + citation |
+| S2 | [[<topic-slug>.md]] | semantic: <score> ([[<new-stub-slug>.md]]) | + bullet under "<section-name>" + citation |
 
 PROPOSED ANSWERS (default reject):
-| # | question | home | overlap | proposed resolution |
-|---|----------|------|---------|---------------------|
-| 1 | <question text> | [[<topic-slug>.md]] | tokens: <token1>, <token2> — or: semantic (top-5) | strike "Open questions" line + fold answer into "<section-name>" + citation |
-| 2 | <question text> | questions.md | tokens: <token1>, <token2> — or: semantic (top-5) | + answer: bullet on the entry + citation |
+| ID | question | home | overlap | proposed resolution |
+|----|----------|------|---------|---------------------|
+| A1 | <question text> | [[<topic-slug>.md]] | tokens: <token1>, <token2> — or: semantic (top-5) | strike "Open questions" line + fold answer into "<section-name>" + citation |
+| A2 | <question text> | questions.md | tokens: <token1>, <token2> — or: semantic (top-5) | + answer: bullet on the entry + citation |
 
+Accept EVERYTHING: accept everything (commit all file changes + accept every proposed item in every block above); exclude with accept everything except <IDs> (e.g. "accept everything except S1, F4")
 File changes: accept-all | reject N (e.g. "reject 3,4") | abort
-Topic decisions: accept N (creates now) | defer N (logs as candidate) | (default: defer all)
-Firm topic updates: applied on commit | reject N (skip — ledgers the pair) | (default: apply all)
-Semantic topic updates: accept N (applies append-only update) | reject N (skip — ledgers the pair) | (default: reject all)
-Speculative updates: accept N (applies append-only update) | reject N (skip) | (default: reject all)
-Proposed answers: accept N (applies answer) | reject N (skip) | (default: reject all)
+Topic decisions: accept TN (creates now) | defer TN (logs as candidate) | (default: defer all)
+Firm topic updates: applied on commit | reject FN (skip — ledgers the pair) | (default: apply all)
+Semantic topic updates: accept SEMN (applies append-only update) | reject SEMN (skip — ledgers the pair) | (default: reject all)
+Speculative updates: accept SN (applies append-only update) | reject SN (skip) | (default: reject all)
+Proposed answers: accept AN (applies answer) | reject AN (skip) | (default: reject all)
 ```
 
 Omit the PROPOSED TOPICS block entirely if no triggers fired in step 6. Omit the firm `TOPIC UPDATES` block entirely if `candidate-topic-updates` has no non-answer-origin entries after step 3 (answer-origin entries surface in PROPOSED ANSWERS, not here). Omit the SEMANTIC TOPIC UPDATES block entirely if `candidate-topic-updates-semantic` is empty after step 3 (arm OFF, or no fire confirmed). Omit the SPECULATIVE TOPIC UPDATES block entirely if `candidate-topic-updates-speculative` is empty after step 3. Omit the PROPOSED ANSWERS block entirely if `candidate-answers` is empty after step 3·7c (questions layer OFF, or no question matched).
@@ -477,19 +478,20 @@ User response handling:
 | `accept-all` | Commit all file changes immediately. Then present step 11 as an optional post-commit prompt. |
 | `reject N` (or comma list, e.g. `reject 3,4`) | Roll back ONLY the listed numbered items: delete new files for those rows, revert edits, remove log entries scoped to those changes. Other changes commit immediately. If a downstream page (e.g., row 3) is rejected but the source page (row 1) is not, downgrade the raw index update from `Wiki = Yes` to `Wiki = Partial` in row 6. If the source page remains committed, present step 11 as an optional post-commit prompt. |
 | `abort` | Roll back EVERYTHING. Raw index `Wiki` stays `No`. Source page is not created. Log entries removed. Skip step 11. |
-| Topic `accept N` (per topic row) | Invoke the `sb-wiki-create-topic` skill mid-run with the proposed topic name. The skill writes the topic page, updates `wiki/topics/topics.md`, cross-links from triggering concept/entity pages, and REMOVES the promoted `candidate-topic` log entry (the topic page is now the record — no `topic-created` entry). |
-| Topic `defer N` (per topic row, default if user omits a topic decision) | The `candidate-topic` log entry persists. The user may promote later by expressing intent — Claude Code auto-fires the `sb-wiki-create-topic` skill. |
-| Firm topic update — APPLIED ON COMMIT (genuine firm rows in the `TOPIC UPDATES (firm …)` block) | Any committing response (`accept-all`, or `reject N` of other rows) APPLIES every genuine firm topic-update row via the staged Step 4.5 update (Step 4.5 owns the apply-semantics — sole authority), minus rows the user explicitly `reject N`s. `abort` rolls back everything (no firm update applies). No log entry — the topic page records its own updated content. (Answer-origin firm entries are excluded — they live in PROPOSED ANSWERS, default-reject.) |
-| Firm topic update `reject N` (per firm topic-update row) | No change to the topic page. APPEND the (source, topic) pair to the rejected ledger in `{wiki_root}/pending-topic-updates.md` (no-renag — the backfill never re-proposes it; create the file with a minimal header if absent). No log entry. |
-| Semantic update `accept N` (per semantic topic-update row) | Apply the staged Step 4.5 update (same apply-semantics — sole authority; no log entry). |
-| Semantic update `reject N` (per semantic topic-update row, default if user omits) | No change to the topic page. APPEND the (source, topic) pair to the rejected ledger in `{wiki_root}/pending-topic-updates.md` (no-renag; create the file with a minimal header if absent). No log entry. An OMISSION-default reject (user never reviewed the row) does NOT ledger — only an EXPLICIT `reject N` ledgers. |
-| Speculative update `accept N` (per speculative topic-update row) | Apply the staged Step 4.5 update (same apply-semantics as firm; no log entry). ALSO append the new stub's wikilink to the topic's `related:` frontmatter (so future firm-tier detection picks up the connection mechanically). |
-| Speculative update `reject N` (per speculative topic-update row, default if user omits) | No change to the topic page. No log entry. The detection is not preserved — re-detected on future ingests of related sources if token overlap recurs. |
-| Proposed answer `accept N` — **topic-home** row (home = `[[<topic>.md]]`) | Apply the staged Step 4.5 update from Step 3·7c (Step 4.5 owns the apply-semantics — sole authority), PLUS strike the matched `Open questions` line in place (`~~…~~`) — never delete it. NEVER auto-authors a page. No log entry — the topic page records its own content. |
-| Proposed answer `accept N` — **questions.md** row (home = `questions.md`) | Accrete the 1-sentence claim onto that `questions.md` entry's `answer:` field per the answer-write procedure in `../shared/question-entry-shapes.md` (`answer:` field rule + State rule), citing `[[<raw-filename>]]`. |
-| Proposed answer `reject N` (per row, default if user omits) | No change to the topic page or `questions.md` entry; for a topic-home row, discard the staged step-4.5 topic-update too. No log entry. The detection is not preserved — re-detected on future ingests (or by the lint sweep) if overlap recurs. |
+| `accept everything` (optionally `accept everything except <IDs>`) | A single committing response that ACCEPTS every proposed item across every block: commit all file changes (as `accept-all`), create every PROPOSED TOPIC (as `accept TN`), and apply every firm/semantic/speculative TOPIC UPDATE and every PROPOSED ANSWER (as `accept FN`/`accept SEMN`/`accept SN`/`accept AN`). Each ID after `except` is REMOVED from the accept set and instead takes its block's normal default (topic → defer; firm → reject-and-ledger; semantic/speculative/answer → reject), ledgering exactly as the equivalent explicit per-row reject would. IDs are the tier-prefixed row IDs shown in the preview (`T`/`F`/`SEM`/`S`/`A`); bare numbers refer to file-change rows (use `reject N` separately to drop a file row). Then present step 11 as an optional post-commit prompt. This verb is an explicit opt-in that overrides the per-tier default-reject of the semantic/speculative/answer blocks; omitting it preserves every block default. |
+| Topic `accept TN` (per topic row) | Invoke the `sb-wiki-create-topic` skill mid-run with the proposed topic name. The skill writes the topic page, updates `wiki/topics/topics.md`, cross-links from triggering concept/entity pages, and REMOVES the promoted `candidate-topic` log entry (the topic page is now the record — no `topic-created` entry). |
+| Topic `defer TN` (per topic row, default if user omits a topic decision) | The `candidate-topic` log entry persists. The user may promote later by expressing intent — Claude Code auto-fires the `sb-wiki-create-topic` skill. |
+| Firm topic update — APPLIED ON COMMIT (genuine firm rows in the `TOPIC UPDATES (firm …)` block) | Any committing response (`accept-all`, `accept everything`, or `reject FN` of other rows) APPLIES every genuine firm topic-update row via the staged Step 4.5 update (Step 4.5 owns the apply-semantics — sole authority), minus rows the user explicitly `reject FN`s. `abort` rolls back everything (no firm update applies). No log entry — the topic page records its own updated content. (Answer-origin firm entries are excluded — they live in PROPOSED ANSWERS, default-reject.) |
+| Firm topic update `reject FN` (per firm topic-update row) | No change to the topic page. APPEND the (source, topic) pair to the rejected ledger in `{wiki_root}/pending-topic-updates.md` (no-renag — the backfill never re-proposes it; create the file with a minimal header if absent). No log entry. |
+| Semantic update `accept SEMN` (per semantic topic-update row) | Apply the staged Step 4.5 update (same apply-semantics — sole authority; no log entry). |
+| Semantic update `reject SEMN` (per semantic topic-update row, default if user omits) | No change to the topic page. APPEND the (source, topic) pair to the rejected ledger in `{wiki_root}/pending-topic-updates.md` (no-renag; create the file with a minimal header if absent). No log entry. An OMISSION-default reject (user never reviewed the row) does NOT ledger — only an EXPLICIT `reject SEMN` ledgers. |
+| Speculative update `accept SN` (per speculative topic-update row) | Apply the staged Step 4.5 update (same apply-semantics as firm; no log entry). ALSO append the new stub's wikilink to the topic's `related:` frontmatter (so future firm-tier detection picks up the connection mechanically). |
+| Speculative update `reject SN` (per speculative topic-update row, default if user omits) | No change to the topic page. No log entry. The detection is not preserved — re-detected on future ingests of related sources if token overlap recurs. |
+| Proposed answer `accept AN` — **topic-home** row (home = `[[<topic>.md]]`) | Apply the staged Step 4.5 update from Step 3·7c (Step 4.5 owns the apply-semantics — sole authority), PLUS strike the matched `Open questions` line in place (`~~…~~`) — never delete it. NEVER auto-authors a page. No log entry — the topic page records its own content. |
+| Proposed answer `accept AN` — **questions.md** row (home = `questions.md`) | Accrete the 1-sentence claim onto that `questions.md` entry's `answer:` field per the answer-write procedure in `../shared/question-entry-shapes.md` (`answer:` field rule + State rule), citing `[[<raw-filename>]]`. |
+| Proposed answer `reject AN` (per row, default if user omits) | No change to the topic page or `questions.md` entry; for a topic-home row, discard the staged step-4.5 topic-update too. No log entry. The detection is not preserved — re-detected on future ingests (or by the lint sweep) if overlap recurs. |
 
-Default behavior when the user omits per-topic decisions: defer all topics, **apply firm updates** (genuine firm rows apply on commit; an explicit `reject N` ledgers that pair, omission does not), reject semantic, reject speculative, reject all proposed answers. Answer-origin firm entries (in PROPOSED ANSWERS) reject by omission like the other answer rows.
+Default behavior when the user omits per-topic decisions: defer all topics, **apply firm updates** (genuine firm rows apply on commit; an explicit `reject FN` ledgers that pair, omission does not), reject semantic, reject speculative, reject all proposed answers. Answer-origin firm entries (in PROPOSED ANSWERS) reject by omission like the other answer rows. The `accept everything` verb overrides these defaults for every block at once (minus any `except` IDs).
 
 **Post-commit citation-integrity gate (MANDATORY — runs after ANY committing response, including silent mode; skipped only on `abort`).** Immediately after the commit lands, run the gate over EVERY page the commit wrote or edited (source page, step-4 updated pages, step-5 stubs, accepted topic pages):
 

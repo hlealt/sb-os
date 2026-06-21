@@ -89,7 +89,7 @@ Five operations cover the wiki lifecycle.
 
 `/sb-wiki-ingest <slug>` runs an 11-step flow. Steps 1-9 run without user input. The source page's `Substance` section obeys a **reconstruction principle** — a reader of `Substance`, without the source, can reconstruct every load-bearing claim, decision rule, quantified fact, distinction, and author caveat the source makes (the signal-class list is illustrative, not a closed checklist; examples tuned for dense scientific papers). Operational rule: `/sb-wiki-ingest` Step 2 "Substance coverage discipline". Two checkpoints gate user interaction:
 
-- **Stage 1 checkpoint** — agent presents an INGEST PREVIEW table of every planned file change plus a PROPOSED TOPICS block (if candidate-topic triggers fired). User responds: `accept-all` | `reject N` | `abort`; per topic: `accept N` (creates now) | `defer N` (logs as candidate). No file writes commit until the user responds.
+- **Stage 1 checkpoint** — agent presents an INGEST PREVIEW table of every planned file change plus a PROPOSED TOPICS block (if candidate-topic triggers fired). User responds: `accept-all` | `reject N` | `abort` | `accept everything` (accept every block at once, optionally `… except <IDs>`); per topic: `accept TN` (creates now) | `defer TN` (logs as candidate). No file writes commit until the user responds.
 - **Stage 2 checkpoint** (optional) — agent prompts the user for `My take`, `Open questions`, and `Dive deeper` on the source page. User can fill or skip each section; skipped sections stay empty on the source page. The agent re-syncs the wiki sources index `My take` cell per the three-state rule (`pending` / `—` / reflected preview) — see Index Rules below. The cell is NEVER blank.
 
 ---
