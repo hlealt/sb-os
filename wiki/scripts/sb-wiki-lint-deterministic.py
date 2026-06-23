@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Deterministic support pass for sb-wiki-lint.
 
-This script handles only mechanical wiki maintenance. It never writes
-judgment-bearing index cells such as Description, Scope, or What it says.
-Those gaps are emitted as a JSON queue for the LLM lint workflow.
+This script handles only mechanical wiki maintenance. It never writes the
+judgment-bearing index `Description` cell (the unified sources/topics/concepts/
+entities cell, U11). Those gaps are emitted as a JSON queue for the LLM lint
+workflow.
 
 Incremental lint state spine
 ----------------------------
@@ -63,7 +64,11 @@ repair_raw_row_width = _RAW_WRITER.repair_raw_row_width
 RAW_HEADER = "| File | Title | Date | Wiki |\n|------|-------|------|------|\n"
 CONCEPT_HEADER = "| File | Description |\n|------|-------------|\n"
 ENTITY_HEADER = "| File | Description |\n|------|-------------|\n"
-TOPIC_HEADER = "| File | Scope |\n|------|-------|\n"
+# U11: topics leaf index unified to `| File | Description |` (was `| File | Scope |`).
+TOPIC_HEADER = "| File | Description |\n|------|-------------|\n"
+# The unified 2-col wiki sources index header (U11 — `My take` column dropped,
+# `What it says` renamed to `Description`).
+SOURCES_HEADER = "| File | Description |\n|------|-------------|\n"
 LEAF_INDEX_FRONTMATTER = "---\ntype: index\n---\n\n"
 STATE_SCHEMA_VERSION = "1.0"
 
@@ -308,15 +313,23 @@ def make_row(cells: list[str]) -> str:
     return "| " + " | ".join(cells) + " |"
 
 
+def _filename_date(name: str) -> str:
+    match = re.match(r"^(\d{4})[-_](\d{2})[-_](\d{2})", name)
+    return "-".join(match.groups()) if match else ""
+
+
 def derive_raw_title_and_date(path: Path) -> tuple[str, str]:
+    # A .pdf raw is binary — never read its bytes as text. Derive deterministically
+    # from the filename (same convention as the ingest-all manifest's describe_pdf):
+    # title = stem, date = the leading YYYY-MM-DD prefix when present.
+    if path.suffix == ".pdf":
+        return path.stem, _filename_date(path.name)
     text = read_text(path)
     fm = frontmatter(text)
     title = fm.get("title", "") or first_h1(text)
     date = fm.get("date", "") or fm.get("created", "")
     if not date:
-        match = re.match(r"^(\d{4})[-_](\d{2})[-_](\d{2})", path.name)
-        if match:
-            date = "-".join(match.groups())
+        date = _filename_date(path.name)
     return title, date
 
 
@@ -355,27 +368,58 @@ def is_regenerable_pdf_twin(raw_file: Path) -> bool:
 
 
 def sync_raw_indexes(wiki_root: Path, report: Report, apply_changes: bool) -> None:
+    """Add a missing raw-index row for every raw SOURCE file (PDF-aware) while
+    keeping ONE row per logical source (duplicate-safe — U1b step 2).
+
+    PDF-aware: the row-adding loop globs ``*.md`` AND ``*.pdf`` so a bare PDF raw
+    with no row gets one. Duplicate-safe — a source contributes exactly one row:
+
+      - A regenerable PDF twin ``.md`` (same-stem ``.pdf`` exists + twin marker)
+        is keyed on the ``.pdf`` (D1), so it gets NO own row (Rule 5).
+      - A bare ``.pdf`` ALREADY REPRESENTED by an existing source page — a legacy
+        dated-clip-first source (caiso/engie) whose clip ``.md`` is the index row
+        and whose source page names the PDF via ``raw:`` / ``Original PDF:`` — gets
+        NO ``.pdf`` row. Detected via the SINGLE union authority
+        ``ingested_raw_filenames`` (its ``Original PDF:`` arm names exactly these
+        bare PDFs). This is the gate that stops re-creating the 5A duplicate row:
+        without it, globbing ``*.pdf`` would add a second row for caiso/engie.
+      - Everything else (a forward-twin PDF whose ``.md`` twin is excluded, an
+        ordinary ``.md`` raw, a genuinely-uncaptured bare PDF) gets its row.
+    """
     raw_root = wiki_root / "raw"
     if not raw_root.exists():
         return
+    # The union authority: raw filenames already represented by a source page
+    # (raw: / Original PDF: backlinks across ALL origins). A bare PDF in this set
+    # is covered by an existing (clip) row — adding a .pdf row would duplicate it.
+    backlink_targets, _ = ingested_raw_filenames(wiki_root)
     for origin_dir in sorted(p for p in raw_root.iterdir() if p.is_dir() and p.name != "assets"):
         index_path = origin_dir / f"{origin_dir.name}.md"
         index_text = read_text(index_path) if index_path.exists() else RAW_HEADER
         if not index_path.exists():
             write_text(index_path, index_text, report, apply_changes)
-        links = table_links(index_text)
+        # Existing-row guard must be EXTENSION-AGNOSTIC: this loop now adds .pdf
+        # rows too, and table_links() captures only `.md` wikilinks — so a `.pdf`
+        # row it already wrote would be re-appended every run (non-idempotent).
+        # Match any [[…]] File-cell target by basename instead.
+        links = {Path(t).name for t in re.findall(r"\[\[([^\]|#]+?)\]\]", index_text)}
         lines = index_text.rstrip("\n").splitlines() if index_text.strip() else RAW_HEADER.rstrip("\n").splitlines()
         # Size appended rows to the ACTUAL header of THIS index (Rule 3), via the
         # consolidated writer — never a hard-coded 4-col under a legacy 3-col
         # header. A headerless/garbled index falls back to the canonical 4-col.
         columns = raw_index_header_columns(lines) or ["File", "Title", "Date", "Wiki"]
         changed = False
-        for raw_file in sorted(origin_dir.glob("*.md")):
+        for raw_file in sorted(p for p in origin_dir.glob("*.*") if p.suffix in (".md", ".pdf")):
             if raw_file.name == index_path.name or raw_file.name in NON_SOURCE_FILES or raw_file.name in links:
                 continue
             # Rule 5 — a regenerable PDF twin .md is keyed on the .pdf, not its
             # own row; exclude it from the row-adding loop.
             if is_regenerable_pdf_twin(raw_file):
+                continue
+            # Duplicate-safe — a bare PDF already represented by a source page
+            # (legacy dated-clip origins: the clip .md is the row, the page's
+            # Original PDF:/raw: names this PDF) gets NO separate .pdf row.
+            if raw_file.suffix == ".pdf" and raw_file.name in backlink_targets:
                 continue
             title, date = derive_raw_title_and_date(raw_file)
             if title and date:
@@ -394,15 +438,25 @@ def sync_raw_indexes(wiki_root: Path, report: Report, apply_changes: bool) -> No
             write_text(index_path, "\n".join(lines) + "\n", report, apply_changes)
 
 
-def ingested_raw_filenames(wiki_root: Path) -> tuple[set[str], dict[str, set[str]]]:
-    """Inventory which raws have a 1:1 source page, by two union signals.
+ORIGINAL_PDF_RE = re.compile(r"^Original PDF:\s*\[\[([^\]|#]+?)\]\]", flags=re.M)
 
-    A raw is "ingested" when EITHER signal fires — both keyed on the raw
-    FILENAME / stem so .md and .pdf raws are handled uniformly:
+
+def ingested_raw_filenames(wiki_root: Path) -> tuple[set[str], dict[str, set[str]]]:
+    """Inventory which raws have a 1:1 source page, by the THREE union signals.
+
+    This is the SINGLE authority for "does a raw have a 1:1 source page?" (U1b).
+    A raw is "ingested" when ANY signal fires — all keyed on the raw FILENAME /
+    stem so .md and .pdf raws are handled uniformly:
 
       - ``raw:`` backlink — the source page's ``raw:`` frontmatter wikilinks
         the raw filename (the canonical 1:1 link per the wiki schema). Returned
         as a set of raw filenames across ALL source pages, any origin.
+      - ``Original PDF:`` body backlink — a PDF-sourced page ingested via a dated
+        ``.md`` clip (so its source-page stem mirrors the CLIP, not the bare PDF)
+        carries ``Original PDF: [[<bare-pdf>.pdf]]`` in its body. This arm is what
+        matches the legacy dated-clip-first sources (caiso/engie) whose bare PDF
+        the ``raw:``/same-stem arms miss. Folded into ``backlink_targets`` because
+        an ``Original PDF:`` target is a raw filename exactly like a ``raw:`` one.
       - filename mirror — a source page ``wiki/sources/{origin}/{stem}.md``
         whose stem equals the raw's stem (a .md raw mirrors 1:1; a .pdf raw's
         source page is the title-slug ``.md``, same stem). Returned per origin.
@@ -422,8 +476,13 @@ def ingested_raw_filenames(wiki_root: Path) -> tuple[set[str], dict[str, set[str
             if page.name == index_name or page.name in NON_SOURCE_FILES:
                 continue
             stems.add(page.stem)
-            raw_val = frontmatter(read_text(page)).get("raw", "")
+            text = read_text(page)
+            raw_val = frontmatter(text).get("raw", "")
             for target in re.findall(r"\[\[([^\]|#]+?)\]\]", raw_val):
+                backlink_targets.add(Path(target).name)
+            # Original PDF: body backlink — the third union arm (the bare PDF of
+            # a dated-clip-first source). Same key space as raw: (raw filenames).
+            for target in ORIGINAL_PDF_RE.findall(text):
                 backlink_targets.add(Path(target).name)
         mirror_stems_by_origin[origin_dir.name] = stems
     return backlink_targets, mirror_stems_by_origin
@@ -516,11 +575,16 @@ def heal_raw_wiki_cells(wiki_root: Path, report: Report, apply_changes: bool) ->
 
 
 def sync_wiki_leaf_headers_and_queue(wiki_root: Path, report: Report, apply_changes: bool) -> None:
+    # U11: every leaf-index family is unified to `| File | Description |`. The
+    # topics index, formerly `| File | Scope |`, is migrated here (header +
+    # separator renamed; row TEXT preserved verbatim — the Scope text becomes
+    # the Description text, only the column label changes, so no data moves).
     specs = [
         ("concepts", "concepts.md", CONCEPT_HEADER, "Description"),
         ("entities", "entities.md", ENTITY_HEADER, "Description"),
-        ("topics", "topics.md", TOPIC_HEADER, "Scope"),
+        ("topics", "topics.md", TOPIC_HEADER, "Description"),
     ]
+    topics_migrated = 0
     for folder, index_name, header, judgment_cell in specs:
         leaf_dir = wiki_root / "wiki" / folder
         if not leaf_dir.exists():
@@ -531,6 +595,17 @@ def sync_wiki_leaf_headers_and_queue(wiki_root: Path, report: Report, apply_chan
             index_text = header
         else:
             index_text = read_text(index_path)
+            # Topics header migration (U11): rename a legacy `| File | Scope |`
+            # header (and its separator) to `| File | Description |`. The data
+            # rows are unchanged — Scope and Description are both the 2nd cell,
+            # so no cell content moves; only the header label is rewritten.
+            # Idempotent: a header already reading `Description` is left as-is.
+            if folder == "topics":
+                migrated_text, did_migrate = migrate_scope_header_to_description(index_text)
+                if did_migrate:
+                    write_text(index_path, migrated_text, report, apply_changes)
+                    index_text = migrated_text
+                    topics_migrated += 1
         links = table_links(index_text)
         for page in sorted(leaf_dir.glob("*.md")):
             if page.name == index_name or page.name in links or page.name in NON_SOURCE_FILES:
@@ -543,6 +618,39 @@ def sync_wiki_leaf_headers_and_queue(wiki_root: Path, report: Report, apply_chan
                     "reason": f"wiki leaf row missing; {judgment_cell} requires LLM judgment",
                 }
             )
+    if topics_migrated:
+        report.detected["topics_index_migrated_to_description"] = topics_migrated
+
+
+def migrate_scope_header_to_description(text: str) -> tuple[str, bool]:
+    """Rename a legacy topics-index `| File | Scope |` header to the unified
+    `| File | Description |` (U11). Returns ``(new_text, changed)``.
+
+    Only the header row's `Scope` label (2nd cell) and the matching separator
+    are rewritten; every data row is preserved byte-for-byte (the Scope text is
+    already in the Description position — column 2 — so nothing moves). A header
+    already in the `Description` form, or a bespoke layout with neither label,
+    is left untouched (changed=False) — idempotent and bespoke-safe.
+    """
+    lines = text.splitlines(keepends=True)
+    changed = False
+    for i, line in enumerate(lines):
+        stripped = line.rstrip("\n").rstrip("\r")
+        if not stripped.lstrip().startswith("|") or re.match(r"^\s*\|\s*-+", stripped):
+            continue
+        cells = split_row_cells(stripped)
+        if len(cells) == 2 and cells[0].lower() == "file" and cells[1].lower() == "scope":
+            eol = line[len(stripped):]
+            lines[i] = "| File | Description |" + eol
+            # Rewrite the immediately-following separator row to the 2-col width.
+            if i + 1 < len(lines):
+                sep = lines[i + 1].rstrip("\n").rstrip("\r")
+                if re.match(r"^\s*\|\s*-+", sep):
+                    sep_eol = lines[i + 1][len(sep):]
+                    lines[i + 1] = "|------|-------------|" + sep_eol
+            changed = True
+            break  # only the FIRST header row is the index header
+    return ("".join(lines), changed)
 
 
 NON_PAGE_TYPES = {"purpose", "questions", "questions-index", "source-queue"}
@@ -656,20 +764,6 @@ def flatten_wikilinks(text: str) -> str:
     )
 
 
-def preview(text: str) -> str:
-    """One-line, table-safe preview (<=280 chars before pipe escaping).
-
-    Wikilinks are flattened to display text BEFORE truncation (a cut
-    mid-wikilink leaks a raw `|` that splits the table row), then any
-    remaining literal pipes are escaped. Normalize-then-escape keeps the
-    result idempotent across re-sync passes.
-    """
-    one_line = re.sub(r"\s+", " ", flatten_wikilinks(text)).strip()
-    if len(one_line) > 280:
-        one_line = one_line[:277].rstrip() + "..."
-    return one_line.replace("\\|", "|").replace("|", "\\|")
-
-
 def split_row_cells(line: str) -> list[str]:
     """Split a Markdown table row on UNESCAPED pipes only (`\\|` stays in-cell)."""
     inner = line.strip()
@@ -680,76 +774,134 @@ def split_row_cells(line: str) -> list[str]:
     return [cell.strip() for cell in re.split(r"(?<!\\)\|", inner)]
 
 
-def sync_source_my_take_and_queue(wiki_root: Path, report: Report, apply_changes: bool) -> None:
+def migrate_sources_index_to_description(wiki_root: Path, report: Report, apply_changes: bool) -> None:
+    """Unify every wiki sources leaf index to `| File | Description |` (U11).
+
+    Replaces the retired `sync_source_my_take_and_queue` (which maintained the
+    dropped `My take` column + its three-state / 7-day-staleness machinery).
+
+    Per-index behavior:
+      - Legacy 3-col `| File | What it says | My take |` → migrate to 2-col
+        `| File | Description |`: the header + separator are rewritten, each
+        data row's `What it says` text (cell 2) is PRESERVED verbatim as the
+        `Description`, and the `My take` cell (cell 3) is DROPPED. The
+        authored take is NOT lost — it lives canonically in the source-page
+        body `## My take` section, untouched by this migration.
+      - Already 2-col `| File | Description |` → left byte-stable (idempotent;
+        a second lint pass is a no-op).
+      - A bespoke / user-customized layout (a header that is neither the
+        canonical legacy 3-col nor the unified 2-col, OR data rows whose width
+        does not match the header) → REPORTED for hand-review, NEVER
+        force-rewritten.
+      - A missing source row (a source page with no index row) → reported as
+        `judgment_needed` (Description requires LLM judgment).
+    """
     sources_root = wiki_root / "wiki" / "sources"
     if not sources_root.exists():
         return
+    migrated = 0
+    bespoke: list[str] = []
     for origin_dir in sorted(p for p in sources_root.iterdir() if p.is_dir()):
         index_path = origin_dir / f"{origin_dir.name}.md"
         if not index_path.exists():
             continue
-        lines = read_text(index_path).splitlines()
-        changed = False
-        modified_rows: list[int] = []
-        linked = table_links("\n".join(lines))
-        for source_page in sorted(origin_dir.glob("*.md")):
-            if source_page.name == index_path.name or source_page.name in linked:
-                continue
-            report.judgment_needed.append(
-                {
-                    "index": str(index_path),
-                    "file": str(source_page),
-                    "cell": "What it says",
-                    "reason": "wiki sources row missing; factual summary requires LLM judgment",
-                }
-            )
-        for idx, line in enumerate(lines):
-            if not line.strip().startswith("|") or re.match(r"^\s*\|\s*-+", line):
+        text = read_text(index_path)
+        lines = text.splitlines()
+
+        # Locate the index header row (first non-separator table row).
+        header_idx = None
+        header_cells: list[str] = []
+        for i, line in enumerate(lines):
+            if line.lstrip().startswith("|") and not re.match(r"^\s*\|\s*-+", line):
+                header_idx = i
+                header_cells = [c.lower() for c in split_row_cells(line)]
+                break
+
+        legacy_3col = header_cells == ["file", "what it says", "my take"]
+        unified_2col = header_cells == ["file", "description"]
+
+        if header_idx is None or not (legacy_3col or unified_2col):
+            # No recognized header (empty/no table) OR a bespoke header: report,
+            # never rewrite. An index file with no table at all is reported so a
+            # human can decide; a recognized-empty file is skipped silently.
+            if header_idx is not None:
+                bespoke.append(
+                    f"{index_path}: header {split_row_cells(lines[header_idx])!r} "
+                    f"is neither legacy 3-col nor unified 2-col — reported, not rewritten"
+                )
+            # Still report missing rows so coverage is not lost.
+            _report_missing_source_rows(origin_dir, index_path, text, report)
+            continue
+
+        if unified_2col:
+            # Already migrated: validate row widths for bespoke drift, report
+            # missing rows, leave the file byte-stable (idempotent).
+            for line in lines[header_idx + 2:]:
+                if not line.lstrip().startswith("|") or re.match(r"^\s*\|\s*-+", line):
+                    continue
+                cells = split_row_cells(line)
+                if len(cells) != 2:
+                    bespoke.append(
+                        f"{index_path}: 2-col index has a {len(cells)}-cell data row "
+                        f"{line.strip()!r} — reported, not rewritten"
+                    )
+            _report_missing_source_rows(origin_dir, index_path, text, report)
+            continue
+
+        # Legacy 3-col → migrate to 2-col. Rewrite header + separator; drop the
+        # My-take cell from every data row, preserving the What-it-says text.
+        new_lines = list(lines)
+        new_lines[header_idx] = "| File | Description |"
+        if header_idx + 1 < len(new_lines) and re.match(r"^\s*\|\s*-+", new_lines[header_idx + 1]):
+            new_lines[header_idx + 1] = "|------|-------------|"
+        had_bespoke_row = False
+        for j in range(header_idx + 2, len(new_lines)):
+            line = new_lines[j]
+            if not line.lstrip().startswith("|") or re.match(r"^\s*\|\s*-+", line):
                 continue
             cells = split_row_cells(line)
-            if not cells or cells[0] == "File":
-                continue
-            match = re.search(r"\[\[([^\]]+?\.md)\]\]", cells[0])
-            if not match:
+            if cells and cells[0] == "File":
                 continue
             if len(cells) != 3:
-                # Malformed data row (e.g. prior unescaped-pipe corruption):
-                # never process it — re-syncing would perpetuate the damage.
-                report.judgment_needed.append(
-                    {
-                        "index": str(index_path),
-                        "file": str(origin_dir / match.group(1)),
-                        "cell": "row-shape",
-                        "reason": f"row has {len(cells)} cells, expected 3 — malformed; repair manually",
-                    }
+                # A data row that is not 3-col under a 3-col header is malformed/
+                # bespoke — never reshape it. Report and abort this index's
+                # migration to avoid persisting a half-migrated table.
+                bespoke.append(
+                    f"{index_path}: legacy 3-col index has a {len(cells)}-cell data row "
+                    f"{line.strip()!r} — reported, index NOT migrated"
                 )
-                continue
-            source_path = origin_dir / match.group(1)
-            if not os.path.exists(_fspath(source_path)):
-                continue
-            body = section_body(read_text(source_path), "My take")
-            if body:
-                new_value = preview(body)
-            elif cells[2] in {DASH, "pending"}:
-                new_value = cells[2]
-            else:
-                new_value = "pending"
-            if new_value != cells[2]:
-                cells[2] = new_value
-                lines[idx] = make_row(cells)
-                modified_rows.append(idx)
-                changed = True
-        if changed:
-            # Post-rewrite shape guard: every row this pass modified must still
-            # split into exactly 3 cells. A violation is a script bug — refuse
-            # the write and surface it rather than persist a broken table.
-            broken = [lines[i] for i in modified_rows if len(split_row_cells(lines[i])) != 3]
-            if broken:
-                report.detected.setdefault("row_shape_errors", []).extend(
-                    f"{index_path}: {row}" for row in broken
-                )
-                continue
-            write_text(index_path, "\n".join(lines) + "\n", report, apply_changes)
+                had_bespoke_row = True
+                break
+            # Preserve File + What-it-says (Description); drop My-take (cell 3).
+            new_lines[j] = make_row([cells[0], cells[1]])
+        if had_bespoke_row:
+            _report_missing_source_rows(origin_dir, index_path, text, report)
+            continue
+        new_text = "\n".join(new_lines) + ("\n" if text.endswith("\n") else "")
+        if new_text != text:
+            write_text(index_path, new_text, report, apply_changes)
+            migrated += 1
+        _report_missing_source_rows(origin_dir, index_path, new_text, report)
+    report.detected["sources_index_migrated_to_description"] = migrated
+    if bespoke:
+        report.detected.setdefault("sources_index_bespoke_reported", []).extend(bespoke)
+
+
+def _report_missing_source_rows(origin_dir: Path, index_path: Path, index_text: str, report: Report) -> None:
+    """Report each source page under *origin_dir* that has no index row as
+    `judgment_needed` (the `Description` is LLM-derived from the source page)."""
+    linked = table_links(index_text)
+    for source_page in sorted(origin_dir.glob("*.md")):
+        if source_page.name == index_path.name or source_page.name in linked:
+            continue
+        report.judgment_needed.append(
+            {
+                "index": str(index_path),
+                "file": str(source_page),
+                "cell": "Description",
+                "reason": "wiki sources row missing; factual summary requires LLM judgment",
+            }
+        )
 
 
 SUBDIVISION_NAMING_POLICY: dict[str, tuple[str, bool]] = {
@@ -1709,6 +1861,420 @@ def detect_pdf_title_conformance(wiki_root: Path, report: Report) -> None:
     report.detected["title_disambiguation_needed"] = disambiguation
 
 
+# ---------------------------------------------------------------------------
+# U3 — missing-link detector (signal-1, report-only)
+# ---------------------------------------------------------------------------
+# Diagnosis Finding 2: concept->concept / concept->source links are created
+# ONLY at ingest, ONLY onto pages the ingested source NAMES. Nothing backfills
+# an obvious link from a later source that did not name the page. Lint repairs
+# only BROKEN links and flags only zero-inbound orphans — so a missing-but-
+# obvious link is invisible to lint today. Example: attention-mechanism.md says
+# "the transformer architecture" in unlinked prose but never links
+# [[transformer.md]], though transformer.md exists.
+#
+# SIGNAL-1 (high precision, the ONLY signal shipped here — signal-2 co-membership
+# is deferred per the spec): a wiki page's EXACT name appears as plain UNLINKED
+# text in ANOTHER page's prose AND a page by that name exists. Case- and
+# hyphen-insensitive ("Self Attention" / "self-attention" / "self attention" all
+# match self-attention.md).
+#
+# DETERMINISTIC + REPORT-ONLY. Pure text scan — no LLM judgment, no writes to any
+# page. It REPORTS into `detected.missing_links` and writes a standalone report
+# file the human-gated update-links lint sub-mode reads. It NEVER appends a
+# `[[link]]` — applying a link is the separate, owner-gated Stage-2 step (the
+# `update-links` sub-command in this script + the lint Step-9 handler). Detection
+# never auto-links (diagnosis §3.4 / decision #33 — detection SIGNALS the owner).
+
+# Report file the Stage-2 update-links sub-mode reads (under wiki_root).
+MISSING_LINK_REPORT = "missing-links.md"
+# Registry of owner-rejected proposals (under wiki_root). A `term -> target`
+# pair listed here is suppressed from every future detection run (spec guard:
+# "dedupe against links the owner already REJECTED"). Owner-maintained: the
+# update-links sub-mode appends a row on a `reject`; the detector reads it.
+MISSING_LINK_REJECTED = "missing-links-rejected.md"
+
+# A page-name token is a single kebab-or-space word run; we tokenize a page's
+# stem into its component words and match the same run, separator-insensitive,
+# inside another page's prose. Multi-word names (self-attention -> "self",
+# "attention") match "self attention" / "Self-Attention" / "self  attention".
+_NAME_WORD_RE = re.compile(r"[a-z0-9]+")
+
+
+def _name_words(stem: str) -> list[str]:
+    """Lowercase word tokens of a page stem (separators folded away).
+
+    `self-attention` -> ['self', 'attention']; `transformer` -> ['transformer'].
+    Diacritics folded so an accented prose mention still matches.
+    """
+    folded = unicodedata.normalize("NFKD", stem)
+    folded = "".join(ch for ch in folded if not unicodedata.combining(ch))
+    return _NAME_WORD_RE.findall(folded.casefold())
+
+
+def _prose_only(text: str) -> str:
+    """Body text with linkable structure stripped so a name inside an existing
+    link, a code span, a footnote def, a frontmatter block, or an embed is NOT
+    counted as an UNLINKED prose mention.
+
+    Removed: frontmatter; fenced/inline code; image embeds; existing `[[..]]`
+    wikilinks (the whole token, target + alias); markdown `[text](url)` links;
+    footnote DEFINITION lines (`[^N]: ...`, the Sources graph edges). What
+    remains is plain prose where an unlinked name is a real missing-link signal.
+    """
+    body = body_after_frontmatter(text)
+    body = re.sub(r"```.*?```", " ", body, flags=re.S)      # fenced code
+    body = re.sub(r"`[^`]*`", " ", body)                     # inline code
+    body = re.sub(r"^\[\^\d+\]:.*$", " ", body, flags=re.M)  # footnote defs
+    body = re.sub(r"!\[\[[^\]]*\]\]", " ", body)             # ![[embed]]
+    body = re.sub(r"!\[[^\]]*\]\([^)]*\)", " ", body)        # ![alt](src)
+    body = re.sub(r"\[\[[^\]]*\]\]", " ", body)              # [[wikilink]]
+    body = re.sub(r"\[[^\]]*\]\([^)]*\)", " ", body)         # [text](url)
+    return body
+
+
+def _name_pattern(words: list[str]) -> "re.Pattern[str] | None":
+    """Compiled whole-token, separator-insensitive matcher for a page-name word
+    run. Whole-token = bounded by a non-alphanumeric on each side, so
+    `transformer` does NOT match inside `transformers` or `transformative`; the
+    words run in order separated only by non-alphanumeric runs (space/hyphen/
+    slash). Compiled ONCE per name (the prose it scans is pre-casefolded), so
+    the corpus-wide scan never recompiles a pattern per page-pair.
+    """
+    if not words:
+        return None
+    body = r"[^a-z0-9]+".join(re.escape(w) for w in words)
+    return re.compile(r"(?<![a-z0-9])" + body + r"(?![a-z0-9])")
+
+
+def _existing_link_targets(text: str) -> set[str]:
+    """Filenames this page ALREADY links — body wikilinks + `related:` frontmatter.
+
+    A page already linking the target is never re-proposed (spec edge case)."""
+    targets: set[str] = set()
+    for target in re.findall(r"\[\[([^\]|#]+?\.md)", text):
+        targets.add(Path(target.strip()).name)
+    return targets
+
+
+def _load_rejected_pairs(wiki_root: Path) -> set[tuple[str, str]]:
+    """Owner-rejected `(term, target.md)` pairs, normalized for comparison.
+
+    Reads the markdown table in `missing-links-rejected.md` (columns
+    `term | proposed-link`). Absent file -> empty set. Term is casefolded;
+    target is the bare `.md` filename. Malformed rows are skipped, never fatal.
+    """
+    path = wiki_root / MISSING_LINK_REJECTED
+    if not os.path.exists(_fspath(path)):
+        return set()
+    rejected: set[tuple[str, str]] = set()
+    for line in read_text(path).splitlines():
+        if not line.strip().startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) < 2:
+            continue
+        term, link = cells[0], cells[1]
+        if term.casefold() in ("term", "---") or set(term) <= {"-", " ", ":"}:
+            continue
+        link_name = Path(flatten_wikilinks(link).strip()).name
+        if link_name.endswith(".md"):
+            rejected.add((term.casefold(), link_name))
+    return rejected
+
+
+def _missing_link_table(rows: list[dict[str, object]]) -> str:
+    """Render a proposal table (header + rows, or a one-line none state)."""
+    head = (
+        "| term | proposed-link | source file | target page | #mentions |\n"
+        "|------|---------------|-------------|-------------|-----------|\n"
+    )
+    if not rows:
+        return head + "| _(none)_ | | | | |\n"
+    return head + "\n".join(
+        f"| {r['term']} | [[{r['target']}]] | {r['source']} | {r['target']} | {r['mentions']} |"
+        for r in rows
+    ) + "\n"
+
+
+def _render_missing_link_report(
+    main_rows: list[dict[str, object]],
+    hub_rows: list[dict[str, object]],
+) -> str:
+    """The standalone report file the Stage-2 update-links sub-mode reads.
+
+    Two sections: the MAIN proposal list (multi-word targets — the actionable
+    set the update-links step reads) and the SINGLE-TOKEN-HUB SUPPRESSED list
+    (single-token targets like ai.md/llm.md — low precision, retained but NOT in
+    the main list; ADX-7). Columns: term | proposed-link | source file | target
+    page | #mentions. Rows arrive pre-sorted by #mentions desc."""
+    return (
+        "---\n"
+        "type: missing-links-report\n"
+        "tags: [missing-links-report]\n"
+        "---\n\n"
+        "# Missing-link proposals (signal-1)\n\n"
+        "> Generated by `/sb-wiki-lint` (deterministic, report-only). Each row: a "
+        "wiki page's exact name appears as UNLINKED prose in the source file where "
+        "a page by that name exists. The human-gated `update-links` step reads the "
+        "MAIN list below; nothing is auto-linked. Sorted by `#mentions` descending.\n\n"
+        f"## Main proposals ({len(main_rows)})\n\n"
+        + _missing_link_table(main_rows)
+        + (
+            f"\n## Single-token-hub suppressed ({len(hub_rows)})\n\n"
+            "> Single-token TARGET names (no hyphen/space in the page stem — e.g. "
+            "`ai.md`, `llm.md`) match a common word in most pages, so they are "
+            "SUPPRESSED from the main list (low precision). Retained here for "
+            "inspection — never silently dropped (ADX-7). The `update-links` step "
+            "does NOT read this section; promote a row manually only if it is a "
+            "genuine link.\n\n"
+            + _missing_link_table(hub_rows)
+        )
+    )
+
+
+def detect_missing_links(wiki_root: Path, report: Report, apply_changes: bool) -> None:
+    """Signal-1 prose-mention scan. Report-only — NEVER writes a link.
+
+    Walks concept / entity / topic / source pages. For each ORDERED pair
+    (source_page, target_page) where target's exact name appears as unlinked
+    prose in source AND source does not already link target AND the pair is not
+    owner-rejected, emit a proposal row. Rows sorted by #mentions desc. Writes
+    the report FILE only under --apply (mirrors the helper's other auto-applied
+    report writes); detection itself is pure and never mutates a page.
+    """
+    cet, sources = collect_wiki_pages(wiki_root)
+    pages = cet + sources
+    # Per-name index, each computed ONCE: word tokens, the display term, a
+    # first-token fast-path key, and a compiled whole-token matcher. Leaf
+    # indexes are already excluded by collect_wiki_pages; a page never proposes
+    # a link to itself. Precompiling here keeps the corpus scan O(pages × names)
+    # in cheap substring checks, running the regex only when the fast-path hits.
+    name_index: list[tuple[str, list[str], str, str, "re.Pattern[str]"]] = []
+    for page in pages:
+        words = _name_words(page.stem)
+        if not words:
+            continue
+        pat = _name_pattern(words)
+        if pat is None:
+            continue
+        name_index.append((page.name, words, " ".join(words), words[0], pat))
+
+    rejected = _load_rejected_pairs(wiki_root)
+    rows: list[dict[str, object]] = []
+
+    for page in pages:
+        text = read_text(page)
+        prose_fold = _prose_only(text).casefold()
+        already = _existing_link_targets(text)
+        rel = str(page.relative_to(wiki_root)).replace("\\", "/")
+        for target_name, words, term, first, pat in name_index:
+            if target_name == page.name:
+                continue                      # never self-link
+            if target_name in already:
+                continue                      # already linked — not re-proposed
+            # cheap fast-path: skip if the name's first token never appears
+            if first not in prose_fold:
+                continue
+            count = len(pat.findall(prose_fold))
+            if count == 0:
+                continue
+            if (term, target_name) in rejected:
+                continue                      # owner already rejected this pair
+            rows.append(
+                {
+                    "term": term,
+                    "target": target_name,
+                    "source": rel,
+                    "mentions": count,
+                }
+            )
+
+    rows.sort(key=lambda r: (-int(r["mentions"]), str(r["source"]), str(r["target"])))
+
+    # ADX-7 — single-token-hub suppression (report-side, never loses info).
+    # A single-token TARGET name (no hyphen AND no space in the page stem, e.g.
+    # ai.md / llm.md) matches a common word in nearly every page → high-volume
+    # low-precision noise. SUPPRESS those from the main list, but RETAIN them
+    # under a separate key + a visible count so nothing is lost (owner rule).
+    # The "single token" test keys on the TARGET stem: its word-token count is 1.
+    main_rows: list[dict[str, object]] = []
+    hub_rows: list[dict[str, object]] = []
+    for r in rows:
+        if len(str(r["term"]).split()) <= 1:
+            hub_rows.append(r)
+        else:
+            main_rows.append(r)
+
+    report.detected["missing_links"] = main_rows
+    report.detected["missing_links_hub_suppressed"] = hub_rows
+    report.detected["missing_links_hub_suppressed_count"] = len(hub_rows)
+    report.detected["missing_links_report"] = MISSING_LINK_REPORT
+    report.detected["missing_links_rejected_registry"] = MISSING_LINK_REJECTED
+
+    report_path = wiki_root / MISSING_LINK_REPORT
+    write_text(report_path, _render_missing_link_report(main_rows, hub_rows), report, apply_changes)
+
+
+# ---------------------------------------------------------------------------
+# U10 — raw-`.md` duplicate detector (report-only)
+# ---------------------------------------------------------------------------
+# detect_pdf_title_conformance (above) already surfaces a PDF raw whose
+# title-slug collides with an existing `.pdf` (`duplicate_raws`). U10 EXTENDS
+# that idea to markdown raws: flag a NOT-yet-ingested raw `.md` whose normalized
+# title OR normalized URL OR exact byte content-hash matches an ALREADY-ingested
+# source. This is the dedup gap diagnosis Finding 1 / §8 names — duplicate
+# detection is title/URL-only and only at ingest time; lint never flagged a
+# duplicate `.md` raw.
+#
+# DETERMINISTIC + REPORT-ONLY. The scan is pure string/hash comparison — no LLM
+# judgment. It REPORTS into `detected.md_duplicate_raws`; it NEVER deletes,
+# renames, or mutates a raw or any other file. The owner disposes a flagged
+# duplicate manually (the same posture as `duplicate_raws`).
+#
+# LIMIT (stated in `detected.md_duplicate_raws_limit` and the lint report):
+# catches same-normalized-title / same-normalized-URL / byte-identical content;
+# does NOT catch reworded same-material (a paraphrase shares no exact title,
+# URL, or hash).
+
+MD_DUPLICATE_LIMIT = (
+    "Catches same-normalized-title / same-normalized-URL / byte-identical "
+    "content only; does NOT catch reworded same-material (a paraphrase of an "
+    "already-ingested source shares no exact title, URL, or content-hash)."
+)
+
+
+def _ingested_source_signals(
+    wiki_root: Path,
+) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
+    """Inventory the title / URL / content-hash of every ALREADY-ingested source.
+
+    Returns three maps keyed on the signal value, each pointing at a stable
+    descriptor of the ingested source it came from (``wiki/sources/{origin}/
+    {page}.md`` relative path for title/URL; the backing raw's relative path for
+    content-hash):
+
+      - ``title_map``   — ``_norm_title_exact`` of the source page's frontmatter
+        ``title:`` or H1 → source-page rel path.
+      - ``url_map``     — ``_norm_source_url`` of the source page's ``url:``
+        frontmatter → source-page rel path.
+      - ``hash_map``    — SHA256 of the BYTES of the raw file the source page's
+        ``raw:`` frontmatter backlinks (the only place the source carries the
+        original raw bytes; the source-page body is synthesis, not raw bytes) →
+        backing-raw rel path.
+
+    Empty signal values are dropped so a blank title/URL never matches a blank.
+    """
+    title_map: dict[str, str] = {}
+    url_map: dict[str, str] = {}
+    hash_map: dict[str, str] = {}
+    sources_root = wiki_root / "wiki" / "sources"
+    if not sources_root.exists():
+        return title_map, url_map, hash_map
+    raw_root = wiki_root / "raw"
+    for origin_dir in sorted(p for p in sources_root.iterdir() if p.is_dir()):
+        index_name = f"{origin_dir.name}.md"
+        for page in sorted(origin_dir.glob("*.md")):
+            if page.name == index_name or page.name in NON_SOURCE_FILES:
+                continue
+            text = read_text(page)
+            fm = frontmatter(text)
+            rel = str(page.relative_to(wiki_root)).replace("\\", "/")
+            ntitle = _norm_title_exact(fm.get("title", "") or first_h1(text))
+            if ntitle:
+                title_map.setdefault(ntitle, rel)
+            nurl = _norm_source_url(fm.get("url", ""))
+            if nurl:
+                url_map.setdefault(nurl, rel)
+            # Content-hash: hash the backing raw the source backlinks via `raw:`.
+            # Resolve the backlink basename inside this origin's raw folder; hash
+            # only when that raw file is present on disk. Hash via the SAME text
+            # read the candidate side uses (`read_text` → UTF-8) so the two
+            # hashes are line-ending-agnostic: under git `core.autocrlf=true` a
+            # byte-identical `.md` lands with CRLF, and a binary-vs-text read of
+            # the same content would otherwise diverge (CRLF preserved vs folded
+            # to LF) and MISS a true duplicate. A candidate `.md` can only be a
+            # duplicate of a `.md` backing raw, so a backing raw that is not
+            # UTF-8 text (a PDF or other binary) is skipped for the hash signal.
+            for target in re.findall(r"\[\[([^\]|#]+?)\]\]", fm.get("raw", "")):
+                raw_name = Path(target).name
+                raw_path = raw_root / origin_dir.name / raw_name
+                if not os.path.exists(_fspath(raw_path)):
+                    continue
+                try:
+                    raw_bytes = read_text(raw_path).encode("utf-8")
+                except (UnicodeDecodeError, OSError):
+                    continue  # binary/undecodable backing raw — not a `.md` dup
+                digest = hashlib.sha256(raw_bytes).hexdigest()
+                raw_rel = str(raw_path.relative_to(wiki_root)).replace("\\", "/")
+                hash_map.setdefault(digest, raw_rel)
+    return title_map, url_map, hash_map
+
+
+def detect_md_duplicate_raws(wiki_root: Path, report: Report) -> None:
+    """Flag a NOT-yet-ingested raw `.md` that duplicates an already-ingested source.
+
+    Deterministic, REPORT-ONLY (U10). For each raw `.md` whose 1:1 source page
+    does NOT already exist (``ingested_raw_filenames`` union — a raw that is
+    already ingested is not a duplicate of itself), compute its three signals
+    and report a match against the ingested-source inventory:
+
+      - title — ``_norm_title_exact`` of the raw's frontmatter ``title:`` / H1
+      - url   — ``_norm_source_url`` of the raw's ``url:`` frontmatter
+      - content-hash — SHA256 of the raw `.md` bytes vs a backing raw's bytes
+
+    NEVER deletes/renames/mutates anything — the owner disposes a flagged
+    duplicate manually. The stated limit rides in ``md_duplicate_raws_limit``.
+    """
+    report.detected["md_duplicate_raws_limit"] = MD_DUPLICATE_LIMIT
+    raw_root = wiki_root / "raw"
+    if not raw_root.exists():
+        report.detected["md_duplicate_raws"] = []
+        return
+    title_map, url_map, hash_map = _ingested_source_signals(wiki_root)
+    backlink_targets, mirror_stems = ingested_raw_filenames(wiki_root)
+    findings: list[dict[str, str]] = []
+    for origin_dir in sorted(
+        p for p in raw_root.iterdir()
+        if p.is_dir() and p.name != "assets" and not excluded_dir(p.relative_to(wiki_root))
+    ):
+        origin_stems = mirror_stems.get(origin_dir.name, set())
+        for raw_file in sorted(origin_dir.glob("*.md")):
+            if raw_file.name == f"{origin_dir.name}.md" or raw_file.name in NON_SOURCE_FILES:
+                continue
+            # Skip a raw that is ALREADY ingested (it is not a duplicate of
+            # itself) — same union signal heal_raw_wiki_cells keys on.
+            if raw_file.name in backlink_targets or raw_file.stem in origin_stems:
+                continue
+            try:
+                text = read_text(raw_file)
+            except (UnicodeDecodeError, OSError):
+                continue  # undecodable raw `.md` — cannot signal-compare, never crash
+            fm = frontmatter(text)
+            rel = str(raw_file.relative_to(wiki_root)).replace("\\", "/")
+            # content-hash — byte-identical to a backing raw of an ingested source.
+            digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+            if digest in hash_map and hash_map[digest] != rel:
+                findings.append(
+                    {"raw": rel, "signal": "content-hash", "matches": hash_map[digest]}
+                )
+                continue  # one finding per raw; content-hash is the strongest
+            # url — exact normalized-URL match.
+            nurl = _norm_source_url(fm.get("url", ""))
+            if nurl and nurl in url_map:
+                findings.append(
+                    {"raw": rel, "signal": "url", "matches": url_map[nurl]}
+                )
+                continue
+            # title — exact normalized-title match.
+            ntitle = _norm_title_exact(fm.get("title", "") or first_h1(text))
+            if ntitle and ntitle in title_map:
+                findings.append(
+                    {"raw": rel, "signal": "title", "matches": title_map[ntitle]}
+                )
+                continue
+    report.detected["md_duplicate_raws"] = findings
+
+
 def rename_referrer_files(wiki_root: Path) -> list[Path]:
     """Rewrite scope per Defect-4 fix: wiki/**, logs/**, raw INDEX files only."""
     files: list[Path] = []
@@ -1930,6 +2496,158 @@ def execute_link_fixes(wiki_root: Path, plan_path: Path, report: Report) -> None
         "skipped": skipped,
         "errors": errors,
     }
+
+
+# ---------------------------------------------------------------------------
+# U3 Stage-2 — human-gated `update-links` sub-mode (append-only apply)
+# ---------------------------------------------------------------------------
+# Reads accepted missing-link proposals and appends `[[target.md]]` to the
+# source page's `related:` frontmatter (append-only) PLUS the reverse link
+# `[[source.md]]` to the target page's `related:`. NEVER auto-links: this runs
+# ONLY when the lint Step-9 `update-links` handler invokes it on an explicit
+# owner accept (mirrors `--execute-link-fixes`). Append-only — it adds list
+# items to an existing-or-created `related:` block and touches nothing else.
+
+def append_related_link(text: str, link_name: str) -> tuple[str, bool]:
+    """Append `- "[[link_name]]"` to a page's `related:` frontmatter, append-only.
+
+    Returns (new_text, changed). Idempotent: if the target is already present in
+    `related:` (any quote/`.md` form), returns unchanged. Handles three shapes:
+    a block list (`related:\n  - "[[x.md]]"`), an inline-empty list
+    (`related: []`), and a missing `related:` key (inserts a block before the
+    closing frontmatter `---`). Never edits body or any other field.
+    """
+    fm_match = re.match(r"^(---\s*\n)(.*?)(\n---\s*\n)", text, flags=re.S)
+    if not fm_match:
+        return text, False
+    head, fm_body, tail = fm_match.group(1), fm_match.group(2), fm_match.group(3)
+    rest = text[fm_match.end():]
+    item = f'  - "[[{link_name}]]"'
+
+    # Idempotence: already linked in related: -> no-op.
+    rel_block_match = re.search(r"^related:\s*(.*)$", fm_body, flags=re.M)
+    existing_targets: set[str] = set()
+    for tgt in re.findall(r"\[\[([^\]|#]+?\.md)", fm_body):
+        existing_targets.add(Path(tgt.strip()).name)
+    if link_name in existing_targets:
+        return text, False
+
+    lines = fm_body.split("\n")
+    if rel_block_match is None:
+        # No related: key — insert a fresh block at the end of frontmatter.
+        new_fm = fm_body.rstrip("\n") + f"\nrelated:\n{item}"
+        return head + new_fm + tail + rest, True
+
+    # Locate the related: line and its (possibly empty) item block.
+    rel_idx = None
+    for i, ln in enumerate(lines):
+        if re.match(r"^related:\s*(.*)$", ln):
+            rel_idx = i
+            break
+    rel_line = lines[rel_idx]
+    inline = re.match(r"^related:\s*(\S.*)$", rel_line)
+    if inline and inline.group(1).strip() in ("[]", "[ ]"):
+        # related: [] -> convert to a block list with the new item.
+        lines[rel_idx] = "related:"
+        lines.insert(rel_idx + 1, item)
+        return head + "\n".join(lines) + tail + rest, True
+    # Block list: find the end of the existing `  - ` item run after rel_idx.
+    insert_at = rel_idx + 1
+    while insert_at < len(lines) and re.match(r"^\s*-\s", lines[insert_at]):
+        insert_at += 1
+    lines.insert(insert_at, item)
+    return head + "\n".join(lines) + tail + rest, True
+
+
+def update_missing_links(wiki_root: Path, plan_path: Path, report: Report) -> None:
+    """Apply accepted missing-link proposals. USER-GATED (lint step 9 accept).
+
+    Plan rows `{source, target}` — `source` wiki-root-relative path of the page
+    that mentions the target; `target` the bare `target.md` filename. For each
+    accepted row: append `[[target]]` to the source's `related:` (forward link)
+    AND `[[source.md]]` to the target's `related:` (reverse link). Append-only;
+    idempotent; never auto-links (only fires on an explicit owner accept).
+    """
+    plan = json.loads(read_text(plan_path))
+    applied: list[dict[str, object]] = []
+    skipped: list[str] = []
+    errors: list[str] = []
+    for row in plan:
+        source_rel, target_name = row["source"], Path(row["target"]).name
+        sparts = Path(source_rel).parts
+        if not sparts or sparts[0] != "wiki" or ".." in sparts:
+            errors.append(f"{source_rel}: outside wiki/ scope — row skipped")
+            continue
+        source_page = wiki_root / source_rel
+        if not os.path.exists(_fspath(source_page)):
+            errors.append(f"{source_rel}: source file missing — row skipped")
+            continue
+        # Resolve the target page by bare filename anywhere under wiki/ (excl. assets).
+        target_matches = [
+            p for p in (wiki_root / "wiki").rglob(target_name)
+            if not excluded_dir(p.relative_to(wiki_root))
+        ]
+        if not target_matches:
+            errors.append(f"{target_name}: target page not found under wiki/ — row skipped")
+            continue
+        if len(target_matches) > 1:
+            errors.append(f"{target_name}: ambiguous ({len(target_matches)} matches) — row skipped")
+            continue
+        target_page = target_matches[0]
+        if target_page.resolve() == source_page.resolve():
+            errors.append(f"{source_rel}: self-link refused — row skipped")
+            continue
+        source_name = source_page.name
+
+        # Forward: append [[target]] to source.related (re-read immediately).
+        s_text = read_text(source_page)
+        s_new, s_changed = append_related_link(s_text, target_name)
+        # Reverse: append [[source]] to target.related.
+        t_text = read_text(target_page)
+        t_new, t_changed = append_related_link(t_text, source_name)
+
+        if not s_changed and not t_changed:
+            skipped.append(f"{source_rel} <-> {target_name}: both directions already linked")
+            continue
+        if s_changed:
+            write_text(source_page, s_new, report, apply_changes=True)
+        if t_changed:
+            write_text(target_page, t_new, report, apply_changes=True)
+        applied.append(
+            {
+                "source": source_rel,
+                "target": target_name,
+                "forward_added": s_changed,
+                "reverse_added": t_changed,
+            }
+        )
+    report.detected["missing_link_updates"] = {
+        "applied": applied,
+        "skipped": skipped,
+        "errors": errors,
+    }
+
+
+def cmd_update_links(args_list: list[str]) -> int:
+    """`update-links` sub-command — Stage-2 human-gated apply of accepted
+    missing-link proposals. Invoked ONLY by the lint Step-9 update-links handler
+    after an explicit owner accept. NEVER part of the read-mostly detection pass.
+    """
+    parser = argparse.ArgumentParser(
+        description="Apply accepted missing-link proposals (append-only, owner-gated)."
+    )
+    parser.add_argument("--vault-root", type=Path, default=Path.cwd())
+    parser.add_argument(
+        "--plan", type=Path, required=True,
+        metavar="PLAN_JSON",
+        help="JSON list of accepted rows {source, target} from the missing-links report",
+    )
+    args = parser.parse_args(args_list)
+    wiki_root = resolve_wiki_root(args.vault_root.resolve())
+    report = Report(mode="execute")
+    update_missing_links(wiki_root, args.plan, report)
+    print(json.dumps(report.detected["missing_link_updates"], indent=2, ensure_ascii=False))
+    return 0
 
 
 def extract_topic_open_questions(text: str) -> list[str]:
@@ -3580,6 +4298,8 @@ def main() -> int:
         return cmd_check_pages(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "normalize-filenames":
         return cmd_normalize_filenames(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "update-links":
+        return cmd_update_links(sys.argv[2:])
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--vault-root", type=Path, default=Path.cwd())
     parser.add_argument("--apply", action="store_true", help="write deterministic changes")
@@ -3701,7 +4421,7 @@ def main() -> int:
         heal_raw_wiki_cells(wiki_root, report, args.apply)
         sync_wiki_leaf_headers_and_queue(wiki_root, report, args.apply)
         sync_type_tags(wiki_root, report, args.apply)
-        sync_source_my_take_and_queue(wiki_root, report, args.apply)
+        migrate_sources_index_to_description(wiki_root, report, args.apply)
         detect_broken_wikilinks(wiki_root, report)
         detect_disputed_callouts(wiki_root, report)
         detect_subdivision(wiki_root, report)
@@ -3715,6 +4435,8 @@ def main() -> int:
         check_questions_links(wiki_root, report)
         structural_walk(wiki_root, report, args.apply)
         detect_pdf_title_conformance(wiki_root, report)
+        detect_md_duplicate_raws(wiki_root, report)
+        detect_missing_links(wiki_root, report, args.apply)
 
         # --- Dirty-set computation (incremental lint state spine) ---
         tracked = collect_tracked_pages(wiki_root)

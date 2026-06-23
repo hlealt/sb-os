@@ -165,7 +165,9 @@ Exit 1 = error (bad args, fetch failed, unknown origin, etc.).
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -1011,6 +1013,170 @@ def _capture_url_pdf(
 
 
 # ---------------------------------------------------------------------------
+# Route-out-of-_unrouted/ = MOVE, not copy (U8 / Finding 5E)
+# ---------------------------------------------------------------------------
+
+# The canonical staging folder under {wiki_root}/raw/. A file routed OUT of here
+# into raw/{origin}/ must MOVE (not copy) so no duplicate is left behind. Scope
+# is _unrouted/ ONLY — a manual --manual-file from anywhere else (Downloads, a
+# scratch path) keeps the legacy copy behavior (the original is the user's, not
+# the tool's to delete).
+_UNROUTED_DIR_NAME = "_unrouted"
+
+# Test-only fault-injection seam (NOT a production code path): when this env var
+# is set to a truthy value, the post-copy byte-verify is FORCED to report a
+# mismatch. This makes the irreversible-unlink gate exercisable at the Fidelity
+# Floor — a real shutil.copyfile never produces a mismatch, so the
+# preserve-original-on-verify-failure behavior (Behavior #2) is otherwise
+# undrivable. The triggering route stays a real route; only the verify verdict
+# is injected. Unset/empty/0/false => normal real verification.
+_FORCE_VERIFY_FAIL_ENV = "SB_WIKI_FORCE_VERIFY_FAIL"
+
+
+def _is_under_unrouted(src: Path) -> bool:
+    """True when ``src`` is a staged file under a ``raw/_unrouted/`` folder.
+
+    Matches the canonical staging location: a ``_unrouted`` directory whose
+    parent directory is ``raw``. Anchored on that pair so an unrelated path that
+    merely contains the word ``_unrouted`` does not trip the move.
+    """
+    try:
+        parts = src.resolve().parts
+    except OSError:
+        parts = src.parts
+    for i in range(1, len(parts)):
+        if parts[i] == _UNROUTED_DIR_NAME and parts[i - 1] == "raw":
+            return True
+    return False
+
+
+def _bytes_digest(raw: bytes) -> tuple[int, str]:
+    """Return (byte_size, sha256_hex) for an in-memory byte string."""
+    return len(raw), hashlib.sha256(raw).hexdigest()
+
+
+def _verify_routed_copy(src: Path, dest: Path, *, is_binary: bool) -> tuple[bool, str]:
+    """Confirm the routed ``dest`` faithfully represents the ``_unrouted/`` ``src``.
+
+    Two regimes, because the route writes the two file kinds differently:
+
+    - ``is_binary`` (PDF) — the route is ``shutil.copyfile`` (an exact binary
+      copy), so the faithfulness test is exact byte equality: same size + same
+      sha256 over the raw bytes. Any difference fails.
+    - text/markdown — the route is ``read_text(utf-8)`` then ``write_text(utf-8)``,
+      which on Windows applies newline translation (``\\n`` -> ``\\r\\n``), so a
+      raw byte compare would ALWAYS mismatch a multi-line file even though no
+      content was lost. The faithfulness test here is DECODED-CONTENT equality:
+      both files decode (utf-8) to the identical string. This is the property
+      that actually proves a lossless move; the newline byte-form is a
+      write-mode artifact, not data loss. A byte-equal file is also
+      content-equal, so binary-identical text still passes.
+
+    Returns (ok, detail). ok=True means the routed copy is a faithful, complete
+    representation of the original and the original is safe to unlink.
+    """
+    try:
+        src_raw = src.read_bytes()
+        dest_raw = dest.read_bytes()
+    except OSError as exc:
+        return False, f"could not read a file for verify: {exc}"
+
+    src_size, src_hash = _bytes_digest(src_raw)
+    dest_size, dest_hash = _bytes_digest(dest_raw)
+
+    if is_binary:
+        if src_size == dest_size and src_hash == dest_hash:
+            return True, f"binary byte-identical ({src_size} bytes)"
+        return False, (
+            f"binary mismatch — size {src_size}->{dest_size} / "
+            f"sha256 {src_hash[:12]}->{dest_hash[:12]}"
+        )
+
+    # Text: decoded-content equality with newline normalization. The write path
+    # (write_text, utf-8) applies platform newline translation (on Windows
+    # \\n -> \\r\\n), so the routed copy's line-ending BYTES differ from the
+    # source's even when not a single character of content was lost. Normalize
+    # both to \\n (universal newlines) before comparing — the line-ending form is
+    # a write-mode artifact, not data. After normalization, equality proves the
+    # move is lossless.
+    try:
+        src_text = src_raw.decode("utf-8")
+        dest_text = dest_raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        return False, f"utf-8 decode failed during verify: {exc}"
+    src_norm = src_text.replace("\r\n", "\n").replace("\r", "\n")
+    dest_norm = dest_text.replace("\r\n", "\n").replace("\r", "\n")
+    if src_norm == dest_norm:
+        return True, (
+            f"content-identical (decoded utf-8, newline-normalized; "
+            f"{len(src_norm)} chars)"
+        )
+    return False, (
+        f"content mismatch — src {len(src_norm)} chars / "
+        f"dest {len(dest_norm)} chars decode differently after newline-normalize"
+    )
+
+
+def _finalize_unrouted_move(
+    src: Path, dests: list[str], dry_run: bool, *, is_binary: bool
+) -> dict:
+    """Complete a route OUT of raw/_unrouted/ as a MOVE: verify then unlink.
+
+    Called ONLY when ``src`` is under ``raw/_unrouted/`` and the routed copy
+    already landed at ``dests`` (the primary saved path is dests[0]). Verifies
+    the routed copy faithfully represents the original (see ``_verify_routed_copy``
+    — exact bytes for a binary/PDF copy, decoded-content equality for text), and
+    ONLY on a clean verify unlinks the ``_unrouted/`` original. The unlink is
+    irreversible, so it is gated strictly on the verify (Behavior #2: a mismatch
+    keeps the original and surfaces the failure; nothing is deleted).
+
+    Raw-index prune: this tool neither reads nor writes the raw index, and a
+    file staged in ``_unrouted/`` has no raw-index row keyed to it (a staged file
+    is not yet a row — rows are written by the lint/ingest index transaction, not
+    here; verified in the diagnosis). So the "prune stale row if any" clause is a
+    confirmed no-op for this tool's scope: there is no row to prune.
+
+    Returns a sub-result dict to merge into the capture result.
+    """
+    if dry_run:
+        return {"move_out_of_unrouted": "dry-run (would verify then unlink)"}
+
+    dest = Path(dests[0])
+    ok, detail = _verify_routed_copy(src, dest, is_binary=is_binary)
+
+    forced = os.environ.get(_FORCE_VERIFY_FAIL_ENV, "").strip().lower()
+    force_fail = forced not in ("", "0", "false", "no")
+    if force_fail:
+        ok, detail = False, "forced via " + _FORCE_VERIFY_FAIL_ENV
+
+    if not ok:
+        # Verify FAILED — do NOT unlink. Preserve the original, surface it.
+        return {
+            "move_out_of_unrouted": "verify_failed",
+            "move_error": (
+                "routed copy did not verify against the _unrouted/ original; "
+                f"original PRESERVED, no unlink ({detail})"
+            ),
+            "unrouted_original_preserved": str(src),
+        }
+
+    # Verify PASSED — unlink the original (this is what makes the route a MOVE).
+    try:
+        src.unlink()
+    except OSError as exc:
+        return {
+            "move_out_of_unrouted": "unlink_failed",
+            "move_error": f"copy verified but unlink failed: {exc}",
+            "unrouted_original_preserved": str(src),
+        }
+    return {
+        "move_out_of_unrouted": "moved",
+        "unrouted_original_removed": str(src),
+        "verify_detail": detail,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Core capture
 # ---------------------------------------------------------------------------
 
@@ -1235,7 +1401,7 @@ def capture(
                 "error": f"--manual-file not found: {src}",
             }
         if _is_pdf(src):
-            return _capture_manual_pdf(
+            pdf_result = _capture_manual_pdf(
                 src=src,
                 url=url,
                 origin=origin,
@@ -1245,6 +1411,22 @@ def capture(
                 dry_run=dry_run,
                 pdf_text=pdf_text,
             )
+            # U8 (5E): a PDF staged in raw/_unrouted/ also routes through here —
+            # complete the route as a MOVE (byte-verify the .pdf copy, then unlink
+            # the _unrouted/ original). The byte-verify targets the .pdf (the
+            # immutable original); the optional .md text companion is regenerable
+            # and not part of the verify. Scope: _unrouted/ ONLY.
+            if (
+                pdf_result.get("state") == "captured_to_raw"
+                and pdf_result.get("saved_paths")
+                and _is_under_unrouted(src)
+            ):
+                pdf_result.update(
+                    _finalize_unrouted_move(
+                        src, pdf_result["saved_paths"], dry_run, is_binary=True
+                    )
+                )
+            return pdf_result
         body = src.read_text(encoding="utf-8")
         resolved_title = title or _extract_title(body) or url
         # A1 — byte floor only for manual paths (user already vetted content).
@@ -1275,6 +1457,16 @@ def capture(
         }
         if pdf_text:
             result["pdf_text"] = "ignored (manual file is not a PDF)"
+        # U8 (5E): a text/markdown file staged in raw/_unrouted/ routes through
+        # here — complete the route as a MOVE (byte-verify the routed copy, then
+        # unlink the _unrouted/ original). Scope: _unrouted/ ONLY; a --manual-file
+        # from anywhere else keeps the legacy copy behavior.
+        if result.get("state") == "captured_to_raw" and _is_under_unrouted(src):
+            result.update(
+                _finalize_unrouted_move(
+                    src, result["saved_paths"], dry_run, is_binary=False
+                )
+            )
         return result
 
     return {

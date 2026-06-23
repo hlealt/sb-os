@@ -15,11 +15,14 @@ ONE-file-per-subagent dispatch plan:
   un-estimable source); "sonnet" otherwise. A dedicated single-source run
   lets Sonnet ingest at full depth; Opus is reserved for the largest sources.
 
-A raw file is "ingested" when its source page exists at
-`wiki/sources/{origin}/{stem}.md`. Files whose raw-index row marks
-`Wiki = Duplicate (…)` are confirmed content-duplicates and are SKIPPED
-(reported under `duplicates`, never targeted). This script only reads — it
-never writes wiki content.
+A raw file is "ingested" when the raw INDEX is the authority (U1b): its index
+row marks `Wiki = Yes`, OR it is a rowless bare PDF bridged by an existing
+source page's `raw:` / `Original PDF:` backlink (legacy dated-clip origins keep
+the clip row and no PDF row). The index is kept authoritative by `sb-wiki-lint`
+— so ingest-all now DEPENDS on a prior lint pass to reflect freshly-ingested
+sources. Files whose raw-index row marks `Wiki = Duplicate (…)` are confirmed
+content-duplicates and are SKIPPED (reported under `duplicates`, never
+targeted). This script only reads — it never writes wiki content.
 
 --healing INVERTS the selection: instead of the missing raw sources, it targets
 ALREADY-ingested SOURCE PAGES (under wiki/sources/**), resolved in the
@@ -216,52 +219,123 @@ def apply_size_filter(payload: dict, size_filter: str) -> dict:
     return payload
 
 
-def _ingested_raw_filenames(sources_root: Path, origin: str) -> set[str]:
-    """Union of three signals that mark a raw file as already ingested.
+def _index_yes_filenames(raw_root: Path, origin: str) -> set[str]:
+    """Raw filenames whose raw-INDEX row marks ``Wiki = Yes`` (the authority).
 
-    Scans every source page under ``sources_root/{origin}/`` and returns the
-    set of raw *filenames* (with extension, e.g. ``foo.pdf``) that have a
-    corresponding source page — via ANY of:
+    U1b flip: the raw index — kept authoritative by ``sb-wiki-lint`` (its union
+    matcher heals each ingested raw's ``Wiki`` cell to ``Yes``) — is the single
+    source of truth for "ingested?". This reads the ``Wiki`` cell of every data
+    row by the row's OWN layout (the last cell of a recognized 3- or 4-col raw
+    row, never a header-positional index), so a hand-corrected ``Wiki`` cell is
+    reflected immediately. Returns File-cell filenames (with extension).
+    """
+    index_path = raw_root / origin / f"{origin}.md"
+    if not index_path.is_file():
+        return set()
+    yes: set[str] = set()
+    for line in read_text(index_path).splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("|") or re.match(r"^\s*\|\s*-+", line):
+            continue
+        cells = [c.strip() for c in stripped.strip("|").split("|")]
+        if not cells or cells[0] == "File":
+            continue
+        # Wiki is the final cell of every recognized raw layout (3-col legacy
+        # File|Description|Wiki and 4-col File|Title|Date|Wiki). Key off the
+        # row's own width, never the header position.
+        if len(cells) < 3:
+            continue
+        if cells[-1].lower() != "yes":
+            continue
+        link = re.search(r"\[\[([^\]|#]+?)\]\]", cells[0])
+        if link:
+            yes.add(Path(link.group(1)).name)
+    return yes
 
-      1. ``raw:`` frontmatter wikilink — the canonical 1:1 backlink per the
-         wiki schema.  Matched on ``Path(target).name``.
-      2. ``Original PDF:`` body wikilink — carried by PDF-sourced pages that
-         were ingested via a dated ``.md`` clip so their source-page stem
-         differs from the bare-PDF stem.  Matched on ``Path(target).name``.
-      3. Same-stem mirror — a source page whose stem equals the raw file's
-         stem (the normal forward-twin case: ``.md`` raws, or PDFs ingested
-         directly without a dated clip).
 
-    ``collect_healing()`` is NOT touched — it has its own namespace.
+def _backlink_bridge(sources_root: Path, origin: str) -> set[str]:
+    """Raw filenames a source page NAMES via ``raw:`` / ``Original PDF:`` (bridge).
+
+    The raw index keys legacy dated-clip-first sources (caiso/engie) on the dated
+    CLIP row; the bare PDF deliberately has NO row (duplicate-safe). This bridge
+    maps that rowless PDF — named by the existing source page's ``raw:`` or
+    ``Original PDF:`` backlink — back to "ingested", so the index stays the
+    authority for state (Wiki=Yes) while the backlink supplies the rowless-PDF
+    coverage. The same-stem filesystem mirror that the private check used is
+    DROPPED — the index replaces it.
     """
     origin_dir = sources_root / origin
     if not origin_dir.is_dir():
         return set()
     index_name = f"{origin}.md"
-    ingested: set[str] = set()
+    bridged: set[str] = set()
     for page in sorted(origin_dir.glob("*.md")):
         if page.name == index_name or page.name in NON_SOURCE_FILES:
             continue
-        # Signal 3 — same-stem mirror (.md raw or forward-twin PDF)
-        ingested.add(page.stem + ".md")
-        ingested.add(page.stem + ".pdf")
         text = read_text(page)
-        fm = frontmatter(text)
-        # Signal 1 — raw: frontmatter backlink
-        raw_val = fm.get("raw", "")
+        raw_val = frontmatter(text).get("raw", "")
         for target in re.findall(r"\[\[([^\]|#]+?)\]\]", raw_val):
-            ingested.add(Path(target).name)
-        # Signal 2 — Original PDF: body backlink
+            bridged.add(Path(target).name)
         for target in re.findall(
             r"^Original PDF:\s*\[\[([^\]|#]+?)\]\]", text, flags=re.M
         ):
-            ingested.add(Path(target).name)
+            bridged.add(Path(target).name)
+    return bridged
+
+
+def _is_regenerable_pdf_twin(raw_file: Path) -> bool:
+    """A raw ``.md`` is a regenerable PDF twin (D1) when a same-stem ``.pdf``
+    original exists alongside it AND it carries the twin marker (``twin_extractor:``
+    frontmatter or a legacy ``Original PDF:`` reference).
+
+    Per D1 the ``.pdf`` is the canonical raw-index row; the twin ``.md`` gets NO
+    own row and is NOT an independent ingestion candidate — its ingestion state
+    rides on the ``.pdf`` row. caiso/engie dated CLIPS are NOT twins (no same-stem
+    ``.pdf``), so this never excludes them. Mirrors the same predicate
+    ``sb-wiki-lint``'s ``sync_raw_indexes`` uses, so discovery and index-writing
+    agree on what counts as a regenerable twin.
+    """
+    if raw_file.suffix != ".md":
+        return False
+    if not raw_file.with_suffix(".pdf").is_file():
+        return False
+    text = read_text(raw_file)
+    if "twin_extractor" in frontmatter(text):
+        return True
+    return bool(re.search(r"^\s*Original PDF:", text, flags=re.M))
+
+
+def _ingested_raw_filenames(wiki_root: Path, origin: str) -> set[str]:
+    """Index-authoritative "ingested?" set for one origin (U1b flip).
+
+    A raw is ingested when ANY of:
+      1. its raw-INDEX row marks ``Wiki = Yes`` (the authority — kept current by
+         lint; a hand-corrected cell is honored immediately), OR
+      2. it is a rowless bare PDF bridged by an existing source page's ``raw:`` /
+         ``Original PDF:`` backlink (legacy dated-clip origins keep no PDF row), OR
+      3. it is a regenerable PDF twin ``.md`` whose canonical same-stem ``.pdf``
+         row is ``Wiki = Yes`` (D1 — the twin's state rides on the ``.pdf`` row;
+         the twin is never an independent candidate).
+
+    Replaces the former private same-stem filesystem check: discovery now reads
+    the index instead of probing ``source_page.exists()``. ``collect_healing()``
+    is NOT touched — it has its own namespace.
+    """
+    raw_root = wiki_root / "raw"
+    sources_root = wiki_root / "wiki" / "sources"
+    yes = _index_yes_filenames(raw_root, origin)
+    ingested = yes | _backlink_bridge(sources_root, origin)
+    # A regenerable twin .md whose canonical .pdf row is Wiki=Yes is ingested.
+    origin_dir = raw_root / origin
+    if origin_dir.is_dir():
+        for md in origin_dir.glob("*.md"):
+            if (md.stem + ".pdf") in yes and _is_regenerable_pdf_twin(md):
+                ingested.add(md.name)
     return ingested
 
 
 def collect(wiki_root: Path, exclude: set[str], only_origin: str | None) -> dict:
     raw_root = wiki_root / "raw"
-    sources_root = wiki_root / "wiki" / "sources"
     items: list[dict] = []
     origins: dict[str, dict[str, int]] = {}
     raw_total = ingested = duplicates = 0
@@ -281,7 +355,7 @@ def collect(wiki_root: Path, exclude: set[str], only_origin: str | None) -> dict
             and f.name != index_name and f.name not in NON_SOURCE_FILES
         )
         marked_duplicate = duplicate_rows(origin_dir)
-        ingested_filenames = _ingested_raw_filenames(sources_root, origin)
+        ingested_filenames = _ingested_raw_filenames(wiki_root, origin)
         for raw_file in raw_files:
             raw_total += 1
             if raw_file.name in ingested_filenames:
@@ -451,7 +525,6 @@ def classify_targets(
 def collect_selection(wiki_root: Path, selected: list[dict]) -> dict:
     """Manifest for an explicit file list — same payload shape as collect(),
     plus `skipped_ingested[]` for listed files that already have a wiki page."""
-    sources_root = wiki_root / "wiki" / "sources"
     raw_root = wiki_root / "raw"
     items: list[dict] = []
     origins: dict[str, dict[str, int]] = {}
@@ -464,7 +537,7 @@ def collect_selection(wiki_root: Path, selected: list[dict]) -> dict:
     for it in selected:
         origin, raw_file = it["origin"], it["path"]
         if origin not in ingested_cache:
-            ingested_cache[origin] = _ingested_raw_filenames(sources_root, origin)
+            ingested_cache[origin] = _ingested_raw_filenames(wiki_root, origin)
         if it["filename"] in ingested_cache[origin]:
             skipped_ingested.append(f"{origin}/{it['filename']}")
             continue

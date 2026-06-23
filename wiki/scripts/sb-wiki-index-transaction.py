@@ -14,8 +14,11 @@ from pathlib import Path
 
 RAW_HEADER = "| File | Title | Date | Wiki |"
 RAW_SEPARATOR = "|------|-------|------|------|"
-SOURCES_HEADER = "| File | What it says | My take |"
-SOURCES_SEPARATOR = "|------|--------------|---------|"
+# U11: the wiki sources index is the unified 2-col `| File | Description |`
+# (the `My take` column was dropped — it lives canonically in the source-page
+# body; `What it says` was renamed to `Description`).
+SOURCES_HEADER = "| File | Description |"
+SOURCES_SEPARATOR = "|------|-------------|"
 
 
 class TransactionError(Exception):
@@ -277,18 +280,40 @@ def build_raw_edit(path: Path, raw_filename: str, title: str | None, date: str |
     return Edit(path=path, before=before, after=after, action=action)
 
 
-def build_sources_edit(path: Path, source_filename: str, summary: str, my_take: str) -> Edit:
+def build_sources_edit(path: Path, source_filename: str, summary: str) -> Edit:
+    """Add the unified 2-col `| File | Description |` wiki-sources row (U11).
+
+    The `My take` index column was dropped (it lives canonically in the
+    source-page body); `What it says` was renamed to `Description`. The
+    Description cell carries the LLM-derived factual summary. If the index FILE
+    is absent, it is created with the 2-col header + separator (ingest step 8
+    contract: "Wiki sources index file missing → create it with header row").
+    A legacy 3-col `| File | What it says | My take |` header is still LOCATED
+    (so an ADD lands correctly) — the row is appended in the 2-col shape; lint
+    migrates the legacy header + existing rows to the 2-col form.
+    """
     if not path.is_file():
-        raise TransactionError(f"missing target: {path}")
-    before = read_text(path)
-    lines = before.splitlines()
-    header_index, columns = find_table(lines, ["File", "What it says", "My take"])
-    file_column = columns.index("File")
+        before = ""
+        lines: list[str] = []
+    else:
+        before = read_text(path)
+        lines = before.splitlines()
+    # Locate the index table by the `File` column (tolerates a not-yet-migrated
+    # legacy 3-col header). Absent any table → write the unified header.
+    try:
+        header_index, columns = find_table(lines, ["File"])
+        file_column = columns.index("File")
+    except TransactionError:
+        if not lines:
+            lines = [SOURCES_HEADER, SOURCES_SEPARATOR]
+        else:
+            lines += [SOURCES_HEADER, SOURCES_SEPARATOR]
+        header_index = len(lines) - 2
+        file_column = 0
     row_index = find_row_by_link(lines, header_index, file_column, source_filename)
     row = [
         f"[[{escape_cell(source_filename)}]]",
         escape_cell(summary),
-        escape_cell(my_take),
     ]
     if row_index is None:
         insert_at = header_index + 2
@@ -298,7 +323,7 @@ def build_sources_edit(path: Path, source_filename: str, summary: str, my_take: 
         action = f"ADD wiki-sources row for {source_filename}"
     else:
         action = f"ALREADY recorded wiki-sources row for {source_filename}"
-    after = "\n".join(lines) + ("\n" if before.endswith("\n") else "")
+    after = "\n".join(lines) + ("\n" if (before == "" or before.endswith("\n")) else "")
     return Edit(path=path, before=before, after=after, action=action)
 
 
@@ -440,8 +465,7 @@ def _add_ingest_args(p: argparse.ArgumentParser, *, required: bool) -> None:
     p.add_argument("--origin", required=required)
     p.add_argument("--raw-file", required=required, help="raw filename including extension")
     p.add_argument("--source-file", required=required, help="source page filename, .md optional")
-    p.add_argument("--what-it-says", required=required, help="wiki-sources factual summary")
-    p.add_argument("--my-take", default="pending")
+    p.add_argument("--what-it-says", required=required, help="wiki-sources Description (factual summary)")
     p.add_argument("--raw-title", help="required only when the raw-index row is missing")
     p.add_argument("--raw-date", help="required only when the raw-index row is missing")
 
@@ -519,7 +543,7 @@ def main() -> int:
             source_filename = normalize_source_filename(args.source_file)
             edits = [
                 build_raw_edit(raw_index, args.raw_file, args.raw_title, args.raw_date),
-                build_sources_edit(sources_index, source_filename, args.what_it_says, args.my_take),
+                build_sources_edit(sources_index, source_filename, args.what_it_says),
             ]
             validate_targets([e for e in edits if e.path.exists()])
             print_plan(edits, args.dry_run)

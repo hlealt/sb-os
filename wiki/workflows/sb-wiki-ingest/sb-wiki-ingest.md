@@ -103,7 +103,7 @@ The ASCII-fold authority is the `normalize-filenames` subcommand of `sb-wiki-lin
 ### A10 — File and image routing
 
 **Rule A — Relocate referenced files via the designated capture tool.**
-When the user directs ingest to handle a file NOT yet in `raw/{origin}/` (parked in Downloads or in `raw/_unrouted/`), route it into `raw/{origin}/{title-slug}.{ext}` via the DESIGNATED sole raw-capture tool — `{sb_os_path}/wiki/scripts/sb-wiki-capture-source.py` — the SOLE raw writer, NEVER an ad-hoc file move. For a file already on disk (Downloads or `raw/_unrouted/`), pass it with `--mode manual --manual-file <path> --url <source-url> --origin <origin> --title "<title>"` (run `--help` for the full interface); the tool PRESERVES the staged file's original clip date when its name carries a `YYYY-MM-DD` prefix (pass `--capture-date YYYY-MM-DD` to set it explicitly), else stamps today — routing no longer silently re-dates a staged file — and emits an ASCII-clean slug. Guard: fire ONLY on explicit ingest/capture intent. Infer `origin` from URL/content and CONFIRM when ambiguous. For files already in `raw/_unrouted/`, this IS the staging→`raw/{origin}/` move.
+When the user directs ingest to handle a file NOT yet in `raw/{origin}/` (parked in Downloads or in `raw/_unrouted/`), route it into `raw/{origin}/{title-slug}.{ext}` via the DESIGNATED sole raw-capture tool — `{sb_os_path}/wiki/scripts/sb-wiki-capture-source.py` — the SOLE raw writer, NEVER an ad-hoc file move. For a file already on disk (Downloads or `raw/_unrouted/`), pass it with `--mode manual --manual-file <path> --url <source-url> --origin <origin> --title "<title>"` (run `--help` for the full interface); the tool PRESERVES the staged file's original clip date when its name carries a `YYYY-MM-DD` prefix (pass `--capture-date YYYY-MM-DD` to set it explicitly), else stamps today — routing no longer silently re-dates a staged file — and emits an ASCII-clean slug. Guard: fire ONLY on explicit ingest/capture intent. Infer `origin` from URL/content and CONFIRM when ambiguous. For files already in `raw/_unrouted/`, this IS the `raw/_unrouted/`→`raw/{origin}/` move.
 
 **Rule B — Screenshot images → `raw/_assets/` + embedded in place.**
 When the user explicitly mentions a file has images and provides their paths (e.g. from the OS screenshot folder), the agent MUST:
@@ -317,6 +317,10 @@ For each page in `existing-pages`:
 4. Update `last-touched: <today>` in frontmatter.
 5. Append inline `[^N]` markers in any newly-written prose tied to this source, with matching `[^N]: [[<raw-filename>]]` definition in `Sources`. Number footnotes locally per page; lint renumbers across pages later. Format per `../shared/citation-format.md`.
 
+#### Step 4 — co-mention reverse-link (forward arm — U3, append-only)
+
+Stops the missing-link gap (Finding 2 / schema § "Missing-link convention") from re-accumulating at ingest time, on a HIGH-PRECISION trigger ONLY: **same-source same-bullet co-mention**. When a single `Substance` bullet of THIS source names two or more co-occurring sibling pages P and Q (each is a wikilinked concept/entity page in that one bullet), append the link BOTH ways — `[[Q.md]]` to P's `related:` and `[[P.md]]` to Q's `related:` — as an append-only edit (never overwrite; idempotent — skip a direction already present). Fires ONLY on co-mention within ONE bullet (not across bullets, not from prose, not from the source title); a bullet naming a single page adds no cross-link. This is a structural `related:` edit, NOT a body edit and NOT a citation — no `[^N]` marker, no `Sources` footnote. Skip any pair where either page does not exist yet (a stub created later this ingest is linked at its own creation, not here). NEVER auto-link beyond this trigger — the cross-corpus backfill stays the human-gated lint flow (Step 7.8 + `update-links`).
+
 ### Step 4.5 — Stage existing topic-update proposals
 
 Process ALL THREE tiers built at step 3: `candidate-topic-updates` (firm), `candidate-topic-updates-speculative` (speculative), and `candidate-topic-updates-semantic` (semantic source-level, clause 7d). The staging logic is identical for all three — each produces staged proposals applied through the SAME apply-semantics (sub-step 3 below — the sole authority; never fork a second apply path). The tiers are surfaced in SEPARATE blocks at Stage 1 (`TOPIC UPDATES (firm — applied on commit; reject FN to skip)` for firm, `SEMANTIC TOPIC UPDATES (source-level, default reject)` for semantic, `SPECULATIVE TOPIC UPDATES` for speculative).
@@ -383,13 +387,14 @@ Arguments:
 - `--origin`: raw/source origin folder.
 - `--raw-file`: current raw filename, including extension. **For a PDF source, pass the `.pdf` filename — never the regenerable `.md` twin (D1).** The raw row keys on the immutable `.pdf` original; the twin `.md` (rendered by `sb-wiki-pdf-twin.py`, carrying `twin_extractor:` frontmatter) gets NO separate raw row. Passing the `.md` would create a second, drifting row. For a Markdown source, pass that `.md` filename as usual.
 - `--source-file`: source page filename matching Step 2 exactly.
-- `--what-it-says`: 1-sentence factual summary (≤280 chars) derived from the source page's `Substance` section.
-- `--my-take`: omit at initial ingest; default is `pending`. Stage 2 (step 11) may overwrite this cell with a 1-sentence reflected preview, with `—` (em-dash) if the user finalizes empty, or leave it as `pending` if the user declines reflection.
+- `--what-it-says`: the wiki sources index `Description` — a 1-sentence factual summary (≤280 chars) derived from the source page's `Substance` section. (The flag name is unchanged; the cell it fills is the unified `Description` column, U11.)
 - `--raw-title` and `--raw-date`: required only if the raw-index row is missing; use deterministic values already established for the raw index format.
+
+**No `My take` index cell (U11).** The wiki sources index is the unified 2-col `| File | Description |` — there is NO `My take` column. The user's reflection lives ONLY in the source-page body `## My take` section (the empty shell written at step 2; filled at Stage 2 or later in Obsidian). The helper takes no `--my-take` flag.
 
 Idempotency: if the wiki sources row already exists, the helper writes no duplicate and still ensures the raw index `Wiki` cell is `Yes`.
 
-Manual fallback for environments without Python: perform the same two edits manually as one staged unit, then verify both landed before continuing. Resolve raw index `{wiki_root}/raw/{origin}/{origin}.md` (or `{wiki_root}/raw/studies/studies.md`), locate/create the row whose `File` column wikilinks the current raw filename (the `.pdf` for a PDF source — D1, never the `.md` twin), and set the row's LAST cell (`Wiki`) to `Yes` — `Wiki` is the final cell for both the canonical 4-col and the legacy 3-col layouts; never write into a wider row's Date cell. Resolve wiki sources index `{wiki_root}/wiki/sources/{origin}/{origin}.md`, add or update the row `| [[<source-page-filename>]] | <What it says> | pending |`, and keep the cell rules in `../shared/index-formats.md` "`My take` Cell — Three States" authoritative. Raw-index FILE missing → LOG A WARNING; do not create it. Wiki sources index FILE missing → create it with `| File | What it says | My take |` plus the separator row before adding the source row.
+Manual fallback for environments without Python: perform the same two edits manually as one staged unit, then verify both landed before continuing. Resolve raw index `{wiki_root}/raw/{origin}/{origin}.md` (or `{wiki_root}/raw/studies/studies.md`), locate/create the row whose `File` column wikilinks the current raw filename (the `.pdf` for a PDF source — D1, never the `.md` twin), and set the row's LAST cell (`Wiki`) to `Yes` — `Wiki` is the final cell for both the canonical 4-col and the legacy 3-col layouts; never write into a wider row's Date cell. Resolve wiki sources index `{wiki_root}/wiki/sources/{origin}/{origin}.md`, add or update the 2-col row `| [[<source-page-filename>]] | <Description> |` (U11 — no `My take` cell), and keep the format in `../shared/index-formats.md` "Wiki Sources Index" authoritative. Raw-index FILE missing → LOG A WARNING; do not create it. Wiki sources index FILE missing → create it with `| File | Description |` plus the separator row before adding the source row.
 
 ### Step 9 — Append log entries
 
@@ -520,7 +525,7 @@ When the gate fires, run an ingest-healing pass on the just-committed source pag
 
 ### Step 11 — Stage 2 checkpoint
 
-**Silent mode override (step 11) — gate.** Silent mode (keyword present) → apply the "Step 11 silent override" block from `extensions/silent-mode.md` (loaded at boot): SKIP this step entirely — never present the prompt, never await a response. The source page user-half stays empty shells; the wiki sources index `My take` cell stays `pending` (set at step 8). The structured summary was already returned at step 10.
+**Silent mode override (step 11) — gate.** Silent mode (keyword present) → apply the "Step 11 silent override" block from `extensions/silent-mode.md` (loaded at boot): SKIP this step entirely — never present the prompt, never await a response. The source page user-half stays empty shells. (No wiki sources index cell is involved — U11 dropped the `My take` index column.) The structured summary was already returned at step 10.
 
 Optional post-commit reflection pass. Skip entirely if Stage 1 was aborted OR the source page was rejected at Stage 1. The ingest is already complete when this prompt appears. If the user ignores the prompt and sends an unrelated next command, do not treat that next command as a reflection response.
 
@@ -537,15 +542,15 @@ Handling:
 
 | User response | Behavior |
 |---------------|----------|
-| No response / unrelated next command | Do nothing. Source page `My take` stays empty. No `questions.md` entry written. Wiki sources index `My take` cell stays `pending` (set at step 8). |
-| `n`, `no`, `skip`, or equivalent no-reflection response | Skip reflection. Source page `My take` stays empty. No `questions.md` entry written. Wiki sources index `My take` cell stays `pending` (set at step 8). |
+| No response / unrelated next command | Do nothing. Source page `My take` stays empty. No `questions.md` entry written. (No wiki sources index cell — U11 dropped the `My take` index column.) |
+| `n`, `no`, `skip`, or equivalent no-reflection response | Skip reflection. Source page `My take` stays empty. No `questions.md` entry written. (No wiki sources index cell — U11 dropped the `My take` index column.) |
 | Freeform reflection text | Route the text into `My take` (source page) and/or `questions.md` entries by intent, regardless of order. |
 
 Reflection routing — two destinations:
 
 | Destination | Receives | Where it is written |
 |-------------|----------|---------------------|
-| `My take` | "why it mattered" reflection content | The source page `## My take` section (UNCHANGED — still feeds the 3-state index cell below) |
+| `My take` | "why it mattered" reflection content | The source page `## My take` BODY section (the ONLY home — U11 dropped the index column; no index cell is written) |
 | `questions.md` | every question AND every dive-deeper / follow-up | One `{wiki_root}/questions.md` entry per question/dive-deeper, `seeded-by:` THIS source, per `../shared/question-entry-shapes.md` |
 
 1. Treat the first substantive response to the Stage 2 prompt as a routing bundle. The user does NOT need to answer in order.
@@ -562,7 +567,7 @@ Reflection routing — two destinations:
 
 **Absent `questions.md` at capture time → CREATE-ON-FIRST-CAPTURE.** When the user routes a question/dive-deeper but `{wiki_root}/questions.md` does not yet exist, create the file (frontmatter `type: questions`, per `../../docs/wiki-schema.md` § "Questions layer — questions.md"), then append the entry. This is consistent with the Step 0.6 load contract: absence at LOAD time means the answer-scan held an empty set for THIS run (layer was OFF for scanning), but a user reflection is an explicit write intent — honor it by materializing the registry. Never silently drop a user-volunteered question. (Load-time absence = no-op for reading; capture-time routing = create-then-write.)
 
-After handling the Stage 2 response, re-sync the wiki sources index `My take` cell per `../shared/index-formats.md` § "`My take` Cell — Three States (NEVER blank)" — its **Write rules** table defines the Stage 2 (step 11) outcome→cell-value mapping (routed reflection filled `My take` → reflected preview; `My take` empty while `Open questions`/`Dive deeper` filled → `—`; declined/ignored/no routed content → `pending`). Source page is canonical; index is derived. **NEVER leave the cell blank.**
+After handling the Stage 2 response, write any routed `My take` content to the source page `## My take` BODY section only. NO wiki sources index cell is written — U11 dropped the `My take` index column; the take lives canonically (and solely) in the source-page body. The wiki sources index is the unified 2-col `| File | Description |` (per `../shared/index-formats.md` § "Wiki Sources Index"), set at step 8 and never touched by Stage 2.
 
 End of flow.
 

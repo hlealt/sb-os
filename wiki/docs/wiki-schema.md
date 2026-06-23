@@ -12,6 +12,31 @@ User mode preference: **query-driven** (asks the agent rather than browses), wit
 
 Audience: future agents executing wiki ingest / create-topic / lint / query operations, and the user reviewing those operations.
 
+## Terminology (canonical glossary)
+
+This wiki uses ONE canonical name per term. Every wiki engine doc, workflow, command, and owner-facing artifact MUST use the canonical name; the banned aliases below are forbidden as NAMES for the thing (a plain-language gloss is allowed only when the canonical name is paired with it in the same place). This glossary is the authority — when any doc drifts, conform it here, never invent a new alias. New terms are added here first, then referenced elsewhere (schema-first).
+
+| Term (the thing) | CANONICAL name (use this) | Banned aliases (NEVER use as a name) |
+|------------------|---------------------------|--------------------------------------|
+| The lint operation | **`/sb-wiki-lint`** — self-described as **"structural and citation lint"** (the function it ALSO performs is index maintenance; write "structural and citation lint + index maintenance" when the maintenance role must be stated) | "health check", "health-check", "health check + index maintenance" as the NAME |
+| Distil one raw source → pages | **`/sb-wiki-ingest`** ("ingest") | "import", "bulk import" as a name (plain-language gloss allowed only when paired with the real name) |
+| Backfill every non-ingested source | **`/sb-wiki-ingest-all`** ("ingest-all") | "the bulk importer", "bulk import" as a name |
+| Re-read an already-ingested source and edit its pages in place to recover lost substance | **`/sb-wiki-ingest-healing`** ("healing" / "heal") | "single-page repair", "single page repair", "repair", "reingest" (as a workflow name), "`/sb-wiki-reingest`" (RETIRED 2026-06-19 — never name it as a current component) |
+| Healing — the 1-target path (owner present, previews before its single commit) | **self-heal** | "single-page repair" |
+| Healing — the ≥2-target / "heal all" path (one sub-agent per source, strictly sequential) | **orchestrated** | — |
+| The triage→tag→heal queue marker that healing's "heal all" reads | **`#reingest`** (tag — STILL VALID; distinct from the retired `/sb-wiki-reingest` workflow) | do NOT conflate with the retired workflow |
+| The unrouted-inbox folder | **`raw/_unrouted/`** (the literal folder name) | "staging", "staging folder", "staged" (as the folder's name), "inbox" — note: "staged"/"staging" remains valid ONLY in the unrelated sense of uncommitted file changes |
+| The citation-integrity sub-command (validates footnote citations on named pages; NOT a full lint, touches no indexes) | **`check-pages`** | "the narrow citation check" as a name |
+| PDF→md text extracted so ingest can distil a PDF | **twin** / **PDF twin** / **text twin** (the regenerable `.md` derivative built by `sb-wiki-pdf-twin.py`) | "extract", "text extract", "extracted-text copy" |
+| Per-source synthesis page (1:1 with a raw file, at `wiki/sources/{origin}/{stem}.md`) | **source page** | "distilled page" ("distilled" is fine as the synthesis verb/adjective, never as the page's name) |
+| The three knowledge page types | **concept page / entity page / topic page** | — |
+| Per-origin raw table (`raw/{origin}/{origin}.md`, carries the `Wiki` column) | **raw leaf index** | — |
+| Per-folder wiki table (`concepts.md` / `entities.md` / `topics.md`, and `wiki/sources/{origin}/{origin}.md`) | **wiki leaf index** (the sources one: **wiki sources leaf index**) | — |
+| The status column in the raw leaf index (values `No` / `Yes` / `Partial` / `Duplicate (of …)`) | **the `Wiki` column** | "imported ✓ mark", "Wiki=Yes mark" |
+| The backfill discovery function in `sb-wiki-ingest-all-manifest.py` (decides "not yet ingested") | **`collect()`** | naming the act "discovery" alone without the function name |
+
+**Raw immutability — clarified.** "Raw is immutable" means **do NOT edit a saved source's CONTENTS** — the verbatim record stays auditable. It does NOT mean a raw file can never be relocated: MOVING a raw file inside `raw/` (e.g. routing it out of `raw/_unrouted/` into `raw/{origin}/`, or a title-conformance rename) is permitted, because the bytes are preserved. The two permitted raw mutations are (1) a filename change (title-conformance rename, §"Raw PDF title-conformance") and (2) a relocation inside `raw/` that preserves contents; the file's CONTENT is never edited.
+
 ## Installer scope guarantee
 
 The sb-os installer (`install.py`) NEVER reads or writes any file under `{wiki_root}/wiki/` or `{wiki_root}/raw/`. The installer's write surface is limited to: managed CLAUDE.mds (marker blocks only), `.claude/` thin loaders, and `sb-os.json` at the vault root. Wiki content — leaf indexes (`wiki/concepts/concepts.md`, `wiki/entities/entities.md`, `wiki/topics/topics.md`, `wiki/sources/{origin}/{origin}.md`), raw leaf indexes (`raw/{origin}/{origin}.md`), source pages, concept pages, entity pages, topic pages, and the `logs/` queues — is created and maintained EXCLUSIVELY by `/sb-wiki-lint` and `/sb-wiki-ingest`. Re-running `install.py --upgrade` is safe at any time and will not modify, overwrite, or delete any wiki content.
@@ -106,7 +131,7 @@ The four page types above are the **base set**. Other sb-os modules MAY add thei
     │   └── {slug}.md
     └── sources/
         ├── {origin}/             mirrors raw/{origin}/
-        │   ├── {origin}.md       leaf index (factual + My take column)
+        │   ├── {origin}.md       leaf index (| File | Description |, U11)
         │   └── {date}-{slug}.md
         └── studies/              mirrors raw/studies/
             ├── studies.md
@@ -269,7 +294,7 @@ A raw **PDF** filename MUST equal the kebab-slug of the paper's actual title (th
 | Title source | The title on the document; the raw index `Title` column is the maintained record lint compares against |
 | Owner | `/sb-wiki-ingest` renames at ingest (step 1.5, before the source page exists); `/sb-wiki-lint` detects + proposes renames for already-ingested PDFs (step 7.6, user-gated) |
 | Collision | If `{title-slug}.pdf` already exists, NEVER overwrite — the raw is a duplicate; ingest halts, lint flags it for merge/delete |
-| Immutability | A rename changes the FILENAME only; raw content is never edited. This is the sole permitted mutation of a raw file |
+| Immutability | A rename changes the FILENAME only; raw CONTENT is never edited. Raw immutability governs contents, not location — a filename change and a relocation inside `raw/` are both permitted (see Terminology § "Raw immutability — clarified"); editing the bytes is not |
 
 **Title-slug algorithm.** (1) Lowercase the title. (2) Replace each run of whitespace and `+ / : – —` with a single `-`. (3) Remove `? ! , . " ' ( ) [ ]`. (4) Collapse consecutive `-`; trim leading/trailing `-`. Acronyms lowercase (`AI` → `ai`). Example: `International AI Safety Report 2026` → `international-ai-safety-report-2026`.
 
@@ -441,50 +466,31 @@ The user never writes citations manually. Renumbering on edit is agent-handled.
 - Lint rebuilds the Sources section by reading inline `[^N]` markers. If the user manually added prose context within a footnote definition (e.g., `[^1]: [[file.md]] — note: this is the original`), lint preserves user prose; only renumbers.
 - Stale-definition removal is REPORT-ONLY — lint NEVER auto-removes a footnote definition. A def with no inline reference is mechanically indistinguishable from stub provenance (stubs are born with defs and no inline markers; later ingests append inline-cited sections while the original def stays unreferenced), and auto-removal strips the page's only graph edge to that source. Lint reports unreferenced defs for hand-reconciliation. A page whose definitions have ZERO inline markers is the ingest-built stub-provenance shape — not a finding, never touched. Set mismatches (inline marker without definition, duplicate definitions) are content defects — reported, never auto-repaired.
 
-## Wiki sources index format
+## Wiki sources index format (U11 — unified `File | Description`)
 
 Each `wiki/sources/{origin}/{origin}.md` index:
 
 ```markdown
-| File | What it says | My take |
-|------|--------------|---------|
-| [[YYYY-MM-DD-slug.md]] | 1-sentence factual summary (≤280 chars). | 1-sentence opinion: why I cared. |
+| File | Description |
+|------|-------------|
+| [[YYYY-MM-DD-slug.md]] | 1-sentence factual summary (≤280 chars). |
 ```
 
-- `What it says` is agent-written during ingest (factual derivative of the source's `Substance` section).
-- `My take` is **agent-derived from the source page's `My take` section** during ingest and refreshed during lint. **The source page is canonical; the index entry is derived. The user never writes the index manually.**
-- The `My take` cell encodes one of three explicit states. **Blank is BANNED** as a state marker — every row carries one of the three values below.
+- `Description` is agent-written during ingest (factual derivative of the source's `Substance` section). It is the same judgment-cell name the concepts/entities/topics leaf indexes use (schema-wide unification).
+- **The source page is canonical; the index entry is derived. The user never writes the index manually.**
 - Stale-by-7d acceptable for skim purpose; agents may fall back to reading the source page if deeper signal is needed.
 
-### `My take` cell — three states (NEVER blank)
+### `My take` is NOT an index column (U11)
 
-The `My take` cell distinguishes **pre-reflect** (the user has not yet been prompted, or skipped the prompt — action pending) from **post-reflect-empty** (the user reflected and intentionally recorded no take — final). Blank cannot encode this distinction; explicit tokens can.
+The sources index formerly carried a third `My take` column. It was a DERIVED preview of the source page's `## My take` section, with NO programmatic reader, and only ~2.7% of rows (~24/904) ever carried an authored take — so the column was dropped. The user's reflection lives canonically in the **source PAGE BODY** `## My take` section (created as an empty shell by ingest step 2; filled at Stage 2 or later in Obsidian). Dropping the index column does NOT touch the body section — every authored take survives in its source page.
 
-| State | Token in cell | Meaning | Source page state |
-|-------|---------------|---------|-------------------|
-| Pre-reflect | `pending` | Stage 2 was skipped, ignored, or never reached — the source page's `My take` section is an empty shell awaiting user action. | `My take` heading present, body empty |
-| Post-reflect-empty | `—` (em-dash, U+2014) | Stage 2 ran and the user explicitly routed reflection content to `questions.md` without recording a take. Finalized. | `My take` heading present, body empty while Stage 2 captured one or more `questions.md` entries (`seeded-by:` this source) |
-| Reflected | 1-sentence opinion derived from the source page's `My take` section (≤280 chars; truncate with ellipsis if longer). Table-safe: wikilinks flattened to display text BEFORE truncation, remaining literal `\|` escaped — the cell must never split the 3-column row | The user filled `My take` on the source page. Index cell mirrors the take. | `My take` heading present, body has substantive content |
+The retired index machinery (the three-state `pending` / `—` / reflected-preview cell rule and the 7-day staleness queue for it) goes away with the column. The topic PAGE's required `Scope` section and the source PAGE's `## My take` body section are unchanged.
 
-**Rationale.** The two empty states have different downstream behaviors (see below) and different remediations from the user's standpoint. Blank conflates them. Two human-readable, typographically distinct tokens preserve the distinction at a glance and let lint detect each state programmatically. `pending` was chosen for its action-pending semantics (a verb-shaped keyword the user reads as "needs me to act"); `—` (em-dash) was chosen for its long-standing convention as a typographic null marker (the user reads it as "nothing here, intentionally").
+### Migration (U11, lint-owned, idempotent)
 
-### Lint and ingest behavior per state
+`/sb-wiki-lint` migrates each legacy 3-column `| File | What it says | My take |` sources index to the 2-column `| File | Description |`: the header and separator become the 2-col form, each data row's `What it says` text is preserved verbatim as `Description`, and the `My take` cell is dropped. A row already in the 2-col form is left byte-stable (idempotent — a second lint pass is a no-op). A user-customized / bespoke leaf-index layout (neither the canonical 3-col legacy nor the 2-col unified shape) is REPORTED for hand-review, never force-rewritten.
 
-| State | Written by | When | Lint behavior |
-|-------|-----------|------|---------------|
-| `pending` | `sb-wiki-ingest` step 8 (initial) AND step 11 if Stage 2 is skipped, ignored, or receives no routed content | At end of ingest when no take was captured | The 7-day staleness rule applies — lint may re-sync (no-op if source page's `My take` body is still empty) |
-| `—` | `sb-wiki-ingest` step 11 if Stage 2 routes reflection content to `questions.md` while `My take` remains empty — see Stage 2 finalization rule below | At end of Stage 2 | Final. The 7-day staleness rule does NOT apply — `—` rows do NOT age out. Lint preserves `—` on every pass (no-op). |
-| Reflected (1-sentence preview) | `sb-wiki-ingest` step 11 if the user filled `My take`; refreshed by `sb-wiki-lint` step 6 on every run | At end of Stage 2 / on every lint pass | Re-sync from the source page's `My take` section on every run, preserving the three-state distinction (if the source page's `My take` body is now empty after previously having content, the lint downgrades the cell to `—` only if a `pending` state cannot be inferred — see "Re-sync algorithm" below) |
-
-**Stage 2 finalization rule.** The `—` token is written ONLY when the user explicitly engaged Stage 2 and routed reflection content to `questions.md` (a question / dive-deeper captured as a `questions.md` entry) while leaving `My take` empty. If the user answered `n`, ignored the prompt, or sent an unrelated next command, the cell stays `pending` — the user did not produce a finalization signal.
-
-**Re-sync algorithm (lint step 6).** For each row:
-- If the source page's `My take` section has substantive content → write the 1-sentence preview (overwriting the prior cell value).
-- If the source page's `My take` section is empty AND the cell currently reads `—` → preserve `—` (already finalized).
-- If the source page's `My take` section is empty AND the cell currently reads `pending` → preserve `pending`.
-- If the source page's `My take` section is empty AND the cell currently reads anything else (legacy blank, stray content, etc.) → write `pending` (default to action-pending; safer to over-prompt the user than to over-finalize).
-
-The raw index (`raw/{origin}/{origin}.md`) keeps its existing format with `Wiki` column — factual only, no opinion. Raw indexes are created and maintained by lint (see `/sb-wiki-lint`).
+The raw index (`raw/{origin}/{origin}.md`) keeps its existing format with `Wiki` column — factual only, no opinion, UNCHANGED by U11. Raw indexes are created and maintained by lint (see `/sb-wiki-lint`).
 
 ## Topic creation rules
 
@@ -716,7 +722,7 @@ Subjects that match nothing here → trigger the Stage-1 off-purpose flag.
 |---------|----------|
 | `## Focus areas` | The match set for classification (in-focus detection). |
 | `## Down-weight signals` | Hints that push a source toward the peripheral band. |
-| `## Quality bar` | Synthesis preferences applied while writing the source page. Does NOT influence index `What it says` phrasing (see Index neutrality guard). |
+| `## Quality bar` | Synthesis preferences applied while writing the source page. Does NOT influence index `Description` phrasing (see Index neutrality guard). |
 | `## Out of purpose` | Optional explicit off-purpose list; if absent, off-purpose = "matches no Focus area". |
 
 ### Classification model
@@ -744,7 +750,7 @@ The lens touches **only the surfaces ingest already resolves by agent judgment**
 | Index updates (raw, sources, concepts, entities, topics) | Speculative topic-tier **ranking** (within the existing top-2 cap) |
 | Log entry shapes; Stage-2 reflection | Stage-1 **presentation** (classification line + off-purpose flag) |
 
-> **Index neutrality guard (the `What it says` edge case).** The wiki sources index `What it says` cell is LLM-derived from the (lens-modulated) `Substance` section, so a dialed-up in-focus Substance could bleed editorial framing into the index. Guard: write `What it says` **band-neutral** — the same factual core claim regardless of band. The index *update mechanism* stays mechanical/untouched; only the source-cell phrasing carries this neutrality rule. `Quality bar` does NOT influence index phrasing.
+> **Index neutrality guard (the sources `Description` edge case).** The wiki sources index `Description` cell (U11 — formerly `What it says`) is LLM-derived from the (lens-modulated) `Substance` section, so a dialed-up in-focus Substance could bleed editorial framing into the index. Guard: write `Description` **band-neutral** — the same factual core claim regardless of band. The index *update mechanism* stays mechanical/untouched; only the source-cell phrasing carries this neutrality rule. `Quality bar` does NOT influence index phrasing.
 
 ### Per-step modulation
 
@@ -941,14 +947,15 @@ Multi-call operations (e.g. an ingest probing several stub-candidates): the FIRS
 
 ## Operations
 
-Four operations covering the wiki lifecycle:
+The operations covering the wiki lifecycle:
 
 | Component | Type | Invoked by | Purpose |
 |-----------|------|------------|---------|
 | `/sb-wiki-ingest <slug>` | Slash command | The user | Distill a raw source into wiki pages |
 | `/sb-wiki-ingest-all [origin \| file …]` | Slash command | The user | Backfill: ingest non-ingested raw sources (all, one origin, or an explicit file list) via batched subagents, then lint |
+| `/sb-wiki-ingest-healing [target …]` | Slash command | The user | Healing: re-read an already-ingested source and edit its pages in place to recover lost substance (self-heal for 1 target; orchestrated for ≥2 / "heal all" via `#reingest`). Superseded the retired `/sb-wiki-reingest` on 2026-06-19. |
 | `sb-wiki-create-topic` | Skill (auto-discovered) | Agent mid-ingest, OR auto-fired when the user expresses intent | Create a topic page from a candidate or freshly-proposed topic |
-| `/sb-wiki-lint` | Slash command | The user | Health check + index maintenance for `raw/` and `wiki/` |
+| `/sb-wiki-lint` | Slash command | The user | Structural and citation lint + index maintenance for `raw/` and `wiki/` |
 | `/sb-wiki-query <question>` | Slash command | The user | Synthesize an answer from wiki + optionally file the result back |
 | `/sb-wiki-update-backfill <mode>` | Slash command | The user | Retroactive backfill — scan all sources for missed topic updates (propose-only) or apply owner-accepted rows |
 
@@ -968,10 +975,10 @@ Two invocations: `/sb-wiki-ingest <slug>` (default, interactive) and `/sb-wiki-i
 | 5 | Create stubs for new entities/concepts that meet the rule | Agent |
 | 6 | Detect candidate-topic triggers (Contradiction, Evolution, Cross-application); add `> [!warning] Disputed` callouts on Contradiction-`same-scope-opposing` | Agent |
 | 7 | Update raw index: `Wiki = Yes`. **Tier-specific rule:** raw-index ROW missing → CREATE it; raw-index FILE missing → LOG A WARNING and do NOT create (lint owns raw-index files); wiki-sources index FILE missing → CREATE with header (step 8 responsibility). | Agent |
-| 8 | Update wiki sources index (`What it says` filled; `My take` set to `pending` — populated post Stage 2 per the three-state rule). Index FILE missing → CREATE with header row. | Agent |
+| 8 | Update wiki sources index (`Description` filled — factual derivative of the source's `Substance`). 2-col `\| File \| Description \|` (U11 — no `My take` index column). Index FILE missing → CREATE with header row. | Agent |
 | 9 | Append `candidate-topic` entries to `logs/topics.md` and `candidate-mention` entries to `logs/mentions.md` when triggered (the actionable queues), each via the lock-guarded `wiki/scripts/sb-wiki-shared-append.py append-block` (collision-safe for parallel bulk workers — see § Concurrency safety under `/sb-wiki-ingest-all`). NO `ingest` / `concept-created` / `entity-created` / `topic-updated` entries — created pages and updates are recorded by the pages themselves | Agent |
 | 10 | **Stage 1 checkpoint**: present structured table + PROPOSED TOPICS block + the topic-update blocks (`TOPIC UPDATES (firm — applied on commit; reject FN to skip)`, `SEMANTIC TOPIC UPDATES (source-level, default reject)`, `SPECULATIVE TOPIC UPDATES`, `PROPOSED ANSWERS` — each omit-when-empty); decision rows carry tier-prefixed IDs (`T`/`F`/`SEM`/`S`/`A`); file rows stay bare numbers. The user accepts-all / rejects N / aborts file changes, OR `accept everything` (commit + accept every block at once, optionally `… except <IDs>`); per topic: accept TN (agent invokes `sb-wiki-create-topic` skill now) / defer TN (keeps as candidate in log). GENUINE firm topic-update rows apply on commit (any committing response applies them minus explicit `reject FN`; `abort` rolls back everything); semantic / speculative / proposed-answer rows default-reject (explicit `accept SEMN`/`accept SN`/`accept AN`, or `accept everything`, applies via Step 4.5). An explicit `reject FN`/`reject SEMN` on a firm or semantic row ledgers that (source, topic) pair in `{wiki_root}/pending-topic-updates.md` (no-renag); omission-defaults never ledger. Approved changes commit before Stage 2 begins. | Agent + User |
-| 11 | **Stage 2 checkpoint** (optional, post-commit): present reflection prompt after approved changes are committed. The user can ignore it, decline it, or answer with freeform reflection content in any order. The agent routes content by intent — `My take` → the source page `My take` section; questions / dive-deepers → `{wiki_root}/questions.md` entries (`seeded-by:` this source) — writes the routed content, and syncs the `My take` column to the wiki sources index. | Agent + User |
+| 11 | **Stage 2 checkpoint** (optional, post-commit): present reflection prompt after approved changes are committed. The user can ignore it, decline it, or answer with freeform reflection content in any order. The agent routes content by intent — `My take` → the source page `## My take` BODY section; questions / dive-deepers → `{wiki_root}/questions.md` entries (`seeded-by:` this source) — and writes the routed content. NO wiki sources index cell is written (U11 — the index has no `My take` column; the take lives only in the source-page body). | Agent + User |
 
 **No mid-flow user input during steps 1–9.** All user interaction happens at steps 10–11.
 
@@ -989,7 +996,7 @@ A raw T4 framing (a specific below-bar claim extracted verbatim from a source) M
 
 | Rule | Requirement |
 |------|-------------|
-| **A — Relocate referenced files into raw via the designated capture tool** | When the user directs ingest to handle a file NOT yet in `raw/{origin}/` (in Downloads, or parked in `raw/_unrouted/`), route it into `raw/{origin}/{title-slug}.{ext}` via the workspace's DESIGNATED sole raw-capture tool — the SOLE raw writer, NEVER an ad-hoc file move. Guard: fire ONLY on explicit ingest/capture intent. Infer `origin` from URL/content and CONFIRM when ambiguous (routing error risk). For files already in `raw/_unrouted/`, this IS the staging→`raw/{origin}/` move. |
+| **A — Relocate referenced files into raw via the designated capture tool** | When the user directs ingest to handle a file NOT yet in `raw/{origin}/` (in Downloads, or parked in `raw/_unrouted/`), route it into `raw/{origin}/{title-slug}.{ext}` via the workspace's DESIGNATED sole raw-capture tool — the SOLE raw writer, NEVER an ad-hoc file move. Guard: fire ONLY on explicit ingest/capture intent. Infer `origin` from URL/content and CONFIRM when ambiguous (routing error risk). For files already in `raw/_unrouted/`, this IS the `raw/_unrouted/`→`raw/{origin}/` move. |
 | **B — Screenshot images → `_assets/` + embedded in place** | When the user explicitly mentions a file has images and provides their paths (e.g. from `C:\Users\...\Screenshots`), the ingesting agent MUST: (1) move each image into `{wiki_root}/raw/_assets/` renamed to a descriptive slug (NEVER a name like "Captura de tela …"); (2) embed `![[slug.png]]` in the raw Markdown at the position each image appears, using image-read + surrounding context; (3) FLAG any placement it is unsure of — NEVER silently guess placement. The user's explicit mention of the file/images IS the required direction to write under `raw/_assets/`. |
 
 #### Stage 1 checkpoint format
@@ -1070,7 +1077,7 @@ The user can answer with a bundled, out-of-order reflection. The agent routes by
 
 Explicit or semantically clear content MUST go to its matching destination even if it arrives while another category is displayed. `My take` content → the source page `My take` section. `Open questions` and `Dive deeper` content → `{wiki_root}/questions.md` entries (`seeded-by:` this source; one entry per question/dive-deeper) per "Questions layer — questions.md" and `question-entry-shapes.md`; they are NOT written back to the source page (v5 — the source page carries `My take` only). Example: "quero dive deeper em graph databases" becomes a `questions.md` entry, never a source-page section. If a response contains multiple routed spans, route each span to its matching destination. If a response contains substantive text with no routing signal, write it under `My take`. If routing is ambiguous and misrouting would change meaning, ask one targeted clarification.
 
-The agent re-syncs the `My take` index cell per the three-state rule defined under "Wiki sources index format" — write the 1-sentence preview if `My take` was filled; write `—` if Stage 2 routed `Open questions` or `Dive deeper` content to `questions.md` while `My take` stayed empty; leave `pending` if Stage 2 was declined, ignored, or produced no routed content.
+The agent writes routed `My take` content to the source page `## My take` BODY section only. NO wiki sources index cell is written (U11 — the index has no `My take` column; the take lives canonically in the source-page body).
 
 #### Silent (non-interactive) mode
 
@@ -1088,7 +1095,7 @@ The default (interactive) mode is the behavior specified throughout this section
 | Semantic topic updates (step 10 SEMANTIC TOPIC UPDATES) | User picks `accept SEMN` / `reject SEMN` (default reject all) | **QUEUE all** — append each to `{wiki_root}/pending-topic-updates.md` via the lock-guarded `wiki/scripts/sb-wiki-shared-append.py append-row` (dedupe-keyed by (source, topic) pair; per-file lock so parallel bulk workers never clobber a queued row; create the file with a minimal header if absent); ONE `Flags` line per queued row; NEVER apply unattended, NEVER drop. |
 | Speculative topic updates (step 10 SPECULATIVE TOPIC UPDATES) | User picks `accept SN` / `reject SN` (default reject all) | `reject` ALL. Write ONE audit record per rejected speculative update into `Flags`. NEVER apply unattended. |
 | Proposed answers (step 10 PROPOSED ANSWERS — both homes; INCLUDES answer-origin firm entries staged by Step 3·7c) | User picks `accept AN` / `reject AN` (default reject all) | `reject` ALL. Write ONE audit record per rejected proposed answer into `Flags`. NEVER apply unattended (no `questions.md` `answer:` accretion; no topic-home strike-and-fold). |
-| Stage 2 reflection (step 11) | Optional post-commit prompt | SKIPPED entirely — never presented, never awaited. The source page user-half stays empty shells; the wiki sources index `My take` cell stays `pending` (set at step 8). |
+| Stage 2 reflection (step 11) | Optional post-commit prompt | SKIPPED entirely — never presented, never awaited. The source page user-half stays empty shells. No wiki sources index cell is involved (U11 — the index has no `My take` column). |
 | Mid-flow HALT | A `<slug>` resolving to multiple raw files HALTS at step 1 for disambiguation | No HALT — see slug-resolution rule below. |
 
 Only the FIRM tier of genuine topic updates auto-applies; semantic topic updates QUEUE to `{wiki_root}/pending-topic-updates.md` (never applied, never dropped); speculative updates and proposed answers (including answer-origin firm entries) NEVER auto-apply. The audit records above are emitted to the structured-summary `Flags` channel (the existing caller-facing field — NO new log entry type, NO parallel log; the `topic-updated` type is retired per "Resolution signal" below and the queues hold no accretion/history entries). The applied topic page is its own durable record; `Flags` is the per-run audit trail `/sb-wiki-ingest-all` aggregates into its final-report counts (firm applied / speculative rejected / answers rejected). This is the v5 silent-mode behavior change.
@@ -1164,12 +1171,13 @@ The script executes the deterministic halves of steps 1, 2, 3, 4, 5, 6, 7, 7.5, 
 | 3 | **Deterministic.** Detect unresolved Disputed callouts in concepts/entities — flagged date (first `YYYY-MM-DD` in the callout body) >30 days old AND no referenced topic page exists to resolve it (resolution = page exists). Callouts with no resolving topic AND no parseable date surface as `unparseable` for manual review |
 | 4 | Walk `logs/topics.md` — flag `candidate-topic` entries aged AT OR ABOVE the candidate age floor (default 7 days; helper flag `--candidate-age-floor`, `0` = every pending candidate) whose topic page does NOT yet exist (resolution = page exists, so a candidate with a live page is not "aging", it is spent and pruned at step 8). Aged candidates feed the step-9 CANDIDATE-TOPIC PROMOTION block (promote → `sb-wiki-create-topic` per accepted candidate, NEVER auto-authored; dismiss → delete the entry from `logs/topics.md`; defer default). ALSO walk `logs/theses.md` — flag every `speculative-thesis-update` as awaiting investor decision (never auto-pruned — the target thesis page already exists, so "page exists" is not a resolution signal); `proposed-new-thesis` resolves like `candidate-topic` (spent → pruned at step 8) |
 | 5 | **Deterministic + judgment.** Verify wikilinks resolve (broken if target file missing); CLASSIFY each broken link — `bucket A` (unique casefold+accent+quote/dash fold-match to an existing file → auto-fixable, exact `suggestion`) or `needs-judgment` (LLM splits into bucket B = genuinely-missing concept/entity to author as a stub, vs bucket C = unresolvable/duplicate, reported only). Ambiguous targets (≥2 fold-candidates) report candidates and default to C |
-| 6 | For each `wiki/sources/{origin}/` — re-sync `My take` column from each source page's `My take` section per the three-state rule (`pending` / `—` / reflected preview — see "Wiki sources index format" §); renumber footnotes (safe bijections only); REPORT unreferenced defs and set mismatches per "Citation format" § — stale-def removal is never auto-applied |
+| 6 | For each `wiki/sources/{origin}/` — maintain the `\| File \| Description \|` index (U11): migrate any legacy 3-col `\| File \| What it says \| My take \|` to the 2-col form (preserve `What it says` text as `Description`, drop the `My take` cell — idempotent; a bespoke layout is REPORTED, never rewritten), and report a missing source row as `judgment_needed`; renumber footnotes (safe bijections only); REPORT unreferenced defs and set mismatches per "Citation format" § — stale-def removal is never auto-applied |
 | 7 | For each `raw/{origin}/` — verify `{origin}.md` index exists; if missing, create it with the standard `\| File \| Title \| Date \| Wiki \|` columns. For each raw file in `{origin}/`, ensure a row exists with `Wiki = No` (default) or `Yes/Partial` (preserved). Same for `raw/studies/studies.md`. **Index creation and maintenance is the agent's job**, not the user's. Also: **type-tag sync** (deterministic, auto-applied) — every page under `wiki/` gets its `type:` value appended to `tags:` when absent (append-only, user tags preserved); index files (stem = parent dir name) missing `type:` get `type: index` + `tags: [index]`; non-index pages with no resolvable `type:` are reported, never guessed. Per Frontmatter schemas § "Type tag (mandatory)". ALSO: **stale-`Wiki=No` heal** (deterministic, auto-applied) — flip a raw-index row `No`→`Yes` when the raw's 1:1 source page exists (the source page's `raw:` backlink names the raw, OR a same-stem source page exists under `wiki/sources/{origin}/`); ONLY an exact `No` is flipped (`Partial` / `Duplicate (…)` / `Yes` preserved). Rows whose File cell points at a raw file ABSENT on disk are reported as DANGLING — never auto-flipped, never auto-deleted (a raw may have been moved). This heals the inconsistency the Step-1.7 content-duplicate gate keys on (gate comparison set = source-page existence, so a stale `No` once masked a real duplicate). |
 | 7.5 | Folder-subdivision detection. For `wiki/concepts/` and `wiki/entities/`, group pages by `kind:` frontmatter. Surface kinds at ≥10 pages as a SUBDIVISION PROPOSAL block (threshold authority: `../workflows/shared/folder-structure.md` § "Stability Rules"). Skip `wiki/topics/` (count <20) and `wiki/sources/` (already subdivided by origin). On user accept at step 9, the agent creates `{type}/{subfolder}/`, leaf index, parent CLAUDE.md marker-block routing rules, moves pages, and rewrites parent index as router. The folder structure and indexes are the record — NO log entry. Naming and policy per schema § "Folder subdivision". |
 | 7.6 | **PDF title-conformance detection.** For each PDF in `raw/{origin}/`, compare the stem to the kebab-slug of the raw index `Title` (Naming convention § "Raw PDF title-conformance"). Mismatch + no name collision → `rename-proposals` row; mismatch + `{title-slug}.pdf` already exists → `duplicate-raws` finding (no rename). Detection only — execution is USER-GATED at step 9, updating the full referrer set per "PDF title-conformance (lint)" below. Markdown sources exempt. |
+| 7.8 | **Missing-link detection (signal-1, report-only).** Deterministic prose-mention scan: for each ORDERED pair (source page, target page) where the target page's EXACT name appears as plain UNLINKED text in the source page's prose AND a page by that name exists, emit a proposal. **Case- and hyphen-insensitive** ("Self Attention" / "self-attention" / "self attention" all match `self-attention.md`). Excludes a pair the source already links and a pair the owner already rejected (`missing-links-rejected.md`); rows sorted by `#mentions` desc. **Single-token-hub suppression (ADX-7):** a proposal whose target name is a single token (no hyphen/space, e.g. `ai.md`) is held out of the main `detected.missing_links` list into `detected.missing_links_hub_suppressed` (+ count) — retained, not dropped. Lands as `detected.missing_links` (main, multi-word) + the report file `missing-links.md` (both sections) the Stage-2 update-links step reads. REPORT-ONLY — never auto-links (decision #33). Full convention: § "Missing-link convention (`related:` cross-links)" below |
 | 8 | Prune the `logs/*.md` files: DELETE every `candidate-topic` / `candidate-mention` / `proposed-new-thesis` entry whose matching page now exists (resolution = page exists), and DELETE any retired history entries (`ingest`, `concept-created`, `entity-created`, `topic-created`, `topic-updated`, `topic-coverage-candidate`, `lint`, `query`). NO `lint` entry is written — findings live in the report only. `candidate-mention` entries with no matching page are NEVER auto-aged; they persist until the page exists or the user dismisses them. `speculative-thesis-update` entries are NEVER auto-pruned (no "page exists" signal — they resolve on explicit user action via `sb-fin-create-thesis` extend or dismiss; lint ages + surfaces them). Entries of an UNKNOWN type (neither active nor retired) are KEPT and surfaced in the report for manual routing — never auto-deleted |
-| 9 | Present findings to the user (read-only summary for findings 1-7; the `candidate-mention` review queue is surfaced here). USER-GATED interactive blocks: LINK-FIX PROPOSAL (bucket-A broken links → accept runs `--execute-link-fixes`), MISSING-PAGE PROPOSAL (bucket-B → accept authors a web-verified stub), RENAME PROPOSAL, SUBDIVISION PROPOSAL, CANDIDATE-TOPIC PROMOTION (step-4 aged candidates → promote invokes `sb-wiki-create-topic` per accepted candidate, NEVER auto-authored; dismiss deletes that entry from `logs/topics.md`), and (questions layer ON) PROPOSED ANSWERS + GRADUATION PROPOSAL — each accepts all / accepts N / rejects / defers |
+| 9 | Present findings to the user (read-only summary for findings 1-7; the `candidate-mention` review queue is surfaced here). USER-GATED interactive blocks: LINK-FIX PROPOSAL (bucket-A broken links → accept runs `--execute-link-fixes`), MISSING-PAGE PROPOSAL (bucket-B → accept authors a web-verified stub), RENAME PROPOSAL, SUBDIVISION PROPOSAL, CANDIDATE-TOPIC PROMOTION (step-4 aged candidates → promote invokes `sb-wiki-create-topic` per accepted candidate, NEVER auto-authored; dismiss deletes that entry from `logs/topics.md`), MISSING-LINK PROPOSAL (step-7.8 proposals → accept runs `update-links` to append the link both ways, append-only; reject records the pair in `missing-links-rejected.md`; defer default), and (questions layer ON) PROPOSED ANSWERS + GRADUATION PROPOSAL — each accepts all / accepts N / rejects / defers |
 
 #### Lint output format
 
@@ -1183,7 +1191,7 @@ Orphans (no inbound) (2): [[A.md]], [[B.md]]
 Unresolved Disputed callouts (1): [[mcp-debate.md]] — flagged 2026-04-12
 Candidate-topics aging without promotion (1): "mcp-debate" — logged 2026-04-12
 Broken wikilinks (4): A=1 auto-fixable | B=2 need a page | C=1 unresolvable
-Index sync — wiki/sources My take refreshed: 4 source pages
+Index sync — wiki/sources Description: 2 migrated to | File | Description | (U11), 4 rows checked
 Index sync — raw indexes: 1 created (raw/studies/studies.md), 3 rows added across raw/{origins}
 Raw index — stale Wiki=No healed (2): raw/a16z/<file> (1:1 source page exists)
 Raw index — dangling rows (1): raw/substack/<file> (File cell → missing raw file; dispose manually)
@@ -1231,6 +1239,24 @@ Orphan-detection is the lint signal for "the wiki is not actually building knowl
 #### purpose.md — SKIP entirely (v1)
 
 `/sb-wiki-lint` MUST skip `{wiki_root}/purpose.md` entirely — NEVER flag it as orphan, stray, or stub; NEVER index it; NEVER count it in orphan detection (in or out). It is regulatory configuration (`type: purpose`), not a wiki page. This holds structurally: lint walks only the `wiki/` and `raw/` subtrees (steps 1–7), and `purpose.md` is a root-level sibling outside both — so it is never walked. Mirrors the existing `raw/_assets/` skip contract. No semantic purpose-lint in v1 (off-purpose-drift / thin-focus / gap detection are parked backlog).
+
+#### Missing-link convention (`related:` cross-links)
+
+A wiki page's `related:` frontmatter list (see Frontmatter schemas § "Common") is the canonical home for cross-page links that connect the knowledge graph beyond inline citations. Concept→concept / concept→source links are created at ingest ONLY onto pages the ingested source NAMES; nothing backfills an obvious link from a later source that did not name the page, and lint repairs only BROKEN links — so a missing-but-obvious link is otherwise invisible. The missing-link flow closes that gap in TWO stages, both honoring the human-gated, no-auto-run principle (#33):
+
+**Stage 1 — detection on lint (report-only, deterministic).** Lint step 7.8 runs a prose-mention scan: for each ORDERED pair (source page, target page) where the target page's EXACT name appears as plain UNLINKED text in the source page's prose AND a page by that name exists, it proposes the link. The match is **case- and hyphen-insensitive** — the page stem's word run (`self-attention` → `self`, `attention`) matches `Self Attention` / `self-attention` / `self attention`, as a whole token (so `transformer` never matches inside `transformers`). It counts ONLY unlinked prose mentions — a name inside an existing `[[wikilink]]`, a `[text](url)` link, a code span, a footnote definition, or frontmatter does NOT count. Output:
+
+| Surface | Content |
+|---------|---------|
+| `detected.missing_links` (report key) | the MAIN actionable list — multi-word-target rows `{term, target, source, mentions}`, sorted by `mentions` descending (high-signal first). The Stage-2 step reads this list |
+| `detected.missing_links_hub_suppressed` + `detected.missing_links_hub_suppressed_count` | the single-token-hub rows held out of the main list (ADX-7) — retained, never dropped |
+| `{wiki_root}/missing-links.md` (report file, `type: missing-links-report`) | two sections — "Main proposals" + "Single-token-hub suppressed" — each a table `term \| proposed-link \| source file \| target page \| #mentions`. The Stage-2 step reads the MAIN section |
+
+Guards: a pair the source page ALREADY links (body wikilink or `related:`) is never re-proposed; a pair the owner already REJECTED (recorded in `{wiki_root}/missing-links-rejected.md`, table columns `term \| proposed-link`) is suppressed; a page never proposes a link to itself. The scan NEVER writes a link — it is report-only. **Signal-1 only** is shipped (a page's exact name in prose); the lower-precision co-membership **signal-2** is deferred (optional/later).
+
+**Single-token-hub suppression (ADX-7).** Signal-1's precision rests on multi-word names; a single-token TARGET name (no hyphen AND no space in the page stem — e.g. `ai.md`, `llm.md`) matches a common word in nearly every page and produces high-volume low-value rows (the live scan found ~69% of proposals were this noise). A proposal whose target name is a single token is therefore SUPPRESSED from the main `detected.missing_links` list — but NEVER silently dropped (owner rule "never lose information"): it is retained under `detected.missing_links_hub_suppressed` with a visible `detected.missing_links_hub_suppressed_count`, and the report file carries it in a separate "Single-token-hub suppressed" section below the main list. Only the MAIN (multi-word-target) list is the actionable set the `update-links` step reads; the owner can still promote a suppressed hub row manually if it is a genuine link (e.g. the diagnosis exemplar `attention-mechanism → transformer` lands in the suppressed list because `transformer` is single-token). Multi-word-target proposals all stay in the main list. The report's `#mentions`-descending sort surfaces the strongest rows first in each section.
+
+**Stage 2 — human-gated `update-links` apply (append-only).** On an explicit owner accept at the lint step-9 MISSING-LINK PROPOSAL block, the agent builds a plan of accepted rows `{source, target}` and runs `python {sb_os_path}/wiki/scripts/sb-wiki-lint-deterministic.py update-links --plan <plan.json>`. For each accepted pair the apply APPENDS `[[target.md]]` to the source page's `related:` (forward link) AND `[[source.md]]` to the target page's `related:` (reverse link). It is append-only and idempotent: it adds list items to an existing-or-created `related:` block (a `related: []` becomes a block list; a missing `related:` key is inserted before the frontmatter close) and edits nothing else — body, other fields, and existing list items are byte-identical. It NEVER auto-links: the apply fires only on the owner accept. On `reject`, the agent records the rejected `{term, target}` pair in `missing-links-rejected.md` so it is suppressed on every future run. The same `related:`-as-cross-link convention is also written forward at ingest (the co-mention reverse-link arm — see `/sb-wiki-ingest` Step 4 "co-mention reverse-link"), which stops the gap from re-accumulating.
 
 ### `/sb-wiki-query`
 
@@ -1346,8 +1372,9 @@ Source files live in the sb-os repo under `sb-os/workflows/sb-wiki-*/`. Skills a
 |-----------|------|--------------------|--------------------------|---------|
 | `sb-wiki-ingest` | Slash command | `sb-os/workflows/sb-wiki-ingest/` | `.claude/commands/sb-wiki-ingest.md` | User-invocable end-to-end ingest |
 | `sb-wiki-ingest-all` | Slash command | `sb-os/workflows/sb-wiki-ingest-all/` | `.claude/commands/sb-wiki-ingest-all.md` | User-invocable batch backfill of all non-ingested sources (orchestration only) |
+| `sb-wiki-ingest-healing` | Slash command | `sb-os/workflows/sb-wiki-ingest-healing/` | `.claude/commands/sb-wiki-ingest-healing.md` | User-invocable healing: re-read an already-ingested source and edit its pages in place to recover lost substance (superseded the retired `/sb-wiki-reingest` on 2026-06-19) |
 | `sb-wiki-create-topic` | Skill (auto-discovered) | `sb-os/workflows/sb-wiki-create-topic/` | `.claude/skills/sb-wiki-create-topic/SKILL.md` | Agent-invokable mid-ingest; auto-fires when the user expresses topic-creation intent |
-| `sb-wiki-lint` | Slash command | `sb-os/workflows/sb-wiki-lint/` | `.claude/commands/sb-wiki-lint.md` | User-invocable health check + index maintenance |
+| `sb-wiki-lint` | Slash command | `sb-os/workflows/sb-wiki-lint/` | `.claude/commands/sb-wiki-lint.md` | User-invocable structural and citation lint + index maintenance |
 | `sb-wiki-query` | Skill (auto-discovered) | `sb-os/workflows/sb-wiki-query/` | `.claude/skills/sb-wiki-query/SKILL.md` | Auto-fires on open / knowledge-seeking questions unless web research is explicitly requested; also user-invocable via `/sb-wiki-query` |
 
 Workflows hold all logic. Slash commands and skills are thin loaders only.

@@ -1,11 +1,11 @@
 ---
 name: sb-wiki-lint
-description: Health check + index maintenance for `raw/` and `wiki/` — detect stubs, orphans, unresolved Disputed callouts, aging candidate-topics, broken wikilinks; auto-apply index sync writes (wiki sources `My take` re-sync, footnote renumber, raw-index creation, wiki leaf-index creation); when the optional questions layer is ON, sweep open questions for now-available answers and surface mature entries for graduation as user-gated proposals; present read-only findings to the user.
+description: Structural and citation lint + index maintenance for `raw/` and `wiki/` — detect stubs, orphans, unresolved Disputed callouts, aging candidate-topics, broken wikilinks; auto-apply index sync writes (wiki sources `My take` re-sync, footnote renumber, raw-index creation, wiki leaf-index creation); when the optional questions layer is ON, sweep open questions for now-available answers and surface mature entries for graduation as user-gated proposals; present read-only findings to the user.
 ---
 
 # sb-wiki-lint
 
-Health check + index maintenance pass across `{wiki_root}/raw/` and `{wiki_root}/wiki/`. Implements the 9-step lint flow defined in the wiki schema. Read-mostly: deterministic index sync writes are auto-applied; judgment-bearing index cells are filled by the LLM before the final report.
+Structural and citation lint + index maintenance pass across `{wiki_root}/raw/` and `{wiki_root}/wiki/`. Implements the 9-step lint flow defined in the wiki schema. Read-mostly: deterministic index sync writes are auto-applied; judgment-bearing index cells are filled by the LLM before the final report.
 
 ## Schema Source
 
@@ -66,6 +66,8 @@ The auto-applied index-sync writes (re-sync `My take`, renumber footnotes, creat
 |-------|-------|--------------|
 | Prune promoted/retired entries from `questions.md` (step 8) — delete entries whose matching wiki page now exists (promoted) or that the user retired, by the same "page exists" test as the `candidate-mention` prune | `{wiki_root}/questions.md` | Auto-applied — no user diff. Skipped entirely when `questions.md` is absent |
 | Regenerate `open-gaps.md` wholesale (step 8.5) — overwrite the read-only cross-wiki aggregate of all open questions (both homes) | `{wiki_root}/open-gaps.md` | Auto-applied — no user diff. ALWAYS emitted (empty-state file when nothing to aggregate); never skipped |
+| Regenerate `missing-links.md` wholesale (step 7.8) — overwrite the read-only missing-link proposal report (signal-1) | `{wiki_root}/missing-links.md` | Auto-applied — no user diff (report-only; written only under `--apply`). It contains PROPOSALS, never links — applying a link is the USER-GATED `update-links` row below |
+| Missing-link apply (step 9 MISSING-LINK PROPOSAL accept) — append `[[target]]` to the source page's `related:` + `[[source]]` to the target's `related:` (append-only), via `update-links --plan <plan.json>` | `related:` frontmatter of accepted source + target pages under `{wiki_root}/wiki/**` | USER-GATED — executed only on `accept` at step 9. Append-only + idempotent; NEVER auto-links |
 | Folder subdivision execution (step 7.5) — create `{type}/{subfolder}/`, leaf index, marker-block CLAUDE.md, rewrite parent index as router, MOVE pages | `{wiki_root}/wiki/{concepts,entities}/...` | USER-GATED — executed only on `accept` at step 9 |
 | PDF title-conformance rename execution (step 7.6) — rename raw PDF + source page, rewrite all referrers (frontmatter, footnotes, both indexes, `logs/*.md`) | `{wiki_root}/raw/{origin}/`, `{wiki_root}/wiki/...`, `{wiki_root}/logs/*.md` | USER-GATED — executed only on `accept` at step 9 |
 | Questions answer-sweep apply (step 7.7) — accrete a cited `answer:` bullet on a `questions.md` entry, OR strike + fold a topic-home `Open questions` answer into the topic body (append-only) | `{wiki_root}/questions.md`, `{wiki_root}/wiki/topics/*.md` | USER-GATED — applied only on `accept` at step 9. Skipped entirely when `questions.md` is absent |
@@ -102,8 +104,10 @@ Run both, in order — the first owns the deterministic index-row + footnote wor
 | `detected.log_spent_entries`, `log_retired_entries`, `log_unknown_type_entries`, `log_aging_candidate_topics`, `log_unparseable_timestamps`, `log_awaiting_thesis_decisions` | 4, 8, 9 | Prune-test results + aged candidates (each row `{slug, logged, age_days, trigger}`; floor = `--candidate-age-floor`, default 7 days, `0` = every pending candidate — feeds the step-9 CANDIDATE-TOPIC PROMOTION block) + candidate-topic headers with no parseable date (kept, report-only) + non-canonical entries (kept) + `speculative-thesis-update` entries surfaced as awaiting investor decision (never auto-pruned) |
 | `detected.type_tags` | 7 | Type-tag sync results — `tags_added` / `type_index_added` counts (auto-applied under `--apply`) + `unresolved` pages whose `type:` cannot be derived deterministically (surface in the LINT REPORT for the user) |
 | `detected.rename_proposals`, `duplicate_raws`, `title_disambiguation_needed` | 7.6 | PDF title-conformance detection; same-title collisions surface as disambiguation, never proposals |
+| `detected.md_duplicate_raws`, `md_duplicate_raws_limit` | 7.6 | Raw-`.md` duplicate detection (U10) — each row `{raw, signal, matches}` where `signal` is `content-hash`/`url`/`title` and `matches` is the already-ingested source it duplicates. Report-only; never auto-deleted. `md_duplicate_raws_limit` is the stated detector limit (catches same-title/URL/byte-identical, NOT reworded same-material) |
 | `detected.subdivision_proposals`, `subdivision_stragglers`, `kind_missing`, `generic_kind_flags` | 7.5 | Folder-subdivision detection |
 | `detected.raw_wiki_healed`, `raw_wiki_dangling` | 7 | Stale `Wiki=No`→`Yes` heals (rows whose 1:1 source page exists — auto-applied under `--apply`) + dangling rows (File cell → missing raw file — report-only, never auto-deleted) |
+| `detected.missing_links`, `missing_links_hub_suppressed`, `missing_links_hub_suppressed_count`, `missing_links_report`, `missing_links_rejected_registry` | 7.8 | Missing-link proposals (signal-1, report-only). `missing_links` is the MAIN actionable list — multi-word-target rows `{term, target, source, mentions}`, sorted by `#mentions` desc: a target page's exact name appears as UNLINKED prose in the source page where a page by that name exists (case/hyphen-insensitive). Excludes already-linked + owner-rejected pairs. **ADX-7:** single-token-target rows (`ai.md`, `llm.md`) are held out into `missing_links_hub_suppressed` (+ `_count`) — retained, never dropped. `missing_links_report` is the report filename (`missing-links.md`, both sections) written under `--apply` that the Step-9 MISSING-LINK handler reads (MAIN section); `missing_links_rejected_registry` is the owner-rejected registry filename (`missing-links-rejected.md`). NEVER auto-linked — the human-gated `update-links` sub-command applies accepted rows |
 
 Execution flags — the helper also owns the mechanical halves of the write paths:
 
@@ -302,7 +306,9 @@ For each PDF raw source in `{wiki_root}/raw/{origin}/` (EXCLUDING `raw/_assets/`
 3. Stem differs AND no `raw/{origin}/{title-slug}.pdf` exists → add a `rename-proposals` row: `{old-stem}`, `{title-slug}`, origin.
 4. Stem differs BUT `raw/{origin}/{title-slug}.pdf` already exists → add to `duplicate-raws` findings (NO rename proposed — the title slug is taken; this raw duplicates an already-ingested paper).
 
-Detection ONLY — NEVER rename at this step. Markdown raw sources are out of scope (clipper-named). Build `rename-proposals` and `duplicate-raws` for the LINT REPORT and the step 9 gate.
+Detection ONLY — NEVER rename at this step. Markdown raw sources are out of scope for title-conformance RENAME (clipper-named). Build `rename-proposals` and `duplicate-raws` for the LINT REPORT and the step 9 gate.
+
+**Raw-`.md` duplicate detection (U10 — deterministic, report-only).** Consume `detected.md_duplicate_raws` from the helper — do NOT re-walk by LLM. The helper flags any NOT-yet-ingested raw `.md` whose normalized title OR normalized URL OR exact byte content-hash matches an already-ingested source. Each row is `{raw, signal, matches}`: `signal` is `content-hash` (byte-identical), `url`, or `title`; `matches` is the already-ingested source (or backing raw) it duplicates. This is REPORT-ONLY — surface every row in the LINT REPORT; NEVER auto-delete, rename, or mutate a raw (the user merges or deletes manually, the same posture as `duplicate-raws`). **Limit (state it in the report — `detected.md_duplicate_raws_limit`):** catches same-title / same-URL / byte-identical; does NOT catch reworded same-material.
 
 #### PDF title-conformance execution (only on user accept at step 9)
 
@@ -322,6 +328,16 @@ Run accepted renames via the deterministic helper: `--execute-renames <plan.json
 ### Step 7.7 — Questions answer-sweep + graduation detection (skip-if-absent)
 
 **Gate — questions layer.** Resolve `{wiki_root}/questions.md`. **Absent or malformed** (unreadable, invalid frontmatter, or no parseable H2 entries) → questions layer OFF: hold EMPTY `questions-answer-proposals` and `graduation-proposals` sets, SKIP this entire step, omit the Step 9 `PROPOSED ANSWERS` and `GRADUATION PROPOSAL` blocks, and do NOT read the extension — the run is identical to today (optionality guarantee #1; malformed-treated-as-absent is guarantee #5, NEVER abort). **Present and parseable** → questions layer ON: READ and execute `{sb_os_path}/wiki/workflows/sb-wiki-lint/extensions/ext-questions-sweep.md` in full (it carries the answer-sweep, the `sweep-gather` helper invocation, the dirty-set scoping, the two validation windows, and the graduation-detection pass). If that file is missing on disk, HALT naming the missing path — never silently skip the feature.
+
+### Step 7.8 — Missing-link detection (signal-1, report-only)
+
+Consume `detected.missing_links` from the helper — do NOT re-walk pages by LLM. The helper runs the deterministic prose-mention scan: for each ORDERED pair (source page, target page) where the target page's EXACT name appears as plain UNLINKED text in the source page's prose AND a page by that name exists, it proposes the link (case- and hyphen-insensitive; whole-token; counts only unlinked prose — never a name inside an existing wikilink, link, code span, footnote def, or frontmatter). Guards: a pair the source already links is not re-proposed; a pair recorded in `{wiki_root}/missing-links-rejected.md` is suppressed; a page never self-links. Rows are sorted by `#mentions` descending.
+
+1. Read `detected.missing_links` — the MAIN actionable list, each row `{term, target, source, mentions}` (multi-word targets only). This is the MISSING-LINK proposal set for the LINT REPORT.
+2. Under `--apply`, the helper has already WRITTEN the report file `{wiki_root}/missing-links.md` (report key `detected.missing_links_report`) with two sections — "Main proposals" + "Single-token-hub suppressed" — and the Step-9 MISSING-LINK handler reads the MAIN section. The scan NEVER writes a `[[link]]`; applying a link is the Step-9 user-gated `update-links` step ONLY.
+3. **Single-token-hub suppression (ADX-7):** a proposal whose target name is a single token (no hyphen/space, e.g. `ai.md`, `llm.md`) is held OUT of the main list into `detected.missing_links_hub_suppressed` with a `detected.missing_links_hub_suppressed_count` — retained, never dropped. The MAIN list is multi-word-target only (high-precision). Report the suppressed count in the LINT REPORT (a one-line note); surface the proposal set per § "Missing-link convention" (schema). Build the MISSING-LINK PROPOSAL set from the MAIN list for the LINT REPORT.
+
+Full convention (both stages, the `related:` cross-link contract, the rejected registry): schema § "Missing-link convention (`related:` cross-links)".
 
 ### Step 8 — Prune the logs
 
@@ -376,6 +392,9 @@ Questions pruned: <N> promoted (page now exists), <M> retired entries removed (o
 Open gaps regenerated: <N> open questions across both homes → open-gaps.md (or "empty" / omit when questions layer OFF and no topic open questions)
 Candidate-mentions to review (N): "<slug>", "<slug>", … (the actionable queue — promote to a stub or dismiss)
 Duplicate raws — title-slug already taken (N): <old>.pdf ≡ <existing>.pdf (merge or delete manually)
+Duplicate raw .md — matches already-ingested source (N): raw/<origin>/<file>.md ≡ <matches> [<signal>] (report-only — merge or delete manually) (omit when zero)
+  Limit: <md_duplicate_raws_limit> (catches same-title/URL/byte-identical; NOT reworded same-material)
+Missing links proposed (N): <term> → [[<target>]] in <source> (×<mentions>), … (signal-1, report-only → missing-links.md; acted on via the MISSING-LINK PROPOSAL block below); <H> single-token-hub rows suppressed (in missing-links.md, not actioned) (omit the line when N=0; omit the hub clause when H=0)
 
 LINK-FIX PROPOSAL — broken-link bucket A (typo/encoding, auto-fixable) (omit block entirely when empty):
 | # | source page | broken link | → existing file |
@@ -438,10 +457,19 @@ Decisions: promote all | promote N (e.g. "promote 1,3") | dismiss N (e.g. "dismi
 (Default if the user does not respond: defer all — candidates persist in logs/topics.md and re-surface next lint run.)
 (Rows come verbatim from `detected.log_aging_candidate_topics`; <floor> is the `--candidate-age-floor` value of the helper run, default 7. On promote, the agent invokes the `sb-wiki-create-topic` skill once per accepted candidate — it NEVER auto-authors a page; the skill writes the topic page, updates wiki/topics/topics.md, and removes the promoted entry from logs/topics.md. On dismiss, the agent deletes that single entry — H2 header + body — from logs/topics.md; no page is created, and a future ingest may legitimately re-propose the same candidate. Defer writes nothing.)
 
+MISSING-LINK PROPOSAL — signal-1 prose-mention proposals (report-only detection; append-only apply on accept) (omit block entirely when empty):
+| # | term | proposed-link | source page | #mentions |
+|---|------|---------------|-------------|-----------|
+| 1 | transformer | [[transformer.md]] | wiki/concepts/mechanisms/attention-mechanism.md | 3 |
+
+Decisions: accept all | accept N (e.g. "accept 1,2") | reject N | defer
+(Default if the user does not respond: defer all — proposals persist in missing-links.md and re-surface next lint run.)
+(Rows come verbatim from `detected.missing_links`, sorted by #mentions desc. On accept, the agent appends `[[target]]` to the source page's `related:` AND `[[source]]` to the target's `related:` (append-only) via the `update-links` sub-command — NEVER auto-linked. On reject, the agent records the pair in missing-links-rejected.md so it is suppressed on every future run. Defer writes nothing. Hub-name rows (single-word targets like ai.md/llm.md) are low-precision — reject or defer them.)
+
 No action required for findings 1-7 (lint is read-mostly; index sync + log prune auto-applied). The candidate-mention queue is yours to work through at your pace — nothing is auto-deleted.
 ```
 
-Omit any zero-count line with empty list (e.g., `Broken wikilinks (0)` may be elided when the body would be empty). The wiki leaf indexes line is omitted when both counts are 0. The `Disputed callouts needing manual review` line is omitted when zero. The `Questions pruned` line is omitted when the questions layer is OFF (`questions.md` absent or malformed); the `Open gaps regenerated` line is omitted only when the questions layer is OFF AND no topic has an open question (the empty-state file is still written per Step 8.5, but there is nothing to report). The LINK-FIX PROPOSAL block is omitted when no bucket-A link exists; the MISSING-PAGE PROPOSAL block is omitted when no bucket-B target exists. The SUBDIVISION PROPOSAL block is omitted when the proposal set is empty. The PROPOSED ANSWERS block is omitted when `questions-answer-proposals` is empty (or the questions layer is OFF). The GRADUATION PROPOSAL block is omitted when `graduation-proposals` is empty (or the questions layer is OFF). The CANDIDATE-TOPIC PROMOTION block is omitted when `detected.log_aging_candidate_topics` is empty; the unparseable-timestamp line is omitted when `detected.log_unparseable_timestamps` is empty. The trailing closing line is REQUIRED.
+Omit any zero-count line with empty list (e.g., `Broken wikilinks (0)` may be elided when the body would be empty). The wiki leaf indexes line is omitted when both counts are 0. The `Disputed callouts needing manual review` line is omitted when zero. The `Questions pruned` line is omitted when the questions layer is OFF (`questions.md` absent or malformed); the `Open gaps regenerated` line is omitted only when the questions layer is OFF AND no topic has an open question (the empty-state file is still written per Step 8.5, but there is nothing to report). The LINK-FIX PROPOSAL block is omitted when no bucket-A link exists; the MISSING-PAGE PROPOSAL block is omitted when no bucket-B target exists. The SUBDIVISION PROPOSAL block is omitted when the proposal set is empty. The PROPOSED ANSWERS block is omitted when `questions-answer-proposals` is empty (or the questions layer is OFF). The GRADUATION PROPOSAL block is omitted when `graduation-proposals` is empty (or the questions layer is OFF). The CANDIDATE-TOPIC PROMOTION block is omitted when `detected.log_aging_candidate_topics` is empty; the unparseable-timestamp line is omitted when `detected.log_unparseable_timestamps` is empty. The `Duplicate raw .md` line (and its `Limit:` sub-line) is omitted when `detected.md_duplicate_raws` is empty. The `Missing links proposed` line and the MISSING-LINK PROPOSAL block are omitted when `detected.missing_links` is empty. The trailing closing line is REQUIRED.
 
 **Step 9 response handlers — per-set JIT load.** Each handler table below is loaded ONLY when its proposal set is non-empty (a clean run loads zero handlers). For each non-empty set, READ and execute the named extension file before applying the user's response; if the set is empty, the block is already omitted from the report (above) and the handler is NOT read. If a needed handler file is missing on disk, HALT naming the missing path.
 
@@ -451,6 +479,7 @@ Omit any zero-count line with empty list (e.g., `Broken wikilinks (0)` may be el
 | MISSING-PAGE (broken-link bucket B, step 5) | `detected.broken_wikilinks` bucket B — Step 5 | `{sb_os_path}/wiki/workflows/sb-wiki-lint/extensions/handler-missing-page.md` |
 | SUBDIVISION (step 7.5) | `detected.subdivision_proposals` — Step 7.5 | `{sb_os_path}/wiki/workflows/sb-wiki-lint/extensions/handler-subdivision.md` |
 | RENAME (PDF title-conformance, step 7.6) | `detected.rename_proposals` — Step 7.6 | `{sb_os_path}/wiki/workflows/sb-wiki-lint/extensions/handler-rename.md` |
+| MISSING-LINK (signal-1 prose-mention, step 7.8) | `detected.missing_links` — Step 7.8 | `{sb_os_path}/wiki/workflows/sb-wiki-lint/extensions/handler-missing-link.md` |
 | PROPOSED ANSWERS (questions answer-sweep, step 7.7a — questions layer ON) | `questions-answer-proposals` — Step 7.7a (`ext-questions-sweep.md`) | `{sb_os_path}/wiki/workflows/sb-wiki-lint/extensions/handler-proposed-answers.md` |
 | GRADUATION (mature `questions.md` entries, step 7.7b — questions layer ON) | `graduation-proposals` — Step 7.7b (`ext-questions-sweep.md`) | `{sb_os_path}/wiki/workflows/sb-wiki-lint/extensions/handler-graduation.md` |
 

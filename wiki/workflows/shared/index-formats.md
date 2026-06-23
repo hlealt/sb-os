@@ -6,12 +6,12 @@ Formats for the two index types maintained in the wiki. Ownership and maintenanc
 
 **File:** `{wiki_root}/wiki/sources/{origin}/{origin}.md`
 
-**Format:**
+**Format (U11 — unified `File | Description`):**
 
 ```markdown
-| File | What it says | My take |
-|------|--------------|---------|
-| [[YYYY-MM-DD-slug.md]] | 1-sentence factual summary (≤280 chars). | 1-sentence opinion: why I cared. |
+| File | Description |
+|------|-------------|
+| [[YYYY-MM-DD-slug.md]] | 1-sentence factual summary (≤280 chars). |
 ```
 
 **Ownership rules:**
@@ -19,40 +19,18 @@ Formats for the two index types maintained in the wiki. Ownership and maintenanc
 | Column | Written by | When |
 |--------|-----------|------|
 | `File` | Agent | During ingest (step 8) |
-| `What it says` | Agent | During ingest (step 8) — factual derivative of the source page's `Substance` section |
-| `My take` | Agent (derived from source page) | Populated at optional post-commit Stage 2 (step 11) if the user fills the source page; refreshed by lint on each pass per the three-state rule below |
+| `Description` | Agent | During ingest (step 8) — factual derivative of the source page's `Substance` section |
 
 - The source page is canonical; the index entry is derived. The user NEVER writes the index manually.
 - Stale-by-7d acceptable for skim purpose. Agents may fall back to reading the source page if deeper signal is needed.
 - If the index file does not exist at ingest step 8, create it with the header row and add the first entry.
-- `What it says` is judgment-bearing. Scripts MUST NOT create or overwrite it from filenames, headings, or excerpts. If a source-index row is missing, scripts report it as `judgment_needed`; the LLM reads the source page and writes a 1-sentence factual summary.
+- `Description` is judgment-bearing. Scripts MUST NOT create or overwrite it from filenames, headings, or excerpts. If a source-index row is missing, scripts report it as `judgment_needed`; the LLM reads the source page and writes a 1-sentence factual summary.
 
-### `My take` Cell — Three States (NEVER blank)
+**My take is NOT an index column (U11).** The user's reflection lives canonically in the source PAGE BODY `## My take` section (created/offered by ingest step 2; filled at Stage 2 or later in Obsidian). The wiki sources index carries NO `My take` column — it was a derived preview with no programmatic reader (~2.7% of rows ever carried an authored take), so it was dropped. The source-page body section is untouched.
 
-The `My take` cell encodes one of three explicit states. **Blank is BANNED** as a state marker — every row carries one of the three values below. The two empty states (`pending` and `—`) have different downstream behaviors and different remediations from the user's standpoint; blank conflates them.
+**Migration (U11, lint-owned).** A legacy 3-column `| File | What it says | My take |` index is migrated to the 2-column `| File | Description |` by `/sb-wiki-lint`: the header and separator become the 2-col form, each data row's `What it says` text is preserved verbatim as `Description`, and the `My take` cell is dropped. Migration is idempotent — a row already in the 2-col form is left byte-stable. A user-customized / bespoke leaf-index layout (one that is neither the canonical 3-col legacy nor the 2-col unified shape) is REPORTED, never force-rewritten.
 
-| State | Token in cell | Meaning | Source page state |
-|-------|---------------|---------|-------------------|
-| Pre-reflect | `pending` | Stage 2 was skipped, ignored, or never reached — source page's `My take` body is an empty shell awaiting user action | `My take` heading present, body empty |
-| Post-reflect-empty | `—` (em-dash, U+2014) | Stage 2 ran and the user explicitly recorded reflection content without a take. Finalized. | `My take` heading present, body empty while `Open questions` or `Dive deeper` has substantive content |
-| Reflected | 1-sentence opinion derived from the source page's `My take` section (≤280 chars; truncate with ellipsis) | The user filled `My take` on the source page | `My take` heading present, body has substantive content |
-
-**Table-safety (reflected previews).** A preview cell MUST never split the 3-column row: flatten wikilinks to their display text BEFORE truncating (a cut mid-`[[target\|alias]]` leaks a raw `|`), then escape any remaining literal `|` as `\|`. Applies to every writer of the cell — agent and script alike.
-
-**Write rules.**
-
-| Trigger | Cell value to write |
-|---------|---------------------|
-| Ingest step 8 (initial row creation, before Stage 2) | `pending` |
-| Stage 2 (step 11) — user declined, ignored, or produced no routed content | `pending` (no change) |
-| Stage 2 (step 11) — routed reflection filled `My take` | 1-sentence reflected preview |
-| Stage 2 (step 11) — routed reflection filled `Open questions` or `Dive deeper` while `My take` stayed empty (Stage 2 finalization rule) | `—` |
-| Lint step 6 re-sync — source page's `My take` body has substantive content | 1-sentence reflected preview (overwrite prior cell value) |
-| Lint step 6 re-sync — source page's `My take` body empty AND cell currently reads `—` | Preserve `—` (final, do not age out) |
-| Lint step 6 re-sync — source page's `My take` body empty AND cell currently reads `pending` | Preserve `pending` |
-| Lint step 6 re-sync — source page's `My take` body empty AND cell currently reads anything else (legacy blank, stray content) | Write `pending` (default to action-pending; safer to over-prompt than to over-finalize) |
-
-**Staleness behavior.** The 7-day staleness rule applies to `pending` rows ONLY. `—` rows are final and do NOT age out. Reflected rows are refreshed every lint pass.
+**Table-safety.** A `Description` cell MUST never split the row: flatten wikilinks to their display text, then escape any remaining literal `|` as `\|`. Applies to every writer of the cell — agent and script alike.
 
 ## Raw Index
 
@@ -89,13 +67,13 @@ For a PDF source the raw row keys on the **`.pdf`** (the immutable original); th
 
 ### One writer (U2b)
 
-All raw-index structural mutations route through ONE schema-parameterized, name-keyed writer (`build_raw_row` / `set_raw_row_wiki` / `raw_row_wiki_index` / `repair_raw_row_width` in `sb-wiki-index-transaction.py`). The two matchers (`find_row_by_link`, `ingested_raw_filenames`) read the same authority. The writer owns STRUCTURE only (header, row presence, File/Title/Date/Wiki placement, width-correct sizing); judgment cells stay delegated — the leaf-index `Description` derivation helper (`sb-wiki-fill-index-descriptions.py`) remains the companion that derives those cells, and `What it says` / `My take` / `Description` / `Scope` are never written from a slug guess.
+All raw-index structural mutations route through ONE schema-parameterized, name-keyed writer (`build_raw_row` / `set_raw_row_wiki` / `raw_row_wiki_index` / `repair_raw_row_width` in `sb-wiki-index-transaction.py`). The two matchers (`find_row_by_link`, `ingested_raw_filenames`) read the same authority. The writer owns STRUCTURE only (header, row presence, File/Title/Date/Wiki placement, width-correct sizing); judgment cells stay delegated — the leaf-index `Description` derivation helper (`sb-wiki-fill-index-descriptions.py`) remains the companion that derives those cells, and `Description` (the unified sources/topics/concepts/entities judgment cell, U11) is never written from a slug guess.
 
 ## Wiki Leaf Indexes
 
 **Files:** `{wiki_root}/wiki/concepts/concepts.md`, `{wiki_root}/wiki/entities/entities.md`, `{wiki_root}/wiki/topics/topics.md`
 
-**Formats:**
+**Format (U11 — `File | Description` for all four leaf-index families):**
 
 ```markdown
 | File | Description |
@@ -103,13 +81,9 @@ All raw-index structural mutations route through ONE schema-parameterized, name-
 | [[concept.md]] | 1-sentence description. |
 ```
 
-```markdown
-| File | Scope |
-|------|-------|
-| [[topic.md]] | 1-sentence scope. |
-```
+`Description` is judgment-bearing. Scripts MAY create missing headers and report missing page rows. Scripts MUST NOT add rows with a blank `Description`. The LLM reads each page and writes the semantic cell.
 
-`Description` and `Scope` are judgment-bearing. Scripts MAY create missing headers and report missing page rows. Scripts MUST NOT add rows with blank `Description` or `Scope`. The LLM reads each page and writes the semantic cell.
+**Topics migration (U11, lint-owned).** The topics leaf index (`topics.md`) was formerly `| File | Scope |`. `/sb-wiki-lint` migrates it to `| File | Description |`: the header/separator become the `Description` form and each row's `Scope` text is preserved verbatim as `Description`. Idempotent — an already-migrated topics index is left byte-stable. The topic PAGE's required `Scope` section (schema § "Topic page") is unchanged — only the INDEX column renames.
 
 ## Type-Folder Router Index (post-subdivision)
 
