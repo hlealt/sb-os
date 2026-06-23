@@ -424,6 +424,28 @@ def print_plan(edits: list[Edit], dry_run: bool) -> None:
         print("NOTE: already recorded; no file changes needed")
 
 
+def _add_global_args(p: argparse.ArgumentParser) -> None:
+    """Add flags shared by every parser/sub-parser: --vault-root and --dry-run."""
+    p.add_argument("--vault-root", type=Path, default=Path.cwd())
+    p.add_argument("--dry-run", action="store_true")
+
+
+def _add_ingest_args(p: argparse.ArgumentParser, *, required: bool) -> None:
+    """Add ingest-specific flags.
+
+    ``required=True`` for the ``ingest`` sub-command (callers MUST supply
+    all four core flags); ``required=False`` for the legacy flat-arg parser
+    (detected at runtime via ``if not args.origin`` in ``main()``).
+    """
+    p.add_argument("--origin", required=required)
+    p.add_argument("--raw-file", required=required, help="raw filename including extension")
+    p.add_argument("--source-file", required=required, help="source page filename, .md optional")
+    p.add_argument("--what-it-says", required=required, help="wiki-sources factual summary")
+    p.add_argument("--my-take", default="pending")
+    p.add_argument("--raw-title", help="required only when the raw-index row is missing")
+    p.add_argument("--raw-date", help="required only when the raw-index row is missing")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command")
@@ -436,15 +458,8 @@ def parse_args() -> argparse.Namespace:
         "ingest",
         help="Record raw-index Wiki=Yes and wiki-sources row (default for backwards compat).",
     )
-    ingest.add_argument("--vault-root", type=Path, default=Path.cwd())
-    ingest.add_argument("--origin", required=True)
-    ingest.add_argument("--raw-file", required=True, help="raw filename including extension")
-    ingest.add_argument("--source-file", required=True, help="source page filename, .md optional")
-    ingest.add_argument("--what-it-says", required=True, help="wiki-sources factual summary")
-    ingest.add_argument("--my-take", default="pending")
-    ingest.add_argument("--raw-title", help="required only when the raw-index row is missing")
-    ingest.add_argument("--raw-date", help="required only when the raw-index row is missing")
-    ingest.add_argument("--dry-run", action="store_true")
+    _add_global_args(ingest)
+    _add_ingest_args(ingest, required=True)
 
     # ------------------------------------------------------------------
     # Sub-command: leaf-index  (U4 — self-heal stub indexing)
@@ -455,7 +470,7 @@ def parse_args() -> argparse.Namespace:
         "leaf-index",
         help="Add a File|Description row to a wiki leaf index (U4 — self-heal stub indexing).",
     )
-    leaf.add_argument("--vault-root", type=Path, default=Path.cwd())
+    _add_global_args(leaf)
     leaf.add_argument(
         "--leaf-index-path",
         required=True,
@@ -472,22 +487,14 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="LLM-derived 1-sentence Description or Scope cell (must not be blank).",
     )
-    leaf.add_argument("--dry-run", action="store_true")
 
     # ------------------------------------------------------------------
     # Legacy flat-arg mode: no sub-command → behave as "ingest"
     # All original callers (sb-wiki-ingest.md Steps 7–8) pass --origin
     # directly without a sub-command; keep them working unchanged.
     # ------------------------------------------------------------------
-    parser.add_argument("--vault-root", type=Path, default=Path.cwd())
-    parser.add_argument("--origin")
-    parser.add_argument("--raw-file")
-    parser.add_argument("--source-file")
-    parser.add_argument("--what-it-says")
-    parser.add_argument("--my-take", default="pending")
-    parser.add_argument("--raw-title")
-    parser.add_argument("--raw-date")
-    parser.add_argument("--dry-run", action="store_true")
+    _add_global_args(parser)
+    _add_ingest_args(parser, required=False)
     return parser.parse_args()
 
 

@@ -101,19 +101,30 @@ Duplicates (skipped or newly detected, if any): <origin>/<filename> — duplicat
 Cross-origin duplicate slugs (lint-healed, if any): <slug list, or "none">
 Questions layer: <U> firm topic-updates applied | <S> speculative updates rejected | <A> proposed answers rejected | <G> graduations (lint)
 Lint: <one-line outcome — see LINT REPORT above>
-Tail steps: lint <ran | SKIPPED> | commit <ran | SKIPPED — <N> paths uncommitted> | manifest cleanup <ran | SKIPPED — ingest-all-manifest.json present>
+Tail steps: lint <ran | SKIPPED> | commit <ran | BLOCKED — <N> page(s) failed citation gate: <page list> | SKIPPED — <N> paths uncommitted> | manifest cleanup <ran | SKIPPED — ingest-all-manifest.json present>
 ```
 
 The `Questions layer` line reflects silent-mode auto-resolution: only FIRM topic updates auto-apply (append-only); speculative updates and proposed answers (both homes, including answer-origin firm entries) are rejected and recorded. When the questions layer is OFF for every source (no `questions.md`) and no firm/speculative topic-update fired, all four counts are `0`. Omit the line entirely only if every count is `0`.
 
 Delete `{wiki_root}/ingest-all-manifest.json` after the report (transient artifact).
 
-Then create the run's SINGLE git commit, covering every change this run produced (source pages, stubs, indexes, log entries, lint heals). Skip when the vault root is not a git repository. This is the ONLY git commit of the entire run — never commit per source or per file.
+Apply the **citation-integrity hard-gate (U7) BEFORE the single commit**:
+
+```bash
+python {sb_os_path}/wiki/scripts/sb-wiki-lint-deterministic.py check-pages --vault-root <vault-root> <page> [<page> ...]
+```
+
+Pass EVERY page the run wrote or edited (every ingested source page + every concept/entity stub slug created in Step 4 + every page lint touched/repaired in Step 5). **Read the exit code off the UN-PIPED process** — never `| tee`/`| head` (a pipe reports the pipe's status, masking a real failure). **HARD-GATE — the single commit is BLOCKED while the exit code is non-zero:**
+
+- **Exit 0** → proceed to the commit.
+- **Exit ≠ 0** → the gate's JSON `failures[]` NAMES each failing page and its issue (e.g. `def without inline ref: 20,21` = an orphan footnote def). Repair each listed failure NOW (place the missing inline `[^N]` marker on the sentence the source backs, or add the missing `[^N]:` definition — NEVER by deleting a `[^N]:` definition; stale-removal is report-only per `{sb_os_path}/wiki/workflows/shared/citation-format.md`) and RE-RUN `check-pages` until it exits 0. The run does NOT commit while the gate fails — a non-zero exit blocks the commit and the named pages MUST be fixed first.
+
+Only after `check-pages` exits 0, create the run's SINGLE git commit, covering every change this run produced (source pages, stubs, indexes, log entries, lint heals). Skip when the vault root is not a git repository. This is the ONLY git commit of the entire run — never commit per source or per file.
 
 **Tail-steps close-out (interrupted runs).** If the orchestrator session ends before reaching this step, any conductor resuming the run MUST execute the three tail steps manually before declaring the run complete:
 
 1. **Heal-lint** — run `/sb-wiki-lint` as in Step 5.
-2. **Single commit** — create the run's git commit covering all uncommitted changes (source pages, stubs, indexes, log entries, lint heals).
+2. **Single commit** — apply the citation-integrity hard-gate (U7) BEFORE committing: run `python {sb_os_path}/wiki/scripts/sb-wiki-lint-deterministic.py check-pages --vault-root <vault-root> <page> [<page> ...]` over every page the run wrote or edited; read the exit code off the UN-PIPED process. Exit ≠ 0 → BLOCK the commit, repair each failure named in `failures[]` (place the missing inline `[^N]` marker or add the missing `[^N]:` definition — NEVER by deleting a definition; per `{sb_os_path}/wiki/workflows/shared/citation-format.md`), and re-run until exit 0. Only after exit 0, create the run's git commit covering all uncommitted changes (source pages, stubs, indexes, log entries, lint heals).
 3. **Manifest cleanup** — delete `{wiki_root}/ingest-all-manifest.json` if it is still present.
 
 A conductor verifies the close-out by checking: (a) git shows no uncommitted wiki changes; (b) `{wiki_root}/ingest-all-manifest.json` is absent. Any skipped tail step MUST be reported with its reason in the `Tail steps:` line of the INGEST-ALL COMPLETE summary.
@@ -147,3 +158,4 @@ Report back the FULL structured summary silent mode returns: status `committed` 
 | User scoped to an `[origin]` with no missing sources | Report "nothing to ingest for `<origin>`"; STOP. |
 | Script exits non-zero — target collision (a bare name is both an origin and a file), unresolvable target, or a bare name matching multiple raw files | The script printed an actionable message to stderr and ingested nothing. Surface it and STOP — never guess the intended target. |
 | File list where every listed file is already ingested (`missing = 0`, `skipped_ingested[]` populated) | Report "all listed files already ingested"; STOP. |
+| The pre-commit citation-integrity gate (`check-pages`) exits non-zero | Repair each listed failure (place the missing inline `[^N]` marker or add the missing `[^N]:` definition — NEVER by deleting a definition) and re-run until exit 0. The run does NOT commit while the gate fails. |
