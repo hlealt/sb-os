@@ -1,6 +1,6 @@
 # Wiki Schema (v7 — retrieval-first)
 
-> **Status:** Locked design. Operational spec for the Karpathy-style wiki layer shipped by **sb-os v2** (per `sb-os-build/second-brain-os-architecture.md` §12 and Decisions Log #12). sb-os v1 ships only the `wiki_root` config slot in `sb-os.json` (default `3-resources/knowledge-base/`), the empty default folder, and a placeholder managed `CLAUDE.md` at `{wiki_root}/CLAUDE.md`. The schema, the four `sb-wiki-*` components, and any populated wiki content described below are out of v1 scope — they ship in **sb-os v2**. Agents and CLAUDE.md files reference this document only after v2 lands.
+> **Status:** Locked design. Operational spec for the Karpathy-style wiki layer shipped by **sb-os v2** (per `sb-os-build/second-brain-os-architecture.md` §12 and Decisions Log #12). sb-os v1 ships only the `wiki_root` config slot in `sb-os.json` (default `3-resources/knowledge-base/`), the empty default folder, and a placeholder managed `CLAUDE.md` at `{wiki_root}/CLAUDE.md`. The schema, the six `sb-wiki-*` components, and any populated wiki content described below are out of v1 scope — they ship in **sb-os v2**. Agents and CLAUDE.md files reference this document only after v2 lands.
 
 ## Purpose & context
 
@@ -1405,9 +1405,9 @@ These edits happen at sb-os v2 build time. Until v2 lands, the user's vault reta
 
 **sb-os repo (v2 build):**
 
-- **NEW `sb-os/workflows/sb-wiki-ingest/`, `sb-wiki-create-topic/`, `sb-wiki-lint/`, `sb-wiki-query/`**: workflow source files implementing the four operations defined above.
+- **NEW `sb-os/workflows/sb-wiki-ingest/`, `sb-wiki-create-topic/`, `sb-wiki-lint/`, `sb-wiki-query/`, `sb-wiki-ingest-all/`, `sb-wiki-ingest-healing/`**: workflow source files implementing the six operations defined above.
 - **`sb-os/wiki/docs/wiki-schema.md`**: this schema doc, relocated from `1-projects/second-brain-evolution/sb-wiki-build/wiki-schema.md` at v2 build time (p2-1). Now at canonical home.
-- **`sb-os/install/module-manifest.json`**: add the four `sb-wiki-*` components so the installer generates loaders.
+- **`sb-os/install/module-manifest.json`**: add the six `sb-wiki-*` components so the installer generates loaders.
 - **`sb-os/wiki/claude-mds/wiki.md`** (managed CLAUDE.md source per architecture §4): replace the v1 placeholder with operational rules referencing this schema (page types — call out extensibility, ingest flow, stub policy, citation format, index rules, lint's raw-index responsibility). Installs to `{vault}/{wiki_root}/CLAUDE.md`.
 - **`sb-os/install.py`**: confirm `wiki_root` prompt persists into `sb-os.json` (already in v1 per architecture §6 manifest schema); v2 adds the `sb-wiki-*` loader generation.
 
