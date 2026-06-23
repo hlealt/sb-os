@@ -149,9 +149,60 @@ Report back: status `healed` | `no-op (already reconstructs source)` | `halted (
 
 ### Step 4 — Preview / commit boundary
 
-**Self-heal, on-demand (1 target, owner present) → PREVIEW before any commit.** Present a single PREVIEW block listing, per target: the source page edited + a precise summary of what was augmented (which agent sections deepened, which signal classes recovered), the concept/entity pages augmented, the new stubs created, and the topic updates proposed (firm/speculative/semantic in their posture blocks, exactly as `/sb-wiki-ingest` Stage 1 surfaces them). State plainly: "These are edits IN PLACE — no page is deleted or rebuilt; `My take` and every human edit are preserved untouched. Nothing commits until you confirm." Require an explicit `confirm` (or `yes`); on decline / silence / `abort`, STOP and change NOTHING. **Before committing, VERIFY the human half survived:** diff each healed page's `My take` (and captured hand-edited regions) against the Step-1 byte span and confirm BYTE-IDENTICAL — a heal that altered the human half is a defect; revert that region and re-surface. On confirm, make this command's OWN single git commit covering every healed page + graph edit (when the vault is a git repo). Run the post-commit citation-integrity gate (`sb-wiki-lint-deterministic.py check-pages`) over every page the heal wrote or edited, per the `/sb-wiki-ingest` Step-10 gate; repair to exit 0.
+**Self-heal, on-demand (1 target, owner present) → PREVIEW before any commit.** Present a single PREVIEW block listing, per target: the source page edited + a precise summary of what was augmented (which agent sections deepened, which signal classes recovered), the concept/entity pages augmented, the new stubs created, and the topic updates proposed (firm/speculative/semantic in their posture blocks, exactly as `/sb-wiki-ingest` Stage 1 surfaces them). State plainly: "These are edits IN PLACE — no page is deleted or rebuilt; `My take` and every human edit are preserved untouched. Nothing commits until you confirm." Require an explicit `confirm` (or `yes`); on decline / silence / `abort`, STOP and change NOTHING. **Before committing, VERIFY the human half survived:** diff each healed page's `My take` (and captured hand-edited regions) against the Step-1 byte span and confirm BYTE-IDENTICAL — a heal that altered the human half is a defect; revert that region and re-surface. On confirm, run the post-commit citation-integrity gate (`sb-wiki-lint-deterministic.py check-pages`) over every page the heal wrote or edited, per the `/sb-wiki-ingest` Step-10 gate; repair to exit 0.
 
-**Orchestrated run (≥2 targets / `heal all`) → HANDS-OFF, no per-target preview.** After every sub-agent finishes (Step 3.5): run `/sb-wiki-lint` (read and execute `{sb_os_path}/wiki/workflows/sb-wiki-lint/sb-wiki-lint.md`) to dedupe cross-origin stubs, renumber footnotes, and repair indexes; run the post-commit citation-integrity gate (`sb-wiki-lint-deterministic.py check-pages`) over every page the run wrote or edited and repair to exit 0; then make the run's EXACTLY ONE git commit covering every healed page + graph edit + lint heal (when the vault is a git repo). A worker that HALTED a target committed NOTHING for it — surface those in the report; never auto-retry. This path commits without owner preview (the price of the ingest-all-style bulk run), but every worker still HARD-VERIFIED its source's human half byte-identical and refused to write a changed human section.
+**Self-heal index write (U4 — run immediately after `check-pages` exits 0, before the git commit).** For every concept/entity/topic stub page created by this heal's Step 3.2, write its leaf-index row immediately so it appears in the wiki index without waiting for the next `/sb-wiki-lint` run:
+
+1. Collect the list of stub pages Step 3.2 created (paths under `{wiki_root}/wiki/`).
+2. For each stub, read the page and derive a 1-sentence description (the first sentence of the page body, or the `Definition` / `What it is` section's lead sentence — the same judgment cell `/sb-wiki-fill-index-descriptions.py` would derive). This cell MUST NOT be blank or a slug guess.
+3. Resolve the stub's leaf-index path: for a page at `{wiki_root}/wiki/{type}/{slug}.md` the leaf index is `{wiki_root}/wiki/{type}/{type}.md`; for a subdivided subfolder page at `{wiki_root}/wiki/{type}/{subfolder}/{slug}.md` the leaf index is `{wiki_root}/wiki/{type}/{subfolder}/{subfolder}.md`.
+4. Call the deterministic writer once per stub:
+
+```bash
+python {sb_os_path}/wiki/scripts/sb-wiki-index-transaction.py leaf-index \
+  --vault-root <vault-root> \
+  --leaf-index-path <absolute-path-to-leaf-index.md> \
+  --page-file <stub-filename.md> \
+  --description "<1-sentence description>"
+```
+
+   - If the leaf index file does not exist yet (lint has not created it), the writer prints a WARNING and exits 0 — do NOT abort the heal; lint will create the file and pick up the stub on its next run.
+   - If the row already exists (idempotent), the writer reports "ALREADY recorded" and exits 0.
+
+5. After ALL writer calls exit 0 (warnings are non-fatal), print this BANNER verbatim:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INDEX NOTE — run /sb-wiki-lint to complete the index
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+New stubs created by this heal have their leaf-index row
+written above (deterministic, scoped).  A full /sb-wiki-lint
+run is still needed to:
+  • renumber footnotes across the wiki
+  • deduplicate cross-origin stubs
+  • repair any other index drift
+Run /sb-wiki-lint when ready.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+6. Make this command's OWN single git commit covering every healed page + graph edit + leaf-index rows (when the vault is a git repo).
+
+If Step 3.2 created NO new stubs, skip steps 1–4 (no writer calls needed) but still print the BANNER and commit.
+
+**No automatic full-lint run.** The owner runs `/sb-wiki-lint` when ready (the banner above reminds them). This path NEVER calls `/sb-wiki-lint` automatically — the owner's standing "detection signals the human, no auto-run" principle (#33).
+
+**Orchestrated run (≥2 targets / `heal all`) → HANDS-OFF, no per-target preview.** After every sub-agent finishes (Step 3.5): run `/sb-wiki-lint` (read and execute `{sb_os_path}/wiki/workflows/sb-wiki-lint/sb-wiki-lint.md`) to dedupe cross-origin stubs, renumber footnotes, and repair indexes; then apply the **citation-integrity hard-gate (U7) BEFORE the single commit**:
+
+```bash
+python {sb_os_path}/wiki/scripts/sb-wiki-lint-deterministic.py check-pages --vault-root <vault-root> <page> [<page> ...]
+```
+
+Pass EVERY page the run wrote or edited (every healed source page + every graph page augmented/created + every lint-touched page). **Read the exit code off the UN-PIPED process** — never `| tee`/`| head` (a pipe reports the pipe's status, masking a real failure). **HARD-GATE — the single commit is BLOCKED while the exit code is non-zero:**
+
+- **Exit 0** → proceed to the commit.
+- **Exit ≠ 0** → the gate's JSON `failures[]` NAMES each failing page and its issue (e.g. `def without inline ref: 20,21` = an orphan footnote def). Repair each listed failure NOW (place the missing inline `[^N]` marker on the sentence the source backs, or add the missing `[^N]:` definition — NEVER by deleting a `[^N]:` definition; stale-removal is report-only per `{sb_os_path}/wiki/workflows/shared/citation-format.md`) and RE-RUN `check-pages` until it exits 0. The run does NOT commit while the gate fails — a non-zero exit blocks the commit and the named pages MUST be fixed first.
+
+Only after `check-pages` exits 0, make the run's EXACTLY ONE git commit covering every healed page + graph edit + lint heal (when the vault is a git repo). A worker that HALTED a target committed NOTHING for it — surface those in the report; never auto-retry. This path commits without owner preview (the price of the ingest-all-style bulk run), but every worker still HARD-VERIFIED its source's human half byte-identical and refused to write a changed human section, AND the bulk commit is hard-gated on `check-pages` exit 0 so no orphan footnote rides the single commit.
 
 **PDF auto-heal (hands-off, fired by the `/sb-wiki-ingest` hook) → NO preview, NO checkpoint.** The healing pass runs the per-source unit (Steps 2–3) against the just-written page + the original PDF, auto-resolves every decision point to the silent defaults (firm topic updates auto-apply append-only; speculative/semantic/proposed-answers default-reject), still verifies the human half byte-identical, and makes NO commit of its own — its edits ride the first-ingest run's single commit. The owner does not review it (the price of fully hands-off paper ingestion).
 

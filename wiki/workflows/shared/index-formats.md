@@ -79,6 +79,18 @@ The `My take` cell encodes one of three explicit states. **Blank is BANNED** as 
 - `Wiki` values: `No` (default), `Yes` (source page created), `Partial` (source page created but some downstream pages rejected), `Duplicate (of [[<existing-raw>]])` (confirmed content-duplicate of an already-ingested raw — never ingested, skipped by `/sb-wiki-ingest-all` discovery; disposition of the file is the user's call).
 - Missing rows are script-safe only when `Title` and `Date` are deterministic. Scripts MUST NOT fill `Title` from a slug guess. Non-deterministic rows are reported as `judgment_needed` for the LLM.
 
+### Row layout authority — `Wiki` is the row's final cell
+
+The raw row's `Wiki` flag is ALWAYS the LAST cell of the row, for BOTH recognized layouts: the 4-col canonical `File|Title|Date|Wiki` and the 3-col legacy `File|Description|Wiki`. Every writer locates `Wiki` by the MATCHED ROW's own width — `len(row) - 1` — NEVER by the header's `index("Wiki")`. This is the locator invariant: a 4-col data row appended under a 3-col legacy header is flipped at its own index 3, never the header's Wiki index 2 (which is the Date cell of the wider row). A row whose width is neither 3 nor 4 is unrecognized — the writer REFUSES to flip it and reports it, never guessing a position. The producer sizes each appended row to the index's ACTUAL header (a legacy 3-col header gets a 3-col row), never a hard-coded 4-col under any header.
+
+### D1 — a PDF source's canonical row keys on the `.pdf`
+
+For a PDF source the raw row keys on the **`.pdf`** (the immutable original); the regenerable `.md` twin (the page rendered by `sb-wiki-pdf-twin.py`, carrying `twin_extractor:` frontmatter, or a legacy `Original PDF:` reference, alongside a same-stem `.pdf`) gets **NO separate row** and is EXCLUDED from the row-adding sweep. Forward invariant: a `Wiki=Yes` PDF row implies a same-named `.md` twin exists. A coexisting `.pdf`+`.md` twin pair is collapsed to the `.pdf` row by lint reconciliation. A dated CLIP `.md` (no `twin_extractor:` / `Original PDF:` and no same-stem `.pdf`, e.g. caiso/engie-brasil daily clips) is NOT a twin and keeps its own row.
+
+### One writer (U2b)
+
+All raw-index structural mutations route through ONE schema-parameterized, name-keyed writer (`build_raw_row` / `set_raw_row_wiki` / `raw_row_wiki_index` / `repair_raw_row_width` in `sb-wiki-index-transaction.py`). The two matchers (`find_row_by_link`, `ingested_raw_filenames`) read the same authority. The writer owns STRUCTURE only (header, row presence, File/Title/Date/Wiki placement, width-correct sizing); judgment cells stay delegated — the leaf-index `Description` derivation helper (`sb-wiki-fill-index-descriptions.py`) remains the companion that derives those cells, and `What it says` / `My take` / `Description` / `Scope` are never written from a slug guess.
+
 ## Wiki Leaf Indexes
 
 **Files:** `{wiki_root}/wiki/concepts/concepts.md`, `{wiki_root}/wiki/entities/entities.md`, `{wiki_root}/wiki/topics/topics.md`

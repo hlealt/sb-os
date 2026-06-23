@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import importlib.util
 import json
 import os
 import re
@@ -30,6 +31,33 @@ import unicodedata
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
+
+
+# ---------------------------------------------------------------------------
+# Consolidated raw-index writer authority (U2b)
+# ---------------------------------------------------------------------------
+# The ONE name-keyed writer lives in sb-wiki-index-transaction.py (U2b home —
+# it holds the row primitives and is what /sb-wiki-ingest calls). The filename
+# is hyphenated, so import it by path. Every raw-index structural mutation in
+# THIS file routes through these helpers; no row is built independently here.
+def _load_raw_index_writer():
+    name = "sb_wiki_index_transaction"
+    if name in sys.modules:
+        return sys.modules[name]
+    mod_path = Path(__file__).resolve().parent / "sb-wiki-index-transaction.py"
+    spec = importlib.util.spec_from_file_location(name, mod_path)
+    mod = importlib.util.module_from_spec(spec)
+    # Register before exec so the module's @dataclass can resolve its __module__.
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)  # type: ignore
+    return mod
+
+
+_RAW_WRITER = _load_raw_index_writer()
+build_raw_row = _RAW_WRITER.build_raw_row
+set_raw_row_wiki = _RAW_WRITER.set_raw_row_wiki
+raw_row_wiki_index = _RAW_WRITER.raw_row_wiki_index
+repair_raw_row_width = _RAW_WRITER.repair_raw_row_width
 
 
 RAW_HEADER = "| File | Title | Date | Wiki |\n|------|-------|------|------|\n"
@@ -292,6 +320,40 @@ def derive_raw_title_and_date(path: Path) -> tuple[str, str]:
     return title, date
 
 
+def raw_index_header_columns(lines: list[str]) -> list[str] | None:
+    """Return the raw index's actual header columns (e.g. ``['File','Title','Date',
+    'Wiki']`` or the legacy ``['File','Description','Wiki']``), or ``None`` when no
+    header row is present. The producer sizes appended rows to THIS header (Rule
+    3), never a hard-coded 4-col, so it stops manufacturing 4-col-under-legacy
+    mix.
+    """
+    for line in lines:
+        if line.lstrip().startswith("|") and not re.match(r"^\s*\|\s*-+", line):
+            return split_row_cells(line)
+    return None
+
+
+def is_regenerable_pdf_twin(raw_file: Path) -> bool:
+    """A raw ``.md`` is a regenerable PDF twin (Rule 5) when it carries the
+    twin marker AND a same-stem ``.pdf`` original exists alongside it.
+
+    Markers: ``twin_extractor:`` frontmatter (written by sb-wiki-pdf-twin.py) or a
+    legacy ``Original PDF:`` reference. The ``.pdf`` is the canonical D1 row; the
+    regenerable ``.md`` twin gets NO separate row, so it is excluded from the
+    row-adding loop. caiso/engie dated CLIPS are NOT twins (their ``.md`` carries
+    no ``twin_extractor`` / ``Original PDF:`` AND has no same-stem ``.pdf``), so
+    this never excludes them.
+    """
+    if raw_file.suffix != ".md":
+        return False
+    if not os.path.exists(_fspath(raw_file.with_suffix(".pdf"))):
+        return False
+    text = read_text(raw_file)
+    if "twin_extractor" in frontmatter(text):
+        return True
+    return bool(re.search(r"^\s*Original PDF:", text, flags=re.M))
+
+
 def sync_raw_indexes(wiki_root: Path, report: Report, apply_changes: bool) -> None:
     raw_root = wiki_root / "raw"
     if not raw_root.exists():
@@ -303,13 +365,21 @@ def sync_raw_indexes(wiki_root: Path, report: Report, apply_changes: bool) -> No
             write_text(index_path, index_text, report, apply_changes)
         links = table_links(index_text)
         lines = index_text.rstrip("\n").splitlines() if index_text.strip() else RAW_HEADER.rstrip("\n").splitlines()
+        # Size appended rows to the ACTUAL header of THIS index (Rule 3), via the
+        # consolidated writer — never a hard-coded 4-col under a legacy 3-col
+        # header. A headerless/garbled index falls back to the canonical 4-col.
+        columns = raw_index_header_columns(lines) or ["File", "Title", "Date", "Wiki"]
         changed = False
         for raw_file in sorted(origin_dir.glob("*.md")):
             if raw_file.name == index_path.name or raw_file.name in NON_SOURCE_FILES or raw_file.name in links:
                 continue
+            # Rule 5 — a regenerable PDF twin .md is keyed on the .pdf, not its
+            # own row; exclude it from the row-adding loop.
+            if is_regenerable_pdf_twin(raw_file):
+                continue
             title, date = derive_raw_title_and_date(raw_file)
             if title and date:
-                lines.append(make_row([f"[[{raw_file.name}]]", title, date, "No"]))
+                lines.append(build_raw_row(columns, raw_file.name, title, date, "No"))
                 changed = True
             else:
                 report.judgment_needed.append(
@@ -395,7 +465,13 @@ def heal_raw_wiki_cells(wiki_root: Path, report: Report, apply_changes: bool) ->
             if not line.strip().startswith("|") or re.match(r"^\s*\|\s*-+", line):
                 continue
             cells = split_row_cells(line)
-            if not cells or cells[0] == "File" or len(cells) != 4:
+            if not cells or cells[0] == "File":
+                continue
+            # Locate the Wiki cell by the row's OWN layout (Rule 1/6) — the
+            # consolidated authority. An unrecognized-width row has no Wiki index;
+            # skip it (never misfire). Recognized widths are 3 (legacy) and 4.
+            wiki_idx = raw_row_wiki_index(cells)
+            if wiki_idx is None:
                 continue
             match = re.search(r"\[\[([^\]|#]+?)\]\]", cells[0])
             if not match:
@@ -406,13 +482,13 @@ def heal_raw_wiki_cells(wiki_root: Path, report: Report, apply_changes: bool) ->
                 # heal (no real raw) and never delete (may be a moved raw).
                 dangling.append({"origin": origin_dir.name, "file": raw_filename})
                 continue
-            if cells[3].strip() != "No":
+            if cells[wiki_idx].strip() != "No":
                 continue
             backlink_hit = raw_filename in backlink_targets
             mirror_hit = Path(raw_filename).stem in origin_stems
             if backlink_hit or mirror_hit:
-                cells[3] = "Yes"
-                lines[idx] = make_row(cells)
+                new_cells, _ = set_raw_row_wiki(cells, "Yes")
+                lines[idx] = make_row(new_cells)
                 modified_rows.append(idx)
                 healed.append(
                     {
@@ -424,9 +500,11 @@ def heal_raw_wiki_cells(wiki_root: Path, report: Report, apply_changes: bool) ->
                     }
                 )
         if modified_rows:
-            # Post-rewrite shape guard: every modified row must still split into
-            # exactly 4 cells. A violation is a script bug — refuse the write.
-            broken = [lines[i] for i in modified_rows if len(split_row_cells(lines[i])) != 4]
+            # Post-rewrite shape guard (Rule 8 — KEEP until the writer is the sole
+            # path AND indexes are normalized): every modified row must still be a
+            # recognized raw width (3 or 4). A violation is a script bug — refuse
+            # the write.
+            broken = [lines[i] for i in modified_rows if raw_row_wiki_index(split_row_cells(lines[i])) is None]
             if broken:
                 report.detected.setdefault("row_shape_errors", []).extend(
                     f"{index_path}: {row}" for row in broken
@@ -1402,13 +1480,21 @@ def footnote_state(text: str) -> dict[str, object]:
 
 
 def cmd_check_pages(args_list: list[str]) -> int:
-    """Citation-integrity gate (``check-pages``) — ingest post-commit check.
+    """Citation-integrity gate (``check-pages``) — ingest/heal commit hard-gate.
 
     Validates the footnote state of the named pages only: every inline
     ``[^N]`` marker has a definition, every definition has at least one
-    inline marker, and no definition number is duplicated.  Ordering is
-    NOT checked — the C3 renumber pass owns normalization.  Exits 1 on
-    any issue so workflow callers can hard-gate on the result.
+    inline marker (the marker-pairing assertion — a ``Sources`` ``[^N]:``
+    def with NO in-text ``[^N]`` marker is an ORPHAN footnote, reported as
+    ``def without inline ref: <N,...>``), and no definition number is
+    duplicated.  Ordering is NOT checked — the C3 renumber pass owns
+    normalization.  Exits 1 on any issue, naming each failing page in the
+    ``failures[]`` JSON, so workflow callers HARD-GATE on the result:
+    the single-page ingest post-commit gate (``sb-wiki-ingest`` Step 10)
+    and the bulk/orchestrated single-commit gate (``sb-wiki-ingest-healing``
+    Step 4 orchestrated path — U7) both block the commit while this exits
+    non-zero.  Read the exit code off the UN-PIPED process (a pipe reports
+    the pipe's status, masking a failure).
     """
     parser = argparse.ArgumentParser(
         description="Citation-integrity check on specific pages."

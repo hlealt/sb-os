@@ -273,6 +273,19 @@ A raw **PDF** filename MUST equal the kebab-slug of the paper's actual title (th
 
 **Title-slug algorithm.** (1) Lowercase the title. (2) Replace each run of whitespace and `+ / : – —` with a single `-`. (3) Remove `? ! , . " ' ( ) [ ]`. (4) Collapse consecutive `-`; trim leading/trailing `-`. Acronyms lowercase (`AI` → `ai`). Example: `International AI Safety Report 2026` → `international-ai-safety-report-2026`.
 
+### Index Rules — raw-index row layout (D1, locked)
+
+The raw index (`raw/{origin}/{origin}.md`) is maintained by ONE schema-parameterized, name-keyed writer (`sb-wiki-index-transaction.py`; the matchers `find_row_by_link` and `ingested_raw_filenames` read the same authority). Locked rules:
+
+| Rule | Statement |
+|------|-----------|
+| Canonical header | `\| File \| Title \| Date \| Wiki \|`. Recognized legacy header: `\| File \| Description \| Wiki \|` (still read; normalization of legacy headers + migration of legacy `Description` text is owned by the index-schema unification, not by this writer). |
+| `Wiki` is the row's final cell | The `Wiki` flag is the LAST cell of every recognized raw row (4-col canonical AND 3-col legacy). A writer locates `Wiki` by the MATCHED ROW's own width (`len(row) - 1`), NEVER by the header's `index("Wiki")` — so a 4-col data row appended under a 3-col legacy header is flipped at its own last cell, never the wider row's Date cell. |
+| Width-sized appends | An appended row is sized to the index's ACTUAL header. A legacy 3-col header receives a 3-col row; the writer never manufactures a 4-col row under a 3-col header. |
+| Unrecognized width refused | A row whose width is neither 3 nor 4 is REPORTED, never auto-flipped or guessed. |
+| **D1 — canonical `.pdf` row** | For a PDF source the raw row keys on the **`.pdf`** (the immutable original). The regenerable `.md` twin (the page rendered by `sb-wiki-pdf-twin.py`, carrying `twin_extractor:` frontmatter, or a legacy `Original PDF:` reference, alongside a same-stem `.pdf`) gets **NO separate row** and is EXCLUDED from the row-adding sweep. Forward invariant: a `Wiki=Yes` PDF row implies a same-named `.md` twin exists. A coexisting `.pdf`+`.md` twin pair is collapsed to the `.pdf` row by lint reconciliation. |
+| D1 exception — dated clips | A dated CLIP `.md` (no `twin_extractor:` / `Original PDF:` and no same-stem `.pdf`, e.g. caiso / engie-brasil daily clips) is NOT a twin and keeps its own row. |
+
 ## Frontmatter schemas
 
 ### Common (all types)

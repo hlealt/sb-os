@@ -216,6 +216,49 @@ def apply_size_filter(payload: dict, size_filter: str) -> dict:
     return payload
 
 
+def _ingested_raw_filenames(sources_root: Path, origin: str) -> set[str]:
+    """Union of three signals that mark a raw file as already ingested.
+
+    Scans every source page under ``sources_root/{origin}/`` and returns the
+    set of raw *filenames* (with extension, e.g. ``foo.pdf``) that have a
+    corresponding source page — via ANY of:
+
+      1. ``raw:`` frontmatter wikilink — the canonical 1:1 backlink per the
+         wiki schema.  Matched on ``Path(target).name``.
+      2. ``Original PDF:`` body wikilink — carried by PDF-sourced pages that
+         were ingested via a dated ``.md`` clip so their source-page stem
+         differs from the bare-PDF stem.  Matched on ``Path(target).name``.
+      3. Same-stem mirror — a source page whose stem equals the raw file's
+         stem (the normal forward-twin case: ``.md`` raws, or PDFs ingested
+         directly without a dated clip).
+
+    ``collect_healing()`` is NOT touched — it has its own namespace.
+    """
+    origin_dir = sources_root / origin
+    if not origin_dir.is_dir():
+        return set()
+    index_name = f"{origin}.md"
+    ingested: set[str] = set()
+    for page in sorted(origin_dir.glob("*.md")):
+        if page.name == index_name or page.name in NON_SOURCE_FILES:
+            continue
+        # Signal 3 — same-stem mirror (.md raw or forward-twin PDF)
+        ingested.add(page.stem + ".md")
+        ingested.add(page.stem + ".pdf")
+        text = read_text(page)
+        fm = frontmatter(text)
+        # Signal 1 — raw: frontmatter backlink
+        raw_val = fm.get("raw", "")
+        for target in re.findall(r"\[\[([^\]|#]+?)\]\]", raw_val):
+            ingested.add(Path(target).name)
+        # Signal 2 — Original PDF: body backlink
+        for target in re.findall(
+            r"^Original PDF:\s*\[\[([^\]|#]+?)\]\]", text, flags=re.M
+        ):
+            ingested.add(Path(target).name)
+    return ingested
+
+
 def collect(wiki_root: Path, exclude: set[str], only_origin: str | None) -> dict:
     raw_root = wiki_root / "raw"
     sources_root = wiki_root / "wiki" / "sources"
@@ -238,10 +281,10 @@ def collect(wiki_root: Path, exclude: set[str], only_origin: str | None) -> dict
             and f.name != index_name and f.name not in NON_SOURCE_FILES
         )
         marked_duplicate = duplicate_rows(origin_dir)
+        ingested_filenames = _ingested_raw_filenames(sources_root, origin)
         for raw_file in raw_files:
             raw_total += 1
-            source_page = sources_root / origin / f"{raw_file.stem}.md"
-            if source_page.exists():
+            if raw_file.name in ingested_filenames:
                 ingested += 1
                 continue
             if raw_file.name in marked_duplicate:
@@ -416,10 +459,13 @@ def collect_selection(wiki_root: Path, selected: list[dict]) -> dict:
     duplicate_files: list[str] = []
     duplicates = 0
     dup_cache: dict[str, set[str]] = {}
+    ingested_cache: dict[str, set[str]] = {}
 
     for it in selected:
         origin, raw_file = it["origin"], it["path"]
-        if (sources_root / origin / f"{it['stem']}.md").exists():
+        if origin not in ingested_cache:
+            ingested_cache[origin] = _ingested_raw_filenames(sources_root, origin)
+        if it["filename"] in ingested_cache[origin]:
             skipped_ingested.append(f"{origin}/{it['filename']}")
             continue
         if origin not in dup_cache:
