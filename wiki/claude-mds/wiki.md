@@ -82,7 +82,7 @@ Five operations cover the wiki lifecycle.
 | `/sb-wiki-ingest <slug>` | Slash command | User | Distill a raw source into wiki pages |
 | `/sb-wiki-ingest-healing [targets]` | Slash command | User (on-demand), AND auto-fired after every PDF first-ingest | HEAL a thin or lossy already-ingested source: an agent re-reads the source (the **original PDF** for a PDF) and EDITS the page in place to the reconstruction standard — augmenting the agent-authored sections, preserving `My take` + every human edit byte-identical, never deleting or rebuilding — then propagates the recovered substance to the linked concept/entity/topic pages and strips `#reingest`. ONE target heals in-session (previews before its own commit); TWO OR MORE (or `heal all` via `#reingest`) dispatch one sub-agent per source, strictly sequentially at the ingest-all Sonnet/Opus split, then one final lint + one commit (hands-off). PDF auto-heal is hands-off (PROBATIONARY) and rides the first-ingest commit. NO AI judge, NO no-worse gate, NO thin-page detector — the healing pass is the sole quality check |
 | `sb-wiki-create-topic` | Skill (auto-discovered) | Agent mid-ingest, OR auto-fired when user expresses topic-creation intent | Create a topic page from a candidate or fresh proposal |
-| `/sb-wiki-lint` | Slash command | User | Health check + index maintenance for `raw/` and `wiki/` |
+| `/sb-wiki-lint` | Slash command | User | Structural and citation lint + index maintenance for `raw/` and `wiki/` |
 | `/sb-wiki-query <question>` | Slash command | User | Synthesize an answer from wiki + optionally file the result back |
 
 ### Ingest flow

@@ -53,6 +53,8 @@ A single bare token naming BOTH an origin folder AND a raw-file stem, an unresol
 
 ## Flow
 
+> **Run `/sb-wiki-lint` before `/sb-wiki-ingest-all`.** Discovery (Step 1) identifies not-yet-ingested sources by reading each raw index row's `Wiki` cell. A freshly-imported source's `Wiki` cell flips from `No` to `Yes` only when `/sb-wiki-lint` runs (its `heal_raw_wiki_cells` pass). Until lint runs after a fresh import, `/sb-wiki-ingest-all` will re-offer that source as not yet ingested.
+
 ### Step 1 — Discover non-ingested sources + dispatch plan
 
 Run from the vault root with the active Python interpreter, forwarding the user's argument(s) VERBATIM as positional targets (an origin name, or one-or-more filenames/paths — the script classifies them; see Invocation):

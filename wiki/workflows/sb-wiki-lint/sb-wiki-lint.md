@@ -1,6 +1,6 @@
 ---
 name: sb-wiki-lint
-description: Structural and citation lint + index maintenance for `raw/` and `wiki/` — detect stubs, orphans, unresolved Disputed callouts, aging candidate-topics, broken wikilinks; auto-apply index sync writes (wiki sources `My take` re-sync, footnote renumber, raw-index creation, wiki leaf-index creation); when the optional questions layer is ON, sweep open questions for now-available answers and surface mature entries for graduation as user-gated proposals; present read-only findings to the user.
+description: Structural and citation lint + index maintenance for `raw/` and `wiki/` — detect stubs, orphans, unresolved Disputed callouts, aging candidate-topics, broken wikilinks; auto-apply index sync writes (sources index `File | Description` migration, footnote renumber, raw-index creation, wiki leaf-index creation); when the optional questions layer is ON, sweep open questions for now-available answers and surface mature entries for graduation as user-gated proposals; present read-only findings to the user.
 ---
 
 # sb-wiki-lint
@@ -60,7 +60,7 @@ Optional-feature step bodies and Step 9 response handlers live in `extensions/` 
 
 This workflow is read-mostly by contract. Auto-applied writes are SCOPED to index sync only. Subdivision execution writes (step 7.5) are USER-GATED — only on explicit accept at step 9.
 
-The auto-applied index-sync writes (re-sync `My take`, renumber footnotes, create/maintain raw + wiki leaf indexes, fill concept/entity `Description` cells, type-tag sync, prune the `logs/` files) are owned SOLELY by their step bodies — Steps 6, 7, and 8 are the sole scope authority for each; this table does NOT restate them. Only the questions-layer skip-if-absent rows and the USER-GATED executor rows below carry authorization semantics not fully resolved inside a single step:
+The auto-applied index-sync writes (migrate sources index to `File | Description`, renumber footnotes, create/maintain raw + wiki leaf indexes, fill concept/entity `Description` cells, type-tag sync, prune the `logs/` files) are owned SOLELY by their step bodies — Steps 6, 7, and 8 are the sole scope authority for each; this table does NOT restate them. Only the questions-layer skip-if-absent rows and the USER-GATED executor rows below carry authorization semantics not fully resolved inside a single step:
 
 | Write | Scope | Authorization |
 |-------|-------|--------------|
@@ -130,7 +130,7 @@ NEVER run an executor flag without an explicit user accept at step 9. After any 
 - **Executor runs do NOT update state.** Executor flags (`--execute-renames`, `--execute-subdivision`, `--execute-link-fixes`) compute no stamps; the helper guards against writing an executor-mode report over the state file, so running an executor with `--report` is safe and NEVER clobbers accumulated stamps.
 - **`runs_completed` counter.** The state file carries a `"runs_completed"` integer — incremented by 1 and persisted on every NON-execute helper run (check + apply modes), absent treated as 0, surviving corrupt-state full-fallback (a fallback run persists `runs_completed: 1`). Executor runs NEVER touch it (the execute-mode report is not persisted). It approximates "complete lint runs" by counting helper invocations and is the durable close signal the Step 7.7a/7.7b validation windows count against.
 
-The helper MUST NOT fill judgment-bearing cells. `Description`, `Scope`, and `What it says` require LLM judgment. After the helper runs, read the JSON report and resolve every `judgment_needed` item by reading the referenced file and writing the required semantic cell before Step 8.
+The helper MUST NOT fill judgment-bearing cells. `Description` (sources, topics, concepts, entities) requires LLM judgment. After the helper runs, read the JSON report and resolve every `judgment_needed` item by reading the referenced file and writing the required semantic cell before Step 8.
 
 ## Flow
 
@@ -198,19 +198,15 @@ Consume `detected.broken_wikilinks` from the helper — do NOT re-walk pages by 
 2. **`questions.md` link resolution (skip if the questions layer is OFF — `{wiki_root}/questions.md` absent or malformed).** Read `detected.questions_broken_links` from the helper (the `relates:`/`seeded-by:` targets in `questions.md` that do not resolve). Treat `questions.md` as the source location. Report only — questions-layer broken links are NOT classified into A/B/C and are NOT auto-repaired.
 3. Build the `broken-wikilinks` set for the LINT REPORT as bucket counts: A (auto-fixable) / B (needs page) / C (unresolvable), plus the `questions.md` broken targets.
 
-### Step 6 — Re-sync wiki sources `My take` column; renumber footnotes; remove stale footnote definitions
+### Step 6 — Migrate and maintain wiki sources index; renumber footnotes; remove stale footnote definitions
 
-**Dirty-set gate:** read `dirty_set` from the helper report. For `My take` resync, process ONLY source pages whose wiki-root-relative path is in `dirty_set`. Source pages absent from `dirty_set` are unchanged since the last run — skip their `My take` re-sync entirely. (`dirty_set` is every-page on `--full` runs and on first-run / state-fallback, so full coverage is preserved.)
+The wiki sources index uses the unified 2-column `| File | Description |` format (U11). The helper's `migrate_sources_index_to_description` pass migrates any legacy 3-col `| File | What it says | My take |` index to the 2-col form (the `What it says` text is preserved verbatim as `Description`; the `My take` cell is dropped — the user's reflection lives in the source page's `## My take` body section, untouched). An already-2-col index is left byte-stable. A bespoke layout is reported, never force-rewritten.
 
 For each `{wiki_root}/wiki/sources/{origin}/` directory (including `studies/`):
 
-1. Read `{origin}.md` (or `studies.md`). Header format per `../shared/index-formats.md` "Wiki Sources Index" section: `| File | What it says | My take |`.
-2. For each row, locate the source page at `{wiki_root}/wiki/sources/{origin}/{filename}`. **Skip rows whose source page is NOT in `dirty_set`.** For rows in `dirty_set`, read the page's `My take` section.
-3. Apply the three-state re-sync rule per `../shared/index-formats.md` "`My take` Cell — Three States (NEVER blank)" section — the four lint-step-6 re-sync rows of its **Write rules** table are the sole authority for which value to write given the source page's `My take` body and the current cell value (table-safety for reflected previews per the same section). **NEVER leave the cell blank** — every row carries `pending`, `—`, or a 1-sentence reflected preview.
-4. The source page is canonical. NEVER modify the source page's `My take` content.
-5. Capture `sources-resynced` count for the LINT REPORT.
-
-**Staleness behavior.** The 7-day staleness rule for `My take` re-sync applies to `pending` rows ONLY. `—` rows are final and do NOT age out. Reflected rows are refreshed every lint pass.
+1. Read `{origin}.md` (or `studies.md`). Header format per `../shared/index-formats.md` "Wiki Sources Index" section: `| File | Description |`.
+2. For each row, ensure the `Description` cell is filled. `Description` cells are LLM-owned — if the deterministic helper reports a missing or blank `Description` cell, read the source page and write a 1-sentence factual description.
+3. Capture `sources-resynced` count for the LINT REPORT.
 
 For each wiki page (concepts, entities, topics, source pages):
 
@@ -236,15 +232,15 @@ For each `{wiki_root}/raw/{origin}/` directory (including `studies/`), **EXCLUDI
 For each wiki leaf folder (`{wiki_root}/wiki/concepts/`, `entities/`, `topics/`):
 
 1. Verify the leaf index exists (`concepts.md`, `entities.md`, `topics.md`).
-2. If `wiki/topics/topics.md` is missing, CREATE it with the 2-column header `| File | Scope |` (per `shared/folder-structure.md` "Creation Rules" table; topics-leaf-index format defined alongside `sb-wiki-create-topic`).
+2. If `wiki/topics/topics.md` is missing, CREATE it with the 2-column header `| File | Description |` (per `shared/folder-structure.md` "Creation Rules" table; topics-leaf-index format defined alongside `sb-wiki-create-topic`).
 3. If `wiki/topics/topics.md` exists with a different column layout (user-customized), preserve the user's columns. Operate accordingly: read filenames from the `File` column; do NOT rewrite the layout.
 4. For `wiki/concepts/concepts.md` and `wiki/entities/entities.md`: create with the standard wiki leaf-index header (`| File | Description |`) if missing. Preserve user-customized layouts when present.
-5. For each page in the leaf folder, ensure a row exists for that page. Concept/entity `Description` cells are auto-filled by `sb-wiki-fill-index-descriptions.py` (run in the Deterministic Helper step) from each page's lead definition sentence; topic `Scope` cells stay LLM-filled. Never leave judgment-bearing columns blank.
+5. For each page in the leaf folder, ensure a row exists for that page. Concept/entity `Description` cells are auto-filled by `sb-wiki-fill-index-descriptions.py` (run in the Deterministic Helper step) from each page's lead definition sentence; topic `Description` cells stay LLM-filled. Never leave judgment-bearing columns blank.
 6. Capture `wiki-leaf-indexes-created` count and `wiki-leaf-rows-added` total for the LINT REPORT.
 
 **Type-tag sync (deterministic, auto-applied by the helper):** every page under `{wiki_root}/wiki/` MUST carry its `type:` frontmatter value as an entry in `tags:` (per `../shared/frontmatter-schemas.md` — Obsidian graph groups color by `tag:`, not frontmatter fields). The helper appends the missing tag (append-only — existing user tags are NEVER removed or reordered); index files (filename stem = parent directory name) missing `type:` get `type: index` + `tags: [index]`, creating the frontmatter block when absent. Non-index pages whose `type:` cannot be derived deterministically are reported in `detected.type_tags.unresolved` — surfaced in the LINT REPORT, never guessed. Capture `tags_added` and `type_index_added` for the LINT REPORT.
 
-**Judgment-bearing cell rule:** Steps above never authorize blank semantic cells. Concept/entity `Description` cells are auto-filled by `sb-wiki-fill-index-descriptions.py` from the page's lead definition sentence; the agent fills ONLY the pages that helper reports as `weak` (no clean lead sentence) AND whose path is in `dirty_set` — skip weak pages absent from `dirty_set` (unchanged since last run). `Scope` (topics) and `What it says` (sources) remain fully LLM-owned — if the deterministic helper reports a missing row for those cells, the agent MUST read the referenced page and write the semantic cell before Step 8 (the log-prune pass). The dirty-set gate does NOT apply to missing-row fills: the helper detects a missing index row full-corpus, so the agent fills any reported missing cell regardless of whether the page is in `dirty_set` (the index has a hole; skipping the fill leaves it corrupt until a `--full` run).
+**Judgment-bearing cell rule:** Steps above never authorize blank semantic cells. Concept/entity `Description` cells are auto-filled by `sb-wiki-fill-index-descriptions.py` from the page's lead definition sentence; the agent fills ONLY the pages that helper reports as `weak` (no clean lead sentence) AND whose path is in `dirty_set` — skip weak pages absent from `dirty_set` (unchanged since last run). `Description` (topics and sources) remains fully LLM-owned — if the deterministic helper reports a missing row for those cells, the agent MUST read the referenced page and write the semantic cell before Step 8 (the log-prune pass). The dirty-set gate does NOT apply to missing-row fills: the helper detects a missing index row full-corpus, so the agent fills any reported missing cell regardless of whether the page is in `dirty_set` (the index has a hole; skipping the fill leaves it corrupt until a `--full` run).
 
 ### Step 7.5 — Folder-subdivision detection
 
@@ -378,7 +374,7 @@ Candidate-topics aging without promotion (N): "<slug>" — logged YYYY-MM-DD (ag
 Candidate-topics with unparseable timestamp (N): "<header>" — cannot be aged; review manually (omit when zero)
 Thesis updates awaiting investor decision (N): "<slug>" — logged YYYY-MM-DD (never auto-pruned; resolve via sb-fin-create-thesis extend or dismiss) (omit when zero)
 Broken wikilinks (N): A=<n> auto-fixable | B=<m> need a page | C=<k> unresolvable; questions.md broken (J): <target>, … (omit the questions.md clause when zero or layer OFF)
-Index sync — wiki/sources My take refreshed: <N> source pages
+Index sync — wiki/sources Description synced: <N> source pages
 Index sync — raw indexes: <N> created (raw/<origin>/<origin>.md), <M> rows added across raw/{origins}
 Raw index — stale Wiki=No healed (<N>): raw/<origin>/<file> (1:1 source page exists) (omit when zero)
 Raw index — dangling rows (<N>): raw/<origin>/<file> (File cell → missing raw file; dispose manually) (omit when zero)
@@ -498,7 +494,7 @@ End of flow.
 | `{wiki_root}/questions.md` absent | Questions layer OFF — skip step 7.7 entirely (hold EMPTY `questions-answer-proposals` and `graduation-proposals`); skip the `questions.md` link-resolution branch at step 5; skip the step-8 `questions.md` prune sub-step; omit the Step 9 `PROPOSED ANSWERS` and `GRADUATION PROPOSAL` blocks. Step 8.5 still runs but aggregates ONLY topic-home open questions — write `open-gaps.md` with the topic-home section populated (or the empty-state file when no topic has an open question); the `questions.md` section shows its empty-state line. Do NOT create `questions.md`. Every other step is identical to today (optionality guarantee #1). |
 | `{wiki_root}/questions.md` malformed (unreadable, invalid frontmatter, or no parseable H2 entries) | WARN and treat as absent — skip step 7.7, the step-5 `questions.md` branch, and the step-8 `questions.md` prune sub-step; omit both Step 9 questions blocks. Step 8.5 behaves as in the absent row (topic-home only). NEVER abort the lint (guarantee #5). |
 | `{wiki_root}/wiki/` or `{wiki_root}/raw/` missing | Skip walks for the missing tree; capture zero counts for affected sets. Continue with remaining steps. |
-| Source page referenced by a `wiki/sources/{origin}/{origin}.md` row does not exist | Skip the row at step 6 `My take` re-sync; do NOT remove the row (user may resolve manually). Capture in `sources-resynced` only when the page exists. |
+| Source page referenced by a `wiki/sources/{origin}/{origin}.md` row does not exist | Skip the row at step 6 `Description` sync; do NOT remove the row (user may resolve manually). Capture in `sources-resynced` only when the page exists. |
 | Raw file referenced by a `raw/{origin}/{origin}.md` row does not exist | Leave the row in place at step 7; do NOT remove it (user may have moved the raw file). |
 | Wiki leaf index user-customized layout (`wiki/topics/topics.md`, `wiki/concepts/concepts.md`, or `wiki/entities/entities.md`) | Preserve at step 7; do NOT rewrite the layout. Operate against the existing `File` column for row presence checks. |
 | Footnote definition in body uses non-standard form (e.g., text-only without wikilink) | Skip the entry at step 6 footnote renumber; preserve user content. Do NOT auto-correct. |
