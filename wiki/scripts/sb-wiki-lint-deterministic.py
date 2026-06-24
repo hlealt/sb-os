@@ -1934,10 +1934,10 @@ def raw_index_titles(origin_dir: Path) -> dict[str, str]:
     title — returning it would make PDF title-conformance slug-compare against
     ``No``/``Yes`` and propose nonsense renames. So a Title is returned ONLY for a
     recognized 4-col legacy row; 2-col and 3-col rows yield no title (the detector
-    skips them via its ``if not title`` guard). The publish-time source of a PDF's
-    title is the document / its source page — see the open question in this task's
-    return: post-migration, PDF title-conformance needs its title from the source
-    page, not the (removed) index column.
+    skips them via its ``if not title`` guard). This is a TRANSITION-ONLY fallback:
+    the primary publish-time source of an ingested PDF's title is now its source
+    page (``title:`` frontmatter, else first H1) via ``pdf_source_titles`` — this
+    legacy index path only supplies a title for a not-yet-migrated 4-col index.
     """
     index_path = origin_dir / f"{origin_dir.name}.md"
     titles: dict[str, str] = {}
@@ -1960,6 +1960,73 @@ def raw_index_titles(origin_dir: Path) -> dict[str, str]:
     return titles
 
 
+def source_page_title(text: str) -> str:
+    """Return a source page's title: its ``title:`` frontmatter, else its first H1.
+
+    Empty when neither is present. This is the post-ADX-9/10 publish-time source
+    of a PDF's title for lint title-conformance (the raw index no longer carries a
+    Title column).
+    """
+    title = frontmatter(text).get("title", "").strip()
+    if title:
+        return title
+    return first_h1(text)
+
+
+def pdf_source_titles(wiki_root: Path, origin_dir: Path) -> dict[str, str]:
+    """Map each PDF raw filename in *origin_dir* -> its ingested source-page title.
+
+    The title is read from the PDF's 1:1 source page (``title:`` frontmatter, else
+    first H1). The source page is located by the SAME three union signals as
+    ``ingested_raw_filenames`` (U1b), keyed on the PDF filename:
+
+      - filename mirror — ``wiki/sources/{origin}/{pdf-stem}.md`` (a PDF's source
+        page is the title-slug ``.md``, same stem).
+      - ``raw:`` frontmatter backlink — a source page whose ``raw:`` wikilinks the
+        PDF filename (divergent stem, e.g. a dated-clip-first source).
+      - ``Original PDF:`` body backlink — a source page whose body names the bare
+        PDF (legacy dated-clip origins: caiso/engie).
+
+    A PDF with NO source page yields no entry (the detector then stays dormant for
+    that file — owner-accepted until ingest). The wiki sources root is resolved the
+    way the rest of the engine resolves it (``wiki_root / "wiki" / "sources" /
+    {origin}``), never a hardcoded vault path.
+    """
+    titles: dict[str, str] = {}
+    pdf_names = {p.name for p in origin_dir.glob("*.pdf")}
+    if not pdf_names:
+        return titles
+    sources_dir = wiki_root / "wiki" / "sources" / origin_dir.name
+    if not sources_dir.exists():
+        return titles
+    index_name = f"{sources_dir.name}.md"
+    # mirror: a same-stem source page maps to a same-stem PDF (papers).
+    pdf_stems = {Path(n).stem: n for n in pdf_names}
+    for page in sorted(sources_dir.glob("*.md")):
+        if page.name == index_name or page.name in NON_SOURCE_FILES:
+            continue
+        text = read_text(page)
+        title = source_page_title(text)
+        if not title:
+            continue
+        # raw: frontmatter backlink + Original PDF: body backlink — both name a
+        # raw FILENAME; bind the title to any PDF they reference.
+        targets: set[str] = set()
+        raw_val = frontmatter(text).get("raw", "")
+        for t in re.findall(r"\[\[([^\]|#]+?)\]\]", raw_val):
+            targets.add(Path(t).name)
+        for t in ORIGINAL_PDF_RE.findall(text):
+            targets.add(Path(t).name)
+        for target in targets:
+            if target in pdf_names:
+                titles.setdefault(target, title)
+        # filename mirror — the source page stem equals the PDF stem.
+        mirror_pdf = pdf_stems.get(page.stem)
+        if mirror_pdf is not None:
+            titles.setdefault(mirror_pdf, title)
+    return titles
+
+
 def detect_pdf_title_conformance(wiki_root: Path, report: Report) -> None:
     proposals: list[dict[str, str]] = []
     duplicates: list[dict[str, str]] = []
@@ -1970,12 +2037,16 @@ def detect_pdf_title_conformance(wiki_root: Path, report: Report) -> None:
             report.detected[key] = []
         return
     for origin_dir in sorted(p for p in raw_root.iterdir() if p.is_dir() and not excluded_dir(p.relative_to(wiki_root))):
-        titles = raw_index_titles(origin_dir)
+        # Primary title source (ADX-9/10): the PDF's ingested source-page
+        # `title:` frontmatter (else first H1). Legacy 4-col raw-index Title is a
+        # transition-only fallback for a not-yet-migrated index.
+        source_titles = pdf_source_titles(wiki_root, origin_dir)
+        legacy_titles = raw_index_titles(origin_dir)
         slug_groups: dict[str, list[tuple[str, str]]] = {}
         for pdf in sorted(origin_dir.glob("*.pdf")):
-            title = titles.get(pdf.name, "")
+            title = source_titles.get(pdf.name) or legacy_titles.get(pdf.name, "")
             if not title:
-                continue  # no index Title — step 7 / judgment pass owns the row first
+                continue  # un-ingested PDF (no source page) — dormant until ingest
             slug_groups.setdefault(title_slug(title), []).append((pdf.stem, title))
         for slug, members in slug_groups.items():
             if not slug:
