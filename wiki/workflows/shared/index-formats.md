@@ -36,30 +36,31 @@ Formats for the two index types maintained in the wiki. Ownership and maintenanc
 
 **File:** `{wiki_root}/raw/{origin}/{origin}.md` (and `{wiki_root}/raw/studies/studies.md`)
 
-**Format:**
+**Format (ADX-9/ADX-10 — `File | Wiki`):**
 
 ```markdown
-| File | Title | Date | Wiki |
-|------|-------|------|------|
-| [[YYYY-MM-DD-slug.md]] | Source title | YYYY-MM-DD | No |
+| File | Wiki |
+|------|------|
+| [[YYYY-MM-DD-slug.md]] | No |
 ```
+
+The summary column (the `Title` of the old 4-col `File|Title|Date|Wiki`, the `Description` of the legacy 3-col `File|Description|Wiki`) AND the `Date` column are both DROPPED — neither had any programmatic reader, the `Date` duplicated the filename's `YYYY-MM-DD` prefix, and the publish date already lives in source-page frontmatter post-ingest.
 
 **Ownership rules:**
 
 | Column | Written by | When |
 |--------|-----------|------|
 | `File` | Lint (creates rows) — ingest may add defensively | Lint sweep; ingest may add missing rows |
-| `Title` | Lint | On index creation when deterministic from frontmatter or H1; otherwise LLM judgment pass |
-| `Date` | Lint | On index creation — ALWAYS the capture date (the filename's `YYYY-MM-DD` prefix), NEVER the source's publication date; LLM judgment pass only when no filename date exists |
 | `Wiki` | Agent (ingest sets `Yes`; rollback sets `No`; silent content-duplicate fire sets `Duplicate (of [[<existing-raw>]])`) | Updated during ingest step 7; downgraded to `Partial` if downstream pages are rejected at Stage 1; set to `Duplicate (…)` at step 1.7 (silent) |
 
 - Raw index creation and maintenance is lint's job. Ingest defensively adds a missing row but does NOT create the index file if it is absent (logs a warning for lint).
 - `Wiki` values: `No` (default), `Yes` (source page created), `Partial` (source page created but some downstream pages rejected), `Duplicate (of [[<existing-raw>]])` (confirmed content-duplicate of an already-ingested raw — never ingested, skipped by `/sb-wiki-ingest-all` discovery; disposition of the file is the user's call).
-- Missing rows are script-safe only when `Title` and `Date` are deterministic. Scripts MUST NOT fill `Title` from a slug guess. Non-deterministic rows are reported as `judgment_needed` for the LLM.
+- A new row is always `| [[file]] | No |` — fully deterministic (File + Wiki only), so there is no `judgment_needed` path for a missing raw row.
+- **Legacy migration (lint-owned).** `/sb-wiki-lint` migrates a legacy 4-col `File|Title|Date|Wiki` or 3-col `File|Description|Wiki` raw index to the 2-col `File|Wiki`: header + separator become the 2-col form, each row collapses to `| [[file]] | <Wiki-value> |` (the `Wiki` value — the LAST cell — preserved verbatim; the summary + date cells dropped). Idempotent — a 2-col index is left byte-stable. A bespoke/garbled header, or a row whose last cell is not a recognized `Wiki` value, is REPORTED, never force-rewritten.
 
 ### Row layout authority — `Wiki` is the row's final cell
 
-The raw row's `Wiki` flag is ALWAYS the LAST cell of the row, for BOTH recognized layouts: the 4-col canonical `File|Title|Date|Wiki` and the 3-col legacy `File|Description|Wiki`. Every writer locates `Wiki` by the MATCHED ROW's own width — `len(row) - 1` — NEVER by the header's `index("Wiki")`. This is the locator invariant: a 4-col data row appended under a 3-col legacy header is flipped at its own index 3, never the header's Wiki index 2 (which is the Date cell of the wider row). A row whose width is neither 3 nor 4 is unrecognized — the writer REFUSES to flip it and reports it, never guessing a position. The producer sizes each appended row to the index's ACTUAL header (a legacy 3-col header gets a 3-col row), never a hard-coded 4-col under any header.
+The raw row's `Wiki` flag is ALWAYS the LAST cell of the row, for ALL recognized layouts: the 2-col canonical `File|Wiki`, the 4-col legacy `File|Title|Date|Wiki`, and the 3-col legacy `File|Description|Wiki`. Every writer locates `Wiki` by the MATCHED ROW's own width — `len(row) - 1` — NEVER by the header's `index("Wiki")`. This is the locator invariant: a legacy 4-col data row appended under a 3-col header is flipped at its own index 3, never the header's Wiki index 2 (the Date cell of the wider row); a 2-col row flips at index 1. A row whose width is none of 2/3/4 is unrecognized — the writer REFUSES to flip it and reports it, never guessing a position. The producer sizes each appended row to the index's ACTUAL header, never a hard-coded width under any header.
 
 ### D1 — a PDF source's canonical row keys on the `.pdf`
 
@@ -67,7 +68,7 @@ For a PDF source the raw row keys on the **`.pdf`** (the immutable original); th
 
 ### One writer (U2b)
 
-All raw-index structural mutations route through ONE schema-parameterized, name-keyed writer (`build_raw_row` / `set_raw_row_wiki` / `raw_row_wiki_index` / `repair_raw_row_width` in `sb-wiki-index-transaction.py`). The two matchers (`find_row_by_link`, `ingested_raw_filenames`) read the same authority. The writer owns STRUCTURE only (header, row presence, File/Title/Date/Wiki placement, width-correct sizing); judgment cells stay delegated — the leaf-index `Description` derivation helper (`sb-wiki-fill-index-descriptions.py`) remains the companion that derives those cells, and `Description` (the unified sources/topics/concepts/entities judgment cell, U11) is never written from a slug guess.
+All raw-index structural mutations route through ONE schema-parameterized, name-keyed writer (`build_raw_row` / `set_raw_row_wiki` / `raw_row_wiki_index` / `repair_raw_row_width` in `sb-wiki-index-transaction.py`). The two matchers (`find_row_by_link`, `ingested_raw_filenames`) read the same authority. The writer owns STRUCTURE only (header, row presence, File/Wiki placement — and the legacy Title/Date/Description cells it still recognizes for migration, width-correct sizing); judgment cells stay delegated — the leaf-index `Description` derivation helper (`sb-wiki-fill-index-descriptions.py`) remains the companion that derives those cells, and `Description` (the unified sources/topics/concepts/entities judgment cell, U11) is never written from a slug guess.
 
 ## Wiki Leaf Indexes
 

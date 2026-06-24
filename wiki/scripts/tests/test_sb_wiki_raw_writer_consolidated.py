@@ -62,9 +62,10 @@ raw_row_wiki_index = _TX.raw_row_wiki_index
 repair_raw_row_width = _TX.repair_raw_row_width
 tx_split_row = _TX.split_row
 
-# Lint module (the producer + twin gate)
+# Lint module (the producer + twin gate + the ADX-9/ADX-10 migration)
 sync_raw_indexes = _LINT.sync_raw_indexes
 is_regenerable_pdf_twin = _LINT.is_regenerable_pdf_twin
+migrate_raw_indexes_to_file_wiki = _LINT.migrate_raw_indexes_to_file_wiki
 Report = _LINT.Report
 lint_split_row_cells = _LINT.split_row_cells
 
@@ -73,8 +74,9 @@ lint_split_row_cells = _LINT.split_row_cells
 # Fixture helpers
 # ---------------------------------------------------------------------------
 
-HEADER_4COL = "| File | Title | Date | Wiki |\n|------|-------|------|------|\n"
-HEADER_3COL = "| File | Description | Wiki |\n|------|-------------|------|\n"
+HEADER_2COL = "| File | Wiki |\n|------|------|\n"          # ADX-9/ADX-10 canonical
+HEADER_4COL = "| File | Title | Date | Wiki |\n|------|-------|------|------|\n"  # legacy
+HEADER_3COL = "| File | Description | Wiki |\n|------|-------------|------|\n"     # legacy
 
 
 def _write_index(path: Path, header: str, data_rows: list[str]) -> Path:
@@ -193,28 +195,33 @@ def test_update_unrecognized_width_refuses(tmp_path: Path):
 # Rule 3 — Producer sizes appended rows to the ACTUAL header
 # ---------------------------------------------------------------------------
 
-def test_producer_appends_4col_row_under_4col_header(tmp_path: Path):
+def test_producer_appends_2col_row_under_2col_header(tmp_path: Path):
+    """ADX-9/ADX-10: under the canonical 2-col `| File | Wiki |` header the producer
+    appends a 2-col `| [[file]] | No |` row — no Title, no Date cell produced."""
     wr = tmp_path / "kb"
-    idx = _write_index(wr / "raw" / "blog" / "blog.md", HEADER_4COL, [])
+    idx = _write_index(wr / "raw" / "blog" / "blog.md", HEADER_2COL, [])
     raw = _raw_md(wr, "blog", "2026-05-10-post.md", title="Post", date="2026-05-10")
     sync_raw_indexes(wr, Report(mode="apply"), apply_changes=True)
     cells = _row_cells(idx, raw.name)
-    assert len(cells) == 4                              # sized to 4-col header
-    assert cells[1] == "Post" and cells[2] == "2026-05-10"
-    assert cells[3] == "No"
+    assert len(cells) == 2                              # 2-col canonical
+    assert cells[0] == "[[2026-05-10-post.md]]"
+    assert cells[1] == "No"                             # Wiki is the last cell
+    assert "Post" not in cells and "2026-05-10" not in cells  # no Title/Date
 
 
-def test_producer_appends_3col_row_under_3col_header_no_mix(tmp_path: Path):
-    """Under a legacy 3-col header the producer appends a 3-col row (no 4-col mix
-    manufactured): File + blank Description + Wiki, with Wiki as the last cell."""
+def test_producer_sizes_to_legacy_header_no_wider_mix(tmp_path: Path):
+    """Under a not-yet-migrated legacy 4-col header the producer still appends a
+    4-col row (sized to the actual header — no wider mix), with Wiki=No as the last
+    cell and blank Title/Date (no title/date derivation post-ADX-9). The migration
+    pass collapses such a row to 2-col on the next lint run."""
     wr = tmp_path / "kb"
-    idx = _write_index(wr / "raw" / "every" / "every.md", HEADER_3COL, [])
+    idx = _write_index(wr / "raw" / "every" / "every.md", HEADER_4COL, [])
     raw = _raw_md(wr, "every", "2026-05-11-essay.md", title="Essay", date="2026-05-11")
     sync_raw_indexes(wr, Report(mode="apply"), apply_changes=True)
     cells = _row_cells(idx, raw.name)
-    assert len(cells) == 3                              # NOT 4 — no mix manufactured
-    assert cells[2] == "No"                             # Wiki is the last cell
-    assert "2026-05-11" not in cells                    # no Date column created
+    assert len(cells) == 4                              # sized to the 4-col header
+    assert cells[-1] == "No"                            # Wiki is the last cell
+    assert cells[1] == "" and cells[2] == ""           # Title/Date blank (not derived)
 
 
 # ---------------------------------------------------------------------------
@@ -253,8 +260,10 @@ def test_caiso_dated_clip_not_excluded(tmp_path: Path):
                    title="CAISO grid clip", date="2026-04-09")
     assert is_regenerable_pdf_twin(clip) is False
     sync_raw_indexes(wr, Report(mode="apply"), apply_changes=True)
+    # Rule 5 contract: the clip GETS a row (not excluded). Title is no longer
+    # derived (ADX-9/ADX-10) — assert the row exists with Wiki=No as the last cell.
     cells = _row_cells(idx, clip.name)
-    assert cells[1] == "CAISO grid clip" and cells[3] == "No"
+    assert cells[0] == f"[[{clip.name}]]" and cells[-1] == "No"
 
 
 def test_engie_clip_with_no_pdf_not_excluded(tmp_path: Path):
@@ -281,8 +290,13 @@ def test_lint_helpers_are_the_transaction_authority():
 
 
 def test_build_raw_row_places_by_name_not_fixed_index():
-    """The single writer places by column NAME: a 3-col legacy header yields a
-    3-col row with Wiki last; a 4-col header yields File/Title/Date/Wiki."""
+    """The single writer places by column NAME: a 2-col canonical header yields a
+    2-col row (File + Wiki, no Title/Date); a 3-col legacy header yields a 3-col
+    row with Wiki last; a 4-col header yields File/Title/Date/Wiki."""
+    row2 = build_raw_row(["File", "Wiki"], "x.md", "T", "2026-01-01", "No")
+    cells2 = tx_split_row(row2)
+    assert cells2 == ["[[x.md]]", "No"]                 # ADX-9/ADX-10 — Title/Date dropped
+
     row3 = build_raw_row(["File", "Description", "Wiki"], "x.md", "T", "2026-01-01", "Yes")
     cells3 = tx_split_row(row3)
     assert len(cells3) == 3 and cells3[0] == "[[x.md]]" and cells3[2] == "Yes"
@@ -294,9 +308,11 @@ def test_build_raw_row_places_by_name_not_fixed_index():
 
 
 def test_raw_row_wiki_index_keys_on_row_width():
+    assert raw_row_wiki_index(["[[a]]", "No"]) == 1                  # 2-col -> last (ADX-9/10)
     assert raw_row_wiki_index(["[[a]]", "desc", "No"]) == 2          # 3-col -> last
     assert raw_row_wiki_index(["[[a]]", "t", "2026-01-01", "No"]) == 3  # 4-col -> last
     assert raw_row_wiki_index(["[[a]]", "b", "c", "d", "e"]) is None    # 5-col -> refuse
+    assert raw_row_wiki_index(["[[a]]"]) is None                      # 1-col -> refuse
 
 
 def test_set_raw_row_wiki_only_touches_wiki_cell():
@@ -304,6 +320,10 @@ def test_set_raw_row_wiki_only_touches_wiki_cell():
     new_cells, prev = set_raw_row_wiki(cells, "Yes")
     assert prev == "No"
     assert new_cells == ["[[a.md]]", "Title", "2026-01-01", "Yes"]
+    # 2-col canonical row: Wiki is cell 1 (ADX-9/ADX-10).
+    c2 = ["[[a.md]]", "No"]
+    new2, prev2 = set_raw_row_wiki(c2, "Yes")
+    assert prev2 == "No" and new2 == ["[[a.md]]", "Yes"]
     # unrecognized width refused, returns previous=None and unchanged cells
     wide = ["a", "b", "c", "d", "e"]
     same, none_prev = set_raw_row_wiki(wide, "Yes")
@@ -336,3 +356,110 @@ def test_repair_noop_on_non_plus_one_overwidth():
     cells = ["[[post.md]]", "a", "b", "c", "2026-03-01", "No"]  # 6 cells
     repaired, changed = repair_raw_row_width(cells, header_width=4)
     assert changed is False and repaired == cells
+
+
+# ---------------------------------------------------------------------------
+# ADX-9/ADX-10 — one-off migration to `| File | Wiki |`
+# Behavior proven DIRECTLY: per-row Wiki value preserved verbatim, summary + Date
+# dropped, idempotent, bespoke/garbled reported-not-rewritten. A COUNT is never the
+# proof — each row's identity (File link + Wiki value) is asserted.
+# ---------------------------------------------------------------------------
+
+def _migrate(wr: Path):
+    report = Report(mode="apply")
+    migrate_raw_indexes_to_file_wiki(wr, report, apply_changes=True)
+    return report
+
+
+def test_migrate_4col_collapses_preserving_wiki_per_row(tmp_path: Path):
+    wr = tmp_path / "kb"
+    idx = _write_index(
+        wr / "raw" / "a16z" / "a16z.md", HEADER_4COL,
+        [
+            "| [[2026-05-28-charts.md]] | Charts of the Year | 2026-05-28 | Yes |",
+            "| [[2026-06-01-pending.md]] | Pending Piece | 2026-06-01 | No |",
+            "| [[2026-06-02-dup.md]] | A Dup | 2026-06-02 | Duplicate (of [[2026-05-28-charts.md]]) |",
+        ],
+    )
+    _migrate(wr)
+    text = idx.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    assert lines[0] == "| File | Wiki |"
+    assert lines[1] == "|------|------|"
+    # Per-row identity: File link kept, Wiki value preserved VERBATIM, no Title/Date.
+    assert _row_cells(idx, "2026-05-28-charts.md") == ["[[2026-05-28-charts.md]]", "Yes"]
+    assert _row_cells(idx, "2026-06-01-pending.md") == ["[[2026-06-01-pending.md]]", "No"]
+    assert _row_cells(idx, "2026-06-02-dup.md") == [
+        "[[2026-06-02-dup.md]]", "Duplicate (of [[2026-05-28-charts.md]])"]
+    assert "Charts of the Year" not in text and "2026-05-28 |" not in text
+
+
+def test_migrate_3col_legacy_collapses_preserving_wiki(tmp_path: Path):
+    wr = tmp_path / "kb"
+    idx = _write_index(
+        wr / "raw" / "every" / "every.md", HEADER_3COL,
+        [
+            "| [[2026-05-27-andreessen.md]] | A long legacy summary | Yes |",
+            "| [[2026-06-09-essay.md]] | Another summary | No |",
+        ],
+    )
+    _migrate(wr)
+    assert _row_cells(idx, "2026-05-27-andreessen.md") == ["[[2026-05-27-andreessen.md]]", "Yes"]
+    assert _row_cells(idx, "2026-06-09-essay.md") == ["[[2026-06-09-essay.md]]", "No"]
+    assert "A long legacy summary" not in idx.read_text(encoding="utf-8")
+
+
+def test_migrate_is_idempotent_second_pass_noop(tmp_path: Path):
+    wr = tmp_path / "kb"
+    idx = _write_index(
+        wr / "raw" / "a16z" / "a16z.md", HEADER_4COL,
+        ["| [[2026-05-28-charts.md]] | Charts | 2026-05-28 | Yes |"],
+    )
+    _migrate(wr)
+    after_first = idx.read_text(encoding="utf-8")
+    report2 = _migrate(wr)
+    assert idx.read_text(encoding="utf-8") == after_first        # byte-stable
+    assert report2.detected["raw_index_migrated_to_file_wiki"] == 0  # no-op
+
+
+def test_migrate_already_2col_left_byte_stable(tmp_path: Path):
+    wr = tmp_path / "kb"
+    idx = _write_index(
+        wr / "raw" / "blog" / "blog.md", HEADER_2COL,
+        ["| [[2026-05-10-post.md]] | No |"],
+    )
+    before = idx.read_text(encoding="utf-8")
+    report = _migrate(wr)
+    assert idx.read_text(encoding="utf-8") == before
+    assert report.detected["raw_index_migrated_to_file_wiki"] == 0
+
+
+def test_migrate_bespoke_header_reported_not_rewritten(tmp_path: Path):
+    wr = tmp_path / "kb"
+    idx = _write_index(
+        wr / "raw" / "weird" / "weird.md", "| File | Foo | Bar |\n|------|-----|-----|\n",
+        ["| [[x.md]] | a | b |"],
+    )
+    before = idx.read_text(encoding="utf-8")
+    report = _migrate(wr)
+    assert idx.read_text(encoding="utf-8") == before             # untouched
+    assert report.detected["raw_index_migrated_to_file_wiki"] == 0
+    assert any("weird.md" in b for b in report.detected.get("raw_index_bespoke_reported", []))
+
+
+def test_migrate_garbled_wiki_value_reports_aborts_index(tmp_path: Path):
+    """A data row whose LAST cell is not a recognized Wiki value is reported as
+    judgment_needed and that index is NOT migrated (never guess a Wiki value)."""
+    wr = tmp_path / "kb"
+    idx = _write_index(
+        wr / "raw" / "broke" / "broke.md", HEADER_4COL,
+        [
+            "| [[2026-01-01-ok.md]] | Title | 2026-01-01 | Yes |",
+            "| [[2026-01-02-bad.md]] | Title | 2026-01-02 | Maybe |",  # bad last cell
+        ],
+    )
+    before = idx.read_text(encoding="utf-8")
+    report = _migrate(wr)
+    assert idx.read_text(encoding="utf-8") == before             # aborted, untouched
+    assert report.detected["raw_index_migrated_to_file_wiki"] == 0
+    assert any(j["cell"] == "Wiki" for j in report.judgment_needed)

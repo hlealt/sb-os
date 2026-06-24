@@ -61,7 +61,10 @@ raw_row_wiki_index = _RAW_WRITER.raw_row_wiki_index
 repair_raw_row_width = _RAW_WRITER.repair_raw_row_width
 
 
-RAW_HEADER = "| File | Title | Date | Wiki |\n|------|-------|------|------|\n"
+# ADX-9/ADX-10: the raw index is reduced to `| File | Wiki |` — the summary
+# (Title/Description) AND the Date column are both dropped. Legacy 4-col/3-col
+# headers are still RECOGNIZED and MIGRATED by migrate_raw_indexes_to_file_wiki.
+RAW_HEADER = "| File | Wiki |\n|------|------|\n"
 CONCEPT_HEADER = "| File | Description |\n|------|-------------|\n"
 ENTITY_HEADER = "| File | Description |\n|------|-------------|\n"
 # U11: topics leaf index unified to `| File | Description |` (was `| File | Scope |`).
@@ -313,24 +316,11 @@ def make_row(cells: list[str]) -> str:
     return "| " + " | ".join(cells) + " |"
 
 
-def _filename_date(name: str) -> str:
-    match = re.match(r"^(\d{4})[-_](\d{2})[-_](\d{2})", name)
-    return "-".join(match.groups()) if match else ""
-
-
-def derive_raw_title_and_date(path: Path) -> tuple[str, str]:
-    # A .pdf raw is binary — never read its bytes as text. Derive deterministically
-    # from the filename (same convention as the ingest-all manifest's describe_pdf):
-    # title = stem, date = the leading YYYY-MM-DD prefix when present.
-    if path.suffix == ".pdf":
-        return path.stem, _filename_date(path.name)
-    text = read_text(path)
-    fm = frontmatter(text)
-    title = fm.get("title", "") or first_h1(text)
-    date = fm.get("date", "") or fm.get("created", "")
-    if not date:
-        date = _filename_date(path.name)
-    return title, date
+# ADX-9/ADX-10: derive_raw_title_and_date + _filename_date REMOVED. The raw index
+# is now `| File | Wiki |` — no Title or Date cell is produced, so the deterministic
+# title/date derivation they backed has no index-facing consumer left. (The
+# ingest-all manifest keeps its own describe_pdf/filename_date for token estimation;
+# this index path no longer needs them.)
 
 
 def raw_index_header_columns(lines: list[str]) -> list[str] | None:
@@ -405,9 +395,12 @@ def sync_raw_indexes(wiki_root: Path, report: Report, apply_changes: bool) -> No
         links = {Path(t).name for t in re.findall(r"\[\[([^\]|#]+?)\]\]", index_text)}
         lines = index_text.rstrip("\n").splitlines() if index_text.strip() else RAW_HEADER.rstrip("\n").splitlines()
         # Size appended rows to the ACTUAL header of THIS index (Rule 3), via the
-        # consolidated writer — never a hard-coded 4-col under a legacy 3-col
-        # header. A headerless/garbled index falls back to the canonical 4-col.
-        columns = raw_index_header_columns(lines) or ["File", "Title", "Date", "Wiki"]
+        # consolidated writer. A not-yet-migrated legacy index keeps its 4-col/3-col
+        # header until migrate_raw_indexes_to_file_wiki collapses it; an appended
+        # row is sized to that header so the index stays internally consistent until
+        # the migration pass runs. The canonical (and headerless/garbled fallback)
+        # form is the 2-col `| File | Wiki |` (ADX-9/ADX-10).
+        columns = raw_index_header_columns(lines) or ["File", "Wiki"]
         changed = False
         for raw_file in sorted(p for p in origin_dir.glob("*.*") if p.suffix in (".md", ".pdf")):
             if raw_file.name == index_path.name or raw_file.name in NON_SOURCE_FILES or raw_file.name in links:
@@ -421,19 +414,14 @@ def sync_raw_indexes(wiki_root: Path, report: Report, apply_changes: bool) -> No
             # Original PDF:/raw: names this PDF) gets NO separate .pdf row.
             if raw_file.suffix == ".pdf" and raw_file.name in backlink_targets:
                 continue
-            title, date = derive_raw_title_and_date(raw_file)
-            if title and date:
-                lines.append(build_raw_row(columns, raw_file.name, title, date, "No"))
-                changed = True
-            else:
-                report.judgment_needed.append(
-                    {
-                        "index": str(index_path),
-                        "file": str(raw_file),
-                        "cell": "Title/Date",
-                        "reason": "raw index row missing and title/date are not fully deterministic",
-                    }
-                )
+            # ADX-9/ADX-10: a new row carries only File + Wiki=No. Title/Date are no
+            # longer produced, so a row can never be "non-deterministic" — every
+            # uncaptured raw gets its row unconditionally (no judgment_needed path).
+            # build_raw_row places by column name; the unused title/date args are
+            # dropped for a 2-col header (kept blank for a not-yet-migrated legacy
+            # header, which the migration then collapses).
+            lines.append(build_raw_row(columns, raw_file.name, "", "", "No"))
+            changed = True
         if changed:
             write_text(index_path, "\n".join(lines) + "\n", report, apply_changes)
 
@@ -528,7 +516,8 @@ def heal_raw_wiki_cells(wiki_root: Path, report: Report, apply_changes: bool) ->
                 continue
             # Locate the Wiki cell by the row's OWN layout (Rule 1/6) — the
             # consolidated authority. An unrecognized-width row has no Wiki index;
-            # skip it (never misfire). Recognized widths are 3 (legacy) and 4.
+            # skip it (never misfire). Recognized widths are 2 (canonical
+            # File|Wiki), 3 (legacy File|Description|Wiki), 4 (legacy File|Title|Date|Wiki).
             wiki_idx = raw_row_wiki_index(cells)
             if wiki_idx is None:
                 continue
@@ -561,8 +550,8 @@ def heal_raw_wiki_cells(wiki_root: Path, report: Report, apply_changes: bool) ->
         if modified_rows:
             # Post-rewrite shape guard (Rule 8 — KEEP until the writer is the sole
             # path AND indexes are normalized): every modified row must still be a
-            # recognized raw width (3 or 4). A violation is a script bug — refuse
-            # the write.
+            # recognized raw width (2, 3, or 4). A violation is a script bug —
+            # refuse the write.
             broken = [lines[i] for i in modified_rows if raw_row_wiki_index(split_row_cells(lines[i])) is None]
             if broken:
                 report.detected.setdefault("row_shape_errors", []).extend(
@@ -572,6 +561,138 @@ def heal_raw_wiki_cells(wiki_root: Path, report: Report, apply_changes: bool) ->
                 write_text(index_path, "\n".join(lines) + "\n", report, apply_changes)
     report.detected["raw_wiki_healed"] = healed
     report.detected["raw_wiki_dangling"] = dangling
+
+
+# Recognized Wiki-cell values (the LAST cell of every raw row). A row whose last
+# cell is none of these is NOT a clean raw row — never collapse it (report it).
+# `Duplicate (…)` is matched case-insensitively by its `duplicate` prefix.
+_RAW_WIKI_LITERALS = {"no", "yes", "partial"}
+
+
+def _is_recognized_wiki_value(value: str) -> bool:
+    v = value.strip().lower()
+    return v in _RAW_WIKI_LITERALS or v.startswith("duplicate")
+
+
+def migrate_raw_indexes_to_file_wiki(wiki_root: Path, report: Report, apply_changes: bool) -> None:
+    """One-off (idempotent) migration: collapse every raw leaf index to the 2-col
+    ``| File | Wiki |`` schema (ADX-9/ADX-10).
+
+    Per-index behavior:
+      - Header is canonical 4-col ``| File | Title | Date | Wiki |`` or legacy
+        3-col ``| File | Description | Wiki |`` → MIGRATE: header + separator are
+        rewritten to the 2-col form, and each data row collapses to
+        ``| [[file]] | <Wiki-value> |`` — the File cell (cell 0) and the Wiki
+        value (the LAST cell — ``No``/``Yes``/``Partial``/``Duplicate (…)``) are
+        PRESERVED VERBATIM; the Title/Description + Date cells are dropped.
+      - Header is already 2-col ``| File | Wiki |`` → left byte-stable (idempotent;
+        a second pass is a no-op). Data rows are validated for drift and reported
+        if bespoke, but never rewritten.
+      - A bespoke/garbled header (neither canonical 4-col, legacy 3-col, nor the
+        unified 2-col) → REPORTED, never force-rewritten (mirrors the source-index
+        preserve rule).
+      - A data row whose LAST cell is not a recognized Wiki value (a spilled /
+        broken row) → REPORTED as ``judgment_needed`` and the index's migration is
+        ABORTED (never persist a half-migrated table; never guess a Wiki value).
+    """
+    raw_root = wiki_root / "raw"
+    migrated = 0
+    bespoke: list[str] = []
+    if not raw_root.exists():
+        report.detected["raw_index_migrated_to_file_wiki"] = migrated
+        return
+    for origin_dir in sorted(
+        p for p in raw_root.iterdir()
+        if p.is_dir() and p.name != "assets" and not excluded_dir(p.relative_to(wiki_root))
+    ):
+        index_path = origin_dir / f"{origin_dir.name}.md"
+        if not index_path.exists():
+            continue
+        text = read_text(index_path)
+        lines = text.splitlines()
+
+        # Locate the index header row (first non-separator table row).
+        header_idx = None
+        header_cells: list[str] = []
+        for i, line in enumerate(lines):
+            if line.lstrip().startswith("|") and not re.match(r"^\s*\|\s*-+", line):
+                header_idx = i
+                header_cells = [c.lower() for c in split_row_cells(line)]
+                break
+
+        canonical_4col = header_cells == ["file", "title", "date", "wiki"]
+        legacy_3col = header_cells == ["file", "description", "wiki"]
+        unified_2col = header_cells == ["file", "wiki"]
+
+        if header_idx is None or not (canonical_4col or legacy_3col or unified_2col):
+            if header_idx is not None:
+                bespoke.append(
+                    f"{index_path}: header {split_row_cells(lines[header_idx])!r} "
+                    f"is neither canonical 4-col, legacy 3-col, nor unified 2-col — "
+                    f"reported, not rewritten"
+                )
+            continue
+
+        if unified_2col:
+            # Already migrated: validate row widths, report bespoke drift, leave
+            # the file byte-stable (idempotent — the no-op a second lint pass needs).
+            for line in lines[header_idx + 2:]:
+                if not line.lstrip().startswith("|") or re.match(r"^\s*\|\s*-+", line):
+                    continue
+                cells = split_row_cells(line)
+                if cells and cells[0] == "File":
+                    continue
+                if len(cells) != 2 or not _is_recognized_wiki_value(cells[-1]):
+                    bespoke.append(
+                        f"{index_path}: 2-col index has a non-conforming data row "
+                        f"{line.strip()!r} — reported, not rewritten"
+                    )
+            continue
+
+        # Canonical 4-col or legacy 3-col → migrate to 2-col. Rewrite header +
+        # separator; collapse each data row to File + Wiki (last cell).
+        new_lines = list(lines)
+        new_lines[header_idx] = "| File | Wiki |"
+        if header_idx + 1 < len(new_lines) and re.match(r"^\s*\|\s*-+", new_lines[header_idx + 1]):
+            new_lines[header_idx + 1] = "|------|------|"
+        aborted = False
+        for j in range(header_idx + 2, len(new_lines)):
+            line = new_lines[j]
+            if not line.lstrip().startswith("|") or re.match(r"^\s*\|\s*-+", line):
+                continue
+            cells = split_row_cells(line)
+            if cells and cells[0] == "File":
+                continue
+            # The Wiki value is the LAST cell (the locator invariant — true for the
+            # canonical, legacy, AND any spilled wider row). If it is not a
+            # recognized Wiki value, this is a broken/bespoke row: report + abort,
+            # never guess.
+            if not cells or not _is_recognized_wiki_value(cells[-1]):
+                bespoke.append(
+                    f"{index_path}: data row {line.strip()!r} has an unrecognized "
+                    f"Wiki value (last cell) — index NOT migrated"
+                )
+                report.judgment_needed.append(
+                    {
+                        "index": str(index_path),
+                        "file": cells[0] if cells else line.strip(),
+                        "cell": "Wiki",
+                        "reason": "raw-index row last cell is not a recognized Wiki "
+                                  "value (No/Yes/Partial/Duplicate); not collapsed",
+                    }
+                )
+                aborted = True
+                break
+            new_lines[j] = make_row([cells[0], cells[-1]])
+        if aborted:
+            continue
+        new_text = "\n".join(new_lines) + ("\n" if text.endswith("\n") else "")
+        if new_text != text:
+            write_text(index_path, new_text, report, apply_changes)
+            migrated += 1
+    report.detected["raw_index_migrated_to_file_wiki"] = migrated
+    if bespoke:
+        report.detected.setdefault("raw_index_bespoke_reported", []).extend(bespoke)
 
 
 def sync_wiki_leaf_headers_and_queue(wiki_root: Path, report: Report, apply_changes: bool) -> None:
@@ -1805,7 +1926,19 @@ def title_slug(title: str) -> str:
 
 
 def raw_index_titles(origin_dir: Path) -> dict[str, str]:
-    """Map raw filename -> index Title cell (empty when no row)."""
+    """Map raw filename -> index Title cell (empty when no row OR no Title cell).
+
+    ADX-9/ADX-10: the canonical raw index is 2-col ``| File | Wiki |`` — it carries
+    NO Title cell. Only a NOT-YET-MIGRATED legacy 4-col ``| File | Title | Date |
+    Wiki |`` row has a Title (cell 1). A 2-col row's cell 1 is the Wiki value, NOT a
+    title — returning it would make PDF title-conformance slug-compare against
+    ``No``/``Yes`` and propose nonsense renames. So a Title is returned ONLY for a
+    recognized 4-col legacy row; 2-col and 3-col rows yield no title (the detector
+    skips them via its ``if not title`` guard). The publish-time source of a PDF's
+    title is the document / its source page — see the open question in this task's
+    return: post-migration, PDF title-conformance needs its title from the source
+    page, not the (removed) index column.
+    """
     index_path = origin_dir / f"{origin_dir.name}.md"
     titles: dict[str, str] = {}
     if not index_path.exists():
@@ -1814,7 +1947,12 @@ def raw_index_titles(origin_dir: Path) -> dict[str, str]:
         if not line.strip().startswith("|") or re.match(r"^\s*\|\s*-+", line):
             continue
         cells = split_row_cells(line)
-        if len(cells) < 2 or cells[0] == "File":
+        if cells and cells[0] == "File":
+            continue
+        # Title lives at cell 1 ONLY in a legacy 4-col row. A 2-col `File|Wiki` row
+        # (cell 1 = Wiki) and a 3-col `File|Description|Wiki` row (cell 1 =
+        # Description, not a title) carry no usable PDF title here.
+        if len(cells) != 4:
             continue
         match = re.search(r"\[\[([^\]|#]+?)\]\]", cells[0])
         if match:
@@ -4417,6 +4555,11 @@ def main() -> int:
             full_mode=full_mode,
             state_fallback_reason=fallback_reason,
         )
+        # Collapse legacy 4-col/3-col raw indexes to the 2-col `| File | Wiki |`
+        # FIRST (ADX-9/ADX-10), so sync_raw_indexes then sizes any newly-added row
+        # to the migrated 2-col header and heal flips the Wiki cell at its 2-col
+        # position — keeping the whole raw-index pass idempotent on a second run.
+        migrate_raw_indexes_to_file_wiki(wiki_root, report, args.apply)
         sync_raw_indexes(wiki_root, report, args.apply)
         heal_raw_wiki_cells(wiki_root, report, args.apply)
         sync_wiki_leaf_headers_and_queue(wiki_root, report, args.apply)

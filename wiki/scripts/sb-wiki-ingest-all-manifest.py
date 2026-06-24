@@ -131,7 +131,10 @@ def duplicate_rows(origin_dir: Path) -> set[str]:
     marked: set[str] = set()
     for line in read_text(index_path).splitlines():
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cells) < 4 or not cells[-1].lower().startswith("duplicate"):
+        # ADX-9/ADX-10: the raw index is now 2-col `| File | Wiki |`. The Wiki value
+        # is still the LAST cell; the width guard drops to the 2-col shape so 2-col
+        # rows (and any not-yet-migrated legacy 3/4-col row) all read correctly.
+        if len(cells) < 2 or not cells[-1].lower().startswith("duplicate"):
             continue
         link = re.search(r"\[\[([^\]|]+?)\]\]", cells[0])
         if link:
@@ -240,10 +243,10 @@ def _index_yes_filenames(raw_root: Path, origin: str) -> set[str]:
         cells = [c.strip() for c in stripped.strip("|").split("|")]
         if not cells or cells[0] == "File":
             continue
-        # Wiki is the final cell of every recognized raw layout (3-col legacy
-        # File|Description|Wiki and 4-col File|Title|Date|Wiki). Key off the
-        # row's own width, never the header position.
-        if len(cells) < 3:
+        # Wiki is the final cell of every recognized raw layout (2-col canonical
+        # File|Wiki, 3-col legacy File|Description|Wiki, 4-col File|Title|Date|Wiki).
+        # Key off the row's own width, never the header position (ADX-9/ADX-10).
+        if len(cells) < 2:
             continue
         if cells[-1].lower() != "yes":
             continue

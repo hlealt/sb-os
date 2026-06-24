@@ -226,8 +226,8 @@ For each wiki page (concepts, entities, topics, source pages):
 
 For each `{wiki_root}/raw/{origin}/` directory (including `studies/`), **EXCLUDING `raw/_assets/`** (per `../shared/folder-structure.md` "Asset Folder" — `raw/_assets/` is NOT a raw origin and MUST NOT receive an `_assets.md` leaf index, MUST NOT be walked as part of raw-origin maintenance, and MUST NOT have its filenames validated):
 
-1. Verify `{origin}.md` (or `studies.md`) exists. If missing, CREATE it with the standard raw index header per `../shared/index-formats.md` "Raw Index" section: `| File | Title | Date | Wiki |`.
-2. For each raw file in the directory, ensure a row exists in the index. If missing, add the row only when `Title` and `Date` are deterministic from frontmatter, an H1, or the filename date.
+1. Verify `{origin}.md` (or `studies.md`) exists. If missing, CREATE it with the standard raw index header per `../shared/index-formats.md` "Raw Index" section: `| File | Wiki |` (ADX-9/ADX-10). A legacy 4-col/3-col index is MIGRATED to this 2-col form (`Wiki` value preserved verbatim) by the helper.
+2. For each raw file in the directory, ensure a row exists in the index. If missing, add the fully-deterministic row `| [[file]] | No |` (File + Wiki only — no Title/Date to derive).
 3. Index creation and maintenance is the agent's job, not the user's (per schema § "/sb-wiki-lint" step 7 and `../shared/folder-structure.md` "Creation Rules" table).
 4. If a row already exists, preserve its `Wiki` value (`Yes`, `Partial`, `No`, or `Duplicate (…)`) — EXCEPT the stale-`No` heal in item 6.
 5. Capture `raw-indexes-created` count, `raw-rows-added` total, and unresolved raw rows from `judgment_needed` for the LINT REPORT.
@@ -301,7 +301,7 @@ Run the mechanical moves and index row surgery via the deterministic helper: `--
 
 For each PDF raw source in `{wiki_root}/raw/{origin}/` (EXCLUDING `raw/_assets/`):
 
-1. Read the raw index `Title` for that file (raw indexes are verified/created at step 7, so titles are present). Compute `{title-slug}` per `../shared/naming-convention.md` § "Raw PDF Title-Conformance" → "Title-slug algorithm".
+1. Read the PDF's title (raw index no longer carries `Title` — ADX-9/ADX-10): the helper uses the source page's `title:` frontmatter (else first H1) for an ingested PDF, or a not-yet-migrated legacy 4-col raw-index Title in transition; a PDF with no title source is skipped (no proposal). Compute `{title-slug}` per `../shared/naming-convention.md` § "Raw PDF Title-Conformance" → "Title-slug algorithm".
 2. Stem already equals `{title-slug}` → skip.
 3. Stem differs AND no `raw/{origin}/{title-slug}.pdf` exists → add a `rename-proposals` row: `{old-stem}`, `{title-slug}`, origin.
 4. Stem differs BUT `raw/{origin}/{title-slug}.pdf` already exists → add to `duplicate-raws` findings (NO rename proposed — the title slug is taken; this raw duplicates an already-ingested paper).

@@ -31,7 +31,11 @@ _spec.loader.exec_module(_mod)  # type: ignore
 heal_raw_wiki_cells = _mod.heal_raw_wiki_cells
 Report = _mod.Report
 
+# ADX-9/ADX-10: the canonical raw index is the 2-col `| File | Wiki |`. The legacy
+# 4-col header is still recognized + healed (transition), so the legacy-row helper
+# below is kept for the legacy-coverage tests; new tests use _raw_index_2col.
 RAW_HEADER = "| File | Title | Date | Wiki |\n|------|-------|------|------|\n"
+RAW_HEADER_2COL = "| File | Wiki |\n|------|------|\n"
 
 
 # ---------------------------------------------------------------------------
@@ -39,11 +43,22 @@ RAW_HEADER = "| File | Title | Date | Wiki |\n|------|-------|------|------|\n"
 # ---------------------------------------------------------------------------
 
 def _raw_index(wiki_root: Path, origin: str, rows: list[tuple[str, str, str, str]]) -> Path:
+    """Legacy 4-col index fixture (transition coverage: legacy rows still heal)."""
     d = wiki_root / "raw" / origin
     d.mkdir(parents=True, exist_ok=True)
     body = RAW_HEADER + "".join(
         f"| [[{f}]] | {t} | {dt} | {w} |\n" for f, t, dt, w in rows
     )
+    idx = d / f"{origin}.md"
+    idx.write_text(body, encoding="utf-8")
+    return idx
+
+
+def _raw_index_2col(wiki_root: Path, origin: str, rows: list[tuple[str, str]]) -> Path:
+    """Canonical 2-col `| File | Wiki |` index fixture (ADX-9/ADX-10)."""
+    d = wiki_root / "raw" / origin
+    d.mkdir(parents=True, exist_ok=True)
+    body = RAW_HEADER_2COL + "".join(f"| [[{f}]] | {w} |\n" for f, w in rows)
     idx = d / f"{origin}.md"
     idx.write_text(body, encoding="utf-8")
     return idx
@@ -93,6 +108,44 @@ def test_heals_via_filename_mirror(tmp_path: Path):
     healed = report.detected["raw_wiki_healed"]
     assert len(healed) == 1
     assert healed[0]["signal"] == "filename-mirror"
+
+
+def test_2col_row_heals_no_to_yes_not_refused_by_shape_guard(tmp_path: Path):
+    """ADX-9/ADX-10 criterion #3: a 2-col `| [[file]] | No |` row heals No->Yes
+    (Wiki is now cell 1, the last cell). The post-rewrite shape guard recognizes
+    width 2, so the write is NOT refused — proving heal is intact on the reduced
+    schema (the exact regression my Contract flagged before the width fix)."""
+    wr = tmp_path / "kb"
+    raw = "2026-05-28-charts.md"
+    idx = _raw_index_2col(wr, "a16z", [(raw, "No")])
+    _raw_file(wr, "a16z", raw)
+    _source_page(wr, "a16z", raw, raw_link=None)  # filename-mirror signal
+    report = _run(wr)
+    # The cell actually flipped on disk (write was NOT refused).
+    assert _wiki_cell(wr / "raw/a16z/a16z.md", raw) == "Yes"
+    healed = report.detected["raw_wiki_healed"]
+    assert len(healed) == 1 and healed[0]["file"] == raw
+    # No shape-error was recorded — the 2-col width is recognized by the guard.
+    assert "row_shape_errors" not in report.detected or not report.detected["row_shape_errors"]
+
+
+def test_2col_never_touches_partial_duplicate_yes(tmp_path: Path):
+    """On the 2-col schema, Partial / Duplicate (…) / Yes are still never flipped."""
+    wr = tmp_path / "kb"
+    rows = [
+        ("a.md", "Partial"),
+        ("b.md", "Duplicate (of [[c.md]])"),
+        ("d.md", "Yes"),
+    ]
+    _raw_index_2col(wr, "blog", rows)
+    for f, _w in rows:
+        _raw_file(wr, "blog", f)
+        _source_page(wr, "blog", f, raw_link=f)  # every one has a source page
+    report = _run(wr)
+    assert _wiki_cell(wr / "raw/blog/blog.md", "a.md") == "Partial"
+    assert _wiki_cell(wr / "raw/blog/blog.md", "b.md") == "Duplicate (of [[c.md]])"
+    assert _wiki_cell(wr / "raw/blog/blog.md", "d.md") == "Yes"
+    assert report.detected["raw_wiki_healed"] == []
 
 
 def test_heals_via_raw_backlink_divergent_stem(tmp_path: Path):

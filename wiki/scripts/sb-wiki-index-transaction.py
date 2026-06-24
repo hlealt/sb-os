@@ -12,8 +12,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-RAW_HEADER = "| File | Title | Date | Wiki |"
-RAW_SEPARATOR = "|------|-------|------|------|"
+# ADX-9/ADX-10: the raw index is reduced to `| File | Wiki |` — the human-readable
+# summary column (Title/Description) AND the Date column are both dropped (zero
+# programmatic readers; Date duplicated the filename's YYYY-MM-DD prefix). Legacy
+# 4-col `File|Title|Date|Wiki` and 3-col `File|Description|Wiki` are still RECOGNIZED
+# (read + migrated by lint), but the canonical written form is 2-col.
+RAW_HEADER = "| File | Wiki |"
+RAW_SEPARATOR = "|------|------|"
 # U11: the wiki sources index is the unified 2-col `| File | Description |`
 # (the `My take` column was dropped — it lives canonically in the source-page
 # body; `What it says` was renamed to `Description`).
@@ -148,29 +153,31 @@ def normalize_source_filename(filename: str) -> str:
 # to misfire into a wider row's cell.
 #
 # Raw-row layout authority. A raw row is recognized when its width is one of the
-# two canonical raw layouts, and the ``Wiki`` flag is ALWAYS the final cell of a
-# raw row (true for both):
-#   - 4-col canonical: ``| File | Title | Date | Wiki |``
+# three raw layouts, and the ``Wiki`` flag is ALWAYS the final cell of a raw row
+# (true for all):
+#   - 2-col canonical: ``| File | Wiki |``               (ADX-9/ADX-10 — current)
+#   - 4-col legacy:    ``| File | Title | Date | Wiki |``
 #   - 3-col legacy:    ``| File | Description | Wiki |``
 # Locating ``Wiki`` as the final cell of the MATCHED ROW (not by the header's
 # ``index("Wiki")``) is the 5B fix: a 4-col data row appended under a 3-col
 # legacy header no longer takes the header's Wiki index (2 = the Date cell of the
 # wider row) — the flag lands in the row's own last cell. A row whose width is
-# neither 3 nor 4 is UNRECOGNIZED: the writer refuses to flip it and reports it,
+# none of 2/3/4 is UNRECOGNIZED: the writer refuses to flip it and reports it,
 # never guessing a Wiki position.
 
-RAW_RECOGNIZED_WIDTHS = (3, 4)
+RAW_RECOGNIZED_WIDTHS = (2, 3, 4)
 
 
 def raw_row_wiki_index(cells: list[str]) -> int | None:
     """Return the index of the ``Wiki`` cell in a raw DATA row, by the row's own
     layout — or ``None`` when the row width is not a recognized raw layout.
 
-    The ``Wiki`` flag is the final cell of every recognized raw row (3-col legacy
-    ``File|Description|Wiki`` and 4-col canonical ``File|Title|Date|Wiki``). This
-    keys off the matched ROW, never the header, so a 4-col row appended under a
-    3-col header is flipped at index 3 (its real last cell), never index 2 (the
-    header's Wiki position, which is the Date cell of the wider row).
+    The ``Wiki`` flag is the final cell of every recognized raw row (2-col
+    canonical ``File|Wiki``, 3-col legacy ``File|Description|Wiki``, 4-col legacy
+    ``File|Title|Date|Wiki``). This keys off the matched ROW, never the header, so
+    a 4-col row appended under a 3-col header is flipped at index 3 (its real last
+    cell), never index 2 (the header's Wiki position, which is the Date cell of
+    the wider row); a 2-col canonical row flips at index 1.
     """
     if len(cells) not in RAW_RECOGNIZED_WIDTHS:
         return None
@@ -197,11 +204,12 @@ def build_raw_row(columns: list[str], raw_filename: str, title: str, date: str, 
     """Build a raw-index row sized to the ACTUAL header ``columns`` (Rule 2/3).
 
     Values are placed by column NAME, never by fixed index, so a non-canonical
-    table is never given a wrong-width row: a 4-col canonical header gets
-    File/Title/Date/Wiki; a 3-col legacy ``File|Description|Wiki`` header gets a
-    3-col row (File + blank Description + Wiki) — the producer does NOT
-    manufacture a 4-col row under a 3-col header (the 5B producer fix). The
-    ``Wiki`` cell is always the row's final cell.
+    table is never given a wrong-width row: a 2-col canonical ``File|Wiki`` header
+    gets ``File + Wiki`` (Title/Date are dropped — not in the column set);
+    a 4-col legacy header gets File/Title/Date/Wiki; a 3-col legacy
+    ``File|Description|Wiki`` header gets a 3-col row (File + blank Description +
+    Wiki). The producer does NOT manufacture a wider row under a narrower header.
+    The ``Wiki`` cell is always the row's final cell.
     """
     lowered = [c.lower() for c in columns]
     cells = [""] * len(columns)

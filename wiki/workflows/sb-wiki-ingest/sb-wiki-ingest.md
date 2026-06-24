@@ -189,7 +189,7 @@ Two deterministic signals — EITHER fires:
 | Signal | Detection |
 |--------|-----------|
 | URL match | Normalize this raw's frontmatter `url`/`source` value: lowercase the host, strip scheme, leading `www.`, query string, fragment, and trailing slash. Run ONE `ripgrep`/`grep` pass over `url:` lines in `{wiki_root}/wiki/sources/**` and compare normalized values. Equal → fire. Raw has no URL → signal skipped. |
-| Title match | Normalize this raw's title (frontmatter `title`, else first H1): lowercase, collapse every non-alphanumeric run to a single space, trim. Compare against the same-normalized titles of already-ingested raws (raws whose source page exists) in ANY origin — use the raw indexes' `Title` column across ALL rows regardless of `Wiki` cell value; the comparison set is every raw whose 1:1 source page exists under `{wiki_root}/wiki/sources/**` (a stale `Wiki = No` cell never excludes a raw whose source page exists); confirm a hit against the matched raw's frontmatter before firing. Equal → fire. |
+| Title match | Normalize this raw's title (frontmatter `title`, else first H1): lowercase, collapse every non-alphanumeric run to a single space, trim. Compare against the same-normalized titles of already-ingested raws (raws whose source page exists) in ANY origin. The comparison set is every raw whose 1:1 source page exists under `{wiki_root}/wiki/sources/**` (a stale `Wiki = No` cell never excludes a raw whose source page exists); each such raw's title comes from the source page's `title:` frontmatter (else its first H1) — the raw index no longer carries a `Title` column (ADX-9/ADX-10). Confirm a hit against the matched raw's frontmatter before firing. Equal → fire. |
 
 On fire:
 
