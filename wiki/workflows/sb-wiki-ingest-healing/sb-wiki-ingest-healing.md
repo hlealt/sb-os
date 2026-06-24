@@ -1,6 +1,6 @@
 ---
 name: sb-wiki-ingest-healing
-description: Heal a thin or lossy already-ingested wiki source by re-reading the source and EDITING its page in place to the reconstruction standard — augment the agent-authored sections, preserve My take + every human edit byte-identical, never delete or rebuild — then propagate to the graph (concept/entity/topic pages) and strip #reingest. ONE target heals in-session (with preview); TWO OR MORE (or `heal all` via #reingest) dispatch one sub-agent per source, strictly sequentially at the ingest-all Sonnet/Opus split, each running the same healing flow. No delete, no rebuild, no AI judge, no no-worse gate.
+description: Heal a thin or lossy already-ingested wiki source by re-reading the source and EDITING its page in place to the reconstruction standard — augment the agent-authored sections, preserve My take + every human edit byte-identical, never delete or rebuild — then propagate to the graph (concept/entity/topic pages) and flip the source's heal-index row to heal=no. ONE target heals in-session (with preview); TWO OR MORE (or `heal all` — the heal-index heal=yes rows) dispatch one sub-agent per source, strictly sequentially at the ingest-all Sonnet/Opus split, each running the same healing flow. A `scan`/`check` mode refreshes the heal-index. No delete, no rebuild, no AI judge, no no-worse gate.
 ---
 
 # sb-wiki-ingest-healing
@@ -14,7 +14,8 @@ This file holds ONLY the healing orchestration. The per-source distillation stan
 | Trigger | Mode | Owner review |
 |---------|------|--------------|
 | A **PDF-format** source finishes its FIRST ingest (the auto-heal hook in `/sb-wiki-ingest`) | Automatic, hands-off (PROBATIONARY — see below) | None — rides the first-ingest run's commit |
-| The owner runs this command (`/sb-wiki-ingest-healing [targets]`) | On-demand — self-heal for 1 target, orchestrated for ≥2 / `heal all` | Self-heal PREVIEWS before committing; orchestrated runs hands-off (no per-target preview) |
+| The owner runs this command (`/sb-wiki-ingest-healing [targets]`) | On-demand — self-heal for 1 target, orchestrated for ≥2 / `heal all` (the heal-index `heal=yes` rows) | Self-heal PREVIEWS before committing; orchestrated runs hands-off (no per-target preview) |
+| The owner runs `/sb-wiki-ingest-healing scan` (or `check`) | Scan-only — refresh the metrics sidecar + merge new sources into the heal-index as `heal=no`, then report (no healing) | None — reports only; writes no wiki page |
 
 **PDF auto-heal is PROBATIONARY (owner, 2026-06-19).** `marker` OCR (a table extractor pulled into the FIRST-ingest twin) may make a second automatic healing pass redundant for table recovery. The automatic PDF heal stays ON for now; it is **NECESSARY** if healing consistently recovers material the marker-improved first ingest still drops (borderless tables `marker` cannot grid, chart/figure numbers, whole dropped sections — measurable via the kept calibration/gold set), and **UNNECESSARY → demote to on-demand** (like non-PDF sources) if marker-improved first ingests are consistently faithful. Evaluate during the first real PDF ingests (Batch 5) and the backfill. **Non-PDF sources NEVER auto-fire** — they heal on-demand only (text extraction is lossless, so the first pass is reliable; auto-healing them would cost without gain). This is the only auto-firing behavior; the on-demand path is unaffected.
 
@@ -29,17 +30,18 @@ This file holds ONLY the healing orchestration. The per-source distillation stan
 
 ## Invocation
 
-`/sb-wiki-ingest-healing [origin | source-page | path …]`. Healing targets SOURCE PAGES (under `{wiki_root}/wiki/sources/**`), resolved by the manifest's `--healing` mode in the SOURCE-PAGE namespace — a page's stem need NOT match its raw filename, so targets are never resolved against `raw/`.
+`/sb-wiki-ingest-healing [scan | check | origin | source-page | path …]`. Healing targets SOURCE PAGES (under `{wiki_root}/wiki/sources/**`), resolved by the manifest's `--healing` mode in the SOURCE-PAGE namespace — a page's stem need NOT match its raw filename, so targets are never resolved against `raw/`.
 
 | Argument shape | Targets resolved |
 |----------------|------------------|
-| none, or a lone `all` token | Every `#reingest`-tagged page (Step 1's sweep) — the "heal all". A tagged LEAF INDEX (`{origin}.md`) → the whole origin; a tagged SOURCE PAGE → that page. |
+| a lone `scan` or `check` token | Scan mode — refresh the heal-index, NO healing (Step 0). Resolves no heal targets. |
+| none, or a lone `all` token | Every heal-index `heal=yes` row (Step 1's sweep) — the "heal all". Each row's `wiki` path is one source page to heal. |
 | one bare token naming an origin folder | That origin's source pages (`--healing` → `origin` mode). |
 | one-or-more `origin/stem[.md]` source-page refs, or ≥2 tokens | Exactly those pages (`--healing` → `files` mode); a bare origin token among them expands to its pages. A ref resolving to no page lands in `skipped_not_ingested` and NEVER halts the run. |
 
-Forward what the user typed — never pre-decide the mode. (A lone `all` = the no-args `#reingest` sweep, NOT a file target; if an origin folder is literally named `all`, qualify it `--origin all`.)
+Forward what the user typed — never pre-decide the mode. (A lone `all` = the no-args heal-index `heal=yes` sweep, NOT a file target; if an origin folder is literally named `all`, qualify it `--origin all`. A lone `scan`/`check` is the scan mode, NOT a heal target.)
 
-**Size scope (optional).** A bare `large` or `small` keyword anywhere in the arguments scopes the heal to one model bucket — exactly as `/sb-wiki-ingest-all`: `large` = the Opus set (`token_estimate` ≥ 5,000 or un-estimable), `small` = the Sonnet set. The manifest pulls it out before mode resolution, so it composes with any target set: `<origin> large`, `<pages> small`, or — with NO other positional target — the `#reingest` sweep filtered to that bucket (`heal large` = heal the large ones in the queue). A size keyword ALONE never means heal-everything: the manifest rejects an empty `--healing`, and the command's no-target path always resolves the `#reingest` set first. The count switch (self-heal vs orchestrated) then runs on the POST-FILTER count.
+**Size scope (optional).** A bare `large` or `small` keyword anywhere in the arguments scopes the heal to one model bucket — exactly as `/sb-wiki-ingest-all`: `large` = the Opus set (`token_estimate` ≥ 5,000 or un-estimable), `small` = the Sonnet set. The manifest pulls it out before mode resolution, so it composes with any target set: `<origin> large`, `<pages> small`, or — with NO other positional target — the heal-index `heal=yes` sweep filtered to that bucket (`heal large` = heal the large ones in the queue). A size keyword ALONE never means heal-everything: the manifest rejects an empty `--healing`, and the command's no-target path always resolves the heal-index `heal=yes` set first. The count switch (self-heal vs orchestrated) then runs on the POST-FILTER count.
 
 ## Run mode — by resolved-target count
 
@@ -71,23 +73,34 @@ A page is healed to the SAME bar a faithful first ingest must meet: `/sb-wiki-in
 | Model routing | Per source, from the manifest's `--healing` plan: the SAME Sonnet/Opus split as ingest-all (Opus at `token_estimate` ≥ 5,000 or un-estimable, Sonnet below). The script computes it — NEVER override by judgment. |
 | Commit ownership | A SELF-HEAL (1 target) owns its OWN single git commit. An ORCHESTRATED run (≥2) makes EXACTLY ONE git commit at the end covering every healed page + graph edit — sub-agents NEVER git-commit (exactly as `/sb-wiki-ingest-all`). A PDF auto-heal rides the first-ingest run's commit (the hook commits nothing of its own). Neither path delegates its commit to `/sb-wiki-ingest-all`. |
 | Serialization | The ORCHESTRATED path runs sub-agents STRICTLY sequentially — one at a time, exactly as `/sb-wiki-ingest-all` serializes — so two heals never parallel-write a shared concept/entity/topic page. Self-heal (1 target) is inherently serial. |
+| Heal-index is the queue | Multi-target / `heal all` selection reads the heal-index `3-resources/knowledge-base/heal-index.md` and takes the `heal=yes` rows (each row's `wiki` path = a source page to heal). At close-out a healed source's row is flipped to `heal=no` (whole-table rewrite — never a single-cell edit) so the source leaves the queue. The scan/check mode (Step 0) MERGE-refreshes the heal-index: new sources appended as `heal=no`, existing `heal` values never overwritten. |
 
 ## Flow
 
+### Step 0 — Scan mode (`scan` / `check`)
+
+ONLY when the sole argument is `scan` or `check`. Run the depth-scan script from the vault root with the active interpreter — it refreshes the metrics sidecar and MERGE-updates the heal-index (new sources appended as `heal=no`; existing `heal` values never overwritten):
+
+```bash
+python 3-resources/tools/sb-os/wiki/scripts/sb-wiki-heal-scan.py
+```
+
+Then report what the scan found — newly-discovered candidate sources added to the heal-index this run, the total source count scanned, and the current `heal=yes` count in the heal-index. Scan mode resolves NO heal targets and writes NO wiki page; it ends after the report. Do NOT proceed to Step 1.
+
 ### Step 1 — Resolve targets + pick mode
 
-Run from the vault root with the active interpreter. The `--healing` flag INVERTS the manifest's selection to the ALREADY-ingested sources (those with a source page) and returns a model-routed `plan.files[]` over them — the SAME Sonnet/Opus split as ingest-all. Forward any `large`/`small` size keyword VERBATIM (the manifest pulls it out and scopes the plan to that bucket); after removing it, if no positional targets remain, run the `#reingest` sweep below:
+Run from the vault root with the active interpreter. The `--healing` flag INVERTS the manifest's selection to the ALREADY-ingested sources (those with a source page) and returns a model-routed `plan.files[]` over them — the SAME Sonnet/Opus split as ingest-all. Forward any `large`/`small` size keyword VERBATIM (the manifest pulls it out and scopes the plan to that bucket); after removing it, if no positional targets remain, run the heal-index sweep below:
 
 ```bash
 python {sb_os_path}/wiki/scripts/sb-wiki-ingest-all-manifest.py --healing --report {wiki_root}/healing-manifest.json [targets…] [large|small]
 ```
 
-- **No args / lone `all` (the `#reingest` sweep):** do NOT call the manifest empty. First grep `{wiki_root}/wiki/sources/**` for every page whose frontmatter `tags:` contains `reingest` (`#reingest` OR a `reingest` tag entry). For each hit pass ONE positional target: a tagged LEAF INDEX (`{origin}.md`) → the bare origin name (`--healing` expands it to that origin's pages); a tagged SOURCE PAGE → its `{origin}/{stem}.md`. De-dup the list. Record which pages and leaf indexes carried `#reingest` — Step 5 strips the mark. If zero `#reingest` marks exist, STOP: "no `#reingest` targets".
+- **No args / lone `all` (the heal-index sweep):** do NOT call the manifest empty. First read the heal-index `3-resources/knowledge-base/heal-index.md` and collect every row with `heal=yes`. Each such row's `wiki` path is one source page to heal; pass each as a positional `{origin}/{stem}.md` target (resolve `{origin}` and `{stem}` from the `wiki` path under `wiki/sources/`). De-dup the list. Record which sources were `heal=yes` — Step 5 flips each healed row to `heal=no`. If zero `heal=yes` rows exist, STOP: "no `heal=yes` targets in the heal-index".
 - **Explicit args:** forward them VERBATIM as positional targets.
 
 If the script exits non-zero it printed an actionable error (e.g. `{wiki_root}` unresolvable, or both positional targets and `--origin` given). Surface it and STOP. Unresolvable individual page refs do NOT halt — they land in `skipped_not_ingested`.
 
-Read the JSON. `plan.files[]` is the ordered heal list — each entry carries `origin`, `filename`, `path` (the SOURCE-PAGE path the worker edits), `token_estimate`, and `model`. `skipped_not_ingested[]` lists any ref with NO page to heal — surface each as "no page to heal; ingest it first with `/sb-wiki-ingest`". A `#reingest` origin that resolves to 0 source pages → no-op note.
+Read the JSON. `plan.files[]` is the ordered heal list — each entry carries `origin`, `filename`, `path` (the SOURCE-PAGE path the worker edits), `token_estimate`, and `model`. `skipped_not_ingested[]` lists any ref with NO page to heal — surface each as "no page to heal; ingest it first with `/sb-wiki-ingest`". An origin that resolves to 0 source pages → no-op note.
 
 **Pick the mode by `len(plan.files)`:**
 
@@ -142,7 +155,7 @@ Heal this one ALREADY-INGESTED wiki source — EDIT its existing page in place, 
 3. Honor every healing contract: EDIT IN PLACE (never delete/rebuild); AUGMENT the agent-authored sections ONLY; PRESERVE `My take` + every human edit BYTE-IDENTICAL (capture the byte span first, verify after — if you cannot preserve it, HALT this source and surface it; NEVER commit a changed human section); READ the original source (HALT if missing, never fabricate).
 4. Fully complete the page — every staged change written to disk — before returning.
 
-Do NOT run /sb-wiki-lint. Do NOT strip #reingest. Do NOT touch files outside this source's heal + its graph pages. NEVER run any git command (add/commit/push) — the orchestrator makes the run's single commit at the end.
+Do NOT run /sb-wiki-lint. Do NOT touch the heal-index (the orchestrator flips healed rows to heal=no at close-out). Do NOT touch files outside this source's heal + its graph pages. NEVER run any git command (add/commit/push) — the orchestrator makes the run's single commit at the end.
 
 Report back: status `healed` | `no-op (already reconstructs source)` | `halted (reason)`; what was recovered (which agent sections deepened, which signal classes); the concept/entity pages augmented + new stubs created; the topic updates proposed/applied; and any human-half HALT verbatim.
 ```
@@ -206,16 +219,13 @@ Only after `check-pages` exits 0, make the run's EXACTLY ONE git commit covering
 
 **PDF auto-heal (hands-off, fired by the `/sb-wiki-ingest` hook) → NO preview, NO checkpoint.** The healing pass runs the per-source unit (Steps 2–3) against the just-written page + the original PDF, auto-resolves every decision point to the silent defaults (firm topic updates auto-apply append-only; speculative/semantic/proposed-answers default-reject), still verifies the human half byte-identical, and makes NO commit of its own — its edits ride the first-ingest run's single commit. The owner does not review it (the price of fully hands-off paper ingestion).
 
-### Step 5 — Strip `#reingest` + close-out
+### Step 5 — Flip healed rows to `heal=no` + close-out
 
-Strip the `#reingest` mark from everything this run healed, so healed sources leave the triage queue. For each page healed this run, remove the `#reingest` tag (the frontmatter `tags:` entry AND any inline `#reingest`) wherever it sits:
+Flip every healed source's heal-index row to `heal=no`, so healed sources leave the heal queue. For each source healed this run, set its row's `heal` cell to `no` in the heal-index `3-resources/knowledge-base/heal-index.md`, keyed by the `wiki` path. Rewrite the WHOLE table from an in-memory array (read all rows, set the healed ones to `heal=no`, write the whole table back) — NEVER a fragile single-cell edit.
 
-- the healed SOURCE PAGE itself, if it carries the mark (the dashboard's per-file ♻️ button tags individual source pages), and
-- the LEAF INDEX `{origin}.md` of every origin whose sources were healed, if it carries the mark (the per-origin ♻️ button tags the leaf index).
+This applies on BOTH no-args (heal-index-sweep) and explicit-arg runs — an explicit-arg heal of a source the owner marked in the dashboard must still flip its row. The PDF auto-heal run is the ONLY exception: it heals a just-ingested page whose row is already `heal=no` (or absent) and commits nothing of its own — skip the flip for it.
 
-This applies on BOTH no-args (`#reingest`-mode) and explicit-arg runs — an explicit-arg heal of a source the owner tagged in the dashboard must still clear that mark. The PDF auto-heal run is the ONLY exception: it heals a just-ingested page that carries no mark and commits nothing of its own — skip the strip for it.
-
-Tell the owner to re-run the triage generator so the dashboard reflects the cleared marks: `python 3-resources/tools/obsidian-dashboards/wiki-reingest-triage.gen.py` (the triage source of `#reingest` marks is `3-resources/tools/obsidian-dashboards/wiki-reingest-triage.md`; if its generator is not present, just note that the marks were stripped).
+A source the run HALTED (source missing, human half unpreservable) keeps its `heal=yes` row — only healed sources flip — so a re-run re-targets it. The dashboard reads the heal-index directly, so the flipped rows appear without re-running any generator.
 
 On any on-demand run (self-heal or orchestrated), delete `{wiki_root}/healing-manifest.json` after the report (transient artifact; the PDF auto-heal never writes it).
 
@@ -232,10 +242,10 @@ Report: pages healed (with what each recovered), any targets skipped (no page to
 | Broken links after augmenting | Re-point each `[[…]]` at the correct page (the re-link discipline, Step 2.5) — never leave a link broken. |
 | Source (raw / PDF) missing | HALT for that target and surface it — healing cannot improve a page against an absent source and NEVER fabricates. Continue with the other targets. |
 | Target whose source page is absent | Nothing to heal in place — surface "no page to heal; ingest it first with `/sb-wiki-ingest`". |
-| A `#reingest` origin with 0 source pages | No-op note; strip the mark anyway (Step 5) so it does not re-fire. |
+| An origin with 0 source pages | No-op note; nothing to heal, no row to flip. |
 | Owner declines at the on-demand preview | Change NOTHING — no edit commits. The run ends clean. |
 | `heal all` / a multi-target arg resolves to exactly 1 page | Self-heal that one page in-session (the count switch) — no dispatch overhead, and the owner still gets the preview. |
-| Orchestrated worker HALTS a target (source missing / human half unpreservable) | Expected handling — carry it into the report, continue the rest. Its `#reingest` mark is NOT stripped (Step 5 strips only healed pages), so a re-run re-targets it. |
+| Orchestrated worker HALTS a target (source missing / human half unpreservable) | Expected handling — carry it into the report, continue the rest. Its heal-index row stays `heal=yes` (Step 5 flips only healed pages), so a re-run re-targets it. |
 
 ## Failure Modes
 
@@ -247,5 +257,5 @@ Report: pages healed (with what each recovered), any targets skipped (no page to
 | The source (raw / PDF) the page derives from is missing | HALT for that target and surface it; never fabricate. Continue with the rest. |
 | `My take` / a human-edited region differs after the heal | A defect — revert that region to its Step-1 byte span, re-surface, and do NOT commit until the human half is byte-identical. |
 | The post-commit citation-integrity gate (`check-pages`) exits non-zero | Repair each listed failure (place the missing inline `[^N]` marker or add the missing `[^N]:` definition) and re-run until exit 0 — never by deleting a definition. The heal is not complete while the gate fails. |
-| An orchestrated sub-agent errors out or `halted`s on its source | Record it; continue with the next `plan.files[]` entry. The page keeps its `#reingest` mark (Step 5 strips only healed pages), so a re-run re-targets only the still-unhealed sources. Surface all in the final report. |
+| An orchestrated sub-agent errors out or `halted`s on its source | Record it; continue with the next `plan.files[]` entry. The page keeps its `heal=yes` heal-index row (Step 5 flips only healed pages), so a re-run re-targets only the still-unhealed sources. Surface all in the final report. |
 | Manifest `--healing` returns 0 `plan.files` | Nothing to heal — STOP and report any `skipped_not_ingested`/duplicate notes. No edit, no dispatch. |

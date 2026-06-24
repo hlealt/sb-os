@@ -24,7 +24,7 @@ This wiki uses ONE canonical name per term. Every wiki engine doc, workflow, com
 | Re-read an already-ingested source and edit its pages in place to recover lost substance | **`/sb-wiki-ingest-healing`** ("healing" / "heal") | "single-page repair", "single page repair", "repair", "reingest" (as a workflow name), "`/sb-wiki-reingest`" (RETIRED 2026-06-19 — never name it as a current component) |
 | Healing — the 1-target path (owner present, previews before its single commit) | **self-heal** | "single-page repair" |
 | Healing — the ≥2-target / "heal all" path (one sub-agent per source, strictly sequential) | **orchestrated** | — |
-| The triage→tag→heal queue marker that healing's "heal all" reads | **`#reingest`** (tag — STILL VALID; distinct from the retired `/sb-wiki-reingest` workflow) | do NOT conflate with the retired workflow |
+| The heal queue (source of truth for which pages need healing) | **`3-resources/knowledge-base/heal-index.md`** (`heal=yes` rows — healing's "heal all" selects from this index; close-out flips healed rows to `heal=no`). The `#reingest` inline tag is RETIRED (superseded by the heal-index; distinct from the also-retired `/sb-wiki-reingest` workflow) | do NOT use `#reingest` as the current queue; do NOT conflate with the retired `/sb-wiki-reingest` workflow |
 | The unrouted-inbox folder | **`raw/_unrouted/`** (the literal folder name) | "staging", "staging folder", "staged" (as the folder's name), "inbox" — note: "staged"/"staging" remains valid ONLY in the unrelated sense of uncommitted file changes |
 | The citation-integrity sub-command (validates footnote citations on named pages; NOT a full lint, touches no indexes) | **`check-pages`** | "the narrow citation check" as a name |
 | PDF→md text extracted so ingest can distil a PDF | **twin** / **PDF twin** / **text twin** (the regenerable `.md` derivative built by `sb-wiki-pdf-twin.py`) | "extract", "text extract", "extracted-text copy" |
@@ -953,7 +953,7 @@ The operations covering the wiki lifecycle:
 |-----------|------|------------|---------|
 | `/sb-wiki-ingest <slug>` | Slash command | The user | Distill a raw source into wiki pages |
 | `/sb-wiki-ingest-all [origin \| file …]` | Slash command | The user | Backfill: ingest non-ingested raw sources (all, one origin, or an explicit file list) via batched subagents, then lint |
-| `/sb-wiki-ingest-healing [target …]` | Slash command | The user | Healing: re-read an already-ingested source and edit its pages in place to recover lost substance (self-heal for 1 target; orchestrated for ≥2 / "heal all" via `#reingest`). Superseded the retired `/sb-wiki-reingest` on 2026-06-19. |
+| `/sb-wiki-ingest-healing [target …]` | Slash command | The user | Healing: re-read an already-ingested source and edit its pages in place to recover lost substance (self-heal for 1 target; orchestrated for ≥2 / "heal all" = heal-index `heal=yes` rows; close-out flips healed rows to `heal=no`). Also: `scan`/`check` mode runs `sb-wiki-heal-scan.py` to refresh the metrics sidecar and merge the heal-index. Superseded the retired `/sb-wiki-reingest` on 2026-06-19. |
 | `sb-wiki-create-topic` | Skill (auto-discovered) | Agent mid-ingest, OR auto-fired when the user expresses intent | Create a topic page from a candidate or freshly-proposed topic |
 | `/sb-wiki-lint` | Slash command | The user | Structural and citation lint + index maintenance for `raw/` and `wiki/` |
 | `/sb-wiki-query <question>` | Slash command | The user | Synthesize an answer from wiki + optionally file the result back |
