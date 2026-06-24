@@ -383,6 +383,10 @@ def sync_raw_indexes(wiki_root: Path, report: Report, apply_changes: bool) -> No
     # (raw: / Original PDF: backlinks across ALL origins). A bare PDF in this set
     # is covered by an existing (clip) row — adding a .pdf row would duplicate it.
     backlink_targets, _ = ingested_raw_filenames(wiki_root)
+    # Binary/non-UTF-8 `.md` files dropped directly under raw/<origin>/ that the
+    # row-adding loop skips+surfaces instead of crashing on (mirrors the dedup
+    # detector's decode guard). Accumulated across all origins, reported once.
+    undecodable_raws: list[str] = []
     for origin_dir in sorted(p for p in raw_root.iterdir() if p.is_dir() and p.name != "assets"):
         index_path = origin_dir / f"{origin_dir.name}.md"
         index_text = read_text(index_path) if index_path.exists() else RAW_HEADER
@@ -405,6 +409,19 @@ def sync_raw_indexes(wiki_root: Path, report: Report, apply_changes: bool) -> No
         for raw_file in sorted(p for p in origin_dir.glob("*.*") if p.suffix in (".md", ".pdf")):
             if raw_file.name == index_path.name or raw_file.name in NON_SOURCE_FILES or raw_file.name in links:
                 continue
+            # A binary/non-UTF-8 `.md` directly in raw/<origin>/ cannot be a real
+            # source: probe its decodability FIRST (before is_regenerable_pdf_twin
+            # reads it and crashes the whole run on UnicodeDecodeError), then skip
+            # it (no row) and surface it. `.pdf` raws are binary by nature — the
+            # row-adding loop never reads their bytes, so they are not probed.
+            if raw_file.suffix == ".md":
+                try:
+                    read_text(raw_file)
+                except (UnicodeDecodeError, OSError):
+                    undecodable_raws.append(
+                        str(raw_file.relative_to(wiki_root)).replace("\\", "/")
+                    )
+                    continue
             # Rule 5 — a regenerable PDF twin .md is keyed on the .pdf, not its
             # own row; exclude it from the row-adding loop.
             if is_regenerable_pdf_twin(raw_file):
@@ -424,6 +441,7 @@ def sync_raw_indexes(wiki_root: Path, report: Report, apply_changes: bool) -> No
             changed = True
         if changed:
             write_text(index_path, "\n".join(lines) + "\n", report, apply_changes)
+    report.detected["raw_undecodable"] = sorted(undecodable_raws)
 
 
 ORIGINAL_PDF_RE = re.compile(r"^Original PDF:\s*\[\[([^\]|#]+?)\]\]", flags=re.M)
