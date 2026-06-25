@@ -782,10 +782,10 @@ def main() -> int:
                   file=sys.stderr)
             return 2
         if not targets and not args.origin:
-            print("ERROR: --healing requires targets (an origin, source-page "
-                  "refs, or the #reingest set the healing workflow passes). "
-                  "There is no heal-everything mode — the wiki is never fully "
-                  "re-healed.", file=sys.stderr)
+            print("ERROR: --healing requires targets (an origin, or the "
+                  "source-page refs the healing workflow passes from the "
+                  "heal-index heal=yes rows). There is no heal-everything mode "
+                  "— the wiki is never fully re-healed.", file=sys.stderr)
             return 2
         payload = collect_healing(wiki_root, exclude,
                                   [args.origin] if args.origin else targets)
