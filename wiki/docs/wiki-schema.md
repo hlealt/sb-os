@@ -344,8 +344,9 @@ Use case: Dataview filtering ("all tools" / "all people I follow"). Predefined b
 raw: "[[YYYY-MM-DD-slug.md]]"
 url: https://...
 author: "..."
+healed: YYYY-MM-DD          # OPTIONAL — date of last heal pass; absence = never healed
 ```
-Rationale: `read-date` is not used — `created` covers the same intent (ingest = read in practice). Add a separate field only if a "read but not yet ingested" workflow surfaces.
+Rationale: `read-date` is not used — `created` covers the same intent (ingest = read in practice). Add a separate field only if a "read but not yet ingested" workflow surfaces. `healed` is the OPTIONAL durable healed stamp written by `/sb-wiki-ingest-healing` Step 2 — the heal-triage dashboard reads it (via the `sb-wiki-heal-scan.py` sidecar) to filter healed pages out of the queue by default; lint preserves it. It is NEVER mirrored into the heal-index `heal` column, which stays binary `yes`/`no` (the dashboard and scan both coerce any third heal-column value back to `no`).
 
 ### Topic pages
 No additional frontmatter. While unpromoted, a topic candidate lives in `logs/topics.md` as a `candidate-topic` entry; once the page exists, that entry is removed (resolution = page exists).

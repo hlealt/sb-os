@@ -80,6 +80,12 @@ def scan_corpus() -> list[dict]:
                 continue
             txt = read(sp)
 
+            # healed stamp (durable "already healed, don't heal again" marker;
+            # source-page frontmatter `healed: YYYY-MM-DD`). The dashboard reads
+            # this from the sidecar to filter healed pages out of the queue.
+            hm = re.search(r'^healed:\s*"?(\d{4}-\d{2}-\d{2})"?', txt, re.M)
+            healed = hm.group(1) if hm else None
+
             # Substance word count
             m = re.search(r"^##\s+Substance\s*$(.*?)(^##\s|\Z)", txt, re.S | re.M)
             sw = words(m.group(1)) if m else 0
@@ -117,6 +123,7 @@ def scan_corpus() -> list[dict]:
                 rawWords= rw,
                 subWords= sw,
                 thin    = thin,
+                healed  = healed,
             ))
     return sources
 

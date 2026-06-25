@@ -37,15 +37,16 @@ kind: tool | person | company | product | model | benchmark | data-format
 
 `kind` is a predefined enum (small and stable). This enum is the SINGLE SOURCE OF TRUTH for entity kinds — the ingest and lint workflows and any registered extension reference it here rather than restating its values. Enables Dataview filtering ("all tools", "all people I follow"). Each enum value MUST pass the blind-reader test — meaning is clear without reading the page. New values added only when multiple ill-fitting entities accumulate AND the proposed name passes the blind-reader test. Generic terms (`pattern`, `spec`, `dynamic`) FAIL the test. `data-format` covers data interchange formats and notations (JSON, TOON, YAML, Markdown). `protocol` is reserved for future use (MCP, HTTP, gRPC).
 
-## Source — adds `raw`, `url`, `author`
+## Source — adds `raw`, `url`, `author` (+ optional `healed`)
 
 ```yaml
 raw: "[[YYYY-MM-DD-slug.md]]"
 url: https://...
 author: "..."
+healed: YYYY-MM-DD          # OPTIONAL — date of last heal pass; absence = never healed
 ```
 
-`raw` is a quoted wikilink to the raw counterpart. `read-date` is NOT used — `created` covers the same intent.
+`raw` is a quoted wikilink to the raw counterpart. `read-date` is NOT used — `created` covers the same intent. `healed` is the OPTIONAL durable healed stamp written by `/sb-wiki-ingest-healing` Step 2 (date of the last heal pass) — the heal-triage dashboard reads it (via the scan sidecar) to filter healed pages out of the queue by default. Its absence means the page has never been healed. Lint preserves it; it is NEVER mirrored into the heal-index `heal` column (that column is binary `yes`/`no`).
 
 ## Topic
 
