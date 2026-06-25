@@ -4513,6 +4513,11 @@ def cmd_normalize_filenames(args_list: list[str]) -> int:
 
 
 def main() -> int:
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except AttributeError:
+        pass
     if len(sys.argv) > 1 and sys.argv[1] == "update-backfill-gather":
         return cmd_update_backfill_gather(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "update-backfill-reconcile":

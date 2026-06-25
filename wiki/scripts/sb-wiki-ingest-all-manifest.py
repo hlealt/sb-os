@@ -718,6 +718,11 @@ def report_target_errors(errors: list, raw_root: Path) -> None:
 
 
 def main() -> int:
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except AttributeError:
+        pass
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "targets",
