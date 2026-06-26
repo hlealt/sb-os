@@ -146,13 +146,13 @@ The wiki maintains five indexes. The user NEVER writes indexes manually — agen
 
 | Index | Path | Format | Maintained by |
 |-------|------|--------|---------------|
-| Raw leaf index | `raw/{origin}/{origin}.md`, `raw/studies/studies.md` | `\| File \| Title \| Date \| Wiki \|` | Lint creates and maintains; ingest sets `Wiki = Yes` (or `Partial` on partial reject, or `Duplicate (of [[<existing-raw>]])` on a silent content-duplicate fire) |
+| Raw leaf index | `raw/{origin}/{origin}.md`, `raw/studies/studies.md` | `\| File \| Title \| Date \| Wiki \|` | Lint creates and maintains; ingest sets `Wiki = Yes` (or `Partial` on partial reject; or `Duplicate (of [[<existing-raw>]])` / `Original (twin: [[<existing-raw>]])` on a silent content-duplicate fire — `Duplicate` for a markdown re-clip, `Original (twin: …)` for a kept PDF original) |
 | Wiki sources leaf index | `wiki/sources/{origin}/{origin}.md` | `\| File \| What it says \| My take \|` | Ingest writes `What it says` (factual derivative of source page's `Substance`); ingest/lint write `My take` (derived from source page's `My take` section); user fills the source page, never the index |
 | Wiki concepts leaf index | `wiki/concepts/concepts.md` | `\| File \| Description \|` | Lint creates and maintains |
 | Wiki entities leaf index | `wiki/entities/entities.md` | `\| File \| Description \|` | Lint creates and maintains |
 | Wiki topics leaf index | `wiki/topics/topics.md` | `\| File \| Scope \|` | `sb-wiki-create-topic` writes new rows defensively; lint owns full creation and maintenance |
 
-Lint's raw-index responsibility is explicit: every `raw/{origin}/` directory gets a `{origin}.md` index — if missing, lint CREATES it with the standard header; for each raw file, lint ensures a row exists with `Wiki = No` (default) or preserves the existing `Yes`/`Partial`/`No`/`Duplicate (…)` value. Same for `raw/studies/studies.md`.
+Lint's raw-index responsibility is explicit: every `raw/{origin}/` directory gets a `{origin}.md` index — if missing, lint CREATES it with the standard header; for each raw file, lint ensures a row exists with `Wiki = No` (default) or preserves the existing `Yes`/`Partial`/`No`/`Duplicate (…)`/`Original (twin: …)` value. Same for `raw/studies/studies.md`.
 
 Source pages are CANONICAL — the wiki sources index `My take` column is DERIVED from the source page's `My take` section. Stale-by-7d acceptable for skim purpose.
 

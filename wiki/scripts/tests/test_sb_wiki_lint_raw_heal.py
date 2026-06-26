@@ -30,6 +30,7 @@ _spec.loader.exec_module(_mod)  # type: ignore
 
 heal_raw_wiki_cells = _mod.heal_raw_wiki_cells
 Report = _mod.Report
+_is_recognized_wiki_value = _mod._is_recognized_wiki_value
 
 # ADX-9/ADX-10: the canonical raw index is the 2-col `| File | Wiki |`. The legacy
 # 4-col header is still recognized + healed (transition), so the legacy-row helper
@@ -146,6 +147,44 @@ def test_2col_never_touches_partial_duplicate_yes(tmp_path: Path):
     assert _wiki_cell(wr / "raw/blog/blog.md", "b.md") == "Duplicate (of [[c.md]])"
     assert _wiki_cell(wr / "raw/blog/blog.md", "d.md") == "Yes"
     assert report.detected["raw_wiki_healed"] == []
+
+
+def test_2col_never_touches_original_twin(tmp_path: Path):
+    """A kept-original PDF row marked `Original (twin: …)` is preserved verbatim
+    by the heal — never flipped, never reported as healed (regression guard for
+    the duplicate→original re-wording: the kept original must survive lint)."""
+    wr = tmp_path / "kb"
+    pdf = "dhl-global-connectedness-report-2026.pdf"
+    twin = "2026-06-06-dhl-global-connectedness-report-2026.md"
+    rows = [
+        (pdf, f"Original (twin: [[{twin}]])"),
+        (twin, "Yes"),
+    ]
+    _raw_index_2col(wr, "dhl", rows)
+    for f, _w in rows:
+        _raw_file(wr, "dhl", f)
+    # the twin .md is the ingested source; the PDF has NO source page of its own
+    _source_page(wr, "dhl", twin, raw_link=twin)
+    report = _run(wr)
+    # NB: the twin filename also appears INSIDE the PDF row's `Original (twin: …)`
+    # cell, so match each row by its File cell (cell 0), not a loose substring.
+    cells_by_file = {
+        line.strip().strip("|").split("|")[0].strip(): line.strip().strip("|").split("|")[-1].strip()
+        for line in (wr / "raw/dhl/dhl.md").read_text(encoding="utf-8").splitlines()
+        if line.strip().startswith("| [[")
+    }
+    assert cells_by_file[f"[[{pdf}]]"] == f"Original (twin: [[{twin}]])"
+    assert cells_by_file[f"[[{twin}]]"] == "Yes"
+    assert report.detected["raw_wiki_healed"] == []
+
+
+def test_original_twin_is_a_recognized_wiki_value():
+    """`Original (twin: …)` is a recognized Wiki value (so lint migration never
+    flags it judgment_needed and never collapses its row); `Duplicate (…)` still
+    is too, and a sweep keying on 'duplicate' must NOT match the kept original."""
+    assert _is_recognized_wiki_value("Original (twin: [[2026-06-06-x.md]])")
+    assert _is_recognized_wiki_value("Duplicate (of [[2026-06-06-x.md]])")
+    assert not "original (twin: [[2026-06-06-x.md]])".startswith("duplicate")
 
 
 def test_heals_via_raw_backlink_divergent_stem(tmp_path: Path):

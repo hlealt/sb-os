@@ -32,7 +32,7 @@ This wiki uses ONE canonical name per term. Every wiki engine doc, workflow, com
 | The three knowledge page types | **concept page / entity page / topic page** | — |
 | Per-origin raw table (`raw/{origin}/{origin}.md`, carries the `Wiki` column) | **raw leaf index** | — |
 | Per-folder wiki table (`concepts.md` / `entities.md` / `topics.md`, and `wiki/sources/{origin}/{origin}.md`) | **wiki leaf index** (the sources one: **wiki sources leaf index**) | — |
-| The status column in the raw leaf index (values `No` / `Yes` / `Partial` / `Duplicate (of …)`) | **the `Wiki` column** | "imported ✓ mark", "Wiki=Yes mark" |
+| The status column in the raw leaf index (values `No` / `Yes` / `Partial` / `Duplicate (of …)` / `Original (twin: …)`) | **the `Wiki` column** | "imported ✓ mark", "Wiki=Yes mark" |
 | The backfill discovery function in `sb-wiki-ingest-all-manifest.py` (decides "not yet ingested") | **`collect()`** | naming the act "discovery" alone without the function name |
 
 **Raw immutability — clarified.** "Raw is immutable" means **do NOT edit a saved source's CONTENTS** — the verbatim record stays auditable. It does NOT mean a raw file can never be relocated: MOVING a raw file inside `raw/` (e.g. routing it out of `raw/_unrouted/` into `raw/{origin}/`, or a title-conformance rename) is permitted, because the bytes are preserved. The two permitted raw mutations are (1) a filename change (title-conformance rename, §"Raw PDF title-conformance") and (2) a relocation inside `raw/` that preserves contents; the file's CONTENT is never edited.
@@ -1103,7 +1103,7 @@ Only the FIRM tier of genuine topic updates auto-applies; semantic topic updates
 
 This silent mode is the SINGLE source of the non-interactive ingest semantics. `/sb-wiki-ingest-all` no longer carries its own copy — its subagents invoke `/sb-wiki-ingest silent <slug>` and inherit these defaults. A change here changes every caller; never re-state these defaults in a caller.
 
-**Content-duplicate (silent).** A step-1.7 fire does NOT halt: RETURN `failed (content-duplicate: duplicate of <existing-raw>)` and ingest nothing — with EXACTLY ONE permitted write: set this raw's index row to `Wiki = Duplicate (of [[<existing-raw>]])` so re-runs and `/sb-wiki-ingest-all` discovery skip it durably. The duplicate raw file itself is NEVER deleted — disposition (delete vs. re-point) is the user's call, surfaced by the caller's report.
+**Content-duplicate (silent).** A step-1.7 fire does NOT halt: RETURN `failed (content-duplicate: duplicate of <existing-raw>)` and ingest nothing — with EXACTLY ONE permitted write to this raw's index row, by raw type: a **markdown** re-clip → `Wiki = Duplicate (of [[<existing-raw>]])` (a disposable content-duplicate; disposition — delete vs. re-point — is the user's call); a **PDF** original → `Wiki = Original (twin: [[<existing-raw>]])` (a KEPT original whose content is already ingested via the matched `.md` twin — never deletable, no user disposition needed). Either write makes re-runs and `/sb-wiki-ingest-all` discovery skip it durably. The raw file itself is NEVER deleted.
 
 **Slug resolution (silent).** The caller MUST pass a precise slug. A `<slug>` that resolves to MULTIPLE raw files is an ERROR in silent mode (NOT a disambiguation prompt): return `failed (slug ambiguous: N matches)` and ingest nothing. An exact filename match always wins and is never ambiguous. A `<slug>` resolving to ZERO raw files is `failed (slug not found)`.
 

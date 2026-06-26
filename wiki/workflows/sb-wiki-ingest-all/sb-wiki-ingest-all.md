@@ -66,7 +66,7 @@ python {sb_os_path}/wiki/scripts/sb-wiki-ingest-all-manifest.py --report {wiki_r
 If the script exits non-zero, it printed an actionable error to stderr (origin/file collision, unresolvable target, or a bare name matching multiple files). Surface that message and STOP — do NOT dispatch. Otherwise read the JSON:
 
 - `mode` — `all` | `origin` | `files`, the classification the script applied. Echo it in the run's opening status so the user sees what was targeted.
-- `totals` + `origins{}` — discovery counts. If `totals.missing` is 0, STOP: report "wiki fully ingested" (`all`/`origin` mode) or "all listed files already ingested" (`files` mode — `skipped_ingested[]` names them); note `totals.duplicates` if non-zero. Raw files whose index row is `Wiki = Duplicate (…)` are already excluded by the script (`duplicate_files[]` lists them — surface the list in the final report).
+- `totals` + `origins{}` — discovery counts. If `totals.missing` is 0, STOP: report "wiki fully ingested" (`all`/`origin` mode) or "all listed files already ingested" (`files` mode — `skipped_ingested[]` names them); note `totals.duplicates` if non-zero. Raw files whose index row is `Wiki = Duplicate (…)` are already excluded by the script (`duplicate_files[]` lists them — surface the list in the final report). Raw files marked `Wiki = Original (twin: …)` (kept originals, content already in the wiki via a twin) are likewise excluded (`twin_original_files[]` / `totals.twin_originals`); they need NO user disposition, so surface them only if non-zero and as kept-originals, never as duplicates.
 - `skipped_ingested[]` (`files` mode only) — listed files already having a wiki page, dropped from this run. Echo the count in the opening status.
 - `plan.files[]` — the flat, ordered, ONE-file-per-sub-agent dispatch list. Each entry carries `index`, `origin`, `filename`, `path`, `token_estimate`, and `model` (`sonnet`, or `opus` when `token_estimate` ≥ 5,000 or is unknown). Dispatch these in order, one at a time.
 - `size_filter` — `large` | `small` | `null`, echoing any size keyword applied. When set, `totals.size_excluded` is the count of missing sources the keyword dropped from this run; echo the scope in the opening status.
@@ -100,6 +100,7 @@ Sources ingested: <N> committed | <P> partial | <F> failed (of <missing> targete
 Origins: <list with per-origin committed/total>
 Failures (if any): <origin>/<filename> — <reason>
 Duplicates (skipped or newly detected, if any): <origin>/<filename> — duplicate of <existing-raw>; awaiting user disposition
+Kept originals (twin-ingested, if any): <origin>/<filename> — original; content in the wiki via twin <existing-raw> (no disposition needed)
 Cross-origin duplicate slugs (lint-healed, if any): <slug list, or "none">
 Questions layer: <U> firm topic-updates applied | <S> speculative updates rejected | <A> proposed answers rejected | <G> graduations (lint)
 Lint: <one-line outcome — see LINT REPORT above>
@@ -155,7 +156,7 @@ Report back the FULL structured summary silent mode returns: status `committed` 
 | `{wiki_root}` or `{sb_os_path}` unresolvable from `sb-os.json` | Halt before step 1; surface error. No dispatch. |
 | Manifest script reports `missing = 0` | Report "wiki fully ingested"; STOP. |
 | A subagent fails on a file | Record the failure; continue with the next file and the run. Surface all failures in step 6. The source's raw-index `Wiki` stays `No`, so a re-run retries it. |
-| A subagent returns `failed (content-duplicate: …)` | NOT an error — the silent step-1.7 fire marked the raw-index row `Duplicate (…)`; re-runs skip it. List it on the report's Duplicates line for user disposition (delete the raw vs. re-point). |
+| A subagent returns `failed (content-duplicate: …)` | NOT an error — the silent step-1.7 fire marked the raw-index row `Duplicate (…)` (a markdown re-clip) or `Original (twin: …)` (a kept PDF original); re-runs skip it either way. A `Duplicate` goes on the report's Duplicates line for user disposition (delete the raw vs. re-point); an `Original (twin: …)` is a kept original — note it as such, never on the Duplicates line, and request no disposition. |
 | A source's subagent errors out | Mark that file `failed`; continue with the next file in the plan. Re-running the command re-targets only the still-missing sources. |
 | User scoped to an `[origin]` with no missing sources | Report "nothing to ingest for `<origin>`"; STOP. |
 | Script exits non-zero — target collision (a bare name is both an origin and a file), unresolvable target, or a bare name matching multiple raw files | The script printed an actionable message to stderr and ingested nothing. Surface it and STOP — never guess the intended target. |

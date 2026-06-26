@@ -22,7 +22,11 @@ the clip row and no PDF row). The index is kept authoritative by `sb-wiki-lint`
 — so ingest-all now DEPENDS on a prior lint pass to reflect freshly-ingested
 sources. Files whose raw-index row marks `Wiki = Duplicate (…)` are confirmed
 content-duplicates and are SKIPPED (reported under `duplicates`, never
-targeted). This script only reads — it never writes wiki content.
+targeted). Files whose row marks `Wiki = Original (twin: …)` are KEPT originals
+(a source PDF whose content is already ingested via a non-same-stem `.md` twin —
+never deletable, never re-ingested); they are likewise SKIPPED (reported under
+`twin_originals`, never targeted — and, unlike duplicates, need no user
+disposition). This script only reads — it never writes wiki content.
 
 --healing INVERTS the selection: instead of the missing raw sources, it targets
 ALREADY-ingested SOURCE PAGES (under wiki/sources/**), resolved in the
@@ -123,23 +127,37 @@ def resolve_wiki_root(vault_root: Path) -> Path:
     return vault_root / manifest["wiki_root"]
 
 
-def duplicate_rows(origin_dir: Path) -> set[str]:
-    """Filenames whose raw-index row marks `Wiki = Duplicate (…)` (case-insensitive)."""
+def _rows_with_wiki_prefix(origin_dir: Path, prefix: str) -> set[str]:
+    """Filenames whose raw-index row's `Wiki` cell (the LAST cell) starts with
+    *prefix* (case-insensitive). ADX-9/ADX-10: the raw index is now 2-col
+    `| File | Wiki |`. The Wiki value is still the LAST cell; the width guard
+    drops to the 2-col shape so 2-col rows (and any not-yet-migrated legacy
+    3/4-col row) all read correctly."""
     index_path = origin_dir / f"{origin_dir.name}.md"
     if not index_path.is_file():
         return set()
     marked: set[str] = set()
     for line in read_text(index_path).splitlines():
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        # ADX-9/ADX-10: the raw index is now 2-col `| File | Wiki |`. The Wiki value
-        # is still the LAST cell; the width guard drops to the 2-col shape so 2-col
-        # rows (and any not-yet-migrated legacy 3/4-col row) all read correctly.
-        if len(cells) < 2 or not cells[-1].lower().startswith("duplicate"):
+        if len(cells) < 2 or not cells[-1].lower().startswith(prefix):
             continue
         link = re.search(r"\[\[([^\]|]+?)\]\]", cells[0])
         if link:
             marked.add(link.group(1).strip())
     return marked
+
+
+def duplicate_rows(origin_dir: Path) -> set[str]:
+    """Filenames whose raw-index row marks `Wiki = Duplicate (…)` (case-insensitive)."""
+    return _rows_with_wiki_prefix(origin_dir, "duplicate")
+
+
+def twin_original_rows(origin_dir: Path) -> set[str]:
+    """Filenames whose raw-index row marks `Wiki = Original (twin: …)` — a kept
+    original (e.g. a source PDF ingested via a non-same-stem `.md` twin). These
+    are SKIPPED by discovery (content already in the wiki via the twin) and,
+    unlike duplicates, need no user disposition."""
+    return _rows_with_wiki_prefix(origin_dir, "original")
 
 
 def assign_model(token_estimate: int | None) -> str:
@@ -341,8 +359,9 @@ def collect(wiki_root: Path, exclude: set[str], only_origin: str | None) -> dict
     raw_root = wiki_root / "raw"
     items: list[dict] = []
     origins: dict[str, dict[str, int]] = {}
-    raw_total = ingested = duplicates = 0
+    raw_total = ingested = duplicates = twin_originals = 0
     duplicate_files: list[str] = []
+    twin_original_files: list[str] = []
 
     origin_dirs = sorted(
         p for p in raw_root.iterdir()
@@ -358,6 +377,7 @@ def collect(wiki_root: Path, exclude: set[str], only_origin: str | None) -> dict
             and f.name != index_name and f.name not in NON_SOURCE_FILES
         )
         marked_duplicate = duplicate_rows(origin_dir)
+        marked_twin_original = twin_original_rows(origin_dir)
         ingested_filenames = _ingested_raw_filenames(wiki_root, origin)
         for raw_file in raw_files:
             raw_total += 1
@@ -367,6 +387,10 @@ def collect(wiki_root: Path, exclude: set[str], only_origin: str | None) -> dict
             if raw_file.name in marked_duplicate:
                 duplicates += 1
                 duplicate_files.append(f"{origin}/{raw_file.name}")
+                continue
+            if raw_file.name in marked_twin_original:
+                twin_originals += 1
+                twin_original_files.append(f"{origin}/{raw_file.name}")
                 continue
             is_pdf = raw_file.suffix == ".pdf"
             title, date, tokens = describe_pdf(raw_file) if is_pdf else describe_md(raw_file)
@@ -390,9 +414,11 @@ def collect(wiki_root: Path, exclude: set[str], only_origin: str | None) -> dict
             "raw_total": raw_total,
             "ingested": ingested,
             "duplicates": duplicates,
+            "twin_originals": twin_originals,
             "missing": len(items),
         },
         "duplicate_files": duplicate_files,
+        "twin_original_files": twin_original_files,
         "origins": origins,
         "items": items,
     }
@@ -533,8 +559,11 @@ def collect_selection(wiki_root: Path, selected: list[dict]) -> dict:
     origins: dict[str, dict[str, int]] = {}
     skipped_ingested: list[str] = []
     duplicate_files: list[str] = []
+    twin_original_files: list[str] = []
     duplicates = 0
+    twin_originals = 0
     dup_cache: dict[str, set[str]] = {}
+    twin_cache: dict[str, set[str]] = {}
     ingested_cache: dict[str, set[str]] = {}
 
     for it in selected:
@@ -549,6 +578,12 @@ def collect_selection(wiki_root: Path, selected: list[dict]) -> dict:
         if it["filename"] in dup_cache[origin]:
             duplicates += 1
             duplicate_files.append(f"{origin}/{it['filename']}")
+            continue
+        if origin not in twin_cache:
+            twin_cache[origin] = twin_original_rows(raw_root / origin)
+        if it["filename"] in twin_cache[origin]:
+            twin_originals += 1
+            twin_original_files.append(f"{origin}/{it['filename']}")
             continue
         is_pdf = raw_file.suffix == ".pdf"
         title, date, tokens = describe_pdf(raw_file) if is_pdf else describe_md(raw_file)
@@ -572,9 +607,11 @@ def collect_selection(wiki_root: Path, selected: list[dict]) -> dict:
             "raw_total": len(selected),
             "ingested": len(skipped_ingested),
             "duplicates": duplicates,
+            "twin_originals": twin_originals,
             "missing": len(items),
         },
         "duplicate_files": duplicate_files,
+        "twin_original_files": twin_original_files,
         "skipped_ingested": skipped_ingested,
         "origins": origins,
         "items": items,
@@ -681,9 +718,11 @@ def collect_healing(wiki_root: Path, exclude: set[str], targets: list[str]) -> d
             "raw_total": len(universe),
             "ingested": len(universe),
             "duplicates": 0,
+            "twin_originals": 0,
             "missing": len(items),
         },
         "duplicate_files": [],
+        "twin_original_files": [],
         "skipped_not_ingested": skipped_not_ingested,
         "origins": origins,
         "items": items,

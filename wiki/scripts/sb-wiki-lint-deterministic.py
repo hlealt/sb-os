@@ -501,7 +501,7 @@ def heal_raw_wiki_cells(wiki_root: Path, report: Report, apply_changes: bool) ->
     A raw counts as ingested when EITHER signal from ``ingested_raw_filenames``
     fires (the source page's ``raw:`` backlink names it, OR a same-stem source
     page exists in the origin). ONLY an exact ``No`` cell is flipped — ``Partial``,
-    ``Duplicate (…)``, and ``Yes`` are never touched. A row whose raw FILE is
+    ``Duplicate (…)``, ``Original (twin: …)``, and ``Yes`` are never touched. A row whose raw FILE is
     absent on disk is DANGLING: reported, never auto-flipped and never deleted
     (a raw may have been moved — same policy as step 7 missing-raw rows; the user
     disposes phantoms manually). Closes the Step-1.7 stale-``No`` masking class:
@@ -583,13 +583,16 @@ def heal_raw_wiki_cells(wiki_root: Path, report: Report, apply_changes: bool) ->
 
 # Recognized Wiki-cell values (the LAST cell of every raw row). A row whose last
 # cell is none of these is NOT a clean raw row — never collapse it (report it).
-# `Duplicate (…)` is matched case-insensitively by its `duplicate` prefix.
+# `Duplicate (…)` is matched case-insensitively by its `duplicate` prefix;
+# `Original (twin: …)` (a kept original — e.g. a source PDF whose content is
+# ingested via a non-same-stem `.md` twin — never deletable, never re-ingested)
+# is matched by its `original` prefix.
 _RAW_WIKI_LITERALS = {"no", "yes", "partial"}
 
 
 def _is_recognized_wiki_value(value: str) -> bool:
     v = value.strip().lower()
-    return v in _RAW_WIKI_LITERALS or v.startswith("duplicate")
+    return v in _RAW_WIKI_LITERALS or v.startswith("duplicate") or v.startswith("original")
 
 
 def migrate_raw_indexes_to_file_wiki(wiki_root: Path, report: Report, apply_changes: bool) -> None:
@@ -601,7 +604,8 @@ def migrate_raw_indexes_to_file_wiki(wiki_root: Path, report: Report, apply_chan
         3-col ``| File | Description | Wiki |`` → MIGRATE: header + separator are
         rewritten to the 2-col form, and each data row collapses to
         ``| [[file]] | <Wiki-value> |`` — the File cell (cell 0) and the Wiki
-        value (the LAST cell — ``No``/``Yes``/``Partial``/``Duplicate (…)``) are
+        value (the LAST cell — ``No``/``Yes``/``Partial``/``Duplicate (…)``/
+        ``Original (twin: …)``) are
         PRESERVED VERBATIM; the Title/Description + Date cells are dropped.
       - Header is already 2-col ``| File | Wiki |`` → left byte-stable (idempotent;
         a second pass is a no-op). Data rows are validated for drift and reported
@@ -696,7 +700,7 @@ def migrate_raw_indexes_to_file_wiki(wiki_root: Path, report: Report, apply_chan
                         "file": cells[0] if cells else line.strip(),
                         "cell": "Wiki",
                         "reason": "raw-index row last cell is not a recognized Wiki "
-                                  "value (No/Yes/Partial/Duplicate); not collapsed",
+                                  "value (No/Yes/Partial/Duplicate/Original); not collapsed",
                     }
                 )
                 aborted = True

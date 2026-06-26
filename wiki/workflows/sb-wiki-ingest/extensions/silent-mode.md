@@ -12,7 +12,7 @@ The mode changes ONLY four things; everything else (clustering, stub rules, appe
 |--------------|-----------------|
 | Step 1 — slug resolution | A multi-match `<slug>` ERRORS — NEVER prompts. See step 1 silent clause. |
 | Step 1.5 — title-conformance collision | A `{title-slug}.pdf` collision ERRORS — `failed (duplicate raw)`. NEVER prompts. See step 1.5 silent clause. |
-| Step 1.7 — content-duplicate fire | A URL/title match against an already-ingested source ERRORS — `failed (content-duplicate)` + raw index row set to `Duplicate (…)`. NEVER prompts. See step 1.7 silent clause. |
+| Step 1.7 — content-duplicate fire | A URL/title match against an already-ingested source ERRORS — `failed (content-duplicate)` + raw index row set to `Duplicate (…)` (markdown re-clip) or `Original (twin: …)` (kept PDF original). NEVER prompts. See step 1.7 silent clause. |
 | Step 10 — Stage 1 commit gate | Auto-resolve every decision to a fixed default; emit the structured summary; NO prompt, NO mid-flow HALT. See step 10 silent clause. |
 | Step 11 — Stage 2 reflection | SKIPPED entirely — never presented, never awaited. See step 11 silent clause. |
 
@@ -26,7 +26,7 @@ Collision — `raw/{origin}/{title-slug}.pdf` already exists → this raw duplic
 
 ## Step 1.7 silent override
 
-Content-duplicate fire (URL or title matches an already-ingested source) → do NOT halt — RETURN `failed (content-duplicate: duplicate of <existing-raw>)` and ingest nothing, with EXACTLY ONE permitted write: set THIS raw's index row (`raw/{origin}/{origin}.md`) to `Wiki = Duplicate (of [[<existing-raw>]])` so re-runs and `/sb-wiki-ingest-all` discovery skip it durably (row missing → create it; index file missing → log a warning, skip the write). NEVER create a source page, stub, or "anchor" page for a duplicate. NEVER delete the duplicate raw — disposition is the user's call, surfaced via the caller's report.
+Content-duplicate fire (URL or title matches an already-ingested source) → do NOT halt — RETURN `failed (content-duplicate: duplicate of <existing-raw>)` and ingest nothing, with EXACTLY ONE permitted write to THIS raw's index row (`raw/{origin}/{origin}.md`), keyed by raw type: a **markdown** re-clip → `Wiki = Duplicate (of [[<existing-raw>]])`; a **PDF** original → `Wiki = Original (twin: [[<existing-raw>]])` (a kept original whose content is already ingested via the matched `.md` twin — NEVER `Duplicate`, so a duplicate-cleanup sweep never reads it as deletable). Either write makes re-runs and `/sb-wiki-ingest-all` discovery skip it durably (row missing → create it; index file missing → log a warning, skip the write). NEVER create a source page, stub, or "anchor" page. NEVER delete the raw — for a markdown `Duplicate` the disposition (delete vs. re-point) is the user's call, surfaced via the caller's report; a PDF `Original (twin: …)` is a kept original and needs no disposition.
 
 ## Step 10 silent override
 

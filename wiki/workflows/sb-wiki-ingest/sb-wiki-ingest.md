@@ -196,7 +196,9 @@ On fire:
 - **Interactive:** ERROR-halt and ask the user — `abort` (skip the duplicate; raw index `Wiki` stays `No`) or `proceed` (ingest anyway — e.g. the new clip genuinely supersedes the old one). Name the existing raw and its source page in the prompt.
 - **Silent mode** (keyword present) → apply the Step 1.7 silent override from `extensions/silent-mode.md` (loaded at boot): do NOT halt — RETURN `failed (content-duplicate: duplicate of <existing-raw>)`.
 
-No fire → proceed to step 2. A fire NEVER deletes the duplicate raw file — disposition (delete vs. re-point) is the user's call.
+**By raw type — which `Wiki` value the fire records.** A **markdown** re-clip is a disposable content-duplicate → `Duplicate (of [[<existing-raw>]])`. A **PDF** is an immutable kept original whose content is already in the wiki via the matched `.md` twin → `Original (twin: [[<existing-raw>]])`, NEVER `Duplicate` — a kept original must never read as deletable to a duplicate-cleanup sweep. (Interactive `abort` writes neither value; the row stays `No`.)
+
+No fire → proceed to step 2. A fire NEVER deletes the raw file. For a markdown `Duplicate`, disposition (delete vs. re-point) is the user's call; a PDF `Original (twin: …)` is a kept original and needs no disposition.
 
 ### Step 2 — Write source page
 
@@ -577,7 +579,7 @@ End of flow.
 |---------|----------|
 | `<slug>` resolves to multiple raw files | Halt at step 1; ask user to disambiguate. No writes. |
 | PDF `{title-slug}.pdf` already exists at step 1.5 (duplicate raw) | Error-halt; ask abort / proceed-without-rename. Silent: RETURN `failed (duplicate raw: {title-slug}.pdf exists)`. No writes. |
-| Content-duplicate fires at step 1.7 (URL or title matches an already-ingested source) | Error-halt; ask abort / proceed. Silent: RETURN `failed (content-duplicate: duplicate of <existing-raw>)` — sole permitted write: raw index row → `Wiki = Duplicate (of [[<existing-raw>]])`. Never delete the raw. |
+| Content-duplicate fires at step 1.7 (URL or title matches an already-ingested source) | Error-halt; ask abort / proceed. Silent: RETURN `failed (content-duplicate: duplicate of <existing-raw>)` — sole permitted write: raw index row → `Wiki = Duplicate (of [[<existing-raw>]])` for a markdown re-clip, or `Wiki = Original (twin: [[<existing-raw>]])` for a kept PDF original. Never delete the raw. |
 | Structured twin extraction fails at step 1.5 (`sb-wiki-pdf-twin.py` errors / write error) | LOG A WARNING; proceed with native PDF read from step 1 as source text; write the `Original PDF: [[{title-slug}.pdf]]` body line but omit the `raw:` twin link in the source page (no twin was produced). Do NOT abort the ingest. |
 | `sb-wiki-pdf-twin.py` reports `twin_fidelity: false` (exit 3) at step 1.5 | NOT a failure — the twin WAS written. Proceed with ingest using the flagged twin; the page-set in `escalate_pages` is escalated unconditionally for native-PDF review (spec #5). NEVER silently clear the paper. |
 | `<slug>` resolves to multiple raw files (silent mode) | No halt. RETURN summary `failed (slug ambiguous: N matches)`. No writes. |
