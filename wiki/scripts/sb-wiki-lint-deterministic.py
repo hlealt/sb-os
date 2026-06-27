@@ -357,6 +357,59 @@ def is_regenerable_pdf_twin(raw_file: Path) -> bool:
     return bool(re.search(r"^\s*Original PDF:", text, flags=re.M))
 
 
+# ---------------------------------------------------------------------------
+# Finance data-artifact raw class (finance wiki extension)
+# ---------------------------------------------------------------------------
+# Captured XBRL companyfacts JSONs (`*-xbrl-companyfacts.json`, written by the
+# finance capture tool's `--ext json` path) are extraction feedstock, never
+# ingested. Their raw-index `Wiki` cell carries `N/A (data artifact)` — never
+# `No`/`Yes`/`Partial` — and they are EXEMPT from raw-without-ingest / ingest-
+# candidate surfacing (the non-`No` cell value carries that exemption). The class
+# is finance-extension-gated: it activates ONLY when `finance` is registered in
+# `sb-os.json` -> `wiki_extensions`, mirroring the Step-0 extension-merge model
+# (finance/CLAUDE.md § "Load mechanism (Step 0)"). A general wiki never treats a
+# stray `.json` as a data artifact. Authority for the rule:
+# finance/wiki-ext/lint-rules.ext.md § "Data-Artifact Raw Class".
+DATA_ARTIFACT_WIKI_CELL = "N/A (data artifact)"
+_DATA_ARTIFACT_FILENAME_RE = re.compile(r".+-xbrl-companyfacts\.json$", re.IGNORECASE)
+
+
+def _registered_wiki_extensions(wiki_root: Path) -> set[str]:
+    """Return the registered wiki extensions from sb-os.json (lowercased).
+
+    Walks up from *wiki_root* to locate the vault-root `sb-os.json`, so the lookup
+    is robust to the configured wiki_root depth (and testable with a manifest
+    beside a tmp wiki root). A missing/unreadable manifest, or an absent/empty
+    `wiki_extensions` field, yields the empty set — the base wiki behaves
+    identically (the data-artifact class stays off).
+    """
+    for base in [wiki_root, *wiki_root.parents]:
+        manifest = base / "sb-os.json"
+        if manifest.is_file():
+            try:
+                data = json.loads(read_text(manifest))
+            except Exception:
+                return set()
+            exts = data.get("wiki_extensions", [])
+            if isinstance(exts, list):
+                return {str(e).strip().lower() for e in exts}
+            return set()
+    return set()
+
+
+def _data_artifact_class_active(wiki_root: Path) -> bool:
+    """True when the finance data-artifact raw class is in force (finance ext registered)."""
+    return "finance" in _registered_wiki_extensions(wiki_root)
+
+
+def is_data_artifact_raw(filename: str) -> bool:
+    """True when *filename* is in the finance data-artifact class (`*-xbrl-companyfacts.json`).
+
+    Pure filename test — the caller gates it on `_data_artifact_class_active`.
+    """
+    return bool(_DATA_ARTIFACT_FILENAME_RE.match(filename))
+
+
 def sync_raw_indexes(wiki_root: Path, report: Report, apply_changes: bool) -> None:
     """Add a missing raw-index row for every raw SOURCE file (PDF-aware) while
     keeping ONE row per logical source (duplicate-safe — U1b step 2).
@@ -375,10 +428,16 @@ def sync_raw_indexes(wiki_root: Path, report: Report, apply_changes: bool) -> No
         without it, globbing ``*.pdf`` would add a second row for caiso/engie.
       - Everything else (a forward-twin PDF whose ``.md`` twin is excluded, an
         ordinary ``.md`` raw, a genuinely-uncaptured bare PDF) gets its row.
+
+    Finance data-artifact class: when the finance wiki extension is registered,
+    the row-adding loop ALSO globs ``*-xbrl-companyfacts.json`` and writes its
+    ``Wiki`` cell as ``N/A (data artifact)`` (never ``No``) — the file is
+    extraction feedstock, never ingested. See ``is_data_artifact_raw``.
     """
     raw_root = wiki_root / "raw"
     if not raw_root.exists():
         return
+    da_active = _data_artifact_class_active(wiki_root)
     # The union authority: raw filenames already represented by a source page
     # (raw: / Original PDF: backlinks across ALL origins). A bare PDF in this set
     # is covered by an existing (clip) row — adding a .pdf row would duplicate it.
@@ -406,7 +465,12 @@ def sync_raw_indexes(wiki_root: Path, report: Report, apply_changes: bool) -> No
         # form is the 2-col `| File | Wiki |` (ADX-9/ADX-10).
         columns = raw_index_header_columns(lines) or ["File", "Wiki"]
         changed = False
-        for raw_file in sorted(p for p in origin_dir.glob("*.*") if p.suffix in (".md", ".pdf")):
+        for raw_file in sorted(
+            p
+            for p in origin_dir.glob("*.*")
+            if p.suffix in (".md", ".pdf")
+            or (da_active and is_data_artifact_raw(p.name))
+        ):
             if raw_file.name == index_path.name or raw_file.name in NON_SOURCE_FILES or raw_file.name in links:
                 continue
             # A binary/non-UTF-8 `.md` directly in raw/<origin>/ cannot be a real
@@ -437,7 +501,16 @@ def sync_raw_indexes(wiki_root: Path, report: Report, apply_changes: bool) -> No
             # build_raw_row places by column name; the unused title/date args are
             # dropped for a 2-col header (kept blank for a not-yet-migrated legacy
             # header, which the migration then collapses).
-            lines.append(build_raw_row(columns, raw_file.name, "", "", "No"))
+            # Finance data-artifact class: a `*-xbrl-companyfacts.json` row is
+            # written `N/A (data artifact)`, never `No` — it is extraction
+            # feedstock, never ingested, so it is exempt from raw-without-ingest /
+            # ingest-candidate surfacing (the non-`No` value carries the exemption).
+            wiki_value = (
+                DATA_ARTIFACT_WIKI_CELL
+                if da_active and is_data_artifact_raw(raw_file.name)
+                else "No"
+            )
+            lines.append(build_raw_row(columns, raw_file.name, "", "", wiki_value))
             changed = True
         if changed:
             write_text(index_path, "\n".join(lines) + "\n", report, apply_changes)
@@ -507,13 +580,22 @@ def heal_raw_wiki_cells(wiki_root: Path, report: Report, apply_changes: bool) ->
     disposes phantoms manually). Closes the Step-1.7 stale-``No`` masking class:
     the ingest content-duplicate gate keys its comparison set on source-page
     existence, so healing the cell removes the data inconsistency itself.
+
+    Finance data-artifact class: when the finance wiki extension is registered, a
+    `No` cell on a `*-xbrl-companyfacts.json` row is CORRECTED to
+    `N/A (data artifact)` (the file is extraction feedstock, never ingested, so it
+    is never `Yes`). Reported under `raw_data_artifact_corrected`. Authority:
+    finance/wiki-ext/lint-rules.ext.md § "Data-Artifact Raw Class".
     """
     raw_root = wiki_root / "raw"
     healed: list[dict[str, str]] = []
     dangling: list[dict[str, str]] = []
+    corrected: list[dict[str, str]] = []
+    da_active = _data_artifact_class_active(wiki_root)
     if not raw_root.exists():
         report.detected["raw_wiki_healed"] = healed
         report.detected["raw_wiki_dangling"] = dangling
+        report.detected["raw_data_artifact_corrected"] = corrected
         return
     backlink_targets, mirror_stems = ingested_raw_filenames(wiki_root)
     for origin_dir in sorted(
@@ -550,6 +632,24 @@ def heal_raw_wiki_cells(wiki_root: Path, report: Report, apply_changes: bool) ->
                 continue
             if cells[wiki_idx].strip() != "No":
                 continue
+            # Finance data-artifact class: a helper-created `No` on a
+            # `*-xbrl-companyfacts.json` row is CORRECTED to `N/A (data artifact)`.
+            # Checked BEFORE the backlink/mirror heal — a data artifact has no
+            # source page, so those signals never fire for it, and the correct
+            # cell value is the class default, never `Yes`.
+            if da_active and is_data_artifact_raw(raw_filename):
+                new_cells, _ = set_raw_row_wiki(cells, DATA_ARTIFACT_WIKI_CELL)
+                lines[idx] = make_row(new_cells)
+                modified_rows.append(idx)
+                corrected.append(
+                    {
+                        "origin": origin_dir.name,
+                        "file": raw_filename,
+                        "from": "No",
+                        "to": DATA_ARTIFACT_WIKI_CELL,
+                    }
+                )
+                continue
             backlink_hit = raw_filename in backlink_targets
             mirror_hit = Path(raw_filename).stem in origin_stems
             if backlink_hit or mirror_hit:
@@ -579,6 +679,7 @@ def heal_raw_wiki_cells(wiki_root: Path, report: Report, apply_changes: bool) ->
                 write_text(index_path, "\n".join(lines) + "\n", report, apply_changes)
     report.detected["raw_wiki_healed"] = healed
     report.detected["raw_wiki_dangling"] = dangling
+    report.detected["raw_data_artifact_corrected"] = corrected
 
 
 # Recognized Wiki-cell values (the LAST cell of every raw row). A row whose last
@@ -586,13 +687,21 @@ def heal_raw_wiki_cells(wiki_root: Path, report: Report, apply_changes: bool) ->
 # `Duplicate (…)` is matched case-insensitively by its `duplicate` prefix;
 # `Original (twin: …)` (a kept original — e.g. a source PDF whose content is
 # ingested via a non-same-stem `.md` twin — never deletable, never re-ingested)
-# is matched by its `original` prefix.
+# is matched by its `original` prefix. `N/A (data artifact)` (a finance data-
+# artifact raw — `*-xbrl-companyfacts.json`, extraction feedstock never ingested)
+# is matched by its `n/a` prefix, so the migration pass preserves the row instead
+# of flagging it bespoke / aborting.
 _RAW_WIKI_LITERALS = {"no", "yes", "partial"}
 
 
 def _is_recognized_wiki_value(value: str) -> bool:
     v = value.strip().lower()
-    return v in _RAW_WIKI_LITERALS or v.startswith("duplicate") or v.startswith("original")
+    return (
+        v in _RAW_WIKI_LITERALS
+        or v.startswith("duplicate")
+        or v.startswith("original")
+        or v.startswith("n/a")
+    )
 
 
 def migrate_raw_indexes_to_file_wiki(wiki_root: Path, report: Report, apply_changes: bool) -> None:
