@@ -16,7 +16,7 @@ You have access to reference files in the project context — gitingest exports,
 
 1. Read `./step-01-boot.md` — load all behavioral rules
 2. If invoked to expand or enrich a library page (e.g. `/sb-tutor expand the item [X] of the topic [Y] (source: …, section: #…)`, or "enrich the topic Y") → follow `./library-protocol.md` ENRICH mode; do NOT start a new lesson
-3. If the student provided a topic → follow the standard flow immediately
+3. If the student provided a topic → run the front-door calibration (`./front-door.md`, the R3 pipeline) on it, then follow the standard flow
 4. If invoked with NO topic and context injection provides study topics → present them and ask what they want to learn today
 5. If invoked with NO topic and no context available → ask the student what they want to learn
 6. There is no step 02 — the tutor runs continuously in pill mode

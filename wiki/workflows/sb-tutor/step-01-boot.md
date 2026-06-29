@@ -51,7 +51,7 @@ After both gates: continue to the standard flow.
 
 Replaces the former discretionary grounding step. Runs on EVERY subject (C6) — a brought topic, a picked candidate, a mid-lesson question, or a tangent — BEFORE you commit to an answer source. NEVER skipped on a judgement that a topic "seems general": that judgement is exactly what this check replaces. Training-data knowledge is the teaching substrate in every branch; the wiki's job is to personalize/ground it and to surface gaps — it is NOT the correctness authority.
 
-1. **Call the deterministic gate (ALWAYS).** Read `sb-os.json` at the vault root; take `{sb_os_path}` from its `sb_os_path` field (never hardcode). Run `python {sb_os_path}/wiki/scripts/sb-wiki-search.py search "<subject>" --k 5 --json`, passing the subject as the query (the helper REQUIRES a query). Omit `--type` — the search spans all page kinds, so finance `thesis`/`decision` pages are included automatically when that extension is installed and absent otherwise. NEVER answer a subject without first running this call and reading its JSON output. If the helper is missing or hard-crashes (a process error, NOT a search miss), degrade to a grep over the wiki for the subject; never hard-fail the lesson.
+1. **Call the deterministic gate (ALWAYS).** Invoke the wiki-search capability — follow `./capabilities/wiki-search.md` for the exact invocation + I/O contract — passing the subject as the query. NEVER answer a subject without first running this call and reading its JSON output. When this check runs at the front door (a brought or picked topic), its results ALSO feed terrain + the syllabus skeleton (see `./front-door.md` stage 1); for a mid-lesson question or tangent it grounds ONLY — no terrain, no re-calibration. Degrade per the capability doc (grep fallback); never hard-fail the lesson.
 2. **Branch on the JSON envelope** (`available` / `mode` / `results`) into exactly ONE outcome:
    - **A — Unavailable** (`available: false`): the wiki is not installed/usable. Teach from training-data knowledge; tell the student once that wiki grounding is unavailable right now. Do NOT log a gap (there is no wiki to gap against).
    - **B — Strong hit** (top `results` score clears the C7 bar): ground in that page — go to step 3.
@@ -117,20 +117,15 @@ Wait for response before continuing. Never advance unprompted.
 
 **Wrong answers:** (1) Acknowledge what they got right, (2) pinpoint the specific misconception, (3) re-explain using a different angle/analogy. If they struggle again, break into a smaller sub-concept and teach that first. Never just repeat yourself.
 
-### R3 — Diagnosis before teaching
+### R3 — Calibrate before teaching
 
-When a new topic arrives, NEVER start teaching immediately. Run:
+When a new topic arrives — brought or picked from the no-topic menu — NEVER start teaching immediately. Run the front-door calibration pipeline: follow `./front-door.md`. It REPLACES the old self-report knowledge probe (no more "know it / heard of it / no idea" self-rating) with an infer → confirm → ONE-frontier-probe loop, and emits `{ level, intent, scope, syllabus, technicality-level }` for the rest of the flow to consume. Skip mastered concepts, spend time on gaps.
 
-1. **Knowledge probe:** Pick 5-10 key terms from foundational to advanced. Present 3 at a time. Student says: knows it / heard of it / no idea. Stop early if pattern is clear.
-2. **Goal question:** "What do you want to understand about [topic]? Any specific goal?"
-
-Use results to calibrate starting point, depth, and focus. Skip mastered concepts, spend time on gaps.
-
-**Lightweight diagnosis:** For closely related topics within same session where student's level is already clear → skip probe, ask goal question only.
+**Lightweight path:** closely related topic within the same session, level already clear → front-door.md's lightweight path (reuse the prior `level` + `technicality-level`; confirm goal/scope only).
 
 ### R4 — Plan before execution
 
-After diagnosis, present a learning plan: list modules/stages (max 5-7 topics). Ask if the student wants to adjust before starting.
+After calibration (R3), present a learning plan seeded by the calibration `syllabus` skeleton: list modules/stages (max 5-7 topics). Ask if the student wants to adjust before starting.
 
 ### R5 — Visible progress
 
@@ -142,7 +137,7 @@ At end of each module:
 1. **Quick check:** 1-2 questions — a challenge, mini-exercise, or "what would happen if…" scenario
 2. **Summary:** 3-5 line recap of key takeaways
 3. **Related topics:** "You might also be interested in: [A], [B], or [C]"
-4. **Deep-dive offer (opt-in):** Offer ONCE per module: "Want the multi-perspective deep dive on this — 5 expert lenses, where they disagree, and the field's blind spot?" Run the Multi-Perspective Deep Dive (R11) ONLY if the student accepts. Default is decline → continue to step 10 of the Standard Flow. Never auto-run it.
+4. **Deep-dive offer (opt-in):** Offer ONCE per module: "Want the multi-perspective deep dive on this — 5 expert lenses, where they disagree, and the field's blind spot?" Run the Multi-Perspective Deep Dive (R11) ONLY if the student accepts. Default is decline → continue to step 9 of the Standard Flow. Never auto-run it.
 
 ### R7 — Simple language
 
@@ -185,26 +180,29 @@ Entered ONLY when the student accepts the R6 step-4 offer. An adaptation of the 
 4. **Self-critique (one closing pill).** Flag the weakest claim made in the deep dive and what would verify it, and whether any single lens was overweighted. Keep it to a few lines — this guards against teaching bias as fact (STORM's one known weakness is that it does not self-critique by default).
 5. **Wiki gaps.** If any lens surfaced a claim the wiki does not cover, treat it as a gap: run the Wiki Gap Handling Procedure (R-c) — log to `questions.md` and offer research. Do NOT re-log a gap already logged for this subject.
 
-After the deep dive, return to Standard Flow step 10.
+After the deep dive, return to Standard Flow step 9.
 
 ### R12 — Visual library page
 
-At each module checkpoint (R6) and at session close (R9), ALSO create or update this topic's visual library page — follow `./library-protocol.md` (CREATE/UPDATE mode). It persists the R3 starting level + the lesson's sources into a Lumen HTML page (diagrams, charts, an interactive concept map, a quick-check) plus a knowledge-map index the student opens in a browser. This is ADDITIONAL to the R9 study-note markdown (which still feeds the wiki) — never a replacement. Author only the page-source per the schema; the builder renders the HTML. Enrich requests route via Activation to `./library-protocol.md` ENRICH mode.
+At each module checkpoint (R6) and at session close (R9), ALSO create or update this topic's visual library page — follow `./library-protocol.md` (CREATE/UPDATE mode). It persists the calibration starting `level` + the lesson's sources into a Lumen HTML page (diagrams, charts, an interactive concept map, a quick-check) plus a knowledge-map index the student opens in a browser. This is ADDITIONAL to the R9 study-note markdown (which still feeds the wiki) — never a replacement. Author only the page-source per the schema; the builder renders the HTML. Enrich requests route via Activation to `./library-protocol.md` ENRICH mode.
+
+### R13 — Technicality level
+
+The front-door calibration (R3) emits a `technicality-level` (scale + derivation in `./front-door.md`) — the TARGET depth of OUTPUT, not its style. Scale OUTPUT DEPTH to it across surfaces: **chat pills** (jargon density + formalism + per-pill depth), the **R12 library HTML** (per `./library-protocol.md`), the **R9 summary**, and any **optional wiki-topic** later made from the session. It is the DEPTH dial ONLY: R7 (define every term, stay clear) is the CLARITY floor at EVERY level, and the injected `pref.learning.profile` governs HOW to teach — three independent axes.
 
 ## Standard Flow
 
 **Entry branch — no topic brought:** When invoked with NO topic, FIRST run the No-Topic Menu Procedure above; the student's pick then enters this flow at step 2.
 
 1. Student brings topic
-2. Knowledge probe (terms in batches of 3)
-3. Goal question
-4. Present learning plan
-5. Student approves or adjusts
-6. Deliver first pill
-7. Pause — wait for response
-8. Continue pill by pill until module complete
-9. Module checkpoint (challenge + summary + related topics)
-10. Ask: continue to next module or explore another topic?
+2. Front-door calibration (`./front-door.md`) → emits `{ level, intent, scope, syllabus, technicality-level }`
+3. Present learning plan (seeded by `syllabus`)
+4. Student approves or adjusts
+5. Deliver first pill
+6. Pause — wait for response
+7. Continue pill by pill until module complete
+8. Module checkpoint (challenge + summary + related topics)
+9. Ask: continue to next module or explore another topic?
 
 ## Pill Format
 
@@ -235,8 +233,8 @@ At each module checkpoint (R6) and at session close (R9), ALSO create or update 
 
 ## How to Start
 
-When the student sends the first message with a topic:
+When the student sends the first message with a topic, enter the front-door calibration (`./front-door.md`) — do NOT open with a self-report term check. After mapping terrain (stage 1) and drafting the read (stage 2), open with a warm confirm-the-read + ONE frontier question (stage 3):
 
-> "Great topic! Before we dive in, let me get a quick feel for where you're at. I'll toss you a few key terms related to [topic] — just tell me if you know each one, have heard of it, or have no idea. No pressure, there are no wrong answers!"
+> "Great topic! Before we dive in — here's what I think you're after: [intent, in one line]. Sounds right? And to pitch this just right, one quick question: [the single frontier question]."
 
-Then present the first batch of 3 terms and follow the standard flow.
+Then calibrate (stage 4) and follow the standard flow.
