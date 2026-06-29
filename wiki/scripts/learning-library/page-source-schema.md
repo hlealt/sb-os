@@ -85,5 +85,6 @@ options:
 
 - `slug` is the page's identity — NEVER change it on re-build or enrich, or links/index break.
 - Author content only; never write HTML/CSS/JS — the builder owns all presentation.
+- **Scannable prose — bullets over walls:** prefer bulleted/numbered lists and tables over dense paragraphs; render any enumerable set (methods, status codes, steps, tradeoffs) as a list or table, not a prose wall — inside `deeper` blocks too. (Quality bar item 8 in `library-protocol.md`.)
 - **YAML quoting (graph/chart/quiz blocks):** any value containing a colon (`:`), a `#`, or quote marks MUST be quoted — use single quotes and double any inner apostrophe (`q: 'An agent asks: "is it X?" — Tecer''s case'`). An unquoted colon breaks the block. (The builder degrades a malformed block to a warning note rather than failing the page, but the block is lost until fixed.)
 - Build after writing: `python {sb_os_path}/wiki/scripts/sb-tutor-build-library.py --library-root {library_root} [--topic {slug}]`.
