@@ -77,6 +77,38 @@
     });
   });
 
+  /* inline tabs — switch which panel shows WITHIN each .tabs container only. Every query is
+     scoped to its container `t`, so multiple tabs blocks on one page never cross-wire. Guarded:
+     no .tabs => no-op (index page reuses this file). */
+  document.querySelectorAll('.tabs').forEach(function(t){
+    var btns=[].slice.call(t.querySelectorAll('.tab-btn')), panels=[].slice.call(t.querySelectorAll('.tab-panel'));
+    btns.forEach(function(b){
+      b.addEventListener('click',function(){
+        var k=b.getAttribute('data-tab');
+        btns.forEach(function(x){var on=x.getAttribute('data-tab')===k; x.classList.toggle('active',on); x.setAttribute('aria-selected',String(on));});
+        panels.forEach(function(p){p.classList.toggle('on',p.getAttribute('data-tab')===k);});
+      });
+    });
+  });
+
+  /* shared wide modal — ONE generic handler for every block. Any element with class
+     js-modal-open and attribute data-modal-src="<hidden-id>" fills .lib-modal-body from that
+     hidden element's innerHTML (trace View I/O, code Expand, diagram Zoom all use this).
+     Close on ×, on scrim, on Escape. Guarded: no #libModal => no-op (index page reuses this). */
+  var libModal=document.getElementById('libModal');
+  if(libModal){
+    var mBody=libModal.querySelector('.lib-modal-body');
+    var closeModal=function(){libModal.setAttribute('hidden','');};
+    document.querySelectorAll('.js-modal-open').forEach(function(b){
+      b.addEventListener('click',function(){var src=document.getElementById(b.getAttribute('data-modal-src'));
+        if(src&&mBody){mBody.innerHTML=src.innerHTML; libModal.removeAttribute('hidden');}});
+    });
+    var mx=libModal.querySelector('.lib-modal-x'), msc=libModal.querySelector('.lib-modal-scrim');
+    if(mx) mx.addEventListener('click',closeModal);
+    if(msc) msc.addEventListener('click',closeModal);
+    addEventListener('keydown',function(e){if(e.key==='Escape'&&!libModal.hasAttribute('hidden'))closeModal();});
+  }
+
   /* hover-to-copy: builds a PRECISE /sb-tutor expand prompt — page-source filepath + section anchor-id + title */
   var toast=document.getElementById('toast'), TOPIC=document.body.getAttribute('data-topic')||'', SOURCE=document.body.getAttribute('data-source')||'';
   function copyText(t){
@@ -84,6 +116,17 @@
     return new Promise(function(res,rej){var ta=document.createElement('textarea'); ta.value=t; ta.style.position='fixed'; ta.style.opacity='0';
       document.body.appendChild(ta); ta.focus(); ta.select(); try{document.execCommand('copy'); res();}catch(e){rej(e);} document.body.removeChild(ta);});
   }
+
+  /* code-block Copy — copies the adjacent visible <pre.code> text via copyText + toast (guarded) */
+  document.querySelectorAll('.js-copy').forEach(function(b){
+    b.addEventListener('click',function(){var wrap=b.closest('.codewrap'), pre=wrap&&wrap.querySelector('pre.code');
+      if(!pre) return;
+      copyText(pre.textContent).then(function(){b.innerHTML='✓ copied';
+        if(toast){toast.textContent='code copied'; toast.classList.add('show');}
+        setTimeout(function(){b.innerHTML='⧉ Copy'; if(toast) toast.classList.remove('show');},1500);});
+    });
+  });
+
   document.querySelectorAll('.main .item').forEach(function(el){
     var b=document.createElement('button'); b.className='copybtn'; b.type='button'; b.textContent='⧉ copy';
     b.setAttribute('aria-label','Copy a /sb-tutor prompt to expand this item');

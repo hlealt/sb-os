@@ -42,7 +42,7 @@ main{padding:34px 0 90px}
 .copybtn{position:absolute;top:18px;right:18px;opacity:0;transform:translateY(-2px);transition:opacity .15s,transform .15s;font-family:"Space Grotesk";font-size:11px;font-weight:600;background:var(--violet);color:#fff;border:0;border-radius:18px;padding:6px 13px;cursor:pointer;box-shadow:0 6px 16px -6px rgba(91,79,224,.8);z-index:2}
 .item:hover .copybtn,.copybtn:focus-visible{opacity:1;transform:translateY(0);outline:none}
 .split{display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:stretch}@media(max-width:720px){.split{grid-template-columns:1fr}}
-.viz{background:linear-gradient(180deg,#FCFCFF,#F6F5FE);border:1px solid var(--line);border-radius:14px;padding:14px}
+.viz{position:relative;background:linear-gradient(180deg,#FCFCFF,#F6F5FE);border:1px solid var(--line);border-radius:14px;padding:14px}
 .viz svg{display:block;width:100%;height:auto}.vcap{font-family:"Space Mono";font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--violet-2);margin-top:8px;text-align:center}
 .hint{font-family:"Space Mono";font-size:10px;color:var(--amber);text-transform:uppercase;letter-spacing:.08em;display:flex;align-items:center;gap:6px;margin-bottom:8px}.hint::before{content:"\261E"}
 
@@ -67,6 +67,15 @@ main{padding:34px 0 90px}
 .gloss:hover::after,.gloss:focus::after,.gloss:focus-visible::after{opacity:1}
 .gloss:focus-visible{outline:2px solid var(--violet-2);outline-offset:1px}
 
+/* inline citations — superscript SOURCE/TRAINING marker + plain-language hover/focus provenance (mirrors .gloss tooltip) */
+.cite{position:relative;font-family:"Space Mono",ui-monospace,monospace;font-weight:700;font-size:.62em;cursor:help}
+.cite a{text-decoration:none}
+.cite-src a{color:var(--violet)}.cite-src:hover a{color:var(--violet-2)}
+.cite-gen a{color:var(--amber)}.cite-gen:hover a{color:#B8780B}
+.cite::after{content:attr(data-prov);position:absolute;left:50%;bottom:185%;transform:translateX(-50%);width:max-content;max-width:264px;background:var(--ink);color:#fff;font-family:"Inter",system-ui,sans-serif;font-weight:400;font-size:12.5px;line-height:1.45;letter-spacing:0;text-align:left;white-space:normal;padding:9px 12px;border-radius:10px;box-shadow:0 16px 34px -12px rgba(24,26,48,.72);opacity:0;pointer-events:none;transition:opacity .14s;z-index:80}
+.cite:hover::after,.cite:focus-within::after{opacity:1}
+.cite a:focus-visible{outline:2px solid var(--violet-2);outline-offset:2px;border-radius:3px}
+
 /* chart */
 .ax{stroke:#C9CCE0;stroke-width:1}.axl{fill:var(--ink-soft);font-family:"Space Mono";font-size:13px}.axt{fill:var(--ink-soft);font-family:"Space Mono";font-size:13px}.leg{fill:var(--ink);font-family:"Space Grotesk";font-weight:500;font-size:13px}.pt{cursor:pointer}
 
@@ -86,7 +95,18 @@ main{padding:34px 0 90px}
 .secbody tbody tr:nth-child(odd),.dbody tbody tr:nth-child(odd){background:#FAFAFE}
 .secbody td:first-child,.dbody td:first-child,table.cmp td:first-child{color:var(--ink);font-weight:500}
 .callout{display:flex;gap:11px;background:var(--tint);border:1px solid #DCD8F7;border-radius:12px;padding:13px 15px;margin:10px 0;font-size:14px}.callout.warn{background:#FFF6E6;border-color:#F2DEB0}.callout .ic{font-weight:700;color:var(--violet)}.callout.warn .ic{color:var(--amber)}
-pre.code{background:var(--code);color:#E7E7F5;border-radius:12px;padding:14px 16px;overflow:auto;font-family:"Space Mono";font-size:12.5px;line-height:1.55;margin:8px 0}pre.code .kw{color:#9FE0FF}pre.code .st{color:#FFCF8A}
+pre.code{background:var(--code);color:#E7E7F5;border-radius:12px;padding:14px 16px;overflow:auto;font-family:"Space Mono";font-size:12.5px;line-height:1.55;margin:8px 0}
+/* conservative syntax highlighting (builder-emitted spans): keyword / string / comment / number / boolean-null */
+pre.code .kw{color:#9FE0FF}pre.code .st{color:#FFCF8A}pre.code .cm{color:#7E83A8;font-style:italic}pre.code .nu{color:#C5B3FF}pre.code .bo{color:#7FE0C4}
+/* wide-table legibility — horizontal scroll wrapper + sticky first column + right-edge scroll cue */
+.tablewrap{position:relative;margin:12px 0}
+.tablescroll{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:6px}
+.tablewrap table{margin:0}
+.tablewrap::after{content:"";position:absolute;top:0;right:0;bottom:0;width:30px;pointer-events:none;border-radius:0 6px 6px 0;background:linear-gradient(to right,rgba(245,246,251,0),rgba(91,79,224,.12))}
+.tablescroll th:first-child,.tablescroll td:first-child{position:sticky;left:0;background:var(--panel)}
+.tablescroll thead th:first-child{z-index:2}
+.tablescroll td:first-child{z-index:1}
+.tablescroll tbody tr:nth-child(odd) td:first-child{background:#FAFAFE}
 details.deeper{border:1px dashed #CFCBEF;border-radius:12px;padding:0 14px;margin:12px 0;background:#FBFAFF}details.deeper>summary{cursor:pointer;list-style:none;padding:11px 0;font-family:"Space Grotesk";font-weight:600;font-size:13px;color:var(--violet);display:flex;gap:8px}details.deeper>summary::-webkit-details-marker{display:none}details.deeper>summary::before{content:"\FF0B"}details.deeper[open]>summary::before{content:"\FF0D"}details.deeper .dbody{padding:0 0 14px;font-size:14px;color:#33364F}
 
 /* quiz */
@@ -106,4 +126,92 @@ details.deeper{border:1px dashed #CFCBEF;border-radius:12px;padding:0 14px;margi
 .src{font-size:13px;margin-bottom:10px}.src .k{font-family:"Space Mono";font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);display:block;margin-bottom:1px}
 .foot{text-align:center;color:var(--ink-soft);font-size:13px;margin-top:26px}.foot code{background:var(--tint);color:var(--violet);padding:1px 6px;border-radius:5px;font-family:"Space Mono";font-size:12px}
 .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(18px);background:var(--ink);color:#fff;font-family:"Space Mono";font-size:12px;padding:11px 18px;border-radius:22px;opacity:0;transition:.25s;pointer-events:none;z-index:50}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+/* trace — N-column per-step comparison; bulky code opens in the shared wide modal */
+.trace{margin:14px 0}
+.trace-cap{font-family:"Space Mono";font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--violet-2);margin-bottom:10px}
+.trace-step{background:linear-gradient(180deg,#FCFCFF,#F6F5FE);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin:12px 0}
+.trace-goal{font-family:"Space Grotesk";font-weight:600;font-size:15px;color:var(--ink)}.trace-goal p{margin:0}
+.trace-note{font-size:13px;color:var(--ink-soft);margin-top:4px}.trace-note p{margin:0}
+.trace-cols{display:grid;grid-template-columns:repeat(var(--tc,3),1fr);gap:10px;margin-top:12px}
+.trace-col{display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:11px 12px;min-width:0}
+.trace-colhead{font-family:"Space Mono";font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--violet);margin-bottom:6px}
+.trace-sum{font-size:13px;color:#33364F;flex:1}.trace-sum p{margin:0}.trace-sum code{font-family:"Space Mono";font-size:11.5px;background:var(--tint);padding:0 4px;border-radius:5px;word-break:break-word}
+.trace-view{align-self:flex-start;margin-top:10px;font-family:"Space Grotesk";font-weight:600;font-size:11.5px;background:var(--tint);color:var(--violet);border:1px solid #DCD8F7;border-radius:16px;padding:5px 11px;cursor:pointer;transition:.13s}
+.trace-view:hover{background:var(--violet);color:#fff;border-color:var(--violet)}
+@media(max-width:680px){.trace-cols{grid-template-columns:1fr}}
+/* shared wide modal — generalized from trace; any js-modal-open[data-modal-src] opens it */
+.lib-modal{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;padding:24px}
+.lib-modal[hidden]{display:none}
+.lib-modal-scrim{position:absolute;inset:0;background:rgba(24,26,48,.55);backdrop-filter:blur(2px)}
+.lib-modal-card{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:16px;max-width:min(900px,94vw);width:100%;max-height:86vh;overflow:auto;box-shadow:0 40px 80px -30px rgba(24,26,48,.7);padding:20px 22px}
+.lib-modal-x{position:absolute;top:12px;right:14px;width:30px;height:30px;border:1px solid var(--line);background:#fff;border-radius:9px;cursor:pointer;font-size:17px;color:var(--ink-soft);line-height:1;z-index:2}
+.lib-modal-x:hover{color:var(--ink);border-color:var(--violet-2)}
+.lib-modal-body svg{display:block;width:100%;height:auto}
+.viz-modal{background:linear-gradient(180deg,#FCFCFF,#F6F5FE);border:1px solid var(--line);border-radius:12px;padding:12px}
+.trace-modal-title{font-family:"Space Grotesk";font-weight:600;font-size:16px;color:var(--ink);margin:0 36px 12px 0}
+.trace-modal-col{font-family:"Space Mono";font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--violet);background:var(--tint);padding:2px 8px;border-radius:9px;margin-right:9px}
+.trace-modal-note{font-size:14px;color:#33364F;margin-bottom:10px}.trace-modal-note p{margin:.2em 0 .6em}
+.lib-modal-body pre.code.trace-code{white-space:pre;overflow-x:auto;max-width:100%;margin:0}
+/* flow — process / pipeline: stage boxes connected by arrows; a stage's long detail opens the shared modal */
+.flow{margin:14px 0;display:flex;flex-direction:column;align-items:stretch}
+.flow-cap{font-family:"Space Mono";font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--violet-2);margin-bottom:10px}
+.flow-stage{background:linear-gradient(180deg,#FCFCFF,#F6F5FE);border:1px solid var(--line);border-left:3px solid var(--violet-2);border-radius:13px;padding:12px 15px}
+.flow-stagehead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.flow-label{font-family:"Space Grotesk";font-weight:600;font-size:15px;color:var(--ink)}
+.flow-kind{font-family:"Space Mono";font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--violet);background:var(--tint);padding:2px 8px;border-radius:9px}
+.flow-desc{font-size:13px;color:var(--ink-soft);margin-top:4px}.flow-desc p{margin:0}.flow-desc code{font-family:"Space Mono";font-size:11.5px;background:var(--tint);padding:0 4px;border-radius:5px;word-break:break-word}
+.flow-arrow{align-self:center;color:var(--violet-2);font-size:18px;line-height:1;margin:5px 0}
+.flow-details{display:inline-block;margin-top:10px;font-family:"Space Grotesk";font-weight:600;font-size:11.5px;background:var(--tint);color:var(--violet);border:1px solid #DCD8F7;border-radius:16px;padding:5px 11px;cursor:pointer;transition:.13s}
+.flow-details:hover{background:var(--violet);color:#fff;border-color:var(--violet)}
+.flow-modal-title{font-family:"Space Grotesk";font-weight:600;font-size:16px;color:var(--ink);margin:0 36px 12px 0}
+.flow-stage.k-input{border-left-color:var(--teal)}.flow-stage.k-input .flow-kind{color:var(--teal);background:#E2F4F2}
+.flow-stage.k-step{border-left-color:var(--violet)}
+.flow-stage.k-output{border-left-color:var(--amber)}.flow-stage.k-output .flow-kind{color:var(--amber);background:#FBEFD8}
+.flow-stage.k-decision{border-left-color:var(--violet-2)}
+.flow-stage.k-other{border-left-color:var(--ink-soft)}.flow-stage.k-other .flow-kind{color:var(--ink-soft);background:#EEF0F8}
+/* visible code-block disclosure toolbar (Copy + Expand) */
+.codewrap{position:relative;margin:8px 0}
+.codebar{display:flex;justify-content:flex-end;gap:6px;margin-bottom:4px}
+.codebtn{font-family:"Space Grotesk";font-weight:600;font-size:10.5px;background:var(--tint);color:var(--violet);border:1px solid #DCD8F7;border-radius:14px;padding:3px 10px;cursor:pointer;transition:.13s}
+.codebtn:hover{background:var(--violet);color:#fff;border-color:var(--violet)}
+.codewrap pre.code{margin-top:0}
+/* diagram Zoom affordance (top-right of a graph/chart viz) */
+.viz-zoom{position:absolute;top:10px;right:10px;font-family:"Space Grotesk";font-weight:600;font-size:10.5px;background:var(--tint);color:var(--violet);border:1px solid #DCD8F7;border-radius:14px;padding:3px 10px;cursor:pointer;transition:.13s;z-index:3}
+.viz-zoom:hover{background:var(--violet);color:#fff;border-color:var(--violet)}
+/* footnotes — Sources (corpus-linked) + General-knowledge (training) section at the page end */
+.footnotes .fngroup{margin:4px 0 14px}.footnotes .fngroup:last-child{margin-bottom:2px}
+.footnotes .fnhead{font-family:"Space Mono";font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--violet);margin:6px 0 8px}
+.footnotes .fngroup.gen .fnhead{color:var(--amber)}
+.footnotes .fnlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
+.footnotes .fn{font-size:13.5px;color:#33364F;display:flex;gap:10px;align-items:baseline;scroll-margin-top:84px;padding:3px 6px;border-radius:7px;transition:background .14s}
+.footnotes .fnnum{font-family:"Space Mono";font-size:11px;font-weight:700;color:var(--violet);min-width:1.7em;flex:none}
+.footnotes .fn-gen .fnnum{color:var(--amber)}
+.footnotes .fn a{color:var(--violet);text-decoration:none;border-bottom:1px solid var(--violet-2)}.footnotes .fn a:hover{border-bottom-color:var(--violet)}
+.footnotes .fn:target{background:var(--tint)}
+/* tabs — inline tabbed content: an underline tab bar switches which panel is visible (variants in one space) */
+.tabs{margin:14px 0}
+.tabs-cap{font-family:"Space Mono";font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--violet-2);margin-bottom:10px}
+.tab-bar{display:flex;flex-wrap:wrap;gap:2px;border-bottom:1px solid var(--line);margin-bottom:13px}
+.tab-btn{font-family:"Space Grotesk";font-weight:600;font-size:13px;color:var(--ink-soft);background:none;border:0;border-bottom:2px solid transparent;padding:8px 15px;margin-bottom:-1px;cursor:pointer;transition:color .13s,border-color .13s}
+.tab-btn:hover{color:var(--ink)}
+.tab-btn.active{color:var(--violet);border-bottom-color:var(--violet)}
+.tab-btn:focus-visible{outline:2px solid var(--violet-2);outline-offset:2px;border-radius:6px 6px 0 0}
+.tab-panel{display:none}.tab-panel.on{display:block}
+/* annotated code — code with a left line-number gutter; annotated lines carry a marker that opens
+   the line's explanation in the shared wide modal. Body is a real pre.code so it inherits the dark
+   style + the `pre.code .kw/.st/.cm/.nu/.bo` highlight colors. */
+.acode{margin:14px 0}
+.acode-head{display:flex;align-items:baseline;gap:10px;margin-bottom:7px;flex-wrap:wrap}
+.acode-lang{font-family:"Space Mono";font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--violet);background:var(--tint);padding:2px 8px;border-radius:9px}
+.acode-cap{font-family:"Space Mono";font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--violet-2)}
+pre.code.acode-body{padding:10px 0;margin:0;overflow-x:auto}
+.acode-line{display:flex;align-items:center;padding:1px 14px}
+.acode-line.annotated{background:rgba(138,125,245,.16);box-shadow:inset 3px 0 0 var(--violet-2)}
+.acode-ln{flex:none;width:2.4em;text-align:right;padding-right:14px;color:#5A5E86;user-select:none;-webkit-user-select:none}
+.acode-src{flex:1 1 auto;white-space:pre;min-width:0}
+.acode-mark{flex:none;margin-left:12px;font-family:"Space Grotesk";font-weight:700;font-size:10px;line-height:1.7;background:var(--violet-2);color:#fff;border:0;border-radius:11px;padding:0 9px;cursor:pointer;transition:.13s}
+.acode-mark:hover{background:var(--violet)}
+.acode-modal-title{font-family:"Space Grotesk";font-weight:600;font-size:16px;color:var(--ink);margin:0 36px 12px 0}
+.acode-modal-ln{font-family:"Space Mono";font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--violet);background:var(--tint);padding:2px 8px;border-radius:9px;margin-right:9px}
+.acode-modal-note{font-size:14px;color:#33364F}.acode-modal-note p{margin:.2em 0 .6em}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}#bar,.tprog i{transition:none}}

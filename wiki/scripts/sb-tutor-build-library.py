@@ -23,8 +23,70 @@ except ImportError as e:  # deterministic dependency
     sys.exit(2)
 
 ASSETS = Path(__file__).resolve().parent / "learning-library" / "assets"
-SPECIAL = {"graph", "chart", "quiz", "deeper"}
+SPECIAL = {"graph", "chart", "quiz", "deeper", "trace", "flow", "tabs", "anncode"}
+_TRACE_UID = [0]  # page-unique id seed for trace cells' shared-modal sources (reset per process)
+_FLOW_UID = [0]   # page-unique id seed for flow stages' shared-modal detail sources
+_TABS_UID = [0]   # page-unique id seed for tabs containers (scopes per-container tab switching)
+_ACODE_UID = [0]  # page-unique id seed for annotated-code line markers' shared-modal note sources
+_CODE_UID = [0]   # page-unique id seed for visible code-block Expand sources
+_ZOOM_UID = [0]   # page-unique id seed for graph/chart Zoom sources
 FENCE = re.compile(r"^```(\w+)[ \t]*\n(.*?)\n```[ \t]*$", re.DOTALL | re.MULTILINE)
+# matches ONLY md_html-generated visible code blocks (class is exactly "code" + a <code> child);
+# never the trace modal's `<pre class="code trace-code">` payload — so trace code is left untouched.
+_CODE_BLOCK = re.compile(r'<pre class="code"><code>.*?</code></pre>', re.DOTALL)
+# citations (v1): inline [^N] = SOURCE marker, [^gN] = TRAINING marker; footnote-def lines
+# `[^N]: {subject, page}` / `[^gN]: desc` are pulled OUT of prose and rendered as a footnotes
+# section at page end. Schema: learning-library/page-source-schema.md § Citations & provenance.
+_CITE_RE = re.compile(r"\[\^(g?\d+)\]")
+_FN_DEF_RE = re.compile(r"^[ \t]*\[\^(g?\d+)\]:[ \t]*(.*)$", re.MULTILINE)
+# extracts the CODE TEXT inside each md_html code block so the highlighter can wrap tokens in
+# spans without disturbing the wrapper tags (kept in sync with _CODE_BLOCK's shape).
+_CODE_INNER = re.compile(r'(<pre class="code"><code>)(.*?)(</code></pre>)', re.DOTALL)
+# matches a rendered markdown table so the builder can drop it in a horizontal-scroll wrapper.
+_TABLE = re.compile(r'<table\b[^>]*>.*?</table>', re.DOTALL)
+# Conservative, language-agnostic code highlighter (json/js/python/bash-ish). Operates on the
+# ALREADY-HTML-ESCAPED code text and only WRAPS matched substrings in spans — never alters a
+# character, so the visible text (and what Copy yields via textContent) stays byte-identical.
+# Left-to-right, non-overlapping (re.finditer via re.sub), alternatives tried in order at each
+# position: HTML entities match first and emit unchanged (so digits in `&#39;` are never numbered);
+# strings win over comments/numbers/keywords (a `#` or number inside a string stays in the string).
+# Anything ambiguous is left plain — a highlighter bug must never corrupt code or break the page.
+# Quote delimiters as they appear AFTER HTML-escaping (python-markdown turns " -> &quot; inside
+# code, and ' may arrive as &#39;), plus the literal forms for robustness.
+_DQ = r'(?:&quot;|&#34;|")'
+_SQ = r"(?:&#39;|&#x27;|')"
+_HL = re.compile(
+    # strings FIRST so a #, //, number, or keyword inside a string stays in the string
+    r'(?P<st>' + _DQ + r'(?:\\.|(?!' + _DQ + r').)*' + _DQ
+    + r'|' + _SQ + r'(?:\\.|(?!' + _SQ + r').)*' + _SQ + r')'
+    # any remaining HTML entity (e.g. &lt; &amp; an unpaired &quot;) emits unchanged
+    r'|(?P<ent>&[a-zA-Z]+;|&#x?[0-9A-Fa-f]+;)'
+    # line comments: # or // only at line start or after whitespace (so https:// is never a comment)
+    r'|(?P<cm>(?:(?<=\s)|^)(?:#|//)[^\n]*)'
+    r'|(?P<nu>\b\d+(?:\.\d+)?\b)'
+    r'|(?P<bo>\b(?:true|false|null|True|False|None)\b)'
+    r'|(?P<kw>\b(?:import|from|def|return|if|else|for|in|function|const|let|var|GET|POST|PUT|DELETE)\b)',
+    re.MULTILINE,
+)
+
+
+def _hl_token(m):
+    g = m.lastgroup
+    s = m.group()
+    if g == "ent":  # leave entities untouched — never tokenize inside &lt; / &#39; etc.
+        return s
+    return f'<span class="{g}">{s}</span>'
+
+
+def highlight_code(escaped: str) -> str:
+    """Wrap recognizable tokens in `<span class="st|cm|nu|bo|kw">` inside ALREADY-ESCAPED code.
+    Adds color only — the underlying characters are reproduced verbatim, so `.js-copy`
+    (textContent) still yields byte-identical code. Best-effort + fail-safe: on any error the
+    original escaped text is returned unchanged."""
+    try:
+        return _HL.sub(_hl_token, escaped)
+    except Exception:
+        return escaped
 
 
 # ---------- small helpers ----------
@@ -40,6 +102,8 @@ def slugify(s: str) -> str:
 def md_html(text: str) -> str:
     h = md.markdown(text, extensions=["extra", "sane_lists"])
     h = re.sub(r"<pre><code[^>]*>", '<pre class="code"><code>', h)
+    # syntax-highlight each visible code block's already-escaped text (wraps tokens in spans only)
+    h = _CODE_INNER.sub(lambda m: m.group(1) + highlight_code(m.group(2)) + m.group(3), h)
     # callouts: blockquote starting with [!warn]/[!note]/[!tip]
     def _co(m):
         kind, body = m.group(1).lower(), m.group(2).strip()
@@ -47,6 +111,8 @@ def md_html(text: str) -> str:
         ic = "&#9650;" if "warn" in cls else "&#9670;"
         return f'<div class="{cls}"><span class="ic">{ic}</span><div>{body}</div></div>'
     h = re.sub(r"<blockquote>\s*<p>\s*\[!(\w+)\]\s*(.*?)</p>\s*</blockquote>", _co, h, flags=re.DOTALL)
+    # wide-table legibility: horizontal-scroll wrapper (sticky first column + scroll cue via CSS)
+    h = _TABLE.sub(lambda m: f'<div class="tablewrap"><div class="tablescroll">{m.group(0)}</div></div>', h)
     return h
 
 
@@ -75,6 +141,106 @@ def apply_glossary(htext: str, glossary: dict, done=None) -> str:
                 done.add(term.lower())
                 break
     return "".join(parts)
+
+
+def wrap_code_blocks(htext: str) -> str:
+    """Give every VISIBLE prose code block (md_html output) a Copy + Expand toolbar.
+    Each match is wrapped in a `.codewrap` carrying a `.codebar` (Copy via app.js copyText;
+    Expand opens the shared modal via `js-modal-open`/`data-modal-src`) plus a hidden
+    `.lib-modal-src` duplicate the modal reads. Apply ONLY to the prose/md stream + deeper
+    bodies — NEVER to a hidden modal source (the trace payload's `<pre class="code trace-code">`
+    is not matched by _CODE_BLOCK, so trace code is never double-wrapped)."""
+    def _w(m):
+        _CODE_UID[0] += 1
+        uid = f"cw{_CODE_UID[0]}"
+        pre = m.group(0)
+        return ('<div class="codewrap"><div class="codebar">'
+                '<button class="codebtn js-copy" type="button" aria-label="Copy code">&#10697; Copy</button>'
+                f'<button class="codebtn js-modal-open" type="button" data-modal-src="{uid}" '
+                'aria-label="Expand code in a wide modal">&#10530; Expand</button></div>'
+                f'{pre}<div class="lib-modal-src" id="{uid}" hidden>{pre}</div></div>')
+    return _CODE_BLOCK.sub(_w, htext)
+
+
+# ---------- citations & footnotes ----------
+def _record_fn(m, footnotes: dict) -> str:
+    """Record one footnote def (first def per label wins) and return '' so the def line is
+    stripped from the prose flow. SOURCE defs ([^N]) carry {subject, page} (a flow map, or a
+    bare subject string); TRAINING defs ([^gN]) carry a plain one-line description."""
+    label, val = m.group(1), m.group(2).strip()
+    if label.startswith("g"):
+        footnotes.setdefault(label, {"kind": "gen", "desc": val})
+    else:
+        subject, page = val, None
+        if val.startswith("{"):  # flow map {subject: ..., page: ...}
+            try:
+                d = yaml.safe_load(val)
+            except yaml.YAMLError:
+                d = None
+            if isinstance(d, dict):
+                subject = d.get("subject") or d.get("title") or d.get("name") or ""
+                page = d.get("page") or d.get("path") or d.get("note")
+        footnotes.setdefault(label, {"kind": "src", "subject": subject, "page": page})
+    return ""
+
+
+def _strip_fn_defs(text: str, footnotes: dict) -> str:
+    """Pull footnote-def lines out of ONE prose chunk (recording them in `footnotes`), while
+    protecting any fenced code so a def-shaped line inside a code block is never taken."""
+    stash: list = []
+    def _mask(mm):
+        stash.append(mm.group(0))
+        return f"\x00FN{len(stash) - 1}\x00"
+    masked = FENCE.sub(_mask, text)
+    masked = _FN_DEF_RE.sub(lambda mm: _record_fn(mm, footnotes), masked)
+    return re.sub(r"\x00FN(\d+)\x00", lambda mm: stash[int(mm.group(1))], masked)
+
+
+def collect_footnotes(sections):
+    """Walk md segments across all sections, pull footnote-def lines OUT of prose, and return
+    (footnotes, sections') — `footnotes` is a page-wide ordered dict keyed by as-authored label
+    ('N' / 'gN'). Special/SVG segments (graph/chart/quiz/deeper/trace) are left untouched."""
+    footnotes: dict = {}
+    out = []
+    for title, sid, segs in sections:
+        nsegs = [("md", _strip_fn_defs(s[1], footnotes)) if s[0] == "md" else s for s in segs]
+        out.append((title, sid, nsegs))
+    return footnotes, out
+
+
+def _cite_marker(label: str, footnotes: dict) -> str:
+    """Render one inline citation marker: a hover-provenance superscript anchored to its
+    footnote. SOURCE shows the as-authored number (violet); TRAINING shows a 'g' (amber)."""
+    fn = footnotes.get(label) or {}
+    if label.startswith("g"):
+        desc = fn.get("desc", "")
+        prov = "general knowledge (training data): " + desc if desc else "general knowledge (training data)"
+        return (f'<sup class="cite cite-gen" data-prov="{esc(prov)}">'
+                f'<a href="#fn-{esc(label)}">g</a></sup>')
+    subject = fn.get("subject", "")
+    prov = "from your wiki: " + subject if subject else "from your wiki"
+    return (f'<sup class="cite cite-src" data-prov="{esc(prov)}">'
+            f'<a href="#fn-{esc(label)}">{esc(label)}</a></sup>')
+
+
+def process_citations(htext: str, footnotes: dict) -> str:
+    """Convert inline [^N]/[^gN] in PROSE html into hover-provenance superscript markers.
+    Markers inside code (`<pre>`/`<code>`, masked here) or inside HTML tags (only text nodes
+    are scanned) are NEVER processed — citations are a prose-only feature. No-op when the html
+    carries no marker, so a citation-free page renders byte-identically."""
+    if not _CITE_RE.search(htext):
+        return htext
+    stash: list = []
+    def _mask(m):
+        stash.append(m.group(0))
+        return f"\x00CT{len(stash) - 1}\x00"
+    masked = re.sub(r"<pre\b[\s\S]*?</pre>", _mask, htext)
+    masked = re.sub(r"<code\b[\s\S]*?</code>", _mask, masked)
+    parts = re.split(r"(<[^>]+>)", masked)  # even = text outside tags; odd = tags (skipped)
+    for i in range(0, len(parts), 2):
+        parts[i] = _CITE_RE.sub(lambda m: _cite_marker(m.group(1), footnotes), parts[i])
+    out = "".join(parts)
+    return re.sub(r"\x00CT(\d+)\x00", lambda m: stash[int(m.group(1))], out)
 
 
 # ---------- source parsing ----------
@@ -120,7 +286,7 @@ def render_special(kind: str, content: str, glossary: dict) -> str:
     if kind == "deeper":
         first, _, rest = content.partition("\n")
         return (f'<details class="deeper"><summary>{esc(first.strip())}</summary>'
-                f'<div class="dbody">{apply_glossary(md_html(rest.strip()), glossary)}</div></details>')
+                f'<div class="dbody">{wrap_code_blocks(apply_glossary(md_html(rest.strip()), glossary))}</div></details>')
     try:  # one malformed block must NOT fail the whole page
         spec = yaml.safe_load(content) or {}
     except yaml.YAMLError as e:
@@ -133,10 +299,28 @@ def render_special(kind: str, content: str, glossary: dict) -> str:
         return render_chart(spec)
     if kind == "quiz":
         return render_quiz(spec)
+    if kind == "trace":
+        return render_trace(spec, glossary)
+    if kind == "flow":
+        return render_flow(spec, glossary)
+    if kind == "tabs":
+        return render_tabs(spec, glossary)
+    if kind == "anncode":
+        return render_anncode(spec, glossary)
     return ""
 
 
 # ---------- visuals ----------
+def _zoom_affordance(svg_str: str) -> str:
+    """A Zoom button (opens the diagram's SVG in the shared wide modal via
+    `js-modal-open`/`data-modal-src`) plus the hidden `.lib-modal-src` the modal reads."""
+    _ZOOM_UID[0] += 1
+    uid = f"zm{_ZOOM_UID[0]}"
+    return (f'<button class="viz-zoom js-modal-open" type="button" data-modal-src="{uid}" '
+            f'aria-label="Zoom this diagram to full width">&#10530; Zoom</button>'
+            f'<div class="lib-modal-src" id="{uid}" hidden><div class="viz-modal">{svg_str}</div></div>')
+
+
 def render_graph(spec: dict, glossary: dict) -> str:
     # Full-width graph (detail panel BELOW it) so labels have room; nodes are text-sized
     # PILLS (no overflow); viewBox sized near display width so text scales ~1:1.
@@ -146,31 +330,108 @@ def render_graph(spec: dict, glossary: dict) -> str:
     # LABELS stay glossary-free (a <span> inside <text> renders blank).
     nodes = spec.get("nodes", []) or []
     edges = spec.get("edges", []) or []
-    W, H, cx, cy = 760, 430, 380, 210
-    rad = 230 if len(nodes) > 4 else 170
+    if not nodes:
+        return ""
+    order = [nd["id"] for nd in nodes]
+    idset = set(order)
+    half = {nd["id"]: (max(64, len(nd.get("label", "")) * 7.7 + 28) / 2.0, 17.0) for nd in nodes}
+    deg = {i: 0 for i in order}
+    for e in edges:
+        if e.get("from") in deg: deg[e["from"]] += 1
+        if e.get("to") in deg: deg[e["to"]] += 1
+    back_set = set()
     pos = {}
-    n = len(nodes)
-    for i, nd in enumerate(nodes):
-        if "x" in nd and "y" in nd:
+    author_pos = all(("x" in nd and "y" in nd) for nd in nodes)
+    if author_pos:
+        for nd in nodes:
             pos[nd["id"]] = (float(nd["x"]), float(nd["y"]))
-        else:
-            a = math.radians(-90 + 360.0 * i / max(n, 1))
-            pos[nd["id"]] = (cx + rad * math.cos(a), cy + rad * 0.62 * math.sin(a))
+        W = 760
+        H = int(max((y for _, y in pos.values()), default=370) + 60)
+    else:
+        outs = {i: [] for i in order}
+        inc = {i: [] for i in order}
+        for e in edges:
+            f, t = e.get("from"), e.get("to")
+            if f in idset and t in idset and f != t:
+                outs[f].append(t); inc[t].append(f)
+        # mark cycle back-edges (DFS) so layering runs over a DAG
+        color = {i: 0 for i in order}
+        def visit(u):
+            color[u] = 1
+            for v in outs[u]:
+                if color[v] == 1: back_set.add((u, v))
+                elif color[v] == 0: visit(v)
+            color[u] = 2
+        roots = [i for i in order if not inc[i]] or [next((nd["id"] for nd in nodes if nd.get("hi")), order[0])]
+        for r in roots:
+            if color[r] == 0: visit(r)
+        for i in order:
+            if color[i] == 0: visit(i)
+        fedges = [(e.get("from"), e.get("to")) for e in edges
+                  if e.get("from") in idset and e.get("to") in idset
+                  and e.get("from") != e.get("to") and (e.get("from"), e.get("to")) not in back_set]
+        # longest-path layering over the DAG (forward edges only)
+        layer = {i: 0 for i in order}
+        for _ in range(len(order) + 1):
+            ch = False
+            for f, t in fedges:
+                if layer[t] < layer[f] + 1: layer[t] = layer[f] + 1; ch = True
+            if not ch: break
+        maxL = max(layer.values()) if layer else 0
+        rows = {}
+        for i in order:
+            rows.setdefault(layer[i], []).append(i)
+        widest = max((len(r) for r in rows.values()), default=1)
+        W = max(840, widest * 132)
+        mxp, top, gap = 64, 50, 124
+        H = int(top + maxL * gap + 60)
+        for L in range(maxL + 1):
+            row = rows.get(L, [])
+            if L > 0:  # order each layer by parent barycenter to cut edge crossings
+                def _bary(i):
+                    ps = [pos[p][0] for p in inc[i] if p in pos]
+                    return sum(ps) / len(ps) if ps else W / 2.0
+                row = sorted(row, key=_bary); rows[L] = row
+            k = len(row)
+            for j, i in enumerate(row):
+                pos[i] = ((W / 2.0) if k == 1 else (mxp + (W - 2 * mxp) * ((j + 0.5) / k)), top + L * gap)
+
+    def border(c, toward, hw, hh, gp):
+        # point on c's rect border toward `toward`, pushed out by gp px (room for the arrowhead)
+        ux, uy = toward[0] - c[0], toward[1] - c[1]
+        if ux == 0 and uy == 0: return c
+        t = min(hw / abs(ux) if ux else 9e9, hh / abs(uy) if uy else 9e9)
+        d = math.hypot(ux, uy) or 1
+        return c[0] + ux * t + ux / d * gp, c[1] + uy * t + uy / d * gp
+
     svg = [f'<svg viewBox="0 0 {W} {H}" role="group" aria-label="Interactive concept diagram">']
     for e in edges:
-        a, b = pos.get(e.get("from")), pos.get(e.get("to"))
-        if not a or not b:
+        f, t = e.get("from"), e.get("to")
+        if f not in pos or t not in pos:
             continue
-        mx, my = (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
-        label = e.get("label", "")
-        wl = len(label) * 6.4 + 12
+        a, b = pos[f], pos[t]
+        hwf, hhf = half.get(f, (32, 17)); hwt, hht = half.get(t, (32, 17))
+        sx, sy = border(a, b, hwf, hhf, 0)   # leave the SOURCE border
+        ex, ey = border(b, a, hwt, hht, 7)   # stop 7px before the TARGET border (arrowhead sits in the gap)
+        label = e.get("label", ""); wl = len(label) * 6.4 + 12
+        if (f, t) in back_set:               # curved cycle-return edge
+            cxp = max(sx, ex) + 72 + abs(sy - ey) * 0.16
+            mp = (sy + ey) / 2
+            geo = (f'<path class="hit" d="M{sx:.0f},{sy:.0f} Q{cxp:.0f},{mp:.0f} {ex:.0f},{ey:.0f}" fill="none"/>'
+                   f'<path class="vis" d="M{sx:.0f},{sy:.0f} Q{cxp:.0f},{mp:.0f} {ex:.0f},{ey:.0f}" fill="none"/>')
+            lx, ly = cxp - 4, mp
+        else:
+            geo = (f'<line class="hit" x1="{a[0]:.0f}" y1="{a[1]:.0f}" x2="{b[0]:.0f}" y2="{b[1]:.0f}"/>'
+                   f'<line class="vis" x1="{sx:.0f}" y1="{sy:.0f}" x2="{ex:.0f}" y2="{ey:.0f}"/>')
+            # bias the label toward the lower-degree (spoke) end so labels spread out instead of piling at a hub
+            frac = 0.6 if deg.get(f, 0) >= deg.get(t, 0) else 0.4
+            lx, ly = sx + (ex - sx) * frac, sy + (ey - sy) * frac
         svg.append(
             f'<g class="iedge" tabindex="0" role="button" data-kind="Edge" '
             f'data-title="{esc(label)}" data-desc="{esc(apply_glossary(esc(e.get("desc","")), glossary))}">'
-            f'<line class="hit" x1="{a[0]:.0f}" y1="{a[1]:.0f}" x2="{b[0]:.0f}" y2="{b[1]:.0f}"/>'
-            f'<line class="vis" x1="{a[0]:.0f}" y1="{a[1]:.0f}" x2="{b[0]:.0f}" y2="{b[1]:.0f}"/>'
-            f'<rect class="elbg" x="{mx-wl/2:.0f}" y="{my-9:.0f}" width="{wl:.0f}" height="17" rx="5"/>'
-            f'<text x="{mx:.0f}" y="{my+3:.0f}" text-anchor="middle">{esc(label)}</text></g>')
+            f'{geo}'
+            f'<rect class="elbg" x="{lx-wl/2:.0f}" y="{ly-9:.0f}" width="{wl:.0f}" height="17" rx="5"/>'
+            f'<text x="{lx:.0f}" y="{ly+3:.0f}" text-anchor="middle">{esc(label)}</text></g>')
     for nd in nodes:
         x, y = pos[nd["id"]]
         label = nd.get("label", "")
@@ -182,9 +443,11 @@ def render_graph(spec: dict, glossary: dict) -> str:
             f'<rect x="{x-w/2:.0f}" y="{y-17:.0f}" width="{w:.0f}" height="34" rx="17"/>'
             f'<text x="{x:.0f}" y="{y+5:.0f}" text-anchor="middle">{esc(label)}</text></g>')
     svg.append("</svg>")
+    svg_str = "".join(svg)
     cap = f'<div class="vcap">{esc(spec.get("caption","click any node or edge to inspect"))}</div>'
-    return (f'<div class="igraph-wrap"><div class="viz igraph"><div class="hint">Click any node or edge</div>'
-            f'{"".join(svg)}{cap}</div>'
+    zoom = _zoom_affordance(svg_str)
+    return (f'<div class="igraph-wrap"><div class="viz igraph">{zoom}<div class="hint">Click any node or edge</div>'
+            f'{svg_str}{cap}</div>'
             f'<div class="detail empty" aria-live="polite"><div>Click any <b>node</b> or <b>edge</b> '
             f'in the diagram to see what it is.</div></div></div>')
 
@@ -225,8 +488,10 @@ def render_chart(spec: dict) -> str:
             svg.append(f'<circle class="pt" cx="{px(i):.0f}" cy="{py(v):.0f}" r="6" fill="{color}">'
                        f'<title>{esc(tip)}</title></circle>')
     svg.append("</svg>")
-    return (f'<div class="viz chartviz"><div class="hint">Hover the dots for exact values</div>'
-            f'{"".join(svg)}<div class="vcap">{esc(spec.get("caption",""))}</div></div>')
+    svg_str = "".join(svg)
+    zoom = _zoom_affordance(svg_str)
+    return (f'<div class="viz chartviz">{zoom}<div class="hint">Hover the dots for exact values</div>'
+            f'{svg_str}<div class="vcap">{esc(spec.get("caption",""))}</div></div>')
 
 
 def render_quiz(spec: dict) -> str:
@@ -238,21 +503,251 @@ def render_quiz(spec: dict) -> str:
     return "".join(out)
 
 
+def render_trace(spec: dict, glossary: dict) -> str:
+    """N-column per-step comparison. Each step is a row carrying a visible `goal` (and
+    optional `note`); each of its `cells` fills one column with a visible `summary` plus an
+    optional `note`/`code` that opens in the page's shared wide modal (code shown verbatim,
+    horizontal scroll — never glossary-wrapped, like the graph/SVG exception). Columns stay
+    narrow; the bulky payload/script gets the modal's full width. YAML-authored; author code
+    via a `code: |` block scalar (literal — no quoting, no nested ``` fences)."""
+    cols = spec.get("columns") or []
+    ncol = max(1, len(cols))
+    out = ['<div class="trace">']
+    cap = spec.get("caption", "")
+    if cap:
+        out.append(f'<div class="trace-cap">{esc(str(cap))}</div>')
+    for step in spec.get("steps") or []:
+        if not isinstance(step, dict):
+            continue
+        goal = str(step.get("goal", ""))
+        out.append('<div class="trace-step">')
+        if goal:
+            out.append(f'<div class="trace-goal">{apply_glossary(md_html(goal), glossary)}</div>')
+        if step.get("note"):
+            out.append(f'<div class="trace-note">{apply_glossary(md_html(str(step["note"])), glossary)}</div>')
+        cells = step.get("cells") or []
+        out.append(f'<div class="trace-cols" style="--tc:{ncol}">')
+        for ci in range(ncol):
+            head = str(cols[ci]) if ci < len(cols) else ""
+            cell = cells[ci] if ci < len(cells) else {}
+            if not isinstance(cell, dict):
+                cell = {"summary": str(cell)}
+            out.append('<div class="trace-col">')
+            out.append(f'<div class="trace-colhead">{esc(head)}</div>')
+            if cell.get("summary"):
+                out.append(f'<div class="trace-sum">{apply_glossary(md_html(str(cell["summary"])), glossary)}</div>')
+            code, cnote = str(cell.get("code", "")), str(cell.get("note", ""))
+            if code or cnote:
+                _TRACE_UID[0] += 1
+                uid = f"tr{_TRACE_UID[0]}"
+                body = [f'<div class="trace-modal-title"><span class="trace-modal-col">{esc(head)}</span>{esc(goal)}</div>']
+                if cnote:
+                    body.append(f'<div class="trace-modal-note">{md_html(cnote)}</div>')
+                if code:
+                    body.append(f'<pre class="code trace-code">{esc(code)}</pre>')
+                out.append(f'<button class="trace-view js-modal-open" type="button" data-modal-src="{uid}">View I/O &#9656;</button>')
+                out.append(f'<div class="trace-src lib-modal-src" id="{uid}" hidden>{"".join(body)}</div>')
+            out.append('</div>')
+        out.append('</div></div>')
+    out.append('</div>')
+    return "".join(out)
+
+
+def render_flow(spec: dict, glossary: dict) -> str:
+    """Process / pipeline. `stages` render in document order as a connected vertical column of
+    boxes joined by arrow connectors; each box shows `label` (bold) + `kind` (a small tag) +
+    a one-line `desc`. A stage carrying `detail` gets a 'details' affordance that opens the
+    page's shared wide modal, populated from a hidden `.lib-modal-src` div holding the rendered
+    `detail` markdown (run through md_html). Known kinds (input/step/output/decision) get subtle
+    color variants; any other kind gets a neutral style. Robust: non-dict or field-missing
+    stages degrade gracefully and the renderer never raises. Glossary applies to desc/caption
+    prose only — never to the modal `detail` payload's code."""
+    stages = [s for s in (spec.get("stages") or []) if isinstance(s, dict)]
+    out = ['<div class="flow">']
+    cap = spec.get("caption", "")
+    if cap:
+        out.append(f'<div class="flow-cap">{apply_glossary(esc(str(cap)), glossary)}</div>')
+    known = {"input", "step", "output", "decision"}
+    n = len(stages)
+    for idx, stage in enumerate(stages):
+        label = str(stage.get("label", "") or stage.get("id", ""))
+        kind = str(stage.get("kind", "") or "")
+        kcls = ("k-" + kind.lower()) if kind.lower() in known else "k-other"
+        desc = str(stage.get("desc", "") or "")
+        out.append(f'<div class="flow-stage {kcls}">')
+        head = f'<span class="flow-label">{esc(label)}</span>'
+        if kind:
+            head += f'<span class="flow-kind">{esc(kind)}</span>'
+        out.append(f'<div class="flow-stagehead">{head}</div>')
+        if desc:
+            out.append(f'<div class="flow-desc">{apply_glossary(md_html(desc), glossary)}</div>')
+        detail = str(stage.get("detail", "") or "")
+        if detail.strip():
+            _FLOW_UID[0] += 1
+            uid = f"fl{_FLOW_UID[0]}"
+            out.append(f'<button class="flow-details js-modal-open" type="button" data-modal-src="{uid}">details &#9656;</button>')
+            out.append(f'<div class="flow-src lib-modal-src" id="{uid}" hidden>'
+                       f'<div class="flow-modal-title">{esc(label)}</div>{md_html(detail)}</div>')
+        out.append('</div>')
+        if idx < n - 1:
+            out.append('<div class="flow-arrow" aria-hidden="true">&#8595;</div>')
+    out.append('</div>')
+    return "".join(out)
+
+
+def render_tabs(spec: dict, glossary: dict) -> str:
+    """Inline tabbed content: a tab bar whose buttons switch which panel is visible — variants of
+    one thing held in a single space (e.g. the same example in Python / shell). `tabs` is a list of
+    `{label, body}`; each `body` is a block scalar of markdown rendered through md_html (so lists,
+    bold, tables, and code all work — and code blocks inherit the existing Copy/Expand toolbar via
+    wrap_code_blocks). First tab active by default. Each block gets a page-unique container id
+    (prefix `tb`, via _TABS_UID) so the JS scopes switching WITHIN one `.tabs` container and
+    multiple tabs blocks on one page never cross-wire. Glossary tooltips apply to body prose +
+    caption only. Robust: non-dict/empty tabs degrade and the renderer never raises."""
+    tabs = [t for t in (spec.get("tabs") or []) if isinstance(t, dict)]
+    if not tabs:
+        return ""
+    _TABS_UID[0] += 1
+    cid = f"tb{_TABS_UID[0]}"
+    out = [f'<div class="tabs" id="{cid}">']
+    cap = spec.get("caption", "")
+    if cap:
+        out.append(f'<div class="tabs-cap">{apply_glossary(esc(str(cap)), glossary)}</div>')
+    bar = ['<div class="tab-bar" role="tablist">']
+    panels = []
+    for i, t in enumerate(tabs):
+        label = str(t.get("label", "") or f"Tab {i + 1}")
+        body = str(t.get("body", "") or "")
+        sel = "true" if i == 0 else "false"
+        bar.append(f'<button class="tab-btn{" active" if i == 0 else ""}" type="button" role="tab" '
+                   f'data-tab="{i}" aria-selected="{sel}">{esc(label)}</button>')
+        panel_html = wrap_code_blocks(apply_glossary(md_html(body), glossary))
+        panels.append(f'<div class="tab-panel{" on" if i == 0 else ""}" role="tabpanel" '
+                      f'data-tab="{i}">{panel_html}</div>')
+    bar.append('</div>')
+    out.append("".join(bar))
+    out.extend(panels)
+    out.append('</div>')
+    return "".join(out)
+
+
+def render_anncode(spec: dict, glossary: dict) -> str:
+    """Annotated code: a code block with a LEFT line-number gutter where specific lines carry a
+    clickable marker that opens that line's explanation in the page's shared wide modal — for
+    teaching code line-by-line. `code` is a literal `code: |` block scalar (no quoting/escaping);
+    `annotations` is a list of `{line, note, label?}` where `line` is the 1-based line number into
+    `code`. Each annotated line gets a marker (`class="acode-mark js-modal-open"` +
+    `data-modal-src="acN"`) pointing at a hidden `.lib-modal-src` div holding the md_html-rendered
+    `note` (+ an `L{line}`/`label` heading); annotated lines also get a subtle highlight. Lines with
+    no annotation render plain. Out-of-range / duplicate `line` values skip gracefully (never raise).
+    Code is rendered VERBATIM (escaped + syntax-highlighted) — glossary applies to the note/caption
+    PROSE only, NEVER to the code lines (the graph/SVG glossary exception). Robust: missing fields
+    skip; a non-dict spec or empty `code` returns ''."""
+    if not isinstance(spec, dict):
+        return ""
+    code = str(spec.get("code", "") or "")
+    if not code.strip():
+        return ""
+    lines = code.split("\n")
+    if lines and lines[-1] == "":  # drop the block scalar's single trailing newline
+        lines.pop()
+    anns: dict = {}
+    for a in spec.get("annotations") or []:
+        if not isinstance(a, dict):
+            continue
+        try:
+            ln = int(a.get("line"))
+        except (TypeError, ValueError):
+            continue
+        if ln < 1 or ln > len(lines) or ln in anns:
+            continue  # out-of-range / duplicate -> skip gracefully
+        anns[ln] = a
+    out = ['<div class="acode">']
+    cap = spec.get("caption", "")
+    lang = str(spec.get("lang", "") or "")
+    if cap or lang:
+        head = []
+        if lang:
+            head.append(f'<span class="acode-lang">{esc(lang)}</span>')
+        if cap:
+            head.append(f'<span class="acode-cap">{apply_glossary(esc(str(cap)), glossary)}</span>')
+        out.append(f'<div class="acode-head">{"".join(head)}</div>')
+    srcs = []
+    # body is a real <pre class="code"> so it inherits the dark style AND the `pre.code .kw/.st/...`
+    # highlight colors; NO whitespace between row divs (pre preserves it) — keep the join separator ''.
+    out.append('<pre class="code acode-body">')
+    for i, line in enumerate(lines, 1):
+        rowcls = "acode-line annotated" if i in anns else "acode-line"
+        body_html = highlight_code(esc(line)) or "&#8203;"  # zero-width keeps an empty line's height
+        out.append(f'<div class="{rowcls}"><span class="acode-ln">{i}</span>'
+                   f'<span class="acode-src">{body_html}</span>')
+        if i in anns:
+            _ACODE_UID[0] += 1
+            uid = f"ac{_ACODE_UID[0]}"
+            a = anns[i]
+            label = str(a.get("label", "") or "")
+            mark = esc(label) if label else "&#9679;"  # the label, else a small dot
+            out.append(f'<button class="acode-mark js-modal-open" type="button" data-modal-src="{uid}" '
+                       f'aria-label="Explain line {i}">{mark}</button>')
+            heading = label or f"Line {i}"
+            note = str(a.get("note", "") or "")
+            mbody = (f'<div class="acode-modal-title"><span class="acode-modal-ln">L{i}</span>{esc(heading)}</div>'
+                     f'<div class="acode-modal-note">{apply_glossary(md_html(note), glossary)}</div>')
+            srcs.append(f'<div class="lib-modal-src" id="{uid}" hidden>{mbody}</div>')
+        out.append('</div>')
+    out.append('</pre>')
+    out.extend(srcs)
+    out.append('</div>')
+    return "".join(out)
+
+
 # ---------- section + rail + page ----------
-def build_section(title, sid, segments, glossary):
+def build_section(title, sid, segments, glossary, footnotes):
     # Render blocks in document order, full-width (visuals own the horizontal space).
     # Glossary links prose ONLY (shared `done` = once per section) — never the SVG/special HTML.
+    # Citation markers ([^N]/[^gN]) render LAST, on prose html only (code already wrapped, so
+    # process_citations masks it); special/SVG blocks are passed through verbatim.
     done = set()
     parts = []
     for seg in segments:
         if seg[0] == "md" and seg[1].strip():
-            parts.append(apply_glossary(md_html(seg[1]), glossary, done))
+            parts.append(process_citations(wrap_code_blocks(apply_glossary(md_html(seg[1]), glossary, done)), footnotes))
         elif seg[0] == "special":
             parts.append(seg[2])
     inner = "".join(parts)
     return (f'<section class="item" id="s-{sid}" data-toc="{esc(title)}" data-item="{esc(title)}">'
             f'<button class="sechead" aria-expanded="true"><span class="chev">&#9662;</span>'
             f'<h2>{esc(title)}</h2></button><div class="secbody">{inner}</div></section>')
+
+
+def render_footnotes(footnotes: dict, vault_name) -> str:
+    """Footnotes section at the END of the page body: a **Sources** subgroup (each subject
+    hyperlinked to its corpus note via wiki_source_html — same Obsidian link as the source
+    rail) and a **General knowledge** subgroup (plain text). Each <li> carries id fn-N / fn-gN
+    so inline markers anchor-link to it. Returns '' when the page authored no footnotes (so a
+    citation-free page is unchanged)."""
+    src = [(label, f) for label, f in footnotes.items() if f.get("kind") == "src"]
+    gen = [(label, f) for label, f in footnotes.items() if f.get("kind") == "gen"]
+    if not src and not gen:
+        return ""
+    out = ['<section class="item footnotes" id="s-footnotes" data-toc="Footnotes" data-item="Footnotes">'
+           '<button class="sechead" aria-expanded="true"><span class="chev">&#9662;</span>'
+           '<h2>Footnotes</h2></button><div class="secbody">']
+    if src:
+        out.append('<div class="fngroup"><h3 class="fnhead">Sources</h3><ul class="fnlist">')
+        for label, f in src:
+            link = wiki_source_html({"subject": f.get("subject", ""), "page": f.get("page")}, vault_name)
+            out.append(f'<li id="fn-{esc(label)}" class="fn fn-src">'
+                       f'<span class="fnnum">{esc(label)}</span> {link}</li>')
+        out.append("</ul></div>")
+    if gen:
+        out.append('<div class="fngroup gen"><h3 class="fnhead">General knowledge</h3><ul class="fnlist">')
+        for label, f in gen:
+            out.append(f'<li id="fn-{esc(label)}" class="fn fn-gen">'
+                       f'<span class="fnnum">{esc(label)}</span> {esc(f.get("desc", ""))}</li>')
+        out.append("</ul></div>")
+    out.append("</div></section>")
+    return "".join(out)
 
 
 def _status_cls(s):
@@ -343,13 +838,16 @@ PAGE = """<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <main class="wrap"><div class="thead"><span class="eyebrow">{eyebrow}</span><h1>{title}</h1><div class="sub">{sub}</div></div>
 <div class="tgrid"><div class="main">{sections}</div><aside><div class="rail">{rail}</div></aside></div>
 <div class="foot">Collapse a section &#183; hover a block to copy a <code>/sb-tutor</code> prompt &#183; open &ldquo;go deeper&rdquo; for the dense parts.</div></main>
+<div class="lib-modal" id="libModal" hidden><div class="lib-modal-scrim"></div><div class="lib-modal-card" role="dialog" aria-modal="true"><button class="lib-modal-x" type="button" aria-label="Close">&#215;</button><div class="lib-modal-body"></div></div></div>
 <div class="toast" id="toast">copied</div><script>{js}</script></body></html>"""
 
 
 def build_page(meta, css, js, source_rel, vault_name):
     glossary = meta.get("glossary") or {}
     sections = split_sections(meta["_body"], glossary)
-    sec_html = "".join(build_section(t, sid, segs, glossary) for t, sid, segs in sections)
+    footnotes, sections = collect_footnotes(sections)  # pull footnote-defs out of prose (page-wide)
+    sec_html = "".join(build_section(t, sid, segs, glossary, footnotes) for t, sid, segs in sections)
+    sec_html += render_footnotes(footnotes, vault_name)  # footnotes section at page end ('' if none)
     sub = []
     if meta.get("date"):
         sub.append(f'LEARNED {esc(meta["date"])}')
