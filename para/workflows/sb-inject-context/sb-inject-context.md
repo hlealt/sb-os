@@ -37,11 +37,15 @@ Context Injection Manager
 
 ### 1. Resolve target
 
-A context entry targets one of three surfaces — a **skill**, a **command** (slash-command), or a **workflow step**. Determine which from the user's description; if unclear, ask: "Inject this into a skill (applies whenever that skill is invoked), a slash-command (applies when that command is read), or a specific workflow step?"
+A context entry targets one of three surfaces — a **skill**, a **command** (slash-command), or a **workflow step**. Determine which from the user's description; if unclear, ask: "Inject this into a skill (applies whenever that skill is invoked), a slash-command (applies when its installed `.claude/commands/` file is read), or a specific workflow step?"
 
-**Skill target:** the user names a skill (e.g., "the `rbtv-safe-move` skill"). Confirm the exact skill name. The context applies every time that skill is invoked.
+**FIRST — verify the real installed surface.** NEVER assume the surface from how the user refers to the component or from a menu label; the same name can appear as a skill in one context and be a command in another. Read `.claude/{commands,skills}/` to confirm: a `.claude/commands/{name}.md` file → it is a command; a `.claude/skills/{name}/SKILL.md` file → it is a skill.
 
-**Command target:** the user names a slash-command (e.g., "the `sb-inject-context` command"). Confirm the exact command name (without the leading `/`). The context applies each time that command's source file is read.
+**CRITICAL — thin-loader slash-commands (the sb-os/RBTV standard).** A `.claude/commands/{name}.md` loader is INLINED by slash expansion — it is NOT Read at runtime — so the **command** and **skill** surfaces (which fire only when `.claude/commands/{name}.md` or `.claude/skills/{name}/SKILL.md` is explicitly Read, or the `Skill` tool is invoked) NEVER fire for normal `/{name}` usage. When the loader delegates to a workflow file (`Read and execute {…}/workflows/{name}/{name}.md`), that workflow file IS Read every run — it is the reliable injection anchor. Target the **workflow-step** surface on that workflow file, NOT the command or skill surface. Read the loader to find the workflow file it delegates to.
+
+**Skill target:** the user names a skill (e.g., "the `rbtv-safe-move` skill") AND `.claude/skills/{name}/SKILL.md` exists. Confirm the exact skill name. The context fires when the `Skill` tool invokes it or that `SKILL.md` is Read.
+
+**Command target:** use ONLY when the context must fire from an explicit Read of the installed `.claude/commands/{name}.md` file — not for normal `/{name}` invocation (see the thin-loader caveat above; for that, use the workflow-step surface). Confirm the exact command name (without the leading `/`).
 
 **Workflow-step target:** ask which workflow and where in it they want to inject context. The user will describe this in natural language (e.g., "this workflow, right before it reads my daily tasks"). Read the workflow's entry point and step files to understand its flow, then map the user's description to the correct step file. Confirm: "That maps to `step-02-{name}.md` — the step where {what it does}. Correct?" If ambiguous, describe 2-3 candidate steps by what they do (not by filename) and ask the user to pick.
 

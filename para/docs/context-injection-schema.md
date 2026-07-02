@@ -14,7 +14,7 @@ Three surfaces resolve a context YAML under a single `user_context_root`:
 |---------|----------|------------------|
 | Skill | A skill invocation (any source — sb-os, RBTV, user, plugin) | `{user_context_root}/skills/{skill-name}.yaml` |
 | Workflow step file | Execution of a step `.md` under a workflow root (below) | `{user_context_root}/{path-relative-to-workflow-root}.yaml` |
-| Command | A slash-command invocation (`.claude/commands/{name}.md`) | `{user_context_root}/commands/{name}.yaml` |
+| Command | An explicit Read of the installed `.claude/commands/{name}.md` file | `{user_context_root}/commands/{name}.yaml` |
 
 A "workflow root" is any directory that contains workflow definitions. Two roots are valid:
 
@@ -63,9 +63,11 @@ Workflow names are unique across roots; if a collision ever exists, the workflow
 
 The `commands/` namespace keeps a command's YAML from colliding with a skill or workflow folder of the same name.
 
-| Command invoked | Resolved YAML (assuming `user_context_root: .user/context/`) |
-|-----------------|---------------------------------------------------------------|
+| `.claude/commands/{name}.md` Read | Resolved YAML (assuming `user_context_root: .user/context/`) |
+|-----------------------------------|---------------------------------------------------------------|
 | `sb-inject-context` | `.user/context/commands/sb-inject-context.yaml` |
+
+**Thin-loader caveat.** The command surface fires ONLY on an explicit Read of the installed `.claude/commands/{name}.md` file. Normal `/{name}` invocation does NOT Read that file — slash expansion inlines the loader body — so the command surface never fires for standard slash usage. When a command is a thin loader that reads a workflow file (`Read and execute {…}/workflows/{name}/{name}.md`), inject context on the **workflow-step** surface of that workflow file instead: that file IS Read every run. Same reasoning applies to the skill surface for a skill invoked only through a thin-loader command.
 
 ## Schema Reference
 
