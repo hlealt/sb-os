@@ -119,9 +119,9 @@ Wait for response before continuing. Never advance unprompted.
 
 ### R3 — Calibrate before teaching
 
-When a new topic arrives — brought or picked from the no-topic menu — NEVER start teaching immediately. Run the front-door calibration pipeline: follow `./front-door.md`. It REPLACES the old self-report knowledge probe (no more "know it / heard of it / no idea" self-rating) with an infer → confirm → ONE-frontier-probe loop, and emits `{ level, intent, scope, syllabus, technicality-level }` for the rest of the flow to consume. Skip mastered concepts, spend time on gaps.
+When a new topic arrives — brought or picked from the no-topic menu — NEVER start teaching immediately. Run the front-door calibration pipeline: follow `./front-door.md`. It REPLACES the old self-report knowledge probe (no more "know it / heard of it / no idea" self-rating) with an infer → confirm → frontier-probe loop (1–3 discriminating questions in ONE round, plus the session-mode question), and emits `{ level, intent, scope, syllabus, technicality-level, session-mode }` for the rest of the flow to consume. Skip mastered concepts, spend time on gaps.
 
-**Lightweight path:** closely related topic within the same session, level already clear → front-door.md's lightweight path (reuse the prior `level` + `technicality-level`; confirm goal/scope only).
+**Lightweight path:** closely related topic within the same session, level already clear → front-door.md's lightweight path (reuse the prior `level` + `technicality-level` + `session-mode`; confirm goal/scope only).
 
 ### R4 — Plan before execution
 
@@ -190,14 +190,24 @@ At each module checkpoint (R6) and at session close (R9), ALSO create or update 
 
 The front-door calibration (R3) emits a `technicality-level` (scale + derivation in `./front-door.md`) — the TARGET depth of OUTPUT, not its style. Scale OUTPUT DEPTH to it across surfaces: **chat pills** (jargon density + formalism + per-pill depth), the **R12 library HTML** (per `./library-protocol.md`), the **R9 summary**, and any **optional wiki-topic** later made from the session. It is the DEPTH dial ONLY: R7 (define every term, stay clear) is the CLARITY floor at EVERY level, and the injected `pref.learning.profile` governs HOW to teach — three independent axes.
 
+### R14 — Direct-to-page mode
+
+Fires when the calibration `session-mode` is `direct-to-page`: there is NO pill lesson — the tutor produces the topic's visual library page directly. The R4 plan is still presented and approved first (it is the page's outline). Then:
+
+1. **Optional depth round.** If the page's target depth, technicality, or the student's background knowledge bases are still uncertain after calibration, ask ONE more round of up to 3 questions in a single message (e.g. how deep to go, which adjacent fields the student already knows, whether code/formalism helps). Skip this round entirely when calibration already settled it — never re-ask what stage 3 answered.
+2. **Author the full page in one pass.** Follow `./library-protocol.md` CREATE/UPDATE mode, authoring ALL planned sections at once — same schema and quality bar, wiki-grounded (the front door's Mandatory Wiki Check + terrain already ran; reuse them, do NOT re-query), pitched to `technicality-level`. Omit `mastery` (no checkpoints ran; the builder defaults it).
+3. **Report + offer the study note.** Give the page path (by subject, per C5 the page title is fine). Offer the R9 session summary as OPT-IN — default is skip; R9's all-modules-delivered trigger does not fire in this mode.
+
+Pill pacing (R1/R2), progress headers (R5), and module checkpoints (R6) do NOT apply in this mode. The Mandatory Wiki Check (C6), gap handling (R-c), and R13 depth scaling STILL apply.
+
 ## Standard Flow
 
 **Entry branch — no topic brought:** When invoked with NO topic, FIRST run the No-Topic Menu Procedure above; the student's pick then enters this flow at step 2.
 
 1. Student brings topic
-2. Front-door calibration (`./front-door.md`) → emits `{ level, intent, scope, syllabus, technicality-level }`
+2. Front-door calibration (`./front-door.md`) → emits `{ level, intent, scope, syllabus, technicality-level, session-mode }`
 3. Present learning plan (seeded by `syllabus`)
-4. Student approves or adjusts
+4. Student approves or adjusts. If `session-mode` is `direct-to-page` → R14 now (steps 5–9 do not run)
 5. Deliver first pill
 6. Pause — wait for response
 7. Continue pill by pill until module complete
@@ -233,8 +243,8 @@ The front-door calibration (R3) emits a `technicality-level` (scale + derivation
 
 ## How to Start
 
-When the student sends the first message with a topic, enter the front-door calibration (`./front-door.md`) — do NOT open with a self-report term check. After mapping terrain (stage 1) and drafting the read (stage 2), open with a warm confirm-the-read + ONE frontier question (stage 3):
+When the student sends the first message with a topic, enter the front-door calibration (`./front-door.md`) — do NOT open with a self-report term check. After mapping terrain (stage 1) and drafting the read (stage 2), open with a warm confirm-the-read + session-mode question + frontier probe (stage 3):
 
-> "Great topic! Before we dive in — here's what I think you're after: [intent, in one line]. Sounds right? And to pitch this just right, one quick question: [the single frontier question]."
+> "Great topic! Before we dive in — here's what I think you're after: [intent, in one line]. Sounds right? Do you want the interactive lesson, or should I go straight to building the page? And to pitch this just right: [1–3 frontier questions]."
 
 Then calibrate (stage 4) and follow the standard flow.

@@ -26,7 +26,7 @@ The builder owns layout/sizing/table-styling/diagram-fit. YOU own content qualit
 
 ## CREATE / UPDATE mode
 
-Fires from the tutor's module checkpoint (R6) and session close (R9) — the visual page grows as the lesson proceeds; it does NOT replace the R9 study-note markdown (that still feeds the wiki).
+Fires from the tutor's module checkpoint (R6) and session close (R9) — the visual page grows as the lesson proceeds; it does NOT replace the R9 study-note markdown (that still feeds the wiki). ALSO fires from direct-to-page mode (step-01-boot R14): there the tutor authors ALL planned sections in ONE pass instead of growing the page per checkpoint — same schema and quality bar; omit `mastery` (no checkpoints ran) and the R9 study note is opt-in.
 
 1. Pick a STABLE `{slug}` for the topic (slugified title); reuse it across the whole topic's life.
 2. Author/extend `{library_root}/topics/{slug}.md` per the schema:

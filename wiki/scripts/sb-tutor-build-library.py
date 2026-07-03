@@ -871,6 +871,25 @@ INDEX = """<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 {body}</main><div class="toast" id="toast">copied</div><script>{js}</script></body></html>"""
 
 
+def map_label(m):
+    """Knowledge-map node label. MUST stay short: long labels render as single centered SVG
+    lines that overlap neighboring nodes. Honor an explicit `map_label` frontmatter override;
+    otherwise take the topic's short name (text before a dash separator) and hard-cap length."""
+    lbl = str(m.get("map_label") or "").strip()
+    if lbl:
+        return lbl
+    title = str(m.get("title", ""))
+    for sep in (" — ", " – ", " -- ", " - "):
+        i = title.find(sep)
+        if i != -1:
+            title = title[:i]
+            break
+    title = title.strip()
+    if len(title) > 30:
+        title = title[:29].rstrip() + "…"
+    return title
+
+
 def build_index(all_meta, css, js):
     if not all_meta:
         body = '<div class="emptylib">No topics yet. Learn something with <b>/sb-tutor</b> and your first page appears here.</div>'
@@ -908,7 +927,7 @@ def build_index(all_meta, css, js):
             f'<a href="pages/{esc(m["slug"])}.html"><g class="{hi}" tabindex="0" role="listitem">'
             f'<circle class="halo" cx="{x:.0f}" cy="{y:.0f}" r="{rad+22:.0f}"/>'
             f'<circle class="core" cx="{x:.0f}" cy="{y:.0f}" r="{rad:.0f}"/>'
-            f'<text class="lbl" x="{x:.0f}" y="{y-rad-12:.0f}" text-anchor="middle">{esc(m["title"])}</text>'
+            f'<text class="lbl" x="{x:.0f}" y="{y-rad-12:.0f}" text-anchor="middle">{esc(map_label(m))}</text>'
             f'<text class="mag" x="{x:.0f}" y="{y+rad+18:.0f}" text-anchor="middle">{meta_line}</text></g></a>')
     svg.append("</svg>")
     legend = ('<div class="legend"><span><i class="v"></i>learned topic</span>'

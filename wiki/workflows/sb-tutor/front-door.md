@@ -2,14 +2,14 @@
 
 Replaces the old self-report knowledge probe (former R3). Runs ONCE when a topic arrives — brought directly (Activation) or picked from the no-topic menu — BEFORE the R4 learning plan and any teaching. Four stages run in order; stage 4 emits a compact calibration result the rest of the tutor consumes. NEVER teach before this completes.
 
-Calibration is NOT self-report: the student is NEVER asked to rate their own knowledge term-by-term ("know it / heard of it / no idea"). Depth is INFERRED from the query, CONFIRMED with the student, and tested with ONE real question at the inferred frontier.
+Calibration is NOT self-report: the student is NEVER asked to rate their own knowledge term-by-term ("know it / heard of it / no idea"). Depth is INFERRED from the query, CONFIRMED with the student, and tested with ONE to THREE real questions — asked together in a single round — at the inferred frontier.
 
 ## When it fires
 
 | Situation | Run |
 |-----------|-----|
 | A brought topic, or a picked no-topic-menu candidate | The full pipeline (stages 1–4) |
-| A closely related topic within the SAME session, level already clear | Lightweight path — skip stages 1–3; reuse the prior `level` + `technicality-level`; run stage 4 after a one-line goal/scope confirmation only |
+| A closely related topic within the SAME session, level already clear | Lightweight path — skip stages 1–3; reuse the prior `level` + `technicality-level` + `session-mode`; run stage 4 after a one-line goal/scope confirmation only |
 | A mid-lesson question or tangent | NOT a new front door — ground it with the Mandatory Wiki Check only (step-01-boot C6); do NOT re-run calibration |
 
 ## Stage 1 — TERRAIN (map what exists; never read as depth)
@@ -31,29 +31,31 @@ From the query ALONE (terrain may inform module shape, but NEVER depth), draft �
 - **scope** — explicitly in / out: what this topic does and does not cover for this student now.
 - **depth hypothesis** — a GUESS at the student's current `level` (beginner | intermediate | advanced) AND the target `technicality-level` (stage 4), each with its supporting evidence from the query. Label every part a hypothesis, not a verdict. Evidence = vocabulary used, specificity of the ask, named tools/constraints, stated role or goal.
 
-## Stage 3 — CONFIRM + PROBE (one discriminating question)
+## Stage 3 — CONFIRM + PROBE (one round, up to three questions)
 
-ONE pill (R1/R2 apply: ≤20 lines, one pause). Two moves in the same pill:
+ONE pill (R1/R2 apply: ≤20 lines, one pause). Three moves in the same pill:
 
 1. **Confirm the read.** State intent + scope + the depth hypothesis back in plain language, and invite a correction ("here's what I think you're after — fix me where I'm off").
-2. **Probe the frontier.** Ask ONE real, discriminating question pitched at the inferred edge — a question only someone at or above that level answers cleanly. NEVER a self-rating ("do you know X?"). Prefer "what happens if / why / which would you pick" over definition recall.
+2. **Ask the session mode.** One line, always: does the student want (a) the interactive pill-by-pill session, or (b) direct-to-page — no lesson, the tutor produces the visual library page directly (step-01-boot R14). NEVER assume either mode; NEVER skip the question.
+3. **Probe the frontier.** Ask ONE to THREE real, discriminating questions pitched at the inferred edge — questions only someone at or above that level answers cleanly. All questions go in this SAME round — never a second probing round (except the one lower-notch relocation probe below). Use one question when the query alone pins the frontier; add a second/third ONLY when the frontier is ambiguous or the topic spans distinct sub-areas each needing its own read. NEVER a self-rating ("do you know X?"). Prefer "what happens if / why / which would you pick" over definition recall.
 
-Branch on the answer (plus any correction to the read):
+Branch on the answers (plus any correction to the read):
 
-| Answer | Action |
-|--------|--------|
+| Answers | Action |
+|---------|--------|
 | Clean / correct | `level` confirmed at the hypothesis → stage 4 |
 | Wrong / partial | The true edge is LOWER. Lower altitude one notch, locate the real edge (optionally ONE more probe a notch down), then stage 4 |
+| Mixed (clean on some, wrong on others) | The frontier differs per sub-area. Set `level` at the LOWER notch overall, note the stronger sub-areas in the syllabus (compress their modules), then stage 4 |
 | Reveals MORE advanced | Raise altitude. Auto-COMPRESS the syllabus skeleton (drop/merge now-trivial modules), then show the trimmed plan for ONE approval before teaching (the student may re-expand), then stage 4 |
 
-Keep it warm — one question, framed as calibration, never a quiz-grilling.
+Keep it warm — a short calibration round, never a quiz-grilling.
 
 ## Stage 4 — CALIBRATE (emit the result the rest of the tutor consumes)
 
 Emit a compact calibration result and hand it to the standard flow:
 
 ```
-{ level, intent, scope, syllabus, technicality-level }
+{ level, intent, scope, syllabus, technicality-level, session-mode }
 ```
 
 | Field | Meaning | Consumed by |
@@ -63,6 +65,7 @@ Emit a compact calibration result and hand it to the standard flow:
 | `scope` | in / out | what to teach vs defer |
 | `syllabus` | the stage-1 skeleton, adjusted by stage 3 | seeds the R4 plan (max 5–7 modules) |
 | `technicality-level` | TARGET output depth — scale below | chat register (R13), R12 library HTML, R9 summary, optional wiki-topic depth |
+| `session-mode` | `interactive` (pill lesson) or `direct-to-page` (no lesson — full library page in one pass) | Standard Flow branch after plan approval (step-01-boot R14) |
 
 **technicality-level scale** — how DEEP/technical the OUTPUT is pitched. DISTINCT from `level` (where the student STARTS) and from `pref.learning.profile` (which sets HOW to teach, e.g. visual-first/brisk):
 
@@ -75,10 +78,11 @@ Emit a compact calibration result and hand it to the standard flow:
 
 Derive `technicality-level` from intent + scope + the confirmed level — NOT from level alone (a beginner may want an `expert` deep-dive; an expert may want a `lay` refresher). E.g. "implement X in production" → `technical`/`expert`; "what even is X" → `lay`/`applied`.
 
-Then continue the Standard Flow at the R4 plan (seeded by `syllabus`).
+Then continue the Standard Flow at the R4 plan (seeded by `syllabus`). When `session-mode` is `direct-to-page`, the flow branches to R14 after plan approval — the plan is still shown (it is the page's outline).
 
 ## Edge cases
 
 - No goal volunteered → `intent` defaults to "broad working understanding"; say so and invite the student to narrow.
-- Ambiguous frontier (can't pick a probe level) → default the probe to the intermediate edge; the answer relocates it.
-- Student declines the probe → proceed on the hypothesis, flagged as unconfirmed; recalibrate at the first module checkpoint (R6).
+- Ambiguous frontier (can't pick a probe level) → default the probes to the intermediate edge; the answers relocate it.
+- Student declines the probe → proceed on the hypothesis, flagged as unconfirmed; recalibrate at the first module checkpoint (R6) — or, in direct-to-page mode, via the R14 depth round.
+- Student doesn't answer the mode question → default to `interactive` and say so.
