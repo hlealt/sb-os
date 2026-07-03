@@ -304,26 +304,73 @@ def _backlink_bridge(sources_root: Path, origin: str) -> set[str]:
     return bridged
 
 
+def _resolve_twin_pdf(raw_file: Path) -> str | None:
+    """The ``.pdf`` filename (in *raw_file*'s own folder) a regenerable twin
+    ``.md`` derives from, or None when *raw_file* is not a marker-bearing twin or
+    no matching PDF is present.
+
+    Marker-based (D1) — the same-stem requirement is DROPPED, so a PDF renamed by
+    the title-conformance pass (Step 7.6) to a stem that diverges from its twin no
+    longer un-recognizes the twin (the Trinity misfire). Resolution:
+
+      marker — ``twin_extractor:`` / ``source_pdf:`` frontmatter (written by
+        ``sb-wiki-pdf-twin.py``) or a legacy ``Original PDF:`` body reference;
+        absent → not a twin (None).
+      pdf    — first hit of: the ``source_pdf:`` filename resolved in-folder; the
+        same-stem ``.pdf`` (back-compat); an ``Original PDF: [[…]]`` in-folder
+        target; else, when the folder holds exactly ONE ``.pdf``, that sole PDF.
+        No PDF resolves → None (an orphaned twin whose PDF is gone is not
+        regenerable, so it surfaces normally).
+
+    caiso/engie dated CLIPS carry no twin marker → None (never excluded).
+    """
+    if raw_file.suffix != ".md":
+        return None
+    try:
+        text = read_text(raw_file)
+    except (UnicodeDecodeError, OSError):
+        return None
+    fm = frontmatter(text)
+    has_marker = (
+        "twin_extractor" in fm
+        or "source_pdf" in fm
+        or bool(re.search(r"^\s*Original PDF:", text, flags=re.M))
+    )
+    if not has_marker:
+        return None
+    origin_dir = raw_file.parent
+
+    def pdf_in_folder(name: str) -> str | None:
+        cand = origin_dir / Path(name).name
+        return cand.name if cand.suffix.lower() == ".pdf" and cand.is_file() else None
+
+    src = fm.get("source_pdf", "").strip()
+    if src:
+        hit = pdf_in_folder(src)
+        if hit:
+            return hit
+    if raw_file.with_suffix(".pdf").is_file():
+        return raw_file.with_suffix(".pdf").name
+    m = re.search(r"^\s*Original PDF:\s*\[\[([^\]|#]+?)\]\]", text, flags=re.M)
+    if m:
+        hit = pdf_in_folder(m.group(1))
+        if hit:
+            return hit
+    pdfs = sorted(p.name for p in origin_dir.glob("*.pdf"))
+    return pdfs[0] if len(pdfs) == 1 else None
+
+
 def _is_regenerable_pdf_twin(raw_file: Path) -> bool:
-    """A raw ``.md`` is a regenerable PDF twin (D1) when a same-stem ``.pdf``
-    original exists alongside it AND it carries the twin marker (``twin_extractor:``
-    frontmatter or a legacy ``Original PDF:`` reference).
+    """A raw ``.md`` is a regenerable PDF twin (D1) when it carries the twin
+    marker AND resolves to a ``.pdf`` in its folder — marker-based, NOT same-stem.
 
     Per D1 the ``.pdf`` is the canonical raw-index row; the twin ``.md`` gets NO
     own row and is NOT an independent ingestion candidate — its ingestion state
-    rides on the ``.pdf`` row. caiso/engie dated CLIPS are NOT twins (no same-stem
-    ``.pdf``), so this never excludes them. Mirrors the same predicate
-    ``sb-wiki-lint``'s ``sync_raw_indexes`` uses, so discovery and index-writing
-    agree on what counts as a regenerable twin.
+    rides on the ``.pdf`` row. Mirrors the same predicate ``sb-wiki-lint``'s
+    ``sync_raw_indexes`` uses, so discovery and index-writing agree on what counts
+    as a regenerable twin.
     """
-    if raw_file.suffix != ".md":
-        return False
-    if not raw_file.with_suffix(".pdf").is_file():
-        return False
-    text = read_text(raw_file)
-    if "twin_extractor" in frontmatter(text):
-        return True
-    return bool(re.search(r"^\s*Original PDF:", text, flags=re.M))
+    return _resolve_twin_pdf(raw_file) is not None
 
 
 def _ingested_raw_filenames(wiki_root: Path, origin: str) -> set[str]:
@@ -346,11 +393,15 @@ def _ingested_raw_filenames(wiki_root: Path, origin: str) -> set[str]:
     sources_root = wiki_root / "wiki" / "sources"
     yes = _index_yes_filenames(raw_root, origin)
     ingested = yes | _backlink_bridge(sources_root, origin)
-    # A regenerable twin .md whose canonical .pdf row is Wiki=Yes is ingested.
+    # A regenerable twin .md whose resolved .pdf row is Wiki=Yes is ingested.
+    # Marker-based (stem-agnostic): a PDF renamed to a stem that diverges from its
+    # twin's still resolves via the twin's source_pdf:/Original PDF: reference, so
+    # the twin stays recognized as ingested (the Trinity misfire).
     origin_dir = raw_root / origin
     if origin_dir.is_dir():
         for md in origin_dir.glob("*.md"):
-            if (md.stem + ".pdf") in yes and _is_regenerable_pdf_twin(md):
+            pdf_name = _resolve_twin_pdf(md)
+            if pdf_name and pdf_name in yes:
                 ingested.add(md.name)
     return ingested
 

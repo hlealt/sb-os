@@ -184,6 +184,8 @@ The rename changes the FILENAME only — raw content is never edited. The PDF is
 
 Runs for EVERY source — markdown AND PDF — after step 1 (and after step 1.5 for PDFs). Detects that this raw duplicates an ALREADY-INGESTED source BEFORE any wiki write. Step 1.5 catches only PDF filename collisions; this step catches re-clips, dated twins, and cross-origin duplicates regardless of filename.
 
+**Regenerable-twin exemption (check FIRST — never mark a twin `Duplicate`).** When this raw is itself a regenerable PDF twin `.md` — it carries a twin marker (`twin_extractor:`/`source_pdf:` frontmatter or a legacy `Original PDF:` reference) and resolves to a `.pdf` in its folder (via `source_pdf:`, same-stem, an `Original PDF:` ref, or a sole in-folder PDF) — whose canonical `.pdf` is already ingested, treat it as ALREADY-INGESTED: do NOT fire, do NOT write any `Duplicate`/`Original` row, skip the ingest (its content already rides on the `.pdf` source). Recognition is MARKER-based, NOT same-stem — a title-conformance PDF rename (Step 1.5/7.6) that diverges the twin's stem from the PDF's must NEVER cause the genuine twin to be flagged `Duplicate` (the Trinity misfire, 2026-07-02). The deterministic predicate is `resolve_twin_pdf` in `{sb_os_path}/wiki/scripts/sb-wiki-lint-deterministic.py`.
+
 Two deterministic signals — EITHER fires:
 
 | Signal | Detection |

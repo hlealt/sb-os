@@ -140,7 +140,7 @@ Fill `<file>` with the single source filename and dispatch with `subagent_type: 
 Ingest this one raw wiki source:
 <file>   (origin: <origin>)
 
-1. If `{user_context_root}/sb-wiki-ingest/sb-wiki-ingest.yaml` exists, read it and apply its `context:` entries BEFORE ingesting (you do not inherit workspace rules — load it yourself).
+1. If `{user_context_root}/sb-wiki-ingest/sb-wiki-ingest.yaml` exists, read it and apply its `context:` entries BEFORE ingesting (you do not inherit workspace rules — load it yourself). Any entry that marks a topic (or topic family) **capture-only / no-auto-write** is BINDING and OVERRIDES the mechanical firm-tier auto-apply: at the silent Step 10 firm-apply, you MUST hard-skip the protected topic's body write and route the update to the capture destination the entry names — NEVER auto-write a protected topic body, no matter how confident the firm fire. This is the silent-mode "Injected capture-only guard".
 2. Run `/sb-wiki-ingest silent <slug>` with this file as `<slug>` by reading and executing `{sb_os_path}/wiki/workflows/sb-wiki-ingest/sb-wiki-ingest.md` in its silent mode. Follow it EXACTLY — it is the sole authority on how a source is distilled and on every checkpoint auto-resolution. PDFs (`.pdf`) are valid slugs; the workflow resolves and reads them natively.
 3. Fully complete the file — every staged change written to disk — before returning.
 

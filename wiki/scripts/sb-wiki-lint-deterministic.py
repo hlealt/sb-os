@@ -336,25 +336,77 @@ def raw_index_header_columns(lines: list[str]) -> list[str] | None:
     return None
 
 
-def is_regenerable_pdf_twin(raw_file: Path) -> bool:
-    """A raw ``.md`` is a regenerable PDF twin (Rule 5) when it carries the
-    twin marker AND a same-stem ``.pdf`` original exists alongside it.
+def resolve_twin_pdf(raw_file: Path) -> str | None:
+    """The ``.pdf`` filename (in *raw_file*'s own folder) a regenerable twin
+    ``.md`` derives from, or None when *raw_file* is not a marker-bearing twin or
+    no matching PDF is present.
 
-    Markers: ``twin_extractor:`` frontmatter (written by sb-wiki-pdf-twin.py) or a
-    legacy ``Original PDF:`` reference. The ``.pdf`` is the canonical D1 row; the
-    regenerable ``.md`` twin gets NO separate row, so it is excluded from the
-    row-adding loop. caiso/engie dated CLIPS are NOT twins (their ``.md`` carries
-    no ``twin_extractor`` / ``Original PDF:`` AND has no same-stem ``.pdf``), so
-    this never excludes them.
+    Marker-based (Rule 5) — the same-stem requirement is DROPPED, so a PDF renamed
+    by the title-conformance pass (Step 7.6) to a stem that diverges from its twin
+    no longer un-recognizes the twin (the Trinity misfire). Resolution:
+
+      marker — ``twin_extractor:`` / ``source_pdf:`` frontmatter (written by
+        ``sb-wiki-pdf-twin.py``) or a legacy ``Original PDF:`` body reference;
+        absent → not a twin (None).
+      pdf    — first hit of: the ``source_pdf:`` filename resolved in-folder; the
+        same-stem ``.pdf`` (back-compat); an ``Original PDF: [[…]]`` in-folder
+        target; else, when the folder holds exactly ONE ``.pdf``, that sole PDF.
+        No PDF resolves → None.
+
+    caiso/engie dated CLIPS carry no twin marker → None (never excluded). Mirrors
+    ``sb-wiki-ingest-all-manifest``'s ``_resolve_twin_pdf`` so discovery and
+    index-writing agree on what counts as a regenerable twin.
     """
     if raw_file.suffix != ".md":
-        return False
-    if not os.path.exists(_fspath(raw_file.with_suffix(".pdf"))):
-        return False
-    text = read_text(raw_file)
-    if "twin_extractor" in frontmatter(text):
-        return True
-    return bool(re.search(r"^\s*Original PDF:", text, flags=re.M))
+        return None
+    try:
+        text = read_text(raw_file)
+    except (UnicodeDecodeError, OSError):
+        return None
+    fm = frontmatter(text)
+    has_marker = (
+        "twin_extractor" in fm
+        or "source_pdf" in fm
+        or bool(re.search(r"^\s*Original PDF:", text, flags=re.M))
+    )
+    if not has_marker:
+        return None
+    origin_dir = raw_file.parent
+
+    def pdf_in_folder(name: str) -> str | None:
+        cand = origin_dir / Path(name).name
+        return (
+            cand.name
+            if cand.suffix.lower() == ".pdf" and os.path.exists(_fspath(cand))
+            else None
+        )
+
+    src = fm.get("source_pdf", "").strip()
+    if src:
+        hit = pdf_in_folder(src)
+        if hit:
+            return hit
+    if os.path.exists(_fspath(raw_file.with_suffix(".pdf"))):
+        return raw_file.with_suffix(".pdf").name
+    m = re.search(r"^\s*Original PDF:\s*\[\[([^\]|#]+?)\]\]", text, flags=re.M)
+    if m:
+        hit = pdf_in_folder(m.group(1))
+        if hit:
+            return hit
+    pdfs = sorted(p.name for p in origin_dir.glob("*.pdf"))
+    return pdfs[0] if len(pdfs) == 1 else None
+
+
+def is_regenerable_pdf_twin(raw_file: Path) -> bool:
+    """A raw ``.md`` is a regenerable PDF twin (Rule 5) when it carries the twin
+    marker AND resolves to a ``.pdf`` in its folder — marker-based, NOT same-stem.
+
+    The ``.pdf`` is the canonical D1 row; the regenerable ``.md`` twin gets NO
+    separate row, so it is excluded from the row-adding loop. A PDF renamed to a
+    stem that diverges from its twin's still resolves via the twin's
+    ``source_pdf:``/``Original PDF:`` reference, so the twin stays recognized.
+    """
+    return resolve_twin_pdf(raw_file) is not None
 
 
 # ---------------------------------------------------------------------------
@@ -2581,6 +2633,13 @@ def detect_md_duplicate_raws(wiki_root: Path, report: Report) -> None:
         for raw_file in sorted(origin_dir.glob("*.md")):
             if raw_file.name == f"{origin_dir.name}.md" or raw_file.name in NON_SOURCE_FILES:
                 continue
+            # A regenerable PDF twin is NEVER a duplicate raw — its content rides
+            # on the canonical .pdf row (D1). Marker-based, so a title-conformance
+            # PDF rename that diverges the stems never mis-flags the twin as a
+            # content-duplicate (the Trinity misfire — U10 flagged the genuine twin
+            # because its same-stem .pdf had been renamed away).
+            if is_regenerable_pdf_twin(raw_file):
+                continue
             # Skip a raw that is ALREADY ingested (it is not a duplicate of
             # itself) — same union signal heal_raw_wiki_cells keys on.
             if raw_file.name in backlink_targets or raw_file.stem in origin_stems:
@@ -2655,6 +2714,12 @@ def execute_renames(wiki_root: Path, plan_path: Path, report: Report) -> None:
         if raw_new.exists() or (source_old.exists() and source_new.exists()):
             errors.append(f"{origin}/{old}.pdf: target name taken (duplicate-raw contract) — row skipped")
             continue
+        # Option B — keep a same-stem regenerable twin `.md` in lockstep with its
+        # PDF. Evaluate recognition NOW, BEFORE the `.pdf` moves: while `{old}.pdf`
+        # still sits beside `{old}.md` the same-stem arm resolves the predicate.
+        raw_twin_old = wiki_root / "raw" / origin / f"{old}.md"
+        raw_twin_new = wiki_root / "raw" / origin / f"{new}.md"
+        rename_twin = raw_twin_old.exists() and is_regenerable_pdf_twin(raw_twin_old)
         for path in rename_referrer_files(wiki_root):
             text = read_text(path)  # re-read immediately before writing (pitfall 6)
             updated = text.replace(f"[[{old}.pdf", f"[[{new}.pdf").replace(f"[[{old}.md", f"[[{new}.md")
@@ -2666,6 +2731,20 @@ def execute_renames(wiki_root: Path, plan_path: Path, report: Report) -> None:
         if source_old.exists():
             os.replace(_fspath(source_old), _fspath(source_new))
             moved.append(f"wiki/sources/{origin}/{old}.md -> {new}.md")
+        # Rename the twin `.md` in lockstep and refresh its `source_pdf:` so the
+        # twin never diverges from the PDF at the title-conformance rename (the
+        # divergence Option A's marker-based recognition otherwise has to rescue).
+        if rename_twin:
+            if raw_twin_new.exists():
+                errors.append(f"{origin}/{old}.md: twin target {new}.md taken — twin NOT renamed")
+            else:
+                twin_text = re.sub(
+                    r"^(source_pdf:\s*).*$", rf"\g<1>{new}.pdf",
+                    read_text(raw_twin_old), count=1, flags=re.M,
+                )
+                write_text(raw_twin_old, twin_text, report, apply_changes=True)
+                os.replace(_fspath(raw_twin_old), _fspath(raw_twin_new))
+                moved.append(f"raw/{origin}/{old}.md -> {new}.md")
         # Verify: remaining old-stem occurrences must be legitimate (URLs, raw bodies)
         for path in (wiki_root / "wiki").rglob("*.md") if (wiki_root / "wiki").exists() else []:
             if excluded_dir(path.relative_to(wiki_root)):
