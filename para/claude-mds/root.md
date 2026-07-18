@@ -75,10 +75,10 @@ Index (`{dir-name}.md`) and task (`{name}-tasks.md`) files carry their own direc
 | `2-areas/` | Ongoing responsibilities (e.g., `area-personal/`, `area-work/`, `area-learning/`) |
 | `3-resources/` | Reference content (e.g., `tools/`, `knowledge-base/`) |
 | `4-archives/` | Holding zone before deletion — completed projects, abandoned files, content under review |
-| `5-workbench/` | Project workspaces with their own git repos and structures |
+| `5-workbench/` | The single home for ALL workbenches — project workspaces with their own git repos and structures, external repo clones, and git worktrees. A workbench (including a worktree of the vault repo itself) is NEVER created anywhere else in the vault |
 | `.user/` | User-owned root: user-context folder + personal extensions (sb-os creates this directory on the initial install and never writes inside it thereafter) |
 
-**Vault file** = any `.md` in PARA folders (`0-` through `4-`). **System component** = files under `.claude/` or the sb-os repo. `5-workbench/` contains independent repos — not vault files.
+**Vault file** = any `.md` in PARA folders (`0-` through `4-`). **System component** = files under `.claude/` or the sb-os repo. `5-workbench/` contains independent repos and worktrees — not vault files.
 
 **Vault content** = vault files governed by sb-os conventions: indexes (`{dir-name}.md`), task files (`{name}-tasks.md`), references, logs, periodic notes. **Project deliverables** = technical documents governed by per-project workflows (PRDs, specs, plans, code) — sb-os does not police their format.
 
