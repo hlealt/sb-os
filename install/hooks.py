@@ -31,9 +31,11 @@ it is intentionally omitted, not overlooked.)
 This module MIRRORS the proven, round-trip-safe RBTV pattern in
 ``rbtv/admin/install/installer/orchestration.py`` (``sync_hook_entry`` /
 ``_is_rbtv_hook_entry`` / ``remove_hook_entry``): sentinel-plus-command-signature
-identity, ``$CLAUDE_PROJECT_DIR``-relative command, foreign-entry preservation,
-fail-soft on a malformed settings file, idempotency. It does NOT import from the
-RBTV repo (a separate repo) — the structure is reproduced here.
+identity, a cwd-independent command (a small Python resolver reading
+``CLAUDE_PROJECT_DIR`` and walking up to the nearest ``.git`` ancestor — see
+`_build_command`), foreign-entry preservation, fail-soft on a malformed settings
+file, idempotency. It does NOT import from the RBTV repo (a separate repo) — the
+structure is reproduced here.
 
 Identity is keyed on EITHER the injected sentinel key (fast path, present when
 preserved) OR an intrinsic command-path signature on ``resolve_context.py``
@@ -117,17 +119,35 @@ def _is_sb_hook_entry(entry: dict) -> bool:
 
 
 def _build_command(sb_os_path: str | Path) -> str:
-    """Return the ``$CLAUDE_PROJECT_DIR``-relative resolver command string.
+    """Return a cwd-independent resolver command string.
 
-    Built from Claude Code's ``$CLAUDE_PROJECT_DIR`` hook variable (the project
-    root, resolved per-machine when the hook runs) joined with the sb-os install
-    path and the resolver's repo-relative location — so it resolves from ANY
-    working directory and on ANY machine, never a hardcoded absolute path. The
-    path is normalized to POSIX (forward slashes) and quoted to tolerate spaces.
+    Claude Code sets ``$CLAUDE_PROJECT_DIR`` to the SESSION's cwd, not necessarily
+    the repo root — a session one or more levels below the repo root (a worktree,
+    a per-seat subfolder) gets a non-existent joined path and a plain
+    ``$CLAUDE_PROJECT_DIR``-relative command errors on every matched tool call
+    (observed 2026-07-24, a team-kit run with per-seat working directories). This
+    wraps the invocation in a small Python resolver that reads
+    ``CLAUDE_PROJECT_DIR`` from ``os.environ`` directly (shell-syntax independent
+    — the same command runs under sh/bash/cmd/PowerShell), walks up from there to
+    the nearest ancestor holding a ``.git`` directory (the real repo root), then
+    joins the sb-os install path + the resolver's repo-relative location. No
+    match (e.g. a differently laid out machine) exits 0 silently — never a hard
+    error. Mirrors RBTV's `_build_cwd_independent_command`
+    (`rbtv/admin/install/installer/orchestration.py`) without importing it (a
+    separate repo — see module docstring).
     """
     base = loaders._normalize_sb_os_path(sb_os_path)
     script_posix = (Path(base) / _RESOLVE_CONTEXT_RELATIVE).as_posix()
-    return f'python "$CLAUDE_PROJECT_DIR/{script_posix}" --hook'
+    code = (
+        "import os,sys,subprocess as s;"
+        "c=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();"
+        "parts=c.split(os.sep);"
+        "cands=[os.sep.join(parts[:len(parts)-i]) or os.sep for i in range(0,len(parts))];"
+        "d=next((x for x in cands if x and os.path.isdir(os.path.join(x,'.git'))),None);"
+        f"p=os.path.join(d,{script_posix!r}) if d else None;"
+        "sys.exit(s.call([sys.executable,p,'--hook']) if p and os.path.isfile(p) else 0)"
+    )
+    return f'python -c "{code}"'
 
 
 def _build_entry(matcher: str, command_str: str) -> dict:
