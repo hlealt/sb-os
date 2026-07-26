@@ -2,17 +2,24 @@
 
 Canonical rule for creation, format, routing, and lifecycle of tasks in the vault.
 
+## CLI-First (MANDATORY when installed)
+
+The `sb-task` CLI is the required executor for task operations — create, read, list, edit, reprioritize, reschedule, complete, reopen, delete. It enforces this contract mechanically (completion validation, number uniqueness, dependency acyclicity, line-precise writes). Probe: `sb-task doctor` (fallback: `python {sb_os_path}/para/cli/sb-task/sb_task.py doctor`; `{sb_os_path}` resolves from `sb-os.json`). Command inventory: `sb-task -h`.
+
+When the probe succeeds, NEVER hand-edit a task's main line or structured sub-bullets — run the CLI. Hand edits are permitted ONLY for sub-bullet content the CLI has no flag for (e.g. `_Review:_`, `_Reschedule:_` entries), and MUST follow this contract. When the probe fails, apply this contract by hand.
+
 ## Main Line Format
 
 ```
-- [ ] 📅 YYYY-MM-DD Verb + concise action
+- [ ] 📅 YYYY-MM-DD 4.1b Verb + concise action
 ```
 
 | Rule | Detail |
 |------|--------|
 | Checkbox first | `- [ ]` or `- [x]` |
 | Date after checkbox | `📅 YYYY-MM-DD` — mandatory with deadline. No date = backlog |
-| Action starts with verb | "Close", "Write", "Review", "Configure" |
+| Number after date (OPTIONAL) | Free-form author-assigned label matching `\d+(\.\d+)*[a-z]?` (`1.1`, `3.3b`, `12`) — merged into the title position, unique within its file. Tasks are addressable by it, and `_Depends:_` edges reference it |
+| Action starts with verb | "Close", "Write", "Review", "Configure". Because the number is recognized positionally, the action text MUST NOT start with a bare number token |
 | Max ~60 chars | Use sub-bullet for explanation |
 
 Completion: `- [x] 📅 2026-03-31 Close design partner ✅ 2026-04-01` — keep original `📅`, add `✅ YYYY-MM-DD`.
@@ -67,12 +74,13 @@ Invoke ONLY on a genuine completion. Do NOT validate indented subtasks, `~~strik
 
 | Prefix | Purpose |
 |--------|---------|
+| `_Depends:_` | Cross-task dependency edges — comma-separated task numbers this task is blocked by: same file by number (`1.2, 3b`), cross-file as `vault-relative-path#number`. The same-file dependency graph MUST stay acyclic (DAG); the CLI refuses a write that creates a cycle |
 | `_Reschedule:_` | Rescheduling history. Each entry: `Nx (origin: 📅 YYYY-MM-DD)` |
-| `_Subtasks:_` | Concrete steps, each starting with a verb |
+| `_Subtasks:_` | Concrete steps as NATIVE CHECKBOXES — each child is an indented `- [ ] Verb + step`, individually checkable. Indented checkboxes are never sweep targets and travel with the parent block |
 
 ### Order
 
-Why → Goal → Context → Criteria → Ref → Review → Reschedule → Subtasks
+Why → Goal → Context → Criteria → Ref → Depends → Review → Reschedule → Subtasks
 
 ## Cold-Start Sufficiency
 
@@ -85,15 +93,17 @@ Every task MUST be executable cold: an agent with **zero memory of the session t
 ```markdown
 #### Must
 
-- [ ] 📅 2026-04-15 Submit court filing for case
+- [ ] 📅 2026-04-15 2.1 Submit court filing for case
   - _Why:_ statutory deadline imminent
   - _Goal:_ ensure evidence specification filed on time
   - _Context:_ lawyer confirmed the evidence list complete on 04-10; filing goes through the court portal under case nº below
   - _Criteria:_ filing protocoled at court
   - _Ref:_
     - Case nº [number]
+  - _Depends:_ 1.3
   - _Subtasks:_
-    - Schedule meeting with lawyer
+    - [x] Schedule meeting with lawyer
+    - [ ] Collect signed power of attorney
 
 #### Should
 
@@ -123,8 +133,8 @@ Tasks live under `####` headings in `{name}-tasks.md`.
 |-------|--------|
 | Creation | No date = backlog (appears in "No Date" on Home) |
 | Recurrence | `🔁` on the line — always appears in "Today" |
-| Execution | Agent starting work on a task MUST append `#wip` to the end of the task line, and MUST remove `#wip` when execution ends (completed or stopped). Marks work-in-progress; dashboards render it as a WIP pill |
-| Completion | `[x]` + `✅ YYYY-MM-DD` at end. Validate the line per § Sweep Contract → Write-Time Validation and BLOCK a non-conforming completion |
+| Execution | Agent starting work on a task MUST append `#wip` to the end of the task line (`sb-task edit <file> <ref> --status wip`), and MUST remove `#wip` when execution ends (completed or stopped). Marks work-in-progress; dashboards render it as a WIP pill. A task whose `_Depends:_` tasks are not all completed is blocked — do not start it |
+| Completion | `[x]` + `✅ YYYY-MM-DD` at end. `sb-task edit <file> <ref> --status done` performs this AND the mandatory validation in one step. Hand completions MUST validate the line per § Sweep Contract → Write-Time Validation and BLOCK a non-conforming completion |
 | Cleanup | Weekly review deletes completed tasks. Git preserves history. Stale `#wip` on tasks with no active execution is removed |
 
 ## Progressive Enrichment

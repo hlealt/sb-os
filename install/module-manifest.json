@@ -18,6 +18,12 @@
           "module": "para",
           "source_template": "para/skills/sb-vault-integrity/SKILL.md",
           "target": ".claude/skills/sb-vault-integrity/SKILL.md"
+        },
+        {
+          "name": "sb-task",
+          "module": "para",
+          "source_template": "para/skills/sb-task/SKILL.md",
+          "target": ".claude/skills/sb-task/SKILL.md"
         }
       ],
       "commands": [
