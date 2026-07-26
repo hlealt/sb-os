@@ -18,6 +18,7 @@ import os
 import re
 import sys
 import tempfile
+import time
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -35,13 +36,13 @@ TAG_RE = re.compile(r"(?:(?<=\s)|^)#([A-Za-z0-9_/-]+)")
 HEADING_RE = re.compile(r"^#{1,6} ")
 MOSCOW_RE = re.compile(r"^#### (Must|Should|Could)\s*$", re.IGNORECASE)
 SUB_CHECKBOX_RE = re.compile(r"^(\s+)- \[( |x)\] (.*)$")
-FIELD_RE = re.compile(r"^(\s+)- _([A-Za-z]+):_\s*(.*)$")
+FIELD_RE = re.compile(r"^(\s+)- _([A-Za-z][A-Za-z-]*):_\s*(.*)$")
 
 MOSCOW_LEVELS = ["Must", "Should", "Could"]
 DIFF_CANON = {"easy": "easy", "med": "med", "hard": "hard",
               "low": "easy", "medium": "med", "high": "hard"}
 FIELD_ORDER = ["Why", "Goal", "Context", "Criteria", "Ref", "Depends",
-               "Review", "Reschedule", "Subtasks"]
+               "Done-after", "Review", "Reschedule", "Subtasks"]
 DUE_BUCKETS = ["overdue", "today", "tomorrow", "week", "month", "later", "none"]
 
 USE_COLOR = False
@@ -179,6 +180,10 @@ def resolve_task_file(vault, spec_str):
     hits = [p for p in known if needle in p.name.lower()]
     if len(hits) == 1:
         return hits[0]
+    if len(hits) > 1:
+        exact = [p for p in hits if p.name.lower() == f"{needle}-tasks.md"]
+        if len(exact) == 1:
+            return exact[0]
     rel = [str(p.relative_to(vault)) for p in known]
     if not hits:
         sugg = difflib.get_close_matches(spec_str, [p.stem for p in known], n=3, cutoff=0.4)
@@ -315,7 +320,24 @@ class TaskFile:
         try:
             with os.fdopen(fd, "w", encoding="utf-8", newline="") as fh:
                 fh.write(payload)
-            os.replace(tmp, self.path)
+            # A sync client / file watcher (Obsidian, AV) can hold the target
+            # briefly after a preceding write; retry before refusing.
+            last = None
+            for pause in (0, 0.05, 0.1, 0.25, 0.5, 1.0):
+                if pause:
+                    time.sleep(pause)
+                try:
+                    os.replace(tmp, self.path)
+                    last = None
+                    break
+                except PermissionError as e:
+                    last = e
+            if last is not None:
+                raise CliError("file-locked",
+                               f"{self.path.name} is held by another process "
+                               f"(sync client / file watcher?) — gave up after 6 attempts",
+                               hint="nothing was written; wait a moment and re-run the same command",
+                               exit_code=3)
         finally:
             if os.path.exists(tmp):
                 with contextlib.suppress(OSError):
@@ -428,9 +450,18 @@ class Task:
         val = FIELD_RE.match(self.tf.lines[fl]).group(3)
         return fl, [d.strip() for d in val.split(",") if d.strip()]
 
+    def done_after(self):
+        """Finish-to-finish gates: refs this task may not complete before."""
+        fl = self.field_line("Done-after")
+        if fl is None:
+            return fl, []
+        val = FIELD_RE.match(self.tf.lines[fl]).group(3)
+        return fl, [d.strip() for d in val.split(",") if d.strip()]
+
     def to_json(self):
         _, subs = self.subtasks()
         _, deps = self.depends()
+        _, gates = self.done_after()
         return {
             "number": self.number,
             "title": self.title_clean(),
@@ -443,6 +474,8 @@ class Task:
             "wip": self.wip,
             "subtasks": {"done": sum(1 for s in subs if s["done"]), "total": len(subs)},
             "depends": deps,
+            "done_after": gates,
+            "tags": self.tags,
             "line": self.start + 1,
         }
 
@@ -487,42 +520,57 @@ def parse_depend_ref(ref):
     return None, ref
 
 
-def validate_depends(tf, task, deps, vault):
+def check_edge_refs(tf, task, refs, vault, field):
     numbers = {t.number for t in tf.tasks if t.number}
-    for d in deps:
+    for d in refs:
         path, num = parse_depend_ref(d)
         if path is None:
             if not NUMBER_RE.match(num):
-                raise CliError("bad-depends", f"'{d}' is not a task number",
-                               hint="depends refs are task numbers like 1.2 or 3b; "
+                raise CliError(f"bad-{field}", f"'{d}' is not a task number",
+                               hint=f"{field} refs are task numbers like 1.2 or 3b; "
                                     "cross-file: <vault-relative-path>#<number>")
             if num not in numbers:
                 sugg = difflib.get_close_matches(num, sorted(numbers), n=3, cutoff=0.3)
-                raise CliError("bad-depends",
-                               f"depends ref '{num}' matches no numbered task in {tf.path.name}",
+                raise CliError(f"bad-{field}",
+                               f"{field} ref '{num}' matches no numbered task in {tf.path.name}",
                                hint=("did you mean: " + ", ".join(sugg) + "\n" if sugg else "")
                                + "numbers present: " + (", ".join(sorted(numbers)) or "(none)"))
             if num == task.number:
-                raise CliError("bad-depends", "a task cannot depend on itself")
+                raise CliError(f"bad-{field}", f"a task cannot {field.replace('-', ' ')} itself")
         else:
             other = vault / path
             if not other.is_file():
-                raise CliError("bad-depends", f"cross-file depends target not found: {path}",
+                raise CliError(f"bad-{field}", f"cross-file {field} target not found: {path}",
                                hint="the path is vault-relative; check: sb-task files")
             otf = TaskFile(other)
             if num not in {t.number for t in otf.tasks if t.number}:
-                raise CliError("bad-depends",
+                raise CliError(f"bad-{field}",
                                f"'{num}' matches no numbered task in {path}")
-    # acyclicity over same-file edges, with the proposed edge set in place
+
+
+def validate_depends(tf, task, deps, vault, done_after=None):
+    """Validate refs + acyclicity of the UNION of _Depends:_ and _Done-after:_.
+
+    Both relations order FINISH times (depends: A starts — so also finishes —
+    after B finishes; done-after: A finishes after B finishes), so a cycle in
+    the union is a real deadlock even when each relation alone is acyclic.
+    `deps` / `done_after` are the proposed sets for `task`; None keeps current.
+    """
+    if deps is None:
+        deps = task.depends()[1]
+    if done_after is None:
+        done_after = task.done_after()[1]
+    check_edge_refs(tf, task, deps, vault, "depends")
+    check_edge_refs(tf, task, done_after, vault, "done-after")
+    same = lambda refs: [parse_depend_ref(x)[1] for x in refs
+                         if parse_depend_ref(x)[0] is None]
     edges = {}
     for t in tf.tasks:
         if not t.number:
             continue
-        _, ds = t.depends()
-        edges[t.number] = [parse_depend_ref(x)[1] for x in ds if parse_depend_ref(x)[0] is None]
+        edges[t.number] = same(t.depends()[1]) + same(t.done_after()[1])
     if task.number:
-        edges[task.number] = [parse_depend_ref(x)[1] for x in deps
-                              if parse_depend_ref(x)[0] is None]
+        edges[task.number] = same(deps) + same(done_after)
     state = {}
     def dfs(node, trail):
         state[node] = "gray"
@@ -530,9 +578,12 @@ def validate_depends(tf, task, deps, vault):
             if state.get(nxt) == "gray":
                 cycle = " -> ".join(trail + [node, nxt])
                 raise CliError("dag-cycle",
-                               f"dependency cycle: {cycle}",
-                               hint="tasks must form a DAG; remove one edge "
-                                    "(sb-task edit <file> <ref> --remove-depends <n>)")
+                               f"ordering cycle across _Depends:_/_Done-after:_ — {cycle}",
+                               hint="this would deadlock: every task in the cycle finishes "
+                                    "after another in it, so none can ever complete. Remove "
+                                    "one edge (--remove-depends / --remove-done-after), or "
+                                    "split the gated task so its build half and its delivery "
+                                    "half are separate tasks")
             if state.get(nxt) != "black":
                 dfs(nxt, trail + [node])
         state[node] = "black"
@@ -544,7 +595,7 @@ def validate_depends(tf, task, deps, vault):
 # ---------------------------------------------------------------- line builders
 
 def build_main_line(done, due, number, title, difficulty=None, batch=None,
-                    wip=False, done_date=None):
+                    wip=False, done_date=None, tags=None):
     parts = [f"- [{'x' if done else ' '}]"]
     if due:
         parts.append(f"{DATE_EMOJI} {due}")
@@ -555,6 +606,8 @@ def build_main_line(done, due, number, title, difficulty=None, batch=None,
         parts.append(f"#d/{difficulty}")
     if batch:
         parts.append(f"#b/{batch}")
+    for t in (tags or []):
+        parts.append(f"#{t}")
     if wip:
         parts.append("#wip")
     if done_date:
@@ -588,6 +641,18 @@ def check_number(tf, value, current_task=None):
                            hint="numbers are unique per file; pick a free one "
                                 f"(sb-task list {tf.path.name} shows them)")
     return value
+
+
+def canon_tag(value):
+    """Normalize + validate a free tag; the structured ones have their own flags."""
+    tag = value.lstrip("#").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_/-]*", tag):
+        raise CliError("bad-tag", f"'{value}' is not a valid tag",
+                       hint="tags are #kebab-or-slash words, e.g. decision, mod/ignite")
+    if tag.startswith(("d/", "b/", "batch/")) or tag == "wip":
+        raise CliError("bad-tag", f"'#{tag}' is a structured tag with its own flag",
+                       hint="use --difficulty / --batch / --status wip instead")
+    return tag
 
 
 def canon_difficulty(value):
@@ -729,10 +794,12 @@ def task_matches(t, args, today):
         return False
     if args.due and due_bucket(t.due, today) != args.due:
         return False
+    if getattr(args, "tag", None) and args.tag.lstrip("#") not in t.tags:
+        return False
     return True
 
 
-def format_digest(t):
+def format_digest(t, wide=False):
     _, subs = t.subtasks()
     _, deps = t.depends()
     bits = [
@@ -746,12 +813,19 @@ def format_digest(t):
         extras.append(f"#d/{t.difficulty}")
     if t.batch:
         extras.append(f"#b/{t.batch}")
+    extras += [f"#{tag}" for tag in t.tags
+               if not tag.startswith(("d/", "b/", "batch/")) and tag != "wip"]
     if subs:
         extras.append(f"sub:{sum(1 for s in subs if s['done'])}/{len(subs)}")
     if deps:
         extras.append("dep:" + ",".join(deps))
+    _, gates = t.done_after()
+    if gates:
+        extras.append("done-after:" + ",".join(gates))
     title = t.title_clean()
-    return " ".join(bits) + " " + title[:70] + ("  " + " ".join(extras) if extras else "")
+    if not wide:
+        title = title[:70]
+    return " ".join(bits) + " " + title + ("  " + " ".join(extras) if extras else "")
 
 
 def cmd_list(args):
@@ -760,7 +834,8 @@ def cmd_list(args):
     today = date.today()
     hits = [t for t in tf.tasks if task_matches(t, args, today)]
     shown = hits[:args.limit]
-    lines = [format_digest(t) for t in shown]
+    wide = getattr(args, "wide", False)
+    lines = [format_digest(t, wide) for t in shown]
     if len(hits) > len(shown):
         lines.append(f"-- {len(hits) - len(shown)} more — re-run with --limit {len(hits)}")
     lines.append(f"-- {len(hits)}/{len(tf.tasks)} tasks ({args.status}) in {tf.path.name}")
@@ -796,8 +871,9 @@ def build_block(args_ns, tf):
         raise CliError("bad-title",
                        f"title starts with '{first}', which parses as a task number",
                        hint=f"pass it explicitly: --number {first} --title \"{tail}\"")
+    tags = [canon_tag(t) for t in (getattr(args_ns, "tag", None) or [])]
     block = [build_main_line(False, due, number, title,
-                             difficulty, args_ns.batch, args_ns.wip)]
+                             difficulty, args_ns.batch, args_ns.wip, tags=tags)]
     for name, flag in [("Why", "why"), ("Goal", "goal"), ("Context", "context"),
                        ("Criteria", "criteria")]:
         val = text_arg(getattr(args_ns, flag))
@@ -809,6 +885,8 @@ def build_block(args_ns, tf):
         block.append(f"    - {text_arg(r)}")
     if args_ns.depends:
         block.append(f"  - _Depends:_ {', '.join(x.strip() for x in args_ns.depends.split(','))}")
+    if getattr(args_ns, "done_after", None):
+        block.append(f"  - _Done-after:_ {', '.join(x.strip() for x in args_ns.done_after.split(','))}")
     if args_ns.sub:
         block.append("  - _Subtasks:_")
         for s in args_ns.sub:
@@ -826,11 +904,12 @@ def cmd_create(args):
                        "by an agent with zero session memory (cold-start sufficiency)",
                        hint="add the missing field(s), or override deliberately: --force")
     block = build_block(args, tf)
-    if args.depends:
-        deps = [x.strip() for x in args.depends.split(",") if x.strip()]
+    if args.depends or args.done_after:
+        deps = [x.strip() for x in (args.depends or "").split(",") if x.strip()]
+        gates = [x.strip() for x in (args.done_after or "").split(",") if x.strip()]
         probe = Task(tf, 0, 0, False, "", None)
         probe.number = args.number
-        validate_depends(tf, probe, deps, vault)
+        validate_depends(tf, probe, deps, vault, done_after=gates)
     level = (args.moscow or "should").capitalize()
     if level not in MOSCOW_LEVELS:
         raise CliError("bad-moscow", f"--moscow must be must|should|could, got '{args.moscow}'")
@@ -937,6 +1016,26 @@ def cmd_edit(args):
         touch("batch")
         tf.reparse(); task = relocate(tf, key)
 
+    for raw in (args.add_tag or []):
+        tag = canon_tag(raw)
+        if tag not in task.tags:
+            set_line(tf, task, add_trailing_token(task.line, f"#{tag}"))
+            touch(f"tag+{tag}")
+            tf.reparse(); task = relocate(tf, key)
+
+    for raw in (args.remove_tag or []):
+        tag = canon_tag(raw)
+        if tag not in task.tags:
+            raise CliError("ref-not-found",
+                           f"'#{tag}' is not on this task "
+                           f"(tags: {', '.join('#' + x for x in task.tags) or 'none'})",
+                           exit_code=2)
+        line, _ = replace_token(task.line,
+                                re.compile("#" + re.escape(tag) + r"(?![\w/-])"), "")
+        set_line(tf, task, line)
+        touch(f"tag-{tag}")
+        tf.reparse(); task = relocate(tf, key)
+
     # --- status ------------------------------------------------------
     if args.status is not None:
         line = task.line
@@ -952,6 +1051,25 @@ def cmd_edit(args):
             line, _ = replace_token(line, re.compile(r"#wip\b"), "")
             line = re.sub(r"\s+$", "", line)
         elif args.status == "done":
+            _, gates = task.done_after()
+            open_gates = []
+            for g in gates:
+                gpath, gnum = parse_depend_ref(g)
+                if gpath is None:
+                    gt = next((t for t in tf.tasks if t.number == gnum), None)
+                    if gt is None or not gt.done:
+                        open_gates.append(g)
+                else:
+                    gp = vault / gpath
+                    gtf = TaskFile(gp) if gp.is_file() else None
+                    gt = next((t for t in gtf.tasks if t.number == gnum), None) if gtf else None
+                    if gt is None or not gt.done:
+                        open_gates.append(g)
+            if open_gates and not args.force:
+                raise CliError("done-gated",
+                               f"cannot complete: _Done-after:_ waits on "
+                               f"{', '.join(open_gates)} (still open)",
+                               hint="finish those first, or override deliberately: --force")
             if not task.done:
                 line = line.replace("- [ ]", "- [x]", 1)
                 line, _ = replace_token(line, re.compile(r"#wip\b"), "")
@@ -1066,6 +1184,35 @@ def cmd_edit(args):
         touch("depends")
         tf.reparse(); task = relocate(tf, key)
 
+    # --- done-after (finish-to-finish gates) --------------------------
+    if args.add_done_after or args.remove_done_after:
+        _, gates = task.done_after()
+        gates = list(gates)
+        for d in (args.add_done_after or "").split(","):
+            d = d.strip()
+            if d and d not in gates:
+                gates.append(d)
+        for d in (args.remove_done_after or "").split(","):
+            d = d.strip()
+            if d in gates:
+                gates.remove(d)
+            elif d:
+                raise CliError("ref-not-found",
+                               f"'{d}' is not in this task's done-after list "
+                               f"({', '.join(gates) or 'empty'})", exit_code=2)
+        validate_depends(tf, task, None, vault, done_after=gates)
+        fl = task.field_line("Done-after")
+        if gates:
+            if fl is not None:
+                tf.lines[fl] = f"  - _Done-after:_ {', '.join(gates)}"
+            else:
+                tf.insert_line(task.field_insert_idx("Done-after"),
+                               f"  - _Done-after:_ {', '.join(gates)}")
+        elif fl is not None:
+            tf.remove_lines(fl, fl + 1)
+        touch("done-after")
+        tf.reparse(); task = relocate(tf, key)
+
     # --- moscow move (last: it relocates the block) -------------------
     if args.moscow is not None:
         level = args.moscow.capitalize()
@@ -1103,8 +1250,8 @@ def cmd_delete(args):
     dependents = []
     if task.number:
         for t in tf.tasks:
-            _, deps = t.depends()
-            if any(parse_depend_ref(d) == (None, task.number) for d in deps):
+            refs = t.depends()[1] + t.done_after()[1]
+            if any(parse_depend_ref(d) == (None, task.number) for d in refs):
                 dependents.append(t.number or t.title_clean()[:40])
     if dependents and not args.force:
         raise CliError("has-dependents",
@@ -1116,6 +1263,241 @@ def cmd_delete(args):
             [f"-- {'DRY-RUN, not written' if not wrote else 'removed from ' + tf.path.name}"]
     emit(args, lines, {"ok": True, "action": "delete", "written": wrote,
                        "deleted_block": "\n".join(block)})
+    return 0
+
+
+# ---------------------------------------------------------------- deps + sort
+
+def dep_state(tf, vault):
+    """Unmet-edge state over the file's not-done tasks.
+
+    Returns (keyed, unmet, external, gate_unmet, gate_external):
+      keyed         — [(key, task)] for every not-done task, in file order
+                      (key = number, or 'line:N' for unnumbered tasks)
+      unmet         — {key: [same-file _Depends:_ numbers not yet done]}
+      external      — {key: [cross-file _Depends:_ refs not yet done]}
+      gate_unmet    — {key: [same-file _Done-after:_ numbers not yet done]}
+      gate_external — {key: [cross-file _Done-after:_ refs not yet done]}
+    A missing target counts as unmet. Done tasks satisfy edges and carry no
+    entry of their own. Depends blocks STARTING; done-after blocks FINISHING.
+    """
+    by_num = {t.number: t for t in tf.tasks if t.number}
+    other_cache = {}
+
+    def split_refs(refs):
+        same, ext = [], []
+        for d in refs:
+            path, num = parse_depend_ref(d)
+            if path is None:
+                dt = by_num.get(num)
+                if dt is not None and not dt.done:
+                    same.append(num)
+            else:
+                if path not in other_cache:
+                    p = vault / path
+                    other_cache[path] = TaskFile(p) if p.is_file() else None
+                otf = other_cache[path]
+                od = next((x for x in otf.tasks if x.number == num), None) if otf else None
+                if od is None or not od.done:
+                    ext.append(d)
+        return same, ext
+
+    keyed, unmet, external = [], {}, {}
+    gate_unmet, gate_external = {}, {}
+    for t in tf.tasks:
+        if t.done:
+            continue
+        key = t.number or f"line:{t.start + 1}"
+        keyed.append((key, t))
+        same, ext = split_refs(t.depends()[1])
+        unmet[key] = same
+        if ext:
+            external[key] = ext
+        gsame, gext = split_refs(t.done_after()[1])
+        gate_unmet[key] = gsame
+        if gext:
+            gate_external[key] = gext
+    return keyed, unmet, external, gate_unmet, gate_external
+
+
+def topo_waves(keyed, unmet, external):
+    """Stable topological waves; externally-blocked tasks (and anything behind
+    them or behind a hand-edited cycle) come back separately, never silently."""
+    order = {k: i for i, (k, _) in enumerate(keyed)}
+    pending = {k: set(v) for k, v in unmet.items() if k not in external}
+    waves, placed = [], set()
+    while pending:
+        ready = sorted((k for k, v in pending.items() if v <= placed),
+                       key=order.get)
+        if not ready:
+            break
+        waves.append(ready)
+        placed.update(ready)
+        for k in ready:
+            del pending[k]
+    stuck = {k: sorted(v - placed) for k, v in pending.items()}
+    return waves, stuck
+
+
+def cmd_deps(args):
+    vault = find_vault_root(args.vault)
+    tf = TaskFile(resolve_task_file(vault, args.file))
+    keyed, unmet, external, gate_unmet, gate_external = dep_state(tf, vault)
+    tasks = dict(keyed)
+    fname = tf.path.name
+    tag = args.tag.lstrip("#") if getattr(args, "tag", None) else None
+
+    def tagged(t):
+        return tag is None or tag in t.tags
+
+    if args.on is not None:
+        target = resolve_task(tf, args.on, vault)
+        if not target.number:
+            raise CliError("no-number",
+                           f"'{args.on}' has no task number, so nothing can depend on it",
+                           hint=f"give it one: sb-task edit {args.file} \"{args.on}\" --number <n>")
+        dependents = [t for t in tf.tasks if not t.done and t is not target
+                      and tagged(t)
+                      and any(parse_depend_ref(d) == (None, target.number)
+                              for d in t.depends()[1] + t.done_after()[1])]
+        lines = [format_digest(t) for t in dependents]
+        lines.append(f"-- {len(dependents)} open tasks depend on {target.number} in {fname}")
+        if dependents:
+            lines.append(f"next: finish {target.number} first: "
+                         f"sb-task edit {args.file} {target.number} --status wip")
+        emit(args, lines, {"ok": True, "on": target.number,
+                           "dependents": [t.to_json() for t in dependents]})
+        return 0
+
+    if args.ready:
+        # gates block FINISHING, not starting — a gated task can still be ready
+        ready = [(k, t) for k, t in keyed
+                 if not unmet.get(k) and k not in external and tagged(t)]
+        lines = [format_digest(t) for _, t in ready]
+        lines.append(f"-- {len(ready)}/{len(keyed)} open tasks are ready "
+                     f"(all depends met{f', #{tag} only' if tag else ''}) in {fname}")
+        lines.append(f"next: sb-task edit {args.file} <number> --status wip")
+        emit(args, lines, {"ok": True, "count": len(ready),
+                           "tasks": [t.to_json() for _, t in ready]})
+        return 0
+
+    # ordering always computes on the FULL graph; --tag filters the display only
+    order_unmet = {k: unmet.get(k, []) + gate_unmet.get(k, []) for k, _ in keyed}
+    waves, stuck = topo_waves(keyed, order_unmet, external)
+    shown_waves = [[k for k in wave if tagged(tasks[k])] for wave in waves]
+    lines = []
+    for i, wave in enumerate(shown_waves, 1):
+        if not wave:
+            continue
+        lines.append(f"wave {i}  ({len(wave)} in parallel)")
+        for k in wave:
+            lines.append(f"  {format_digest(tasks[k])}")
+    for k, refs in sorted(external.items()):
+        if tagged(tasks[k]):
+            lines.append(f"blocked-external: {k} waits on {', '.join(refs)}")
+    for k, refs in sorted(gate_external.items()):
+        if tagged(tasks[k]):
+            lines.append(f"done-gated-external: {k} may start but not complete before {', '.join(refs)}")
+    for k, deps in sorted(stuck.items()):
+        if tagged(tasks[k]):
+            lines.append(f"blocked: {k} waits on {', '.join(deps) or 'a blocked/cyclic chain'}")
+    shown_n = sum(len(w) for w in shown_waves)
+    lines.append(f"-- {shown_n}{f'/{len(keyed)} (#{tag})' if tag else ''} open tasks, "
+                 f"{len(waves)} waves in {fname}")
+    lines.append(f"next: sb-task deps {args.file} --ready")
+    emit(args, lines, {"ok": True, "waves": shown_waves, "tag": tag,
+                       "blocked_external": external, "blocked": stuck,
+                       "done_gated_external": gate_external,
+                       "tasks": [t.to_json() for _, t in keyed if tagged(t)]})
+    return 0
+
+
+def cmd_sort(args):
+    """Rewrite each contiguous run of task blocks in dependency order.
+
+    The DAG (_Depends:_) stays the single ordering truth — file position is a
+    derived, re-runnable view of it. Ties keep their current relative order.
+    """
+    vault = find_vault_root(args.vault)
+    tf = TaskFile(resolve_task_file(vault, args.file))
+    by_num = {t.number: t for t in tf.tasks if t.number}
+
+    # contiguous runs: consecutive task blocks separated by blank lines only
+    runs, cur = [], []
+    for t in tf.tasks:
+        if cur and any(tf.lines[i].strip() != ""
+                       for i in range(cur[-1].end, t.start)):
+            runs.append(cur)
+            cur = []
+        cur.append(t)
+    if cur:
+        runs.append(cur)
+
+    changed = []
+    for run in reversed(runs):        # bottom-up keeps line indices valid
+        if len(run) < 2:
+            continue
+        in_run = {t.number for t in run if t.number}
+        order = {id(t): i for i, t in enumerate(run)}
+        pending = []
+        for t in run:
+            same = set()
+            for d in t.depends()[1] + t.done_after()[1]:
+                path, num = parse_depend_ref(d)
+                dt = by_num.get(num) if path is None else None
+                if dt is not None and not dt.done and num in in_run:
+                    same.add(num)
+            pending.append((t, same))
+        placed, new_order = set(), []
+        while pending:
+            ready = [(t, s) for t, s in pending if s <= placed]
+            if not ready:                     # hand-edited cycle: keep as-is
+                new_order.extend(t for t, _ in pending)
+                break
+            ready.sort(key=lambda ts: order[id(ts[0])])
+            for t, _ in ready:
+                new_order.append(t)
+                if t.number:
+                    placed.add(t.number)
+            pending = [(t, s) for t, s in pending if t not in
+                       {x for x, _ in ready}]
+        if [id(t) for t in new_order] == [id(t) for t in run]:
+            continue
+        blocks = [(tf.lines[t.start:t.end], tf.eols[t.start:t.end])
+                  for t in new_order]
+        lo, hi = run[0].start, run[-1].end
+        del tf.lines[lo:hi]
+        del tf.eols[lo:hi]
+        at = lo
+        for i, (bl, be) in enumerate(blocks):
+            if i:
+                tf.lines.insert(at, "")
+                tf.eols.insert(at, tf.default_eol)
+                at += 1
+            tf.lines[at:at] = bl
+            tf.eols[at:at] = be
+            at += len(bl)
+        changed.append({
+            "section": run[0].section or "(none)",
+            "before": [t.number or t.title_clean()[:30] for t in run],
+            "after": [t.number or t.title_clean()[:30] for t in new_order],
+        })
+    changed.reverse()
+
+    wrote = False
+    if changed:
+        tf.reparse()
+        wrote = tf.save(args)
+    lines = []
+    for c in changed:
+        lines.append(f"{c['section']}: {' '.join(c['before'])}  ->  {' '.join(c['after'])}")
+    if not changed:
+        lines.append("already in dependency order — nothing to move")
+    else:
+        lines.append(f"-- {'DRY-RUN, not written' if not wrote else f'{len(changed)} run(s) reordered in {tf.path.name}'}")
+    lines.append(f"next: sb-task deps {args.file}")
+    emit(args, lines, {"ok": True, "action": "sort", "written": wrote,
+                       "runs_changed": changed})
     return 0
 
 
@@ -1236,6 +1618,136 @@ def cmd_selftest(args):
         code, out = invoke(*V, "--json", "list", "testp", "--due", "overdue")
         ok("due-bucket-overdue", code == 0 and json.loads(out)["count"] == 1, out)
 
+        # --- deps views (state here: 3 depends on 1.1; 2 independent) ----
+        code, out = invoke(*V, "--json", "deps", "testp")
+        j = json.loads(out) if code == 0 else {}
+        ok("deps-waves", code == 0 and len(j.get("waves", [])) == 2
+           and "3" in j["waves"][1] and "1.1" in j["waves"][0], out)
+        code, out = invoke(*V, "--json", "deps", "testp", "--ready")
+        j = json.loads(out) if code == 0 else {}
+        ok("deps-ready", code == 0 and j.get("count") == 2
+           and all(t["number"] != "3" for t in j.get("tasks", [])), out)
+        code, out = invoke(*V, "--json", "deps", "testp", "--on", "1.1")
+        j = json.loads(out) if code == 0 else {}
+        ok("deps-on", code == 0
+           and [t["number"] for t in j.get("dependents", [])] == ["3"], out)
+
+        # --- sort: 3 sits above 1.1 in Must but depends on it ------------
+        code, out = invoke(*V, "--json", "sort", "testp")
+        j = json.loads(out) if code == 0 else {}
+        ok("sort-reorders", code == 0 and j.get("written") is True
+           and j["runs_changed"] and j["runs_changed"][0]["after"] == ["1.1", "3"], out)
+        code, out = invoke(*V, "--json", "sort", "testp")
+        ok("sort-idempotent", code == 0
+           and json.loads(out)["runs_changed"] == [], out)
+        code, out = invoke(*V, "--json", "list", "testp", "--moscow", "must", "--status", "all")
+        j = json.loads(out) if code == 0 else {}
+        ok("sort-order-on-disk", code == 0
+           and [t["number"] for t in j.get("tasks", [])] == ["1.1", "3"], out)
+
+        # --- list --wide -------------------------------------------------
+        long_title = "Review the fixture docs " + "x" * 70
+        code, out = invoke(*V, "edit", "testp", "2", "--title", long_title)
+        ok("edit-long-title", code == 0, out)
+        code, out = invoke(*V, "list", "testp", "--status", "all")
+        ok("list-truncates", code == 0 and long_title not in out, out)
+        code, out = invoke(*V, "list", "testp", "--status", "all", "--wide")
+        ok("list-wide", code == 0 and long_title in out, out)
+        code, out = invoke(*V, "edit", "testp", "2", "--title", "Review the fixture docs")
+        ok("edit-title-restore", code == 0, out)
+
+        # --- done-after: finish-to-finish gates --------------------------
+        # 3 depends on 1.1; gating 1.1 on 3 would deadlock — must refuse
+        code, out = invoke(*V, "edit", "testp", "1.1", "--add-done-after", "3")
+        ok("done-after-deadlock-refused", code == 1, out)
+        code, out = invoke(*V, "--json", "edit", "testp", "3", "--add-done-after", "2")
+        j = json.loads(out) if code == 0 else {}
+        ok("done-after-add", code == 0 and j["task"]["done_after"] == ["2"], out)
+        code, out = invoke(*V, "edit", "testp", "3", "--add-done-after", "9.9")
+        ok("done-after-unknown-refused", code == 1)
+        code, out = invoke(*V, "--json", "edit", "testp", "3", "--status", "done")
+        ok("done-gate-blocks", code == 1
+           and json.loads(out)["error"]["code"] == "done-gated", out)
+        code, out = invoke(*V, "--json", "edit", "testp", "3", "--status", "done", "--force")
+        if real_sb_os:
+            ok("done-gate-force", code == 0
+               and json.loads(out)["task"]["status"] == "done", out)
+            code, out = invoke(*V, "edit", "testp", "3", "--status", "open")
+            ok("done-gate-reopen", code == 0, out)
+        else:
+            ok("done-gate-force", code == 3, "gate bypassed; validator-missing refusal")
+            ok("done-gate-reopen", True, "skipped (no validator)")
+        # sort orders by the union: 4 gated on 3 must land after it
+        code, out = invoke(*V, "create", "testp", "--title", "Deliver the thing",
+                           "--number", "4", "--moscow", "must",
+                           "--done-after", "3", "--force")
+        ok("create-with-done-after", code == 0, out)
+        code, out = invoke(*V, "--json", "sort", "testp")
+        j = json.loads(out) if code == 0 else {}
+        ok("sort-respects-gates", code == 0 and j["runs_changed"]
+           and j["runs_changed"][0]["after"] == ["1.1", "3", "4"], out)
+        code, out = invoke(*V, "--json", "edit", "testp", "3", "--remove-done-after", "2")
+        ok("done-after-remove", code == 0 and json.loads(out)["task"]["done_after"] == [], out)
+        code, out = invoke(*V, "delete", "testp", "3", "--yes")
+        ok("delete-gate-dependent-refused", code == 1, out)
+        code, out = invoke(*V, "delete", "testp", "4", "--yes")
+        ok("delete-gated-task", code == 0, out)
+
+        # --- decision lane: free tags + --tag filters --------------------
+        code, out = invoke(*V, "--json", "create", "testp",
+                           "--title", "Rule the fixture direction", "--number", "5",
+                           "--moscow", "could", "--tag", "decision",
+                           "--context", "ctx", "--criteria", "ruled")
+        ok("create-with-tag", code == 0 and "#decision" in json.loads(out)["block"], out)
+        code, out = invoke(*V, "--json", "list", "testp", "--tag", "decision")
+        j = json.loads(out) if code == 0 else {}
+        ok("list-tag-filter", code == 0 and j["count"] == 1
+           and j["tasks"][0]["number"] == "5"
+           and "decision" in j["tasks"][0]["tags"], out)
+        code, out = invoke(*V, "--json", "deps", "testp", "--ready", "--tag", "decision")
+        j = json.loads(out) if code == 0 else {}
+        ok("deps-ready-tag", code == 0 and j["count"] == 1
+           and j["tasks"][0]["number"] == "5", out)
+        code, out = invoke(*V, "--json", "deps", "testp", "--tag", "decision")
+        j = json.loads(out) if code == 0 else {}
+        ok("deps-waves-tag", code == 0
+           and [k for w in j.get("waves", []) for k in w] == ["5"], out)
+        code, out = invoke(*V, "edit", "testp", "5", "--add-tag", "b/nope")
+        ok("structured-tag-refused", code == 1)
+        code, out = invoke(*V, "--json", "edit", "testp", "5", "--remove-tag", "decision")
+        ok("remove-tag", code == 0 and "decision" not in json.loads(out)["task"]["tags"], out)
+        code, out = invoke(*V, "--json", "edit", "testp", "5", "--add-tag", "#decision")
+        ok("add-tag", code == 0 and "decision" in json.loads(out)["task"]["tags"], out)
+        code, out = invoke(*V, "delete", "testp", "5", "--yes")
+        ok("delete-decision-task", code == 0, out)
+
+        # --- exact file name beats substring ambiguity -------------------
+        extra = vault / "1-projects" / "testp-x"
+        extra.mkdir(parents=True)
+        (extra / "testp-x-tasks.md").write_text("#### Should\n", encoding="utf-8")
+        code, out = invoke(*V, "--json", "list", "testp")
+        ok("file-exact-beats-substring", code == 0
+           and json.loads(out)["file"].endswith("testp/testp-tasks.md"), out)
+        code, out = invoke(*V, "list", "testp-x-tasks-nothere")
+        ok("file-miss-exit-2", code == 2)
+
+        # --- save retries while the target is briefly locked -------------
+        real_replace = os.replace
+        state = {"n": 0}
+        def flaky_replace(src, dst):
+            state["n"] += 1
+            if state["n"] <= 2:
+                raise PermissionError(13, "held by a watcher", str(dst), 5)
+            return real_replace(src, dst)
+        os.replace = flaky_replace
+        try:
+            code, out = invoke(*V, "edit", "testp", "2", "--batch", "retrykick")
+        finally:
+            os.replace = real_replace
+        ok("save-retry-on-lock", code == 0 and state["n"] == 3, out)
+        code, out = invoke(*V, "edit", "testp", "2", "--batch", "none")
+        ok("save-retry-cleanup", code == 0, out)
+
         code, out = invoke(*V, "delete", "testp", "1.1", "--yes")
         ok("delete-dependent-refused", code == 1, out)
         code, out = invoke(*V, "edit", "testp", "3", "--remove-depends", "1.1")
@@ -1308,7 +1820,9 @@ def build_parser():
     sp.add_argument("--difficulty", help="easy|med|hard (aliases low/high)")
     sp.add_argument("--batch")
     sp.add_argument("--due", choices=DUE_BUCKETS)
+    sp.add_argument("--tag", help="only tasks carrying #TAG (e.g. decision — the owner lane)")
     sp.add_argument("--limit", type=int, default=50)
+    sp.add_argument("--wide", action="store_true", help="full titles, no 70-char cut")
 
     sp = cmd("read", "one task's full block + parsed fields",
              'sb-task read tecer 4.1b',
@@ -1331,7 +1845,12 @@ def build_parser():
     sp.add_argument("--context"); sp.add_argument("--criteria")
     sp.add_argument("--ref", action="append", help="repeatable external reference")
     sp.add_argument("--depends", help="comma-separated task numbers (or path#number)")
+    sp.add_argument("--done-after", dest="done_after",
+                    help="finish-to-finish gates: may start anytime, may not "
+                         "complete before these tasks (numbers or path#number)")
     sp.add_argument("--sub", action="append", help="repeatable subtask text")
+    sp.add_argument("--tag", action="append",
+                    help="repeatable free tag, e.g. decision (owner-lane task)")
     sp.add_argument("--wip", action="store_true")
     sp.add_argument("--force", action="store_true", help="create without context/criteria")
 
@@ -1346,6 +1865,9 @@ def build_parser():
     sp.add_argument("--moscow", help="must|should|could — moves the block between sections")
     sp.add_argument("--difficulty", help="easy|med|hard|none (aliases low/high)")
     sp.add_argument("--batch", help="batch slug/number, or 'none' to clear")
+    sp.add_argument("--add-tag", action="append",
+                    help="append a free tag, e.g. decision (owner-lane task)")
+    sp.add_argument("--remove-tag", action="append", help="remove a free tag")
     sp.add_argument("--number", help="new unique number, or 'none' to clear")
     sp.add_argument("--title", help="replace the title text")
     sp.add_argument("--why"); sp.add_argument("--goal")
@@ -1356,6 +1878,29 @@ def build_parser():
     sp.add_argument("--uncheck-sub", action="append", help="untick a subtask")
     sp.add_argument("--add-depends", help="comma-separated numbers to add (DAG-checked)")
     sp.add_argument("--remove-depends", help="comma-separated numbers to remove")
+    sp.add_argument("--add-done-after",
+                    help="add finish-to-finish gates: this task may not be "
+                         "marked done before these (DAG-checked with depends)")
+    sp.add_argument("--remove-done-after", help="comma-separated gates to remove")
+    sp.add_argument("--force", action="store_true",
+                    help="override the done-after gate on --status done")
+
+    sp = cmd("deps", "dependency views: parallel waves (default), --ready, --on <ref>",
+             'sb-task deps tecer --ready',
+             "sb-task edit <file> <number> --status wip")
+    sp.add_argument("file")
+    sp.add_argument("--ready", action="store_true",
+                    help="only open tasks whose depends are all met (startable now)")
+    sp.add_argument("--on", metavar="REF",
+                    help="open tasks that depend on REF (what finishing it unblocks)")
+    sp.add_argument("--tag", help="show only tasks carrying #TAG (ordering still "
+                                  "computed on the full graph) — e.g. decision")
+
+    sp = cmd("sort", "rewrite each section's task blocks in dependency order "
+             "(derived from _Depends:_; re-run anytime; ties keep current order)",
+             'sb-task sort tecer --dry-run',
+             "sb-task deps <file>")
+    sp.add_argument("file")
 
     sp = cmd("delete", "remove a task block (prints it; git history preserves it)",
              'sb-task delete tecer 3.2 --yes',
@@ -1374,7 +1919,7 @@ def build_parser():
 DISPATCH = {
     "doctor": cmd_doctor, "files": cmd_files, "list": cmd_list, "read": cmd_read,
     "create": cmd_create, "edit": cmd_edit, "delete": cmd_delete,
-    "selftest": cmd_selftest,
+    "deps": cmd_deps, "sort": cmd_sort, "selftest": cmd_selftest,
 }
 
 

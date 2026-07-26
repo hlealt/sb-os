@@ -6,16 +6,18 @@ Deterministic executor for every operation on `*-tasks.md` files. NEVER hand-edi
 
 1. **Verify + orient:** `sb-task doctor` (fallback if not on PATH: `python {sb_os_path}/para/cli/sb-task/sb_task.py doctor`; resolve `{sb_os_path}` from `sb-os.json`). A failing probe means: apply the task contract by hand instead.
 2. **Find the file:** `sb-task files` — every task file with tag + open/done counts. Any `<file>` argument accepts a vault-relative path OR a unique name substring (`tecer` → `2-areas/tecer/tecer-tasks.md`). WHICH file a new task belongs in is a routing decision — `sb-vault-ops` owns it, not this CLI.
-3. **Read before write:** `sb-task list <file>` (digest; filters: `--status --moscow --due --batch --difficulty`), then `sb-task read <file> <ref>` for one task's full block. `<ref>` = task number (`4.1b`), exact title, or unique title substring.
-4. **Write:** one named command per action — `create`, `edit`, `delete`. Add `--dry-run` to preview any write. Use `--json` whenever output will be parsed.
+3. **Read before write:** `sb-task list <file>` (digest; filters: `--status --moscow --due --batch --difficulty`; `--wide` for full titles), then `sb-task read <file> <ref>` for one task's full block. `<ref>` = task number (`4.1b`), exact title, or unique title substring.
+4. **Order of execution:** `sb-task deps <file>` — parallel waves derived from `_Depends:_`; `--ready` = startable now; `--on <ref>` = what finishing it unblocks. `sb-task sort <file>` rewrites the blocks into that order (derived view, re-runnable; the DAG stays the ordering truth).
+5. **Write:** one named command per action — `create`, `edit`, `delete`. Add `--dry-run` to preview any write. Use `--json` whenever output will be parsed.
 
 ## Rules
 
 - Starting work on a task → `sb-task edit <file> <ref> --status wip`; ending → `--status done` (validates the sweep contract + stamps ✅ today) or back via `--status open`.
 - `create` refuses without `--context` + `--criteria` (cold-start sufficiency). Override with `--force` only when the owner explicitly waives it.
 - `delete` requires `--yes`, refuses while other tasks depend on the target (`--force` overrides), and prints the removed block — surface that block in your reply (never lose information).
-- Dependencies: `--add-depends`/`--remove-depends` reference task NUMBERS; the CLI refuses unknown refs and dependency cycles. Do not start a task whose depends are not all done.
+- Dependencies: `--add-depends`/`--remove-depends` reference task NUMBERS; the CLI refuses unknown refs and cycles. Do not start a task whose depends are not all done. `--add-done-after`/`--remove-done-after` set finish-to-finish gates instead — the task may start anytime but `--status done` refuses while a gate is open (override: `--force`); cycles are checked across BOTH edge types together.
 - Free text with quotes/backticks/newlines: pass `@<path>` or `@-` (stdin) to any text flag.
+- Decision lane: a decision owed by the owner is its OWN task tagged `#decision` (`create --tag decision`), never a note inside an execution task — the contract's § Decision Tasks vs Execution Tasks. Owner queue: `sb-task deps <file> --ready --tag decision`.
 - There is no raw escape hatch: an operation the CLI lacks (e.g. a `_Review:_` entry) is a hand edit under the task contract — keep it line-precise.
 
 ## Examples

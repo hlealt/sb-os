@@ -4,7 +4,7 @@ Canonical rule for creation, format, routing, and lifecycle of tasks in the vaul
 
 ## CLI-First (MANDATORY when installed)
 
-The `sb-task` CLI is the required executor for task operations — create, read, list, edit, reprioritize, reschedule, complete, reopen, delete. It enforces this contract mechanically (completion validation, number uniqueness, dependency acyclicity, line-precise writes). Probe: `sb-task doctor` (fallback: `python {sb_os_path}/para/cli/sb-task/sb_task.py doctor`; `{sb_os_path}` resolves from `sb-os.json`). Command inventory: `sb-task -h`.
+The `sb-task` CLI is the required executor for task operations — create, read, list, edit, reprioritize, reschedule, complete, reopen, delete, dependency/ordering queries (`deps`), and dependency-order file rewrites (`sort`). It enforces this contract mechanically (completion validation incl. the `_Done-after:_` gate, number uniqueness, acyclicity of the `_Depends:_` + `_Done-after:_` union, line-precise writes). Probe: `sb-task doctor` (fallback: `python {sb_os_path}/para/cli/sb-task/sb_task.py doctor`; `{sb_os_path}` resolves from `sb-os.json`). Command inventory: `sb-task -h`.
 
 When the probe succeeds, NEVER hand-edit a task's main line or structured sub-bullets — run the CLI. Hand edits are permitted ONLY for sub-bullet content the CLI has no flag for (e.g. `_Review:_`, `_Reschedule:_` entries), and MUST follow this contract. When the probe fails, apply this contract by hand.
 
@@ -74,13 +74,30 @@ Invoke ONLY on a genuine completion. Do NOT validate indented subtasks, `~~strik
 
 | Prefix | Purpose |
 |--------|---------|
-| `_Depends:_` | Cross-task dependency edges — comma-separated task numbers this task is blocked by: same file by number (`1.2, 3b`), cross-file as `vault-relative-path#number`. The same-file dependency graph MUST stay acyclic (DAG); the CLI refuses a write that creates a cycle |
+| `_Depends:_` | START-blocking dependency edges (finish-to-start) — comma-separated task numbers this task must not START before: same file by number (`1.2, 3b`), cross-file as `vault-relative-path#number` |
+| `_Done-after:_` | FINISH-blocking gates (finish-to-finish) — comma-separated task numbers this task may not be marked DONE before, though work on it may start anytime. Same ref syntax as `_Depends:_`. Use for delivery gates: the task's build can proceed, but its completion claim depends on another task landing. The UNION of the same-file `_Depends:_` + `_Done-after:_` graphs MUST stay acyclic — both order finish times, so a cycle across them is a deadlock (nothing in it can ever complete); the CLI refuses a write that creates one |
 | `_Reschedule:_` | Rescheduling history. Each entry: `Nx (origin: 📅 YYYY-MM-DD)` |
 | `_Subtasks:_` | Concrete steps as NATIVE CHECKBOXES — each child is an indented `- [ ] Verb + step`, individually checkable. Indented checkboxes are never sweep targets and travel with the parent block |
 
 ### Order
 
-Why → Goal → Context → Criteria → Ref → Depends → Review → Reschedule → Subtasks
+Why → Goal → Context → Criteria → Ref → Depends → Done-after → Review → Reschedule → Subtasks
+
+## Decision Tasks vs Execution Tasks
+
+Tasks split into two lanes BY DESIGN, at logging time — so the vault owner can walk the decision path as its own DAG while agents work the execution path:
+
+| Lane | Marker | Executor | Title verbs |
+|------|--------|----------|-------------|
+| Decision | `#decision` tag | The vault owner — rulings, design calls, approvals | RULE, SETTLE, DECIDE, APPROVE |
+| Execution | (no lane tag) | Agents — anything buildable/runnable without an owner ruling | BUILD, RUN, WRITE, MIGRATE, FIX, … |
+
+Rules:
+
+- **Separate at logging time.** A decision owed by the owner is logged as its OWN task tagged `#decision` — NEVER embedded as a "settle first" / "design call" note inside an execution task. The execution task takes a `_Depends:_` edge on the decision task (ruling needed before starting) or a `_Done-after:_` gate on it (ruling ratifies built work).
+- **Decision tasks are ordinary DAG nodes** — numbered, dependable, wave-ordered like any task. The owner's queue is `sb-task deps <file> --ready --tag decision`; agents pull ready execution tasks (`--ready`, ignoring `#decision` rows).
+- **Task = pending question; record = permanent ruling.** When a ruling lands, the decision task completes pointing at where the ruling is recorded (decisions doc / ledger). The task tracks that a decision is OWED; the record holds WHAT was decided — one lifecycle, two stages, never two competing truths.
+- A discovered mid-execution decision is split out the moment it surfaces: file the `#decision` task, wire the edge, continue on unblocked work.
 
 ## Cold-Start Sufficiency
 
@@ -134,7 +151,7 @@ Tasks live under `####` headings in `{name}-tasks.md`.
 | Creation | No date = backlog (appears in "No Date" on Home) |
 | Recurrence | `🔁` on the line — always appears in "Today" |
 | Execution | Agent starting work on a task MUST append `#wip` to the end of the task line (`sb-task edit <file> <ref> --status wip`), and MUST remove `#wip` when execution ends (completed or stopped). Marks work-in-progress; dashboards render it as a WIP pill. A task whose `_Depends:_` tasks are not all completed is blocked — do not start it |
-| Completion | `[x]` + `✅ YYYY-MM-DD` at end. `sb-task edit <file> <ref> --status done` performs this AND the mandatory validation in one step. Hand completions MUST validate the line per § Sweep Contract → Write-Time Validation and BLOCK a non-conforming completion |
+| Completion | `[x]` + `✅ YYYY-MM-DD` at end. `sb-task edit <file> <ref> --status done` performs this AND the mandatory validation in one step, and REFUSES while any `_Done-after:_` gate is still open (deliberate override: `--force`). Hand completions MUST validate the line per § Sweep Contract → Write-Time Validation, BLOCK a non-conforming completion, and honor the `_Done-after:_` gate |
 | Cleanup | Weekly review deletes completed tasks. Git preserves history. Stale `#wip` on tasks with no active execution is removed |
 
 ## Progressive Enrichment
