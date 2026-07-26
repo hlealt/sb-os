@@ -29,6 +29,7 @@ DATE_EMOJI = "\U0001F4C5"   # 📅
 DONE_EMOJI = "✅"       # ✅
 
 NUMBER_RE = re.compile(r"^\d+(?:\.\d+)*[a-z]?$")
+LINE_REF_RE = re.compile(r"^[Ll](\d+)$")   # positional ref: L110 = file line 110
 TASK_LINE_RE = re.compile(r"^- \[( |x)\] (.*)$")
 DUE_RE = re.compile(DATE_EMOJI + r" (\d{4}-\d{2}-\d{2})")
 DONE_RE = re.compile(DONE_EMOJI + r" ?(\d{4}-\d{2}-\d{2})")
@@ -491,6 +492,18 @@ def resolve_task(tf, ref, vault):
                        f"number '{ref}' appears on {len(by_number)} tasks (numbers must be unique)",
                        hint="fix the duplicates: sb-task edit <file> <title-substring> --number <new>",
                        exit_code=2)
+    m = LINE_REF_RE.match(ref)
+    if m:
+        n = int(m.group(1))
+        # a line anywhere inside a task's block resolves to that task
+        hit = [t for t in tf.tasks if t.start + 1 <= n <= t.end]
+        if len(hit) == 1:
+            return hit[0]
+        raise CliError("ref-not-found",
+                       f"line {n} is not inside any task block in {tf.path.name}",
+                       hint=f"line refs shift on every edit — re-read them: "
+                            f"sb-task list {tf.path.name}",
+                       exit_code=2)
     low = ref.lower()
     exact = [t for t in tf.tasks if t.title_clean().lower() == low]
     if len(exact) == 1:
@@ -771,6 +784,8 @@ def cmd_files(args):
         })
     lines = [f"{r['open']:>3} open {r['done']:>3} done  {r['kind']:<7} {r['path']}"
              for r in rows]
+    if not args.json and lines:
+        lines.insert(0, f"{'open':<8} {'done':<8}  {'kind':<7} path")
     lines.append(f"-- {len(rows)} task files")
     lines.append("next: sb-task list <file>   (any unique name substring works)")
     emit(args, lines, {"ok": True, "count": len(rows), "files": rows})
@@ -799,7 +814,7 @@ def task_matches(t, args, today):
     return True
 
 
-def format_digest(t, wide=False):
+def format_digest(t, wide=False, show_line=False):
     _, subs = t.subtasks()
     _, deps = t.depends()
     bits = [
@@ -808,6 +823,8 @@ def format_digest(t, wide=False):
         f"{(t.section or '-').lower():<6}",
         f"{(t.due or '-'):<10}",
     ]
+    if show_line:
+        bits.append(f"L{t.start + 1:<5}")
     extras = []
     if t.difficulty:
         extras.append(f"#d/{t.difficulty}")
@@ -828,6 +845,13 @@ def format_digest(t, wide=False):
     return " ".join(bits) + " " + title + ("  " + " ".join(extras) if extras else "")
 
 
+def digest_header(show_line=False):
+    bits = ["s", f"{'number':>6}", f"{'moscow':<6}", f"{'due':<10}"]
+    if show_line:
+        bits.append(f"{'line':<6}")
+    return " ".join(bits) + " title  tags"
+
+
 def cmd_list(args):
     vault = find_vault_root(args.vault)
     tf = TaskFile(resolve_task_file(vault, args.file))
@@ -835,11 +859,13 @@ def cmd_list(args):
     hits = [t for t in tf.tasks if task_matches(t, args, today)]
     shown = hits[:args.limit]
     wide = getattr(args, "wide", False)
-    lines = [format_digest(t, wide) for t in shown]
+    lines = [format_digest(t, wide, show_line=True) for t in shown]
+    if not args.json and lines:
+        lines.insert(0, digest_header(show_line=True))
     if len(hits) > len(shown):
         lines.append(f"-- {len(hits) - len(shown)} more — re-run with --limit {len(hits)}")
     lines.append(f"-- {len(hits)}/{len(tf.tasks)} tasks ({args.status}) in {tf.path.name}")
-    lines.append(f"next: sb-task read {args.file} <number-or-title>")
+    lines.append(f"next: sb-task read {args.file} <number|Lline|title>")
     emit(args, lines, {"ok": True, "file": str(tf.path.relative_to(vault)).replace(os.sep, "/"),
                        "count": len(hits), "shown": len(shown),
                        "tasks": [t.to_json() for t in shown]})
@@ -1360,7 +1386,9 @@ def cmd_deps(args):
                       and tagged(t)
                       and any(parse_depend_ref(d) == (None, target.number)
                               for d in t.depends()[1] + t.done_after()[1])]
-        lines = [format_digest(t) for t in dependents]
+        lines = [format_digest(t, show_line=True) for t in dependents]
+        if not args.json and lines:
+            lines.insert(0, digest_header(show_line=True))
         lines.append(f"-- {len(dependents)} open tasks depend on {target.number} in {fname}")
         if dependents:
             lines.append(f"next: finish {target.number} first: "
@@ -1373,7 +1401,9 @@ def cmd_deps(args):
         # gates block FINISHING, not starting — a gated task can still be ready
         ready = [(k, t) for k, t in keyed
                  if not unmet.get(k) and k not in external and tagged(t)]
-        lines = [format_digest(t) for _, t in ready]
+        lines = [format_digest(t, show_line=True) for _, t in ready]
+        if not args.json and lines:
+            lines.insert(0, digest_header(show_line=True))
         lines.append(f"-- {len(ready)}/{len(keyed)} open tasks are ready "
                      f"(all depends met{f', #{tag} only' if tag else ''}) in {fname}")
         lines.append(f"next: sb-task edit {args.file} <number> --status wip")
@@ -1386,12 +1416,14 @@ def cmd_deps(args):
     waves, stuck = topo_waves(keyed, order_unmet, external)
     shown_waves = [[k for k in wave if tagged(tasks[k])] for wave in waves]
     lines = []
+    if not args.json and any(shown_waves):
+        lines.append("  " + digest_header(show_line=True))
     for i, wave in enumerate(shown_waves, 1):
         if not wave:
             continue
         lines.append(f"wave {i}  ({len(wave)} in parallel)")
         for k in wave:
-            lines.append(f"  {format_digest(tasks[k])}")
+            lines.append(f"  {format_digest(tasks[k], show_line=True)}")
     for k, refs in sorted(external.items()):
         if tagged(tasks[k]):
             lines.append(f"blocked-external: {k} waits on {', '.join(refs)}")
@@ -1575,6 +1607,21 @@ def cmd_selftest(args):
         ok("read-by-substring", code == 0 and json.loads(out)["task"]["number"] == "2")
         code, out = invoke(*V, "read", "testp", "zzz-nothing")
         ok("read-miss-exit-2", code == 2)
+
+        code, out = invoke(*V, "--json", "read", "testp", "1.1")
+        ln = json.loads(out)["task"]["line"] if code == 0 else 0
+        code, out = invoke(*V, "--json", "read", "testp", f"L{ln}")
+        ok("read-by-line-ref", code == 0 and json.loads(out)["task"]["number"] == "1.1", out)
+        code, out = invoke(*V, "--json", "read", "testp", f"L{ln + 1}")
+        ok("read-line-ref-midblock", code == 0
+           and json.loads(out)["task"]["number"] == "1.1", out)
+        code, out = invoke(*V, "read", "testp", "L9999")
+        ok("read-line-ref-miss-exit-2", code == 2, out)
+        code, out = invoke(*V, "list", "testp")
+        ok("list-header", code == 0 and out.splitlines()[0].split() == [
+            "s", "number", "moscow", "due", "line", "title", "tags"], out)
+        code, out = invoke(*V, "--json", "list", "testp")
+        ok("list-header-not-in-json", code == 0 and "tasks" in json.loads(out), out)
 
         code, out = invoke(*V, "--json", "edit", "testp", "2",
                            "--due", "2099-06-01", "--difficulty", "high", "--batch", "kick")
@@ -1813,7 +1860,7 @@ def build_parser():
 
     sp = cmd("list", "digest of a file's tasks (one line each), filterable",
              'sb-task list tecer --status open --moscow must',
-             "sb-task read <file> <number-or-title>")
+             "sb-task read <file> <number|Lline|title>")
     sp.add_argument("file", help="vault-relative path or unique task-file name substring")
     sp.add_argument("--status", choices=["open", "wip", "done", "all"], default="open")
     sp.add_argument("--moscow", choices=["must", "should", "could"])
@@ -1828,7 +1875,8 @@ def build_parser():
              'sb-task read tecer 4.1b',
              "sb-task edit <file> <ref> --status wip")
     sp.add_argument("file")
-    sp.add_argument("ref", help="task number, exact title, or unique title substring")
+    sp.add_argument("ref", help="task number, line ref (L110, from the list 'line' column), "
+                                "exact title, or unique title substring")
 
     sp = cmd("create", "add a task (refuses without --context + --criteria; escape: --force)",
              'sb-task create tecer --title "Close the Q3 review" --number 3.2 '
