@@ -38,6 +38,7 @@ HEADING_RE = re.compile(r"^#{1,6} ")
 MOSCOW_RE = re.compile(r"^#### (Must|Should|Could)\s*$", re.IGNORECASE)
 SUB_CHECKBOX_RE = re.compile(r"^(\s+)- \[( |x)\] (.*)$")
 FIELD_RE = re.compile(r"^(\s+)- _([A-Za-z][A-Za-z-]*):_\s*(.*)$")
+LIST_ITEM_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s")   # starts a new list item
 
 MOSCOW_LEVELS = ["Must", "Should", "Could"]
 DIFF_CANON = {"easy": "easy", "med": "med", "hard": "hard",
@@ -399,18 +400,28 @@ class Task:
         return None
 
     def field_extent(self, idx):
-        """[idx, j) — the field line plus its deeper-indented children."""
+        """[idx, j) — the field line, its deeper-indented children, and its
+        continuation lines.
+
+        Markdown does not require a wrapped bullet's later lines to be indented,
+        and task blocks carry many at column 0 (blank-line-separated paragraphs
+        under a `_Context:_`). A field therefore ends only where a NEW list item
+        starts at or shallower than its own indent — never at the first blank or
+        first shallow line, which ended the field early and let an insert index
+        derived from it land INSIDE the bullet. Trailing blank lines are left
+        out so an insert still lands directly after the last content line.
+        """
         indent = len(FIELD_RE.match(self.tf.lines[idx]).group(1))
-        j = idx + 1
+        j = end = idx + 1
         while j < self.end:
             line = self.tf.lines[j]
-            if line.strip() == "":
-                break
-            cur = len(line) - len(line.lstrip())
-            if cur <= indent:
-                break
+            if line.strip():
+                cur = len(line) - len(line.lstrip())
+                if cur <= indent and LIST_ITEM_RE.match(line):
+                    break
+                end = j + 1
             j += 1
-        return j
+        return end
 
     def present_fields(self):
         out = {}
