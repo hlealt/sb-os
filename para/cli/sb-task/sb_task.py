@@ -1315,19 +1315,42 @@ def dep_state(tf, vault):
       external      — {key: [cross-file _Depends:_ refs not yet done]}
       gate_unmet    — {key: [same-file _Done-after:_ numbers not yet done]}
       gate_external — {key: [cross-file _Done-after:_ refs not yet done]}
-    A missing target counts as unmet. Done tasks satisfy edges and carry no
+    A missing target counts as unmet: a cross-file ref whose file or task is
+    gone stays in `external`, and a same-file ref that resolves to no task is
+    REFUSED outright (see split_refs). Both branches fail CLOSED — an
+    unresolvable ref never reads as met. Done tasks satisfy edges and carry no
     entry of their own. Depends blocks STARTING; done-after blocks FINISHING.
     """
     by_num = {t.number: t for t in tf.tasks if t.number}
     other_cache = {}
 
-    def split_refs(refs):
+    def split_refs(refs, task, field):
         same, ext = [], []
         for d in refs:
             path, num = parse_depend_ref(d)
             if path is None:
                 dt = by_num.get(num)
-                if dt is not None and not dt.done:
+                if dt is None:
+                    # Fail CLOSED and LOUD, matching the external branch below.
+                    # Silently dropping it released the row as if the edge were
+                    # met — a readiness that was a fact about typing, not about
+                    # the store.
+                    sugg = difflib.get_close_matches(num, sorted(by_num),
+                                                     n=3, cutoff=0.3)
+                    raise CliError(
+                        "unresolvable-ref",
+                        f"{field} ref '{d}' on task "
+                        f"{task.number or 'line:' + str(task.start + 1)} "
+                        f"matches no numbered task in {tf.path.name}",
+                        hint=("did you mean: " + ", ".join(sugg) + "\n"
+                              if sugg else "")
+                        + "refs are plain task numbers, comma-separated; guards "
+                          "like '1.1 [rc=0]' and alternates like '1.1|1.2' are "
+                          "not supported ref grammar\n"
+                        + "cross-file refs look like <path>#<number>\n"
+                        + "numbers present: "
+                        + (", ".join(sorted(by_num)) or "(none)"))
+                if not dt.done:
                     same.append(num)
             else:
                 if path not in other_cache:
@@ -1346,11 +1369,11 @@ def dep_state(tf, vault):
             continue
         key = t.number or f"line:{t.start + 1}"
         keyed.append((key, t))
-        same, ext = split_refs(t.depends()[1])
+        same, ext = split_refs(t.depends()[1], t, "_Depends:_")
         unmet[key] = same
         if ext:
             external[key] = ext
-        gsame, gext = split_refs(t.done_after()[1])
+        gsame, gext = split_refs(t.done_after()[1], t, "_Done-after:_")
         gate_unmet[key] = gsame
         if gext:
             gate_external[key] = gext
