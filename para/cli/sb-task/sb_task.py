@@ -423,6 +423,35 @@ class Task:
             j += 1
         return end
 
+    def field_value_extent(self, idx):
+        """[idx, j) — the field bullet and its WHOLE value.
+
+        `field_extent` bounds a field for INSERTION and stops at a new list
+        item at or shallower than the field's own indent. A REPLACE needs the
+        other bound: a value routinely continues as a list at column 0 or 1
+        (measured: 75 of 589 field bullets in one store carry 546 non-blank
+        lines beyond `field_extent`), and replacing only what `field_extent`
+        covers leaves the rest standing under the new text at rc=0.
+
+        A field's value therefore ends only where the NEXT field bullet of the
+        same block starts at or shallower than its own indent — the parser's
+        own field predicate — or where the block ends. A deeper-indented
+        `_Field:_` bullet is part of the value, not a terminator. Trailing
+        blank lines are left out so a replace does not swallow the separation
+        before whatever follows.
+        """
+        indent = len(FIELD_RE.match(self.tf.lines[idx]).group(1))
+        j = end = idx + 1
+        while j < self.end:
+            line = self.tf.lines[j]
+            fm = FIELD_RE.match(line)
+            if fm and len(fm.group(1)) <= indent:
+                break
+            if line.strip():
+                end = j + 1
+            j += 1
+        return end
+
     def present_fields(self):
         out = {}
         for i in range(self.start + 1, self.end):
@@ -1136,7 +1165,12 @@ def cmd_edit(args):
         val = text_arg(val)
         fl = task.field_line(name)
         if fl is not None:
+            # a replace consumes the field's WHOLE value, not its first
+            # physical line — see Task.field_value_extent
+            end = task.field_value_extent(fl)
             tf.lines[fl] = re.sub(r"(_[A-Za-z]+:_\s*).*$", rf"\g<1>{val}", tf.lines[fl])
+            if end > fl + 1:
+                tf.remove_lines(fl + 1, end)
         else:
             tf.insert_line(task.field_insert_idx(name), f"  - _{name}:_ {val}")
         touch(flag)
