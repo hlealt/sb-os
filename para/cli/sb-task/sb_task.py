@@ -1634,6 +1634,77 @@ type: tasks
 """
 
 
+# Shapes `edit`'s four-field paths must survive: a field's value continuing as
+# an indented block, as a column-0 list, and as a shallower numbered list; the
+# three `_Context…:_` labels; and values whose earlier field runs past a blank
+# line, which is where an insertion index derived from it used to land inside.
+FIELD_FIXTURE = """---
+tags:
+  - fieldp
+type: tasks
+---
+
+# fieldp — tasks
+
+#### Must
+
+- [ ] 1 Indented continuation shape
+  - _Criteria:_ first criteria line
+    2. second criteria line
+    3. third criteria line
+  - _Ref:_
+    - untouched ref
+
+- [ ] 2 Column-zero continuation shape
+  - _Criteria:_ first criteria line
+- a column-0 list line inside the value
+- a second column-0 line
+
+- [ ] 3 Shallow numbered continuation shape
+  - _Criteria:_ first criteria line
+ 8. a shallow numbered line inside the value
+ 9. a second shallow numbered line
+
+- [ ] 4 Plain context label
+  - _Context:_ plain context
+  - _Criteria:_ crit
+
+- [ ] 5 Cold-start context label
+  - _Context (cold-start):_ cold start context
+  - _Criteria:_ crit
+
+- [ ] 6 No context bullet
+  - _Criteria:_ crit
+
+- [ ] 7 Insert after a multi-paragraph value
+  - _Why:_ why first line
+
+  a second why paragraph after a blank line
+  - _Criteria:_ crit
+
+- [ ] 8 Ref groups split by a blank line
+  - _Ref:_
+    - first ref
+
+    - second ref
+  - _Criteria:_ crit
+
+- [ ] 9 Subtasks split by a blank line
+  - _Subtasks:_
+    - [ ] step one
+
+    - [ ] step two
+  - _Criteria:_ crit
+
+- [ ] 10 Backslash value on the insert path
+  - _Criteria:_ crit
+
+#### Should
+
+#### Could
+"""
+
+
 def cmd_selftest(args):
     checks = []
 
@@ -1876,6 +1947,96 @@ def cmd_selftest(args):
         ok("crlf-preserved", "\r\n#### Should" in content or "#### Should\r\n" in content,
            "untouched lines keep their \\r\\n endings")
         ok("no-fixture-task-left", "Ship the fixture feature" not in content)
+
+        # --- edit's four sub-bullet fields: REPLACE consumes the field's -----
+        # --- WHOLE value; INSERT lands after it. Both paths run on their -----
+        # --- own file so nothing above depends on their state. --------------
+        fproj = vault / "1-projects" / "fieldp"
+        fproj.mkdir(parents=True)
+        (fproj / "fieldp-tasks.md").write_text(FIELD_FIXTURE, encoding="utf-8",
+                                               newline="\n")
+
+        def fblock(num):
+            c, o = invoke(*V, "--json", "read", "fieldp", num)
+            return json.loads(o)["block"] if c == 0 else f"read failed rc={c}: {o}"
+
+        # A replace leaves the new value and nothing else: no continuation
+        # line of the old value survives, and the NEXT field bullet does.
+        code, out = invoke(*V, "edit", "fieldp", "1", "--criteria", "REPLACED")
+        b = fblock("1")
+        ok("edit-replace-indented-continuation", code == 0 and b.splitlines() == [
+            "- [ ] 1 Indented continuation shape",
+            "  - _Criteria:_ REPLACED",
+            "  - _Ref:_",
+            "    - untouched ref"], b)
+        code, out = invoke(*V, "edit", "fieldp", "2", "--criteria", "REPLACED")
+        b = fblock("2")
+        ok("edit-replace-column-zero-continuation", code == 0 and b.splitlines() == [
+            "- [ ] 2 Column-zero continuation shape",
+            "  - _Criteria:_ REPLACED"], b)
+        code, out = invoke(*V, "edit", "fieldp", "3", "--criteria", "REPLACED")
+        b = fblock("3")
+        ok("edit-replace-shallow-numbered-continuation", code == 0 and b.splitlines() == [
+            "- [ ] 3 Shallow numbered continuation shape",
+            "  - _Criteria:_ REPLACED"], b)
+
+        # The three `_Context…:_` labels, whose divergence is documented
+        # behaviour: only the exact label is a replace target.
+        code, out = invoke(*V, "edit", "fieldp", "4", "--context", "NEW ctx")
+        b = fblock("4")
+        ok("edit-context-plain-label-replaces", code == 0 and b.splitlines() == [
+            "- [ ] 4 Plain context label",
+            "  - _Context:_ NEW ctx",
+            "  - _Criteria:_ crit"], b)
+        code, out = invoke(*V, "edit", "fieldp", "5", "--context", "NEW ctx")
+        b = fblock("5")
+        ok("edit-context-cold-start-label-appends-second", code == 0 and b.splitlines() == [
+            "- [ ] 5 Cold-start context label",
+            "  - _Context:_ NEW ctx",
+            "  - _Context (cold-start):_ cold start context",
+            "  - _Criteria:_ crit"], b)
+        code, out = invoke(*V, "edit", "fieldp", "6", "--context", "NEW ctx")
+        b = fblock("6")
+        ok("edit-context-absent-label-appends", code == 0 and b.splitlines() == [
+            "- [ ] 6 No context bullet",
+            "  - _Context:_ NEW ctx",
+            "  - _Criteria:_ crit"], b)
+
+        # INSERT: an index derived from an earlier field must clear that
+        # field's whole value, including past a blank line.
+        code, out = invoke(*V, "edit", "fieldp", "7", "--goal", "GOAL text")
+        b = fblock("7")
+        ok("edit-insert-field-after-multiline-value", code == 0 and b.splitlines() == [
+            "- [ ] 7 Insert after a multi-paragraph value",
+            "  - _Why:_ why first line",
+            "",
+            "  a second why paragraph after a blank line",
+            "  - _Goal:_ GOAL text",
+            "  - _Criteria:_ crit"], b)
+        code, out = invoke(*V, "edit", "fieldp", "8", "--add-ref", "third ref")
+        b = fblock("8")
+        ok("edit-add-ref-after-blank-in-value", code == 0 and b.splitlines() == [
+            "- [ ] 8 Ref groups split by a blank line",
+            "  - _Ref:_",
+            "    - first ref",
+            "",
+            "    - second ref",
+            "    - third ref",
+            "  - _Criteria:_ crit"], b)
+        code, out = invoke(*V, "--json", "read", "fieldp", "9")
+        j = json.loads(out) if code == 0 else {}
+        ok("read-subtasks-across-blank-line",
+           code == 0 and j["task"]["subtasks"] == {"done": 0, "total": 2}, out)
+
+        # A value is text, never a pattern: backslash escapes reach the file
+        # as themselves. Guarded on the INSERT path only — the REPLACE path
+        # does not hold this property today, so no check asserts that it does.
+        code, out = invoke(*V, "edit", "fieldp", "10", "--why", r"C:\temp\new \g<1>")
+        b = fblock("10")
+        ok("edit-insert-backslash-value-literal", code == 0 and b.splitlines() == [
+            "- [ ] 10 Backslash value on the insert path",
+            r"  - _Why:_ C:\temp\new \g<1>",
+            "  - _Criteria:_ crit"], b)
 
     failed = [(n, d) for n, c, d in checks if not c]
     for n, c, d in checks:
