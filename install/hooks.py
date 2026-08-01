@@ -69,6 +69,11 @@ _RESOLVE_CONTEXT_RELATIVE = (
 # ``__rbtv__``. POSIX (forward slashes), matching the command string.
 _HOOK_COMMAND_SIGNATURE = _RESOLVE_CONTEXT_RELATIVE.as_posix()
 
+# POSIX prefix that resolves the interpreter NAME when the hook runs, not when it
+# is installed. See `_build_command` for why baking a name or an absolute path is
+# wrong for this git-tracked, cross-machine settings file.
+_PY_PICK = 'command -v python >/dev/null 2>&1 && SBPY=python || SBPY=python3;'
+
 # The two managed entries, by hook event name + tool matcher. Markdown scoping
 # of the Read entry is delegated to the resolver (see module docstring), so the
 # matcher is the bare tool name.
@@ -135,6 +140,14 @@ def _build_command(sb_os_path: str | Path) -> str:
     error. Mirrors RBTV's `_build_cwd_independent_command`
     (`rbtv/admin/install/installer/orchestration.py`) without importing it (a
     separate repo — see module docstring).
+
+    The interpreter NAME is resolved at hook-run time, never baked at install
+    time: `.claude/settings.local.json` is a git-tracked, cross-machine file, so
+    an interpreter captured on one machine (a literal ``python``, or an absolute
+    ``sys.executable``) breaks the hook on every other machine — a Linux VPS
+    ships ``python3`` and no ``python``, Windows the reverse. The emitted prefix
+    prefers ``python`` and falls back to ``python3``. It is POSIX-shell syntax,
+    so the entry pins ``"shell": "bash"`` (see `_build_entry`).
     """
     base = loaders._normalize_sb_os_path(sb_os_path)
     script_posix = (Path(base) / _RESOLVE_CONTEXT_RELATIVE).as_posix()
@@ -147,15 +160,20 @@ def _build_command(sb_os_path: str | Path) -> str:
         f"p=os.path.join(d,{script_posix!r}) if d else None;"
         "sys.exit(s.call([sys.executable,p,'--hook']) if p and os.path.isfile(p) else 0)"
     )
-    return f'python -c "{code}"'
+    return f'{_PY_PICK} "$SBPY" -c "{code}"'
 
 
 def _build_entry(matcher: str, command_str: str) -> dict:
-    """The sb-managed hook entry for a given matcher, carrying the sentinel."""
+    """The sb-managed hook entry for a given matcher, carrying the sentinel.
+
+    ``shell: "bash"`` is required — `_build_command` emits a POSIX interpreter
+    picker, which PowerShell (Claude Code's Windows default when Git Bash is
+    absent) cannot parse.
+    """
     return {
         "__sb__": _HOOK_SENTINEL,
         "matcher": matcher,
-        "hooks": [{"type": "command", "command": command_str}],
+        "hooks": [{"type": "command", "command": command_str, "shell": "bash"}],
     }
 
 

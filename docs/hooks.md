@@ -148,7 +148,9 @@ The hook fires `para/workflows/sb-inject-context/resolve_context.py --hook` to i
 | `PreToolUse` | `Skill` | Fires before any skill invocation; injects the skill's YAML context before the skill body runs |
 | `PostToolUse` | `Read` | Fires after every file read inside a workflow or skill; injects step-level user context |
 
-Both entries call `python "$CLAUDE_PROJECT_DIR/{sb_os_path}/para/workflows/sb-inject-context/resolve_context.py" --hook`, substituting `{sb_os_path}` with the path recorded in `sb-os.json`.
+Both entries run a small Python resolver that walks up from `$CLAUDE_PROJECT_DIR` to the repo root and calls `{sb_os_path}/para/workflows/sb-inject-context/resolve_context.py --hook`, substituting `{sb_os_path}` with the path recorded in `sb-os.json`.
+
+**Interpreter portability.** The interpreter NAME is resolved when the hook RUNS, by the prefix `command -v python >/dev/null 2>&1 && SBPY=python || SBPY=python3;`, and each entry pins `"shell": "bash"` so that POSIX prefix is parsed correctly on Windows too. Nothing machine-specific is baked at install time: `.claude/settings.local.json` is commonly git-tracked and shared across machines, so a literal `python` (absent on most Linux hosts) or an absolute `sys.executable` (a path that exists on only one machine) makes the hook error on every other machine.
 
 Schema and YAML contract reference: `para/docs/context-injection-schema.md`.
 
