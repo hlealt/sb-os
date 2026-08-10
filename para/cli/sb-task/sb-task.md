@@ -10,6 +10,10 @@ Deterministic executor for every operation on `*-tasks.md` files. NEVER hand-edi
 4. **Order of execution:** `sb-task deps <file>` — parallel waves derived from `_Depends:_`; `--ready` = startable now; `--on <ref>` = what finishing it unblocks. `sb-task sort <file>` rewrites the blocks into that order (derived view, re-runnable; the DAG stays the ordering truth).
 5. **Write:** one named command per action — `create`, `edit`, `delete`. Add `--dry-run` to preview any write. Use `--json` whenever output will be parsed.
 
+## Output shape
+
+A write op answers with a one-line receipt — number + title, each change as `field: old → new`, and the file — not the task's text (`8.1 Ship the parser — status: open → wip (tecer-tasks.md)`). You already have the corpus; re-reading it back costs context and tells you nothing. The full block returns on `--verbose`, on `--dry-run` (previewing the would-be block is the preview's whole job), and always from `read`. Anything an edit DISCARDS is echoed in full regardless: `delete` prints the removed block, and a `--why/--goal/--context/--criteria` replace prints the value it overwrote (`--json` carries it as `replaced`).
+
 ## Rules
 
 - Starting work on a task → `sb-task edit <file> <ref> --status wip`; ending → `--status done` (validates the sweep contract + stamps ✅ today) or back via `--status open`.

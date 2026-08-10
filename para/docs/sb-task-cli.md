@@ -21,6 +21,14 @@ The vault-side wrapper is per-machine, never synced by git:
 - Error: `{"ok": false, "error": {"code", "message", "hint"}}`.
 - Exit codes: `0` success · `1` refusal/validation (teaching error text) · `2` reference not found/ambiguous (with closest-match suggestions) · `3` environment/IO (no vault, bad encoding, file changed on disk).
 
+## Output policy
+
+Stdout is context the calling agent pays for, so a write op's default answer is a **receipt, not the corpus**: one line carrying the task's number + (truncated) title, each change as `field: old → new`, and the file name. `--verbose` restores the full task block; `--dry-run` shows it unconditionally (previewing the would-be block is the preview's purpose). Read ops (`list`, `read`, `deps`, `files`) are already consumption-shaped and echo what was asked for.
+
+The one exception is **discarded text, which is always echoed in full** — the vault's never-lose-information rule outranks brevity. `delete` prints the removed block; a `--why/--goal/--context/--criteria` replace prints the value it overwrote (JSON: the `replaced` object, keyed by field name). Any future op that overwrites or drops user text inherits this exception.
+
+`--json` is unaffected by the receipt reshaping: every key it emitted before still carries the same content (`edit` still returns the full post-edit `block`), and `replaced` is purely additive.
+
 ## Design invariants
 
 - **Line-precise writes.** Per-line `\r` and the file's BOM are preserved; untouched lines are never reformatted. Writes are atomic (temp file + replace), retry briefly when a sync client or file watcher holds the target (then refuse typed, nothing written), and refuse if the file's mtime changed between read and write.

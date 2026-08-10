@@ -70,6 +70,27 @@ def emit(args, text_lines, json_obj):
             print(ln)
 
 
+def short(s, n=48):
+    """Trim free text for a one-line receipt."""
+    s = " ".join(str(s).split())
+    return s if len(s) <= n else s[:n - 1] + "…"
+
+
+def receipt(task, tf, details, wrote, verbose):
+    """A write op's default output: one line saying what changed, where.
+
+    Agents pay for stdout by the token; the task corpus they already have is
+    the most expensive thing to echo back. The full block returns only on
+    --verbose or --dry-run (a preview's whole job is showing the would-be
+    block).
+    """
+    ident = " ".join(x for x in (task.number, short(task.title_clean(), 60)) if x)
+    line = f"{ident} — {'; '.join(details)} ({tf.path.name})"
+    if not wrote:
+        line += "  [DRY-RUN, not written]"
+    return (task.block_lines() + [line]) if (verbose or not wrote) else [line]
+
+
 def color(s, c):
     if not USE_COLOR:
         return s
@@ -982,10 +1003,10 @@ def cmd_create(args):
     heading = tf.ensure_section(level)
     at = tf.insert_block(heading, block)
     wrote = tf.save(args)
-    lines = block + [
-        f"-- {'DRY-RUN, not written' if not wrote else f'created under #### {level}, line {at + 1}'}",
-        f"next: sb-task read {args.file} {args.number or 'this title'}",
-    ]
+    ident = " ".join(x for x in (args.number, short(text_arg(args.title).strip(), 60)) if x)
+    line = (f"created {ident} → #### {level}, line {at + 1} ({tf.path.name})"
+            + ("" if wrote else "  [DRY-RUN, not written]"))
+    lines = (block + [line]) if (args.verbose or not wrote) else [line]
     emit(args, lines, {"ok": True, "action": "create", "written": wrote,
                        "file": str(tf.path.relative_to(vault)).replace(os.sep, "/"),
                        "line": at + 1, "block": "\n".join(block)})
@@ -1009,17 +1030,21 @@ def cmd_edit(args):
     tf = TaskFile(resolve_task_file(vault, args.file))
     task = resolve_task(tf, args.ref, vault)
     changed = []
+    details = []      # human receipt text, one per change (JSON keeps `changed`)
+    discarded = []    # text an edit overwrote — always echoed, never lost
 
     def key_of(t):
         return ("number", t.number) if t.number else ("title", t.title_clean())
 
     key = key_of(task)
 
-    def touch(label):
+    def touch(label, detail=None):
         changed.append(label)
+        details.append(detail or label)
 
     # --- main-line token edits ---------------------------------------
     if args.due is not None:
+        old = task.due or "none"
         due = check_date(args.due, "--due")
         line = task.line
         if due == "none":
@@ -1030,10 +1055,11 @@ def cmd_edit(args):
         else:
             line = re.sub(r"^(- \[.\] )", rf"\g<1>{DATE_EMOJI} {due} ", line)
         set_line(tf, task, line)
-        touch("due")
+        touch("due", f"due: {old} → {due}")
         tf.reparse(); task = relocate(tf, key)
 
     if args.number is not None:
+        old = task.number or "none"
         num = check_number(tf, args.number, task)
         line = task.line
         prefix_re = re.compile(r"^(- \[.\] (?:" + DATE_EMOJI + r" \d{4}-\d{2}-\d{2} )?)")
@@ -1044,10 +1070,11 @@ def cmd_edit(args):
         if num != "none":
             rest = f"{num} {rest}"
         set_line(tf, task, line[:pm.end()] + rest)
-        touch("number")
+        touch("number", f"number: {old} → {num}")
         tf.reparse(); task = relocate(tf, ("line", task.start)); key = key_of(task)
 
     if args.title is not None:
+        old_title = task.title_clean()
         new_title = text_arg(args.title).strip()
         line = task.line
         old = task.title_raw
@@ -1058,10 +1085,11 @@ def cmd_edit(args):
                 cut = min(cut, p)
         head_len = len(line) - len(old)
         set_line(tf, task, line[:head_len] + new_title + old[cut:])
-        touch("title")
+        touch("title", f"title: {short(old_title)} → {short(new_title)}")
         tf.reparse(); task = relocate(tf, ("line", task.start)); key = key_of(task)
 
     if args.difficulty is not None:
+        old = task.difficulty or "none"
         diff = canon_difficulty(args.difficulty)
         line = task.line
         line, hit = replace_token(line, re.compile(r"#d/[A-Za-z]+"),
@@ -1069,24 +1097,25 @@ def cmd_edit(args):
         if not hit and diff != "none":
             line = add_trailing_token(line, f"#d/{diff}")
         set_line(tf, task, line)
-        touch("difficulty")
+        touch("difficulty", f"difficulty: {old} → {diff}")
         tf.reparse(); task = relocate(tf, key)
 
     if args.batch is not None:
+        old = task.batch or "none"
         line = task.line
         line, hit = replace_token(line, re.compile(r"#(?:b|batch)/[A-Za-z0-9_-]+"),
                                   "" if args.batch == "none" else f"#b/{args.batch}")
         if not hit and args.batch != "none":
             line = add_trailing_token(line, f"#b/{args.batch}")
         set_line(tf, task, line)
-        touch("batch")
+        touch("batch", f"batch: {old} → {args.batch}")
         tf.reparse(); task = relocate(tf, key)
 
     for raw in (args.add_tag or []):
         tag = canon_tag(raw)
         if tag not in task.tags:
             set_line(tf, task, add_trailing_token(task.line, f"#{tag}"))
-            touch(f"tag+{tag}")
+            touch(f"tag+{tag}", f"tag: +#{tag}")
             tf.reparse(); task = relocate(tf, key)
 
     for raw in (args.remove_tag or []):
@@ -1099,11 +1128,12 @@ def cmd_edit(args):
         line, _ = replace_token(task.line,
                                 re.compile("#" + re.escape(tag) + r"(?![\w/-])"), "")
         set_line(tf, task, line)
-        touch(f"tag-{tag}")
+        touch(f"tag-{tag}", f"tag: -#{tag}")
         tf.reparse(); task = relocate(tf, key)
 
     # --- status ------------------------------------------------------
     if args.status is not None:
+        old = "done" if task.done else ("wip" if task.wip else "open")
         line = task.line
         if args.status == "wip":
             if task.done:
@@ -1153,7 +1183,7 @@ def cmd_edit(args):
                                f"completion line fails the sweep contract: {verdict.get('reason')}",
                                hint="nothing was written; fix the line content and re-run")
         set_line(tf, task, line)
-        touch(f"status={args.status}")
+        touch(f"status={args.status}", f"status: {old} → {args.status}")
         tf.reparse(); task = relocate(tf, key)
 
     # --- sub-bullet fields -------------------------------------------
@@ -1168,12 +1198,16 @@ def cmd_edit(args):
             # a replace consumes the field's WHOLE value, not its first
             # physical line — see Task.field_value_extent
             end = task.field_value_extent(fl)
+            # a replace DISCARDS text: echo it, never lose information
+            discarded.append((name, list(tf.lines[fl:end])))
             tf.lines[fl] = re.sub(r"(_[A-Za-z]+:_\s*).*$", rf"\g<1>{val}", tf.lines[fl])
             if end > fl + 1:
                 tf.remove_lines(fl + 1, end)
+            detail = f"{flag}: replaced ({end - fl} line(s), echoed below)"
         else:
             tf.insert_line(task.field_insert_idx(name), f"  - _{name}:_ {val}")
-        touch(flag)
+            detail = f"{flag}: added"
+        touch(flag, detail)
         tf.reparse(); task = relocate(tf, key)
 
     for r in (args.add_ref or []):
@@ -1229,6 +1263,7 @@ def cmd_edit(args):
     # --- depends ------------------------------------------------------
     if args.add_depends or args.remove_depends:
         _, deps = task.depends()
+        old = ", ".join(deps) or "none"
         deps = list(deps)
         for d in (args.add_depends or "").split(","):
             d = d.strip()
@@ -1252,12 +1287,13 @@ def cmd_edit(args):
                                f"  - _Depends:_ {', '.join(deps)}")
         elif fl is not None:
             tf.remove_lines(fl, fl + 1)
-        touch("depends")
+        touch("depends", f"depends: {old} → {', '.join(deps) or 'none'}")
         tf.reparse(); task = relocate(tf, key)
 
     # --- done-after (finish-to-finish gates) --------------------------
     if args.add_done_after or args.remove_done_after:
         _, gates = task.done_after()
+        old = ", ".join(gates) or "none"
         gates = list(gates)
         for d in (args.add_done_after or "").split(","):
             d = d.strip()
@@ -1281,7 +1317,7 @@ def cmd_edit(args):
                                f"  - _Done-after:_ {', '.join(gates)}")
         elif fl is not None:
             tf.remove_lines(fl, fl + 1)
-        touch("done-after")
+        touch("done-after", f"done-after: {old} → {', '.join(gates) or 'none'}")
         tf.reparse(); task = relocate(tf, key)
 
     # --- moscow move (last: it relocates the block) -------------------
@@ -1290,22 +1326,25 @@ def cmd_edit(args):
         if level not in MOSCOW_LEVELS:
             raise CliError("bad-moscow", f"--moscow must be must|should|could, got '{args.moscow}'")
         if (task.section or "").capitalize() != level:
+            old = (task.section or "none").lower()
             block = tf.remove_lines(task.start, task.end)
             heading = tf.ensure_section(level)
             tf.insert_block(heading, block)
-            touch(f"moscow={level.lower()}")
+            touch(f"moscow={level.lower()}", f"moscow: {old} → {level.lower()}")
             tf.reparse(); task = relocate(tf, key)
 
     if not changed:
         raise CliError("no-op", "no edit flags given — nothing to change",
                        hint=f"see the flags: sb-task edit -h")
     wrote = tf.save(args)
-    lines = task.block_lines() + [
-        f"-- {'DRY-RUN, not written' if not wrote else 'updated: ' + ', '.join(changed)}",
-    ]
+    lines = receipt(task, tf, details, wrote, args.verbose)
+    for name, old_lines in discarded:
+        lines.append(f"replaced _{name}:_ was:")
+        lines.extend(old_lines)
     emit(args, lines, {"ok": True, "action": "edit", "written": wrote,
                        "changed": changed, "task": task.to_json(),
-                       "block": "\n".join(task.block_lines())})
+                       "block": "\n".join(task.block_lines()),
+                       "replaced": {n: "\n".join(ls) for n, ls in discarded}})
     return 0
 
 
@@ -1770,6 +1809,30 @@ def cmd_selftest(args):
         code, out = invoke(*V, "edit", "testp", "2", "--number", "1.1")
         ok("edit-number-taken-refused", code == 1)
 
+        # a write op's default output is a one-line receipt, not the corpus
+        code, out = invoke(*V, "edit", "testp", "2", "--status", "wip")
+        ok("edit-receipt-is-one-line",
+           code == 0 and out.strip().splitlines() == [
+               "2 Review the fixture docs — status: open → wip (testp-tasks.md)"], out)
+        code, out = invoke(*V, "--verbose", "edit", "testp", "2", "--status", "open")
+        ok("edit-verbose-restores-block",
+           code == 0 and "_Criteria:_ docs reviewed" in out
+           and "status: wip → open" in out, out)
+        # a replace discards text — it is echoed, never lost
+        code, out = invoke(*V, "edit", "testp", "2", "--criteria", "replacement crit")
+        ok("edit-replace-echoes-discarded",
+           code == 0 and "docs reviewed" in out, out)
+        code, out = invoke(*V, "--json", "edit", "testp", "2", "--criteria", "docs reviewed")
+        ok("edit-replace-json-carries-discarded",
+           code == 0 and "replacement crit" in json.loads(out)["replaced"]["Criteria"], out)
+        code, out = invoke(*V, "create", "testp", "--title", "Receipt shape probe",
+                           "--number", "97", "--force")
+        ok("create-receipt-is-one-line",
+           code == 0 and len(out.strip().splitlines()) == 1
+           and out.startswith("created 97 Receipt shape probe → #### Should"), out)
+        code, out = invoke(*V, "delete", "testp", "97", "--yes")
+        ok("create-receipt-probe-removed", code == 0 and "Receipt shape probe" in out, out)
+
         code, out = invoke(*V, "--json", "edit", "testp", "3",
                            "--check-sub", "1")
         j = json.loads(out) if code == 0 else {}
@@ -2067,6 +2130,8 @@ def build_parser():
                         help="vault root (default: walk up for sb-os.json)")
     common.add_argument("--dry-run", action="store_true", default=argparse.SUPPRESS,
                         help="show the result, write nothing")
+    common.add_argument("--verbose", action="store_true", default=argparse.SUPPRESS,
+                        help="write ops: echo the full task block, not just the receipt")
 
     p = argparse.ArgumentParser(
         prog=PROG, parents=[common],
@@ -2208,7 +2273,7 @@ def main(argv=None):
             sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     parser = build_parser()
     args = parser.parse_args(argv)
-    for name, default in (("json", False), ("pretty", False),
+    for name, default in (("json", False), ("pretty", False), ("verbose", False),
                           ("vault", None), ("dry_run", False)):
         if not hasattr(args, name):
             setattr(args, name, default)
