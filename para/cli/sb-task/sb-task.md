@@ -9,6 +9,7 @@ Deterministic executor for every operation on `*-tasks.md` files. NEVER hand-edi
 3. **Read before write:** `sb-task list <file>` (digest; filters: `--status --moscow --due --batch --difficulty`; `--wide` for full titles), then `sb-task read <file> <ref>` for one task's full block. `<ref>` = task number (`4.1b`), exact title, or unique title substring.
 4. **Order of execution:** `sb-task deps <file>` — parallel waves derived from `_Depends:_`; `--ready` = startable now; `--on <ref>` = what finishing it unblocks. `sb-task sort <file>` rewrites the blocks into that order (derived view, re-runnable; the DAG stays the ordering truth).
 5. **Write:** one named command per action — `create`, `edit`, `delete`. Add `--dry-run` to preview any write. Use `--json` whenever output will be parsed.
+6. **Bulk:** `edit` takes a comma-separated ref list — `sb-task edit <file> 3.2,3.3,4.1 --status done`. Every ref is resolved before the first write, so a typo refuses the whole batch; the same flags apply to each task in turn (per-task validation still fires, so a sweep or gate refusal stops the batch mid-way — refs already applied stay applied). Uniqueness flags (`--number`, `--title`) are single-task by nature.
 
 ## Output shape
 
@@ -30,6 +31,7 @@ A write op answers with a one-line receipt — number + title, each change as `f
 sb-task list tecer --status open --moscow must
 sb-task create sb-os --title "Wire the ignite VPS wrapper" --number 12 --due 2026-08-01 --context "..." --criteria "..."
 sb-task edit tecer 4.1b --status done
+sb-task edit tecer 4.1,4.2,4.3 --batch 7 --moscow should --due 2026-09-01
 ```
 
 Full inventory and per-command examples: `sb-task -h` and `sb-task <command> -h`.

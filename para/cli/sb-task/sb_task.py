@@ -1026,9 +1026,49 @@ def relocate(tf, key):
 
 
 def cmd_edit(args):
+    """One or many refs: `<ref>` is a comma-separated list (bulk mode).
+
+    Free text is resolved ONCE up front — `@-` (stdin) reads once, and a
+    re-resolve of already-read content can't misfire on a leading '@'.
+    """
     vault = find_vault_root(args.vault)
+    for flag in ("title", "why", "goal", "context", "criteria"):
+        val = getattr(args, flag, None)
+        if val is not None:
+            setattr(args, flag, text_arg(val))
+    for flag in ("add_ref", "add_sub"):
+        vals = getattr(args, flag, None)
+        if vals:
+            setattr(args, flag, [text_arg(v) for v in vals])
+
+    refs = [r.strip() for r in args.ref.split(",") if r.strip()]
+    if not refs:
+        raise CliError("ref-not-found", "no task ref given", exit_code=2)
+    if len(refs) == 1:
+        return edit_one(args, vault, refs[0])
+
+    # resolve every ref BEFORE the first write — a typo in ref 5 must not
+    # land after refs 1-4 are already written
+    path = resolve_task_file(vault, args.file)
+    for r in refs:
+        resolve_task(TaskFile(path), r, vault)
+
+    lines, results = [], []
+    for r in refs:
+        buf = []
+        rc = edit_one(args, vault, r, sink=lambda tl, jo: (buf.extend(tl), results.append(jo)))
+        if rc:
+            return rc
+        lines.extend(buf)
+    emit(args, lines, {"ok": True, "action": "edit", "bulk": len(results),
+                       "results": results})
+    return 0
+
+
+def edit_one(args, vault, ref, sink=None):
+    emit_ = sink or (lambda tl, jo: emit(args, tl, jo))
     tf = TaskFile(resolve_task_file(vault, args.file))
-    task = resolve_task(tf, args.ref, vault)
+    task = resolve_task(tf, ref, vault)
     changed = []
     details = []      # human receipt text, one per change (JSON keeps `changed`)
     discarded = []    # text an edit overwrote — always echoed, never lost
@@ -1075,7 +1115,7 @@ def cmd_edit(args):
 
     if args.title is not None:
         old_title = task.title_clean()
-        new_title = text_arg(args.title).strip()
+        new_title = args.title.strip()
         line = task.line
         old = task.title_raw
         cut = len(old)
@@ -1138,7 +1178,7 @@ def cmd_edit(args):
         if args.status == "wip":
             if task.done:
                 raise CliError("bad-status", "task is completed; reopen first",
-                               hint=f"sb-task edit {args.file} {args.ref} --status open")
+                               hint=f"sb-task edit {args.file} {ref} --status open")
             if not task.wip:
                 line = add_trailing_token(line, "#wip")
         elif args.status == "open":
@@ -1192,7 +1232,6 @@ def cmd_edit(args):
         val = getattr(args, flag)
         if val is None:
             continue
-        val = text_arg(val)
         fl = task.field_line(name)
         if fl is not None:
             # a replace consumes the field's WHOLE value, not its first
@@ -1211,7 +1250,6 @@ def cmd_edit(args):
         tf.reparse(); task = relocate(tf, key)
 
     for r in (args.add_ref or []):
-        r = text_arg(r)
         fl = task.field_line("Ref")
         if fl is None:
             at = task.field_insert_idx("Ref")
@@ -1223,7 +1261,6 @@ def cmd_edit(args):
 
     # --- subtasks ----------------------------------------------------
     for s in (args.add_sub or []):
-        s = text_arg(s)
         fl = task.field_line("Subtasks")
         if fl is None:
             at = task.field_insert_idx("Subtasks")
@@ -1238,7 +1275,7 @@ def cmd_edit(args):
         _, subs = task.subtasks()
         if not subs:
             raise CliError("no-subtasks", "this task has no subtasks",
-                           hint=f"add one: sb-task edit {args.file} {args.ref} --add-sub \"...\"")
+                           hint=f"add one: sb-task edit {args.file} {ref} --add-sub \"...\"")
         hit = None
         if ref.isdigit() and 1 <= int(ref) <= len(subs):
             hit = subs[int(ref) - 1]
@@ -1341,10 +1378,10 @@ def cmd_edit(args):
     for name, old_lines in discarded:
         lines.append(f"replaced _{name}:_ was:")
         lines.extend(old_lines)
-    emit(args, lines, {"ok": True, "action": "edit", "written": wrote,
-                       "changed": changed, "task": task.to_json(),
-                       "block": "\n".join(task.block_lines()),
-                       "replaced": {n: "\n".join(ls) for n, ls in discarded}})
+    emit_(lines, {"ok": True, "action": "edit", "written": wrote,
+                  "changed": changed, "task": task.to_json(),
+                  "block": "\n".join(task.block_lines()),
+                  "replaced": {n: "\n".join(ls) for n, ls in discarded}})
     return 0
 
 
@@ -2101,6 +2138,22 @@ def cmd_selftest(args):
             r"  - _Why:_ C:\temp\new \g<1>",
             "  - _Criteria:_ crit"], b)
 
+        # --- bulk edit: one call, many refs ------------------------------
+        code, out = invoke(*V, "edit", "fieldp", "4,5,6", "--batch", "bulk1",
+                           "--moscow", "could")
+        c2, o2 = invoke(*V, "--json", "list", "fieldp", "--batch", "bulk1")
+        j = json.loads(o2) if c2 == 0 else {"tasks": []}
+        ok("bulk-edit-applies-to-every-ref",
+           code == 0 and sorted(t["number"] for t in j["tasks"]) == ["4", "5", "6"]
+           and all(t["moscow"] == "could" for t in j["tasks"]), out + o2)
+
+        # A bad ref anywhere refuses BEFORE the first write — no partial batch
+        code, out = invoke(*V, "edit", "fieldp", "1,nope-no-such-task",
+                           "--batch", "bulk2")
+        c2, o2 = invoke(*V, "--json", "list", "fieldp", "--batch", "bulk2")
+        ok("bulk-edit-bad-ref-writes-nothing",
+           code != 0 and json.loads(o2)["tasks"] == [], out + o2)
+
     failed = [(n, d) for n, c, d in checks if not c]
     for n, c, d in checks:
         print(f"{'ok  ' if c else 'FAIL'} {n}" + (f"  {d[:120]}" if not c and d else ""))
@@ -2196,11 +2249,13 @@ def build_parser():
     sp.add_argument("--wip", action="store_true")
     sp.add_argument("--force", action="store_true", help="create without context/criteria")
 
-    sp = cmd("edit", "change any task field; combines flags in one call",
-             'sb-task edit tecer 3.2 --status done',
+    sp = cmd("edit", "change any task field; combines flags in one call; "
+             "bulk = comma-separated refs",
+             'sb-task edit tecer 3.2,3.3,4.1 --batch 2 --due 2026-09-01',
              "sb-task list <file>")
     sp.add_argument("file")
-    sp.add_argument("ref")
+    sp.add_argument("ref", help="task ref, or a comma-separated list for bulk "
+                                "(all refs resolved before the first write)")
     sp.add_argument("--status", choices=["open", "wip", "done"],
                     help="done validates the sweep contract + stamps today; wip toggles #wip on")
     sp.add_argument("--due", help="YYYY-MM-DD, or 'none' to clear")
