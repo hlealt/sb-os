@@ -2,15 +2,13 @@
 
 The structural non-overlap (ME = mutual-exclusivity) gate needs a machine-
 readable answer to one question: "does this logical concept ALREADY have a
-canonical store somewhere in the finance system?" That answer lives in the
-p2-7 sources-of-truth inventory
-(`1-projects/finance-system/finance-system-v2-foundation/phase-2/inventories/p2-7-sources-of-truth.md`),
-which catalogs 23 data domains (§1.1–§1.23), each with a canonical source and
-the logical concept it owns.
+canonical store somewhere in the finance system?" That answer lives in a
+sources-of-truth inventory that catalogs 23 data domains (§1.1–§1.23), each
+with a canonical source and the logical concept it owns.
 
 This module transcribes that inventory into a registry the gate queries. It is
 intentionally a hand-curated registry, NOT a heuristic that re-derives concepts
-from filenames — the p2-7 inventory is the human-reviewed source of truth, and a
+from filenames — the inventory is the human-reviewed source of truth, and a
 registry-driven check is auditable (every match points at a known §-numbered
 entry) where a filename heuristic would be a guess.
 

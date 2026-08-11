@@ -41,12 +41,11 @@ Update pagamentos-recorrentes.md? (Y/N)
 
 ## Bank ID Mapping
 
-| bank_id | Name in pagamentos-recorrentes.md |
-|---|---|
-| `santander_fatura` | Cartão Santander (bloqueado) — Visa final 4011, old card, residual subscriptions only |
-| `santander_fatura_infinite` | Cartão Santander (ativo) — Unique Cashback Visa Infinite final 8667 |
-| `mp_fatura` | Cartão Mercado Pago |
-| `nubank_fatura` | Cartão Nubank |
+`pagamentos-recorrentes.md` names each recurring card by its own row label (e.g. `Cartão Mercado Pago`) — not by `bank_id`. To match a `fatura_totals.json` `bank_id` to its row:
+
+1. Read `{CONFIG_DIR}/banks.json` and get that `bank_id`'s `name` field.
+2. Find the `pagamentos-recorrentes.md` row whose label plausibly matches that name.
+3. If more than one row is plausible, STOP and ask the user which row to use — never guess between two active cards.
 
 ## Step Menu
 

@@ -1,8 +1,7 @@
 """Schema-conformance + schema-gap dual-surfacing for the tool-builder companion.
 
-Spec: `1-projects/finance-system/finance-system-v2-implementation/phase-5/p5-4.task.md`
-(tool-builder companion). Sources: `shape.md` "Tool-builder authority boundary";
-`p2-17-tool-builder-runtime.md` (schema-conformance check + dual-surfacing).
+Sources: `shape.md` "Tool-builder authority boundary" (schema-conformance
+check + dual-surfacing).
 
 The `tool-builder` companion (`finance/workflows/tool-builder/tool-builder.md`)
 builds tools whose output MUST conform, by default, to the destination

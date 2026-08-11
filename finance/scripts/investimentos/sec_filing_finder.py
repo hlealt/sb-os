@@ -23,9 +23,11 @@ BR arm (CVM dados-abertos):
   resolves to a PDF or HTML viewer on rad.cvm.gov.br or fnet.bmfbovespa.com.br.
 
 User-Agent:
-  SEC fair-access endpoints 403 non-contact UAs. The contact UA below is sent on
-  every SEC request. Override with --user-agent. CVM does not require a contact UA
-  but uses the same header for consistency.
+  SEC fair-access endpoints 403 non-contact UAs. Resolved from SEC_EDGAR_UA
+  (OS env, then vault .user/config/env/.env — same convention as BRAPI_TOKEN
+  in price_fetcher.py), falling back to a neutral placeholder that will get
+  403'd by SEC — set the env var. Override either with --user-agent. CVM does
+  not require a contact UA but uses the same header for consistency.
 
 CLI:
     python investimentos/sec_filing_finder.py \\
@@ -44,6 +46,7 @@ import argparse
 import csv
 import io
 import json
+import os
 import re
 import sys
 import time
@@ -54,9 +57,41 @@ from typing import Optional
 
 # ---------------------------------------------------------------------------
 # Contact User-Agent (SEC fair-access policy; same sent to CVM for consistency)
+# Resolved from SEC_EDGAR_UA (OS env, then vault .env) — see _load_ua().
 # Override with --user-agent on the CLI.
 # ---------------------------------------------------------------------------
-DEFAULT_UA = "Henrique Teixeira henrique.leal.teixeira@gmail.com"
+PLACEHOLDER_UA = "sb-os-user your-email@example.com"
+
+
+def _load_ua() -> str:
+    """Resolve SEC_EDGAR_UA: OS env first, then vault .user/config/env/.env.
+
+    Mirrors price_fetcher.py's _load_brapi_token() convention. Falls back to
+    a neutral placeholder — SEC will 403 requests sent with it.
+    """
+    ua = os.environ.get("SEC_EDGAR_UA")
+    if ua and ua.strip():
+        return ua.strip()
+
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "CLAUDE.md").exists() and (parent / ".user").is_dir():
+            env_path = parent / ".user" / "config" / "env" / ".env"
+            try:
+                with open(env_path, encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line.startswith("SEC_EDGAR_UA="):
+                            value = line[len("SEC_EDGAR_UA="):].strip()
+                            if value:
+                                return value
+            except OSError:
+                pass
+            break
+
+    return PLACEHOLDER_UA
+
+
+DEFAULT_UA = _load_ua()
 
 # ---------------------------------------------------------------------------
 # SEC EDGAR — base URLs
@@ -314,6 +349,13 @@ def resolve_sec(
       primary_document, primary_url, exhibit_list,
       filing_folder_url, index_url, company_name, market
     """
+    if user_agent == PLACEHOLDER_UA:
+        raise ValueError(
+            "No contact User-Agent set — SEC EDGAR will 403 this request. "
+            "Set SEC_EDGAR_UA (env var or .user/config/env/.env) or pass "
+            "--user-agent 'Your Name your-email@example.com'."
+        )
+
     cik = _resolve_cik(ticker, user_agent)
     submissions = _fetch_submissions(cik, user_agent)
     company_name = submissions.get("name", ticker)

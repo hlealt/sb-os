@@ -16,16 +16,15 @@
 # manifest is reconciled to match the prose declaration. `doc-maintainer` owns
 # maintenance: a new store/transformation adds a row here in the same reconcile.
 #
-# Mechanism source:
-#   1-projects/finance-system/finance-system-v2-foundation/phase-2/decision-prep/p2-19-documentation-currency.md
-#
 # Schema (per coupling entry):
 #   node_id : stable identifier for this coupled surface (snake_case)
 #   code    : list of paths/globs (repo-relative to sb-os/finance/, or rooted at
 #             `.user/` for personal config) whose change makes the docs stale
 #   docs    : list of {path, sections} the `code` change couples to. `path` is
-#             repo-relative to sb-os/finance/ unless rooted at `1-projects/` (a
-#             foundation doc reconciled by doc-maintainer, not gated here).
+#             repo-relative to sb-os/finance/ unless rooted at a per-install
+#             `1-projects/{project}/...` path (a foundation doc whose path is
+#             supplied by that install via context injection, reconciled by
+#             doc-maintainer, not gated here).
 #             `sections` lists the heading names at risk (informational; the
 #             hook gates at file granularity, the signal reports the sections).
 
@@ -56,7 +55,7 @@ couplings:
           - "Two parallel pipelines"
           - "Roles by directory"
           - "What lives where"
-      - path: "1-projects/finance-system/finance-system-v2-foundation/phase-2/data-flow-map-target.md"
+      - path: "1-projects/{project}/UNSET — no default ships; path comes from .user/context/doc-maintainer/doc-maintainer.yaml"
         sections:
           - "Gastos Pipeline — TARGET"
           - "Investimentos Pipeline — TARGET"
@@ -160,7 +159,8 @@ couplings:
 
   - node_id: tag_review_acks
     # New store created 2026-06-05. enforcement: hard-block would require docs outside
-    # this repo (data-flow-map-target.md lives in 1-projects/); use signal-only so the
+    # this repo (the target data-flow map is a per-install path under 1-projects/,
+    # supplied via context injection — not shipped by sb-os); use signal-only so the
     # companion reconciles rather than the pre-commit hook blocks.
     # ack_tag_review.py (the canonical write/upsert writer of the store) added 2026-06-06.
     enforcement: signal-only
@@ -169,7 +169,7 @@ couplings:
       - "scripts/shared/gate_coverage.py"
       - "scripts/shared/ack_tag_review.py"
     docs:
-      - path: "1-projects/finance-system/finance-system-v2-foundation/phase-2/data-flow-map-target.md"
+      - path: "1-projects/{project}/UNSET — no default ships; path comes from .user/context/doc-maintainer/doc-maintainer.yaml"
         sections:
           - "Tag-coverage ack side-ledger — TARGET (NEW, D18)"
       - path: "scripts/tools-index.md"

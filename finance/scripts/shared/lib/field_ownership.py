@@ -1,7 +1,5 @@
 """Field-ownership loader + write-permission gate for `assets.csv`.
 
-Spec: `1-projects/finance-system/finance-system-v2-foundation/phase-1/p1-21.task.md`.
-
 Loads the declarative field-ownership manifest from
 `.user/finance/bookkeeper/config/_field_ownership.yaml` and exposes a small
 helper used by `upsert_assets` (and any future asset-metadata writer) to

@@ -1,7 +1,5 @@
 """Audit-event protocol — append-only JSONL log of finance pipeline writes.
 
-Spec: `1-projects/finance-system/finance-system-v2-foundation/phase-1/audit-event-protocol.md`.
-
 Every ledger / config / state write performed by a finance script emits a
 single structured event to a central log at
 `{vault_root}/.user/finance/bookkeeper/audit/events-{YYYY}.jsonl`.
@@ -407,9 +405,6 @@ def emit_gate(
 # (it never emits it). The coupling between code/config surfaces and the docs
 # that describe them lives in the shared manifest
 # `sb-os/finance/docs/doc-currency-manifest.yaml`.
-#
-# Mechanism source:
-#   1-projects/finance-system/finance-system-v2-foundation/phase-2/decision-prep/p2-19-documentation-currency.md
 
 _DOC_CURRENCY_MANIFEST_REL = "3-resources/tools/sb-os/finance/docs/doc-currency-manifest.yaml"
 _FINANCE_PREFIX = "3-resources/tools/sb-os/finance/"

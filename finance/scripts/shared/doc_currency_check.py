@@ -20,9 +20,6 @@ re-commit. There is NO bypass flag in this tool. (Git's own `--no-verify` skips
 ALL hooks at the committer's own risk; this tool does not offer or advertise a
 per-tool bypass, by design — RC #7 exists because drift was allowed.)
 
-Mechanism source:
-  1-projects/finance-system/finance-system-v2-foundation/phase-2/decision-prep/p2-19-documentation-currency.md
-
 Usage (pre-commit):
     python doc_currency_check.py
         # reads `git diff --cached --name-only` (repo-relative paths) and the
@@ -58,14 +55,15 @@ _FINANCE_PREFIX = "finance/"
 
 # A coupling is commit-time HARD-BLOCKED only when its `enforcement` is this
 # value AND it has at least one in-repo doc (a doc this commit could stage). A
-# coupling whose docs all live OUTSIDE this repo (e.g. the foundation
-# data-flow-map under `1-projects/`) cannot be satisfied by an sb-os commit, so
-# it is never commit-gated — it is reconciled by the `doc-maintainer` companion
-# (layer 4). The default when `enforcement` is absent is hard-block.
+# coupling whose docs all live OUTSIDE this repo (e.g. a per-install foundation
+# doc under `1-projects/{any-project}/some-doc.md`) cannot be satisfied by an
+# sb-os commit, so it is never commit-gated — it is reconciled by the
+# `doc-maintainer` companion (layer 4). The default when `enforcement` is absent
+# is hard-block.
 _ENFORCE_HARD_BLOCK = "hard-block"
 
 # Doc paths under these prefixes live OUTSIDE the sb-os repo (they are vault
-# PARA paths, e.g. the foundation data-flow-map under `1-projects/`). They cannot
+# PARA paths, e.g. a per-install foundation doc under `1-projects/`). They cannot
 # be staged in an sb-os commit, so a coupling whose docs are all out-of-repo is
 # never commit-gated — it is a layer-4 (doc-maintainer) surface. Every other doc
 # path in the manifest is finance-relative (`docs/...`, `scripts/...`) and is in

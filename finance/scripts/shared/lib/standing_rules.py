@@ -1,7 +1,5 @@
 """Standing-rules loader + rule-fire instrumentation.
 
-Spec: `1-projects/finance-system/finance-system-v2-foundation/phase-1/p1-20.task.md`.
-
 Loads the declarative standing-rules registry from
 `.user/finance/bookkeeper/config/standing-rules.yaml` and provides a small
 helper for in-script consumers (categorize.py today; more later) to count
