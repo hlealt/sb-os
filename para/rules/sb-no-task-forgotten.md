@@ -36,14 +36,25 @@ Sequencing gate plus required output. You MUST NOT declare the job done or hand 
 
 ## Materiality Bar
 
-A loose end that failed the Execute-Inline Test becomes a task ONLY when at least one holds:
+A loose end that failed the Execute-Inline Test becomes a task ONLY when it passes BOTH prongs:
 
-1. **Owner decision** — its resolution depends on an owner decision, preference, or open question.
+**Prong 1 — shape.** At least one holds:
+
+1. **Owner decision** — its resolution depends on an owner decision that something real is waiting on. A question nobody needs answered is not a decision task — it is a below-bar note.
 2. **Destructive** — executing it is destructive or irreversible (deletes, archive moves, git history changes).
-3. **Standalone unit of work** — it is a genuine, self-contained piece of work with its own outcome, not a nit riding on this job's context.
+3. **Standalone unit of work** — it is a genuine, self-contained piece of work with its own outcome, not a nit riding on this job's context. Being self-contained is a shape, not a value: hygiene and polish are self-contained too, and Prong 2 is what keeps them out.
 4. **Blocker** — it blocks this or other known work.
 
-Below the bar → disclosure line only. The backlog is a cost: every captured task is owner attention spent later; the bar exists so small finds are executed or disclosed, never accumulated.
+**Prong 2 — present value.** The task text can name a concrete cost that is being paid NOW or on a known date if the task is never done. Passing shapes:
+
+- a defect whose effect is observable today (not one that "could" fire on an unhit path);
+- an owed teardown/cleanup — something this job left running, dirty, or armed;
+- content that actively misleads the next agent (a stale doc that already misled someone, a pointer to the wrong place — not mere staleness);
+- work another captured task or ruling explicitly depends on.
+
+Failing shapes — below the bar REGARDLESS of Prong 1: latent edge cases nobody has hit, speculative hardening ("could break if…"), test/probe hygiene whose absence has caused no wrong conclusion, doc/comment polish, and re-verification of things already verified once. If the value sentence needs "may", "might", "in principle", or "someday", it fails.
+
+Below the bar → disclosure line only. The backlog is a cost: every captured task is owner attention spent later — and a batch of captured tasks that each spawn their own follow-ups is how a finished job becomes a program that never closes. The bar exists so small and speculative finds are executed or disclosed, never accumulated.
 
 ## Execute-Inline Test
 
@@ -76,6 +87,7 @@ A loose end is executed inline INSTEAD of captured ONLY when ALL three hold:
 | Game | "I'll write a stub task now and fill in the context later" | Later is never. Meet cold-start sufficiency at write time — the next agent has only the task text. |
 | Game | "The next agent will figure out the context from the code" | The next agent has zero memory of this session. Encode what you know now: paths, decisions made and why, the state work was left in, what was tried and ruled out. |
 | Game | "To be safe I'll capture every idea I had" | Over-capture. Only the four loose-end classes qualify — speculative nice-to-haves do not. |
+| Game | "It's a REAL finding, so it deserves a task" | Truth is not value. A finding is captured for its consequence (Prong 2), not for being correct — a true observation about an unhit edge case is a disclosure line, not a task. |
 | Game | "I'll just say there were no loose ends" | If the job deferred, discovered, left-partial, or hit a blocker, "none" is false. The four classes make this checkable. |
 
 ## Scope
