@@ -638,3 +638,76 @@ def test_validate_line_mode_does_not_touch_vault(tmp_path):
     assert (state / "work-log.md").read_text(encoding="utf-8") == stale
     assert list(archive.iterdir()) == []
     assert "- [x] Task ✅ 2026-06-18" in foo.read_text(encoding="utf-8")
+
+
+# --------------------------------------------------------------------------- #
+# Ref integrity: refs pointing at swept tasks are scrubbed, never left dangling
+# --------------------------------------------------------------------------- #
+
+def _ref_fixture(tmp_path):
+    vault, state, archive = make_vault(tmp_path)
+    fresh_today_worklog(state)
+    foo = vault / "1-projects" / "foo" / "foo-tasks.md"
+    write_bytes(foo, (
+        "# foo\n\n"
+        f"- [x] 1.1 archived ✅ {TODAY}\n\n"
+        f"- [x] 1.2 also archived ✅ {TODAY}\n"
+        "  - _Depends:_ 1.1\n\n"
+        "- [ ] 2.1 still open\n"
+        "  - _Depends:_ 1.1, 1.2, 3.1\n"
+        "  - _Done-after:_ 1.1\n\n"
+        "- [ ] 3.1 also open\n"
+        "  - _Depends:_ 1.2\n"
+        "  - _Ref:_ keep me\n"
+    ), crlf=False)
+    return vault, foo
+
+
+def test_refs_to_swept_tasks_are_scrubbed(tmp_path):
+    vault, foo = _ref_fixture(tmp_path)
+    rc = run(vault)
+    assert rc == 0
+    out = foo.read_text(encoding="utf-8")
+    assert "  - _Depends:_ 3.1\n" in out        # 1.1/1.2 dropped, 3.1 kept
+    assert "_Done-after:_" not in out           # emptied field line removed
+    assert "1.1" not in out and "1.2" not in out
+    assert "  - _Ref:_ keep me\n" in out        # unrelated fields untouched
+
+
+def test_scrubbed_refs_are_reported_and_deps_resolvable(tmp_path):
+    vault, foo = _ref_fixture(tmp_path)
+    report = run_sweep(vault)
+    scrubbed = {(s["task"], s["field"]): s["removed"] for s in report["refs_scrubbed"]}
+    assert scrubbed == {("2.1", "_Depends:_"): ["1.1", "1.2"],
+                        ("2.1", "_Done-after:_"): ["1.1"],
+                        ("3.1", "_Depends:_"): ["1.2"]}
+    # every same-file ref left in the file now resolves to a task in it
+    sb = sw.load_sb_task()
+    tf = sb.TaskFile(foo)
+    numbers = {t.number for t in tf.tasks if t.number}
+    for t in tf.tasks:
+        for ref in t.depends()[1] + t.done_after()[1]:
+            path, num = sb.parse_depend_ref(ref)
+            assert path is not None or num in numbers
+
+
+def test_dry_run_reports_ref_scrub_without_writing(tmp_path):
+    vault, foo = _ref_fixture(tmp_path)
+    before = foo.read_text(encoding="utf-8")
+    report = run_sweep(vault, dry_run=True)
+    assert len(report["refs_scrubbed"]) == 3
+    assert foo.read_text(encoding="utf-8") == before
+
+
+def test_cross_file_refs_are_left_alone(tmp_path):
+    vault, state, archive = make_vault(tmp_path)
+    fresh_today_worklog(state)
+    foo = vault / "1-projects" / "foo" / "foo-tasks.md"
+    write_bytes(foo, (
+        "# foo\n\n"
+        f"- [x] 1.1 archived ✅ {TODAY}\n\n"
+        "- [ ] 2.1 open\n"
+        "  - _Depends:_ 1-projects/bar/bar-tasks.md#1.1\n"
+    ), crlf=False)
+    assert run(vault) == 0
+    assert "_Depends:_ 1-projects/bar/bar-tasks.md#1.1" in foo.read_text(encoding="utf-8")

@@ -69,7 +69,9 @@ An `--only` path that matches no task file exits 2 with an error — pass paths 
 
 Both stages perform day-rollover (idempotent) then the sweep: every top-level `- [x]` task in `*-tasks.md` under `1-projects/` and `2-areas/` (within the chosen scope) is extracted verbatim, routed by its `✅ YYYY-MM-DD` marker (today → `work-log.md`, earlier → `{date}-work-log.md` in the archive), appended under a `### Swept from [[{file-name}]] ({vault-relative-path})` group inside the target's `## Completed` section (deduplicated by task line; missing archive files created with frontmatter + `# Work Log` heading + `## Completed`), and removed from the source. Each block is preserved byte-for-byte, each source file's line endings are kept, and a checked item nested under an open `- [ ]` parent is never swept.
 
-Report the act-stage result in chat in one line: tasks swept, source files cleaned, work-logs written.
+Any remaining task whose `_Depends:_` / `_Done-after:_` pointed at a task just swept has that ref dropped (a swept task is done, so its edge is satisfied) — otherwise `sb-task deps` fails on the whole file. Each drop is listed in `sweep.refs_scrubbed`.
+
+Report the act-stage result in chat in one line: tasks swept, source files cleaned, work-logs written, refs scrubbed (list them if any).
 
 ## What NOT to do
 

@@ -30,6 +30,12 @@ the parser keys on is documented in
 `para/workflows/sb-vault-ops/data/tasks.md` (§ Sweep contract). Skip-not-delete
 is the invariant: on ANY routing doubt the sweep refuses to remove content.
 
+REF INTEGRITY: after removing a block, the sweep drops every same-file
+`_Depends:_` / `_Done-after:_` ref pointing at a task it just swept (a swept
+task is done, so its edge is satisfied) and REPORTS each drop. Left standing,
+those refs are unresolvable same-file refs that make `sb-task deps` fail on the
+whole file. Ref parsing is reused from the sb-task CLI, never reimplemented.
+
 Usage:
     python sweep_done_tasks.py [--vault-path PATH] [--rollover-only]
                                [--only P] [--dry-run] [--json]
@@ -78,6 +84,7 @@ import json
 import shutil
 import argparse
 import datetime
+import importlib.util
 from pathlib import Path
 from collections import OrderedDict
 
@@ -378,6 +385,78 @@ def extract_blocks(lines, today):
     return blocks, remove_ranges, skips
 
 
+def load_sb_task():
+    """Import the sb-task CLI module for its task/ref parsing. None if absent.
+
+    Mirror of sb_task.load_sweep_validator (which loads THIS file) — the two
+    scripts are siblings in the sb-os repo, so the path is fixed relative to
+    this file: {sb_os}/para/cli/sb-task/sb_task.py.
+    """
+    p = Path(__file__).resolve().parents[2] / "cli" / "sb-task" / "sb_task.py"
+    if not p.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location("sb_task", p)
+    mod = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(mod)
+    except Exception:
+        return None
+    return mod
+
+
+def swept_numbers(sb, path, remove_ranges):
+    """Task numbers of the blocks about to be removed, parsed by sb-task."""
+    starts = {s for s, _ in remove_ranges}
+    tf = sb.TaskFile(path)
+    return {t.number for t in tf.tasks if t.start in starts and t.number}, starts
+
+
+def scrub_dangling_refs(sb, path, gone, skip_starts=(), dry_run=False):
+    """Drop `_Depends:_` / `_Done-after:_` refs pointing at swept task numbers.
+
+    A swept task is DONE (rule 1 — the sweep only moves `- [x]` blocks), so the
+    edge it carried is satisfied: dropping the ref preserves ordering semantics
+    while keeping the store deps-resolvable. Left standing, the ref is a
+    same-file unresolvable ref that makes `sb-task deps` fail closed on the
+    WHOLE file (and it reports only the first one per run).
+
+    Cross-file refs (`path#num`) are left alone: `sb-task deps` classes a
+    missing cross-file target as `external`, not an error.
+
+    Returns [{task, field, removed: [...]}, ...]. Writes unless dry_run.
+    """
+    tf = sb.TaskFile(path)
+    scrubs, rewrites, drops = [], {}, []
+    for t in tf.tasks:
+        if t.start in skip_starts:
+            continue
+        for getter in ("depends", "done_after"):
+            fl, refs = getattr(t, getter)()
+            if fl is None:
+                continue
+            keep = [r for r in refs
+                    if sb.parse_depend_ref(r)[0] is not None
+                    or sb.parse_depend_ref(r)[1] not in gone]
+            if len(keep) == len(refs):
+                continue
+            m = sb.FIELD_RE.match(tf.lines[fl])
+            indent, label = m.group(1), m.group(2)
+            if keep:
+                rewrites[fl] = f"{indent}- _{label}:_ {', '.join(keep)}"
+            else:
+                drops.append(fl)
+            scrubs.append({"task": t.number or f"line:{t.start + 1}",
+                           "field": f"_{label}:_",
+                           "removed": [r for r in refs if r not in keep]})
+    if scrubs and not dry_run:
+        for fl, text in rewrites.items():
+            tf.lines[fl] = text
+        for fl in sorted(drops, reverse=True):
+            tf.remove_lines(fl, fl + 1)
+        tf.save(argparse.Namespace(dry_run=False))
+    return scrubs
+
+
 def ensure_archive_worklog(path, date):
     """Create a missing target work-log (minimal skeleton). No-op if it exists."""
     if path.exists():
@@ -527,9 +606,24 @@ def sweep(vault, state_dir, archive_dir, today, now_hm, dry_run, only=None):
         "appended_per_target": {},
     }
 
+    # Dangling-ref scrub (see scrub_dangling_refs): the numbers leaving each
+    # source must be read BEFORE the blocks are removed from it.
+    sb = load_sb_task()
+    if sb is None and source_removals:
+        report["ref_scrub_unavailable"] = "sb_task.py not importable; refs NOT checked"
+    gone_by_source = {}
+    if sb is not None:
+        for rel, (_lines, ranges) in source_removals.items():
+            gone_by_source[rel] = swept_numbers(sb, vault / rel, ranges)
+
     if dry_run or total_blocks == 0:
         report["worklogs_written"] = [Path(tp).name for tp in by_target]
         report["dry_run"] = bool(dry_run)
+        if dry_run and sb is not None:
+            report["refs_scrubbed"] = [
+                dict(source=rel, **s)
+                for rel, (gone, starts) in gone_by_source.items()
+                for s in scrub_dangling_refs(sb, vault / rel, gone, starts, dry_run=True)]
         return report
 
     # Write order is APPEND-THEN-REMOVE so a block is never deleted from its
@@ -558,6 +652,13 @@ def sweep(vault, state_dir, archive_dir, today, now_hm, dry_run, only=None):
         newlines = [lines[k] for k in range(len(lines)) if k not in drop]
         with open(vault / rel, "w", encoding="utf-8", newline="") as f:
             f.writelines(newlines)
+
+    # 3) Scrub refs left dangling by step 2 (post-removal, so indices are fresh).
+    scrubs = []
+    for rel, (gone, _starts) in gone_by_source.items():
+        for s in scrub_dangling_refs(sb, vault / rel, gone):
+            scrubs.append(dict(source=rel, **s))
+    report["refs_scrubbed"] = scrubs
 
     return report
 
@@ -603,6 +704,16 @@ def format_text_report(rollover, sweep_report):
                 tgt = ", ".join(info["targets"]) if info["targets"] else "—"
                 extra = f", {info['skipped']} skipped" if info["skipped"] else ""
                 lines.append(f"  - {rel}: {info['swept']} sweepable → {tgt}{extra}")
+        if sweep_report.get("ref_scrub_unavailable"):
+            lines.append(f"[sweep] WARNING: {sweep_report['ref_scrub_unavailable']}")
+        scrubs = sweep_report.get("refs_scrubbed", [])
+        if scrubs:
+            verb = "would drop" if sweep_report.get("dry_run") else "dropped"
+            lines.append(f"[sweep] {verb} {len(scrubs)} ref(s) pointing at swept "
+                         f"(now-archived, done) tasks:")
+            for s in scrubs:
+                lines.append(f"  - {s['source']}: task {s['task']} {s['field']} "
+                             f"-= {', '.join(s['removed'])}")
         skips = sweep_report.get("skipped", [])
         if skips:
             lines.append(f"[sweep] SKIPPED {len(skips)} unparseable/ambiguous "
