@@ -45,6 +45,14 @@ Fits an existing file → append. Index files (`{dir-name}.md`) are NEVER conten
 
 **Parallel sessions — working-tree reverts.** Edit rejection is not the only collision: a parallel session may `git restore` files in a shared repo and silently wipe your applied-but-uncommitted edits (observed 2026-06-05, sb-os). Immediately before staging, `git diff` each file you intend to stage and confirm your delta is still present; if wiped, re-read and re-apply only your delta, then commit without delay — the edit→commit window is the exposure.
 
+**Parallel sessions — whole-tree operations.** On a shared working tree, `git stash`, `git restore`/`git checkout` with no explicit pathspec, `git checkout -- .`, and `git clean` are FORBIDDEN — each silently reverts or discards every concurrent session's uncommitted work at once, defeating the write-collision and revert protections above in one shot, and is invisible to the sessions it hits (measured 2026-08-31, redesign-continue-1: a whole-tree `git stash` reverted ~12 concurrent seats' uncommitted edits). The recurring real need behind the forbidden command is comparing your change against clean HEAD — do that instead with a scratch worktree outside the vault, never inside the tree you're comparing against:
+
+```
+git -C <repo> worktree add /tmp/<name>-ab HEAD
+```
+
+or, for a single file, `git -C <repo> show HEAD:<path>`. Remove the scratch worktree (`git -C <repo> worktree remove /tmp/<name>-ab`) when done; it never touches the shared tree.
+
 **New conventions are owner-gated.** Introducing a NEW structural convention or standard not already covered by documented rules — a new folder *pattern*, file-organization scheme, task/file format, or naming standard — requires BOTH (1) documenting the rule in the owning `CLAUDE.md` or a decisions doc AND (2) the owner's agreement, BEFORE you apply it. Never introduce such structure ad hoc: propose, get agreement, document, then apply. Creating an ordinary project/area folder that follows existing PARA routing is NOT a new convention — this gate is for novel patterns only. An undocumented convention is a defect even when the work it organizes is correct.
 
 Users extend these defaults by adding their own routing rules below the marker block — anything outside the markers wins over the marker-block defaults (agents read top-to-bottom).
