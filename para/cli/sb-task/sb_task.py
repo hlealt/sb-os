@@ -1239,7 +1239,11 @@ def edit_one(args, vault, ref, sink=None):
             end = task.field_value_extent(fl)
             # a replace DISCARDS text: echo it, never lose information
             discarded.append((name, list(tf.lines[fl:end])))
-            tf.lines[fl] = re.sub(r"(_[A-Za-z]+:_\s*).*$", rf"\g<1>{val}", tf.lines[fl])
+            # lambda, not an f-string template: a replacement template would
+            # interpret backslashes in the owner's text (a Windows path's \U
+            # raises, \n and \t corrupt silently). Free text goes in literally.
+            tf.lines[fl] = re.sub(r"(_[A-Za-z]+:_\s*).*$",
+                                  lambda m: m.group(1) + val, tf.lines[fl])
             if end > fl + 1:
                 tf.remove_lines(fl + 1, end)
             detail = f"{flag}: replaced ({end - fl} line(s), echoed below)"
@@ -2129,13 +2133,24 @@ def cmd_selftest(args):
            code == 0 and j["task"]["subtasks"] == {"done": 0, "total": 2}, out)
 
         # A value is text, never a pattern: backslash escapes reach the file
-        # as themselves. Guarded on the INSERT path only — the REPLACE path
-        # does not hold this property today, so no check asserts that it does.
+        # as themselves. Both arms are guarded — the REPLACE path used to
+        # interpolate the value into an re.sub replacement template, which
+        # raised on \U (any Windows path) and silently turned \n and \t into
+        # real whitespace; it now substitutes via a lambda, so both hold.
         code, out = invoke(*V, "edit", "fieldp", "10", "--why", r"C:\temp\new \g<1>")
         b = fblock("10")
         ok("edit-insert-backslash-value-literal", code == 0 and b.splitlines() == [
             "- [ ] 10 Backslash value on the insert path",
             r"  - _Why:_ C:\temp\new \g<1>",
+            "  - _Criteria:_ crit"], b)
+
+        # …and again over the now-present field, which is the REPLACE path
+        code, out = invoke(*V, "edit", "fieldp", "10", "--why",
+                           r"D:\Users\new\tab \1 \g<0>")
+        b = fblock("10")
+        ok("edit-replace-backslash-value-literal", code == 0 and b.splitlines() == [
+            "- [ ] 10 Backslash value on the insert path",
+            r"  - _Why:_ D:\Users\new\tab \1 \g<0>",
             "  - _Criteria:_ crit"], b)
 
         # --- bulk edit: one call, many refs ------------------------------
