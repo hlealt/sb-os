@@ -3,6 +3,13 @@
 import csv
 from pathlib import Path
 
+import sys as _fp_sys
+_FP_SHARED = Path(__file__).resolve().parents[2] / "shared"
+if str(_FP_SHARED) not in _fp_sys.path:
+    _fp_sys.path.insert(0, str(_FP_SHARED))
+from lib.finance_paths import bookkeeper_root
+
+
 
 def _find_vault_root() -> Path:
     for parent in Path(__file__).resolve().parents:
@@ -15,7 +22,7 @@ VAULT_ROOT = _find_vault_root()
 
 # Default location of name_map.csv
 DEFAULT_NAME_MAP_PATH = (
-    VAULT_ROOT / ".user" / "finance" / "bookkeeper" / "ledgers" / "investimentos" / "name_map.csv"
+    bookkeeper_root(VAULT_ROOT) / "ledgers" / "investimentos" / "name_map.csv"
 )
 
 

@@ -38,6 +38,8 @@ Exit codes:
     1  No rows matched or corrections directory not found
 """
 from __future__ import annotations
+from lib.finance_paths import bookkeeper_root
+
 
 import argparse
 import csv
@@ -82,8 +84,7 @@ def _resolve_corrections_dir() -> Path:
     if override:
         return Path(override) / "corrections"
     return (
-        _find_vault_root()
-        / ".user" / "finance" / "bookkeeper" / "config" / "corrections"
+        bookkeeper_root(_find_vault_root()) / "config" / "corrections"
     )
 
 

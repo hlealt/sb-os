@@ -566,6 +566,20 @@ def install_command_loader(
     return target
 
 
+def rebase_finance_target(target_root: Path | str, target_rel: str) -> str:
+    """Rewrite a manifest template target that sits under the default finance root.
+
+    Delegates to ``lib.finance_paths.rebase_finance_rel`` (sb-os.json
+    ``finance_root``, default ``.user/finance``). Other targets are unchanged.
+    """
+    shared = Path(__file__).resolve().parents[1] / "finance" / "scripts" / "shared"
+    if str(shared) not in sys.path:
+        sys.path.insert(0, str(shared))
+    from lib.finance_paths import rebase_finance_rel
+
+    return rebase_finance_rel(target_root, target_rel)
+
+
 def install_template_if_missing(
     target_root: Path | str,
     sb_os_root: Path | str,
@@ -587,6 +601,7 @@ def install_template_if_missing(
         raise FileNotFoundError(
             f"sb-os template source missing: {src}. Re-clone the sb-os repo."
         )
+    target_rel = rebase_finance_target(target_root, target_rel)
     dst = Path(target_root) / target_rel
     if dst.exists():
         return None

@@ -45,6 +45,8 @@ Exit codes:
 """
 
 from __future__ import annotations
+from lib.finance_paths import bookkeeper_root
+
 
 import argparse
 import csv
@@ -375,14 +377,14 @@ def main() -> int:
     if args.config_dir:
         config_dir = Path(args.config_dir)
     else:
-        config_dir = vault_root / ".user" / "finance" / "bookkeeper" / "config"
+        config_dir = bookkeeper_root(vault_root) / "config"
 
     # Resolve transactions path.
     if args.transactions:
         tx_path = Path(args.transactions)
     else:
         # Default to most-recent fechamento month.
-        fechamento_base = vault_root / ".user" / "finance" / "bookkeeper" / "ledgers" / "fechamento"
+        fechamento_base = bookkeeper_root(vault_root) / "ledgers" / "fechamento"
         month_dirs = sorted(
             [d for d in fechamento_base.iterdir() if d.is_dir()],
             key=lambda p: p.name,

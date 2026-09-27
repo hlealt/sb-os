@@ -18,6 +18,8 @@ rule_fired audit event emission is tested via RuleFireCounter.emit_summary
 records the expected rule name(s).
 """
 from __future__ import annotations
+from lib.finance_paths import bookkeeper_root
+
 
 import json
 import os
@@ -515,10 +517,7 @@ class TestFamilyCanonicals:
         """The live standing-rules.yaml family_canonicals section loads correctly."""
         vault_root = Path(__file__).resolve().parents[7]
         real_yaml = (
-            vault_root
-            / ".user"
-            / "finance"
-            / "bookkeeper"
+            bookkeeper_root(vault_root)
             / "config"
             / "standing-rules.yaml"
         )

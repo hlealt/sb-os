@@ -14,6 +14,13 @@ import json
 import sys
 from pathlib import Path
 
+import sys as _fp_sys
+_FP_SHARED = Path(__file__).resolve().parents[1] / "shared"
+if str(_FP_SHARED) not in _fp_sys.path:
+    _fp_sys.path.insert(0, str(_FP_SHARED))
+from lib.finance_paths import bookkeeper_root
+
+
 
 def _find_vault_root() -> Path:
     for parent in Path(__file__).resolve().parents:
@@ -33,7 +40,7 @@ from utils import (
 )
 from lib import audit  # noqa: E402
 
-LEDGER_DIR = VAULT_ROOT / ".user" / "finance" / "bookkeeper" / "ledgers" / "investimentos"
+LEDGER_DIR = bookkeeper_root(VAULT_ROOT) / "ledgers" / "investimentos"
 
 # Map: normalized CSV prefix → (target ledger filename, column list)
 PREFIX_TO_LEDGER = {

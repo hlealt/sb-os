@@ -29,6 +29,11 @@ dates do not always coincide with the chosen close date). Enforcing it would
 raise false alarms.
 """
 from __future__ import annotations
+try:
+    from .finance_paths import bookkeeper_root
+except ImportError:
+    from finance_paths import bookkeeper_root
+
 
 import argparse
 import csv
@@ -41,7 +46,7 @@ from pathlib import Path
 def _default_ledger_dir() -> Path:
     for parent in Path(__file__).resolve().parents:
         if (parent / "CLAUDE.md").exists() and (parent / ".user").is_dir():
-            return (parent / ".user" / "finance" / "bookkeeper"
+            return (bookkeeper_root(parent)
                     / "ledgers" / "investimentos")
     raise RuntimeError(f"Vault root not found from {__file__}")
 

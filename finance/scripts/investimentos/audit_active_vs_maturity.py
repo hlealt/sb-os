@@ -28,6 +28,13 @@ import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+import sys as _fp_sys
+_FP_SHARED = Path(__file__).resolve().parents[1] / "shared"
+if str(_FP_SHARED) not in _fp_sys.path:
+    _fp_sys.path.insert(0, str(_FP_SHARED))
+from lib.finance_paths import bookkeeper_root
+
+
 
 def _find_vault_root() -> Path:
     for parent in Path(__file__).resolve().parents:
@@ -40,14 +47,14 @@ def _default_ledger_dir() -> Path:
     override = os.environ.get("BOOKKEEPER_INVESTIMENTOS_DIR")
     if override:
         return Path(override)
-    return _find_vault_root() / ".user" / "finance" / "bookkeeper" / "ledgers" / "investimentos"
+    return bookkeeper_root(_find_vault_root()) / "ledgers" / "investimentos"
 
 
 def _default_assets_path() -> Path:
     override = os.environ.get("BOOKKEEPER_ASSETS_PATH")
     if override:
         return Path(override)
-    return _find_vault_root() / ".user" / "finance" / "bookkeeper" / "data" / "assets.csv"
+    return bookkeeper_root(_find_vault_root()) / "data" / "assets.csv"
 
 
 def _load_csv(path: Path) -> list[dict]:

@@ -5,6 +5,11 @@ Reads `events-{YYYY}.jsonl` files under
 """
 
 from __future__ import annotations
+try:
+    from .finance_paths import bookkeeper_root
+except ImportError:
+    from finance_paths import bookkeeper_root
+
 
 import argparse
 import json
@@ -68,7 +73,7 @@ def cmd_tail(args: argparse.Namespace) -> int:
     if root is None:
         print("error: could not find sb-os.json walking up from cwd", file=sys.stderr)
         return 2
-    audit_dir = root / ".user" / "finance" / "bookkeeper" / "audit"
+    audit_dir = bookkeeper_root(root) / "audit"
     events = list(_iter_events(audit_dir))
 
     since_dt: datetime | None = None

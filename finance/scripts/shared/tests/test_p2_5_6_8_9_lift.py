@@ -6,6 +6,8 @@ p2-8: months.json automated from fechamento/ directory scan.
 p2-9: single resolver (_resolve_bookkeeper_config) for all config files.
 """
 from __future__ import annotations
+from lib.finance_paths import bookkeeper_root
+
 
 import json
 import os
@@ -38,7 +40,7 @@ def test_p2_5_forex_vendors_in_live_config():
     """Live categories.json must declare intercontas_auto_pair_config.forex_vendors."""
     # Walk up from tests/ to find the live config
     for parent in _TESTS_DIR.parents:
-        cats = parent / ".user" / "finance" / "bookkeeper" / "config" / "categories.json"
+        cats = bookkeeper_root(parent) / "config" / "categories.json"
         if cats.exists():
             data = json.loads(cats.read_text(encoding="utf-8"))
             cfg = data.get("intercontas_auto_pair_config", {})
@@ -56,7 +58,7 @@ def test_p2_5_forex_vendors_in_live_config():
 def test_p2_5_noise_patterns_in_live_config():
     """Live categories.json must declare intercontas_auto_pair_config.noise_patterns."""
     for parent in _TESTS_DIR.parents:
-        cats = parent / ".user" / "finance" / "bookkeeper" / "config" / "categories.json"
+        cats = bookkeeper_root(parent) / "config" / "categories.json"
         if cats.exists():
             data = json.loads(cats.read_text(encoding="utf-8"))
             cfg = data.get("intercontas_auto_pair_config", {})
@@ -163,7 +165,7 @@ def test_p2_6_reimbursement_wins_declared_in_standing_rules():
     """standing-rules.yaml must declare reimbursement_wins_over_self_transfer: true
     under supplier_rules.self_transfer (p2-6 / V-2 documentation fix)."""
     for parent in _TESTS_DIR.parents:
-        sr = parent / ".user" / "finance" / "bookkeeper" / "config" / "standing-rules.yaml"
+        sr = bookkeeper_root(parent) / "config" / "standing-rules.yaml"
         if sr.exists():
             data = yaml.safe_load(sr.read_text(encoding="utf-8"))
             self_transfer = (data.get("supplier_rules") or {}).get("self_transfer", {})
@@ -325,7 +327,7 @@ def test_p2_8_live_fechamento_months_json_consistent():
     month dirs that have transactions.csv.
     """
     for parent in _TESTS_DIR.parents:
-        fechamento = parent / ".user" / "finance" / "bookkeeper" / "ledgers" / "fechamento"
+        fechamento = bookkeeper_root(parent) / "ledgers" / "fechamento"
         if not fechamento.is_dir():
             continue
         months_json = fechamento / "months.json"

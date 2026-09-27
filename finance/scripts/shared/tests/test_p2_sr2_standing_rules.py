@@ -17,6 +17,8 @@ rule_fired audit event emission is tested via RuleFireCounter (same infra as B2-
 tests). Full `categorize.py` startup load is tested via integration test at the end.
 """
 from __future__ import annotations
+from lib.finance_paths import bookkeeper_root
+
 
 from pathlib import Path
 
@@ -599,7 +601,7 @@ class TestCategorizePy_SR2Startup:
         """The live standing-rules.yaml loads all 6 B2-SR2 sections without error."""
         vault_root = Path(__file__).resolve().parents[7]
         real_yaml = (
-            vault_root / ".user" / "finance" / "bookkeeper" / "config"
+            bookkeeper_root(vault_root) / "config"
             / "standing-rules.yaml"
         )
         if not real_yaml.exists():

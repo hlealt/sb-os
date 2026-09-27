@@ -1,3 +1,5 @@
+from lib.finance_paths import bookkeeper_root
+
 #!/usr/bin/env python3
 """Categorize normalized transactions into the new caixa/competência schema.
 
@@ -721,7 +723,7 @@ def _resolve_bookkeeper_config() -> Path:
     if override:
         path = Path(override)
     else:
-        path = _find_vault_root() / ".user" / "finance" / "bookkeeper" / "config"
+        path = bookkeeper_root(_find_vault_root()) / "config"
     if not path.exists():
         raise RuntimeError(
             f"Bookkeeper config directory not found: {path}. "

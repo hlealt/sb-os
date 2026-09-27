@@ -10,6 +10,13 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+import sys as _fp_sys
+_FP_SHARED = Path(__file__).resolve().parents[1] / "shared"
+if str(_FP_SHARED) not in _fp_sys.path:
+    _fp_sys.path.insert(0, str(_FP_SHARED))
+from lib.finance_paths import bookkeeper_root
+
+
 
 def _find_vault_root() -> Path:
     for parent in Path(__file__).resolve().parents:
@@ -25,7 +32,7 @@ from parsers.safra_fundos_movimentacoes import SafraFundosMovimentacoesParser
 from parsers.safra_rf_movimentacoes import SafraRfMovimentacoesParser
 from parsers.name_map import NameMapResolver
 
-BOOTSTRAP_DIR = VAULT_ROOT / '.user' / 'finance' / 'bookkeeper' / 'raw-data' / 'safra-bootstrap-2024-2026'
+BOOTSTRAP_DIR = bookkeeper_root(VAULT_ROOT) / 'raw-data' / 'safra-bootstrap-2024-2026'
 
 FILES = [
     ('fundos', 'safra-fundos-2024.csv'),

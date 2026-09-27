@@ -26,6 +26,8 @@ for _p in (_SCRIPTS_DIR, _TESTS_DIR):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
+from lib.finance_paths import bookkeeper_root  # noqa: E402
+
 
 # ---------------------------------------------------------------------------
 # Real assets.csv mutation guard (session-scoped)
@@ -36,7 +38,7 @@ _VAULT_ROOT = next(
     None,
 )
 _REAL_ASSETS_CSV = (
-    _VAULT_ROOT / ".user" / "finance" / "bookkeeper" / "data" / "assets.csv"
+    bookkeeper_root(_VAULT_ROOT) / "data" / "assets.csv"
     if _VAULT_ROOT
     else None
 )

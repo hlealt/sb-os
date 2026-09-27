@@ -43,6 +43,8 @@ Exit codes:
     2   Config directory not found or config files missing / unreadable.
 """
 from __future__ import annotations
+from lib.finance_paths import bookkeeper_root
+
 
 import argparse
 import json
@@ -76,8 +78,7 @@ def _resolve_config_dir() -> Path:
     if override:
         return Path(override)
     return (
-        _find_vault_root()
-        / ".user" / "finance" / "bookkeeper" / "config"
+        bookkeeper_root(_find_vault_root()) / "config"
     )
 
 

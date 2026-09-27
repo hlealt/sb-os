@@ -42,6 +42,8 @@ Exit codes:
     1  No fechamento transactions.csv data found
 """
 from __future__ import annotations
+from lib.finance_paths import bookkeeper_root
+
 
 import argparse
 import csv
@@ -67,7 +69,7 @@ def _resolve_fechamento_dir(override: str | None) -> Path:
         return Path(override)
     env = os.environ.get("BOOKKEEPER_LEDGER_DIR")
     base = Path(env) if env else (
-        _find_vault_root() / ".user" / "finance" / "bookkeeper" / "ledgers"
+        bookkeeper_root(_find_vault_root()) / "ledgers"
     )
     return base / "fechamento"
 

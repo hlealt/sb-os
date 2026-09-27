@@ -54,6 +54,13 @@ import csv
 import os
 import sys
 from pathlib import Path
+
+import sys as _fp_sys
+_FP_SHARED = Path(__file__).resolve().parents[1] / "shared"
+if str(_FP_SHARED) not in _fp_sys.path:
+    _fp_sys.path.insert(0, str(_FP_SHARED))
+from lib.finance_paths import bookkeeper_root
+
 from typing import Any
 
 # ---------------------------------------------------------------------------
@@ -84,9 +91,9 @@ from lib.safe_write import atomic_write  # noqa: E402
 # Paths
 # ---------------------------------------------------------------------------
 
-DATA_DIR = VAULT_ROOT / ".user" / "finance" / "bookkeeper" / "data"
+DATA_DIR = bookkeeper_root(VAULT_ROOT) / "data"
 DESTINATION = DATA_DIR / "assets.csv"
-CONFIG_DIR = VAULT_ROOT / ".user" / "finance" / "bookkeeper" / "config"
+CONFIG_DIR = bookkeeper_root(VAULT_ROOT) / "config"
 
 # ---------------------------------------------------------------------------
 # Known type and class sets (from position_calculator.py and the live CSV)

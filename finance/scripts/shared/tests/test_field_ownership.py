@@ -4,6 +4,8 @@ Spec: p1-21 task — `1-projects/finance-system/finance-system-v2-foundation/pha
 """
 
 from __future__ import annotations
+from lib.finance_paths import bookkeeper_root
+
 
 import json
 import os
@@ -214,10 +216,7 @@ def test_real_vault_manifest_loads():
     parses + validates against the loader."""
     vault_root = Path(__file__).resolve().parents[7]
     real_yaml = (
-        vault_root
-        / ".user"
-        / "finance"
-        / "bookkeeper"
+        bookkeeper_root(vault_root)
         / "config"
         / "_field_ownership.yaml"
     )

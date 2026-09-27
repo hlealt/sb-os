@@ -127,6 +127,7 @@ def run_upgrade(
         finance_dashboard_html_path=finance_html_path,
         orphaned_loaders=orphaned_loaders,
         orphaned_rules=orphaned_rules,
+        target_root=target_root,
     )
     cli.print_plan(plan.actions)
     print(
@@ -410,6 +411,7 @@ def build_upgrade_plan(
     finance_dashboard_html_path: str = cli.DEFAULT_FINANCE_DASHBOARD_HTML_PATH,
     orphaned_loaders: Iterable[str] = (),
     orphaned_rules: Iterable[str] = (),
+    target_root: Path | None = None,
 ) -> cli.Plan:
     """Build the planned-action list for an upgrade. Pure — no FS writes.
 
@@ -469,9 +471,14 @@ def build_upgrade_plan(
             detail="rewrite (verbatim from sb-os module rules/)",
         ))
     for _src, target_rel in loaders.manifest_templates(modules_scoped, excl):
+        planned = (
+            loaders.rebase_finance_target(target_root, target_rel)
+            if target_root is not None
+            else target_rel
+        )
         plan.add(cli.Action(
             category="file",
-            target=target_rel,
+            target=planned,
             detail="template (install-if-missing — skipped when target exists)",
         ))
     if finance_selected:
@@ -592,7 +599,7 @@ def _execute_upgrade(
     for source_rel, target_rel in loaders.manifest_templates(
         modules_scoped, excluded_components
     ):
-        dest = target_root / target_rel
+        dest = target_root / loaders.rebase_finance_target(target_root, target_rel)
         _track(dest, lambda source_rel=source_rel, target_rel=target_rel: loaders.install_template_if_missing(
             target_root=target_root,
             sb_os_root=sb_os_root,

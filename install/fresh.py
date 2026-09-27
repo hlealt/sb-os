@@ -420,7 +420,11 @@ def build_fresh_plan(
     for filename, _module in rules:
         _add_file_action(plan, f".claude/rules/{filename}", detail="rule (verbatim copy)")
     for _src, target_rel in templates:
-        _add_file_action(plan, target_rel, detail="template (install-if-missing)")
+        _add_file_action(
+            plan,
+            loaders.rebase_finance_target(target_root, target_rel),
+            detail="template (install-if-missing)",
+        )
 
     # Finance dashboard entry HTML — rendered from the module template with
     # vault-root-absolute asset paths (see install/finance.py).
@@ -645,8 +649,10 @@ def _execute_fresh(
             source_rel=source_rel,
             target_rel=target_rel,
         )
-        if written is not None and target_rel not in created:
-            created.append(target_rel)
+        if written is not None:
+            written_rel = written.relative_to(target_root).as_posix()
+            if written_rel not in created:
+                created.append(written_rel)
 
     # Finance dashboard entry HTML — rendered with vault-root-absolute asset
     # paths derived from sb_os_path; install-if-missing (never clobbers a

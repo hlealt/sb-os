@@ -33,6 +33,8 @@ Exit codes:
 """
 
 from __future__ import annotations
+from lib.finance_paths import bookkeeper_root
+
 
 import json
 import os
@@ -72,8 +74,7 @@ def _default_portfolio_path() -> Path:
     if override:
         return Path(override)
     return (
-        _find_vault_root()
-        / ".user" / "finance" / "bookkeeper" / "ledgers" / "investimentos" / "portfolio.json"
+        bookkeeper_root(_find_vault_root()) / "ledgers" / "investimentos" / "portfolio.json"
     )
 
 

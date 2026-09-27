@@ -10,6 +10,11 @@ exception unchanged; the audit helper simply skips emission on exception.
 """
 
 from __future__ import annotations
+try:
+    from .finance_paths import bookkeeper_root
+except ImportError:
+    from finance_paths import bookkeeper_root
+
 
 import csv
 import inspect
@@ -92,10 +97,7 @@ def _log_path(ts: datetime) -> Path | None:
     if root is None:
         return None
     return (
-        root
-        / ".user"
-        / "finance"
-        / "bookkeeper"
+        bookkeeper_root(root)
         / "audit"
         / f"events-{ts.year}.jsonl"
     )

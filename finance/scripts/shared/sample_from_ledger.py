@@ -35,6 +35,8 @@ Exit codes:
     1  No rows matched filters or file not found
 """
 from __future__ import annotations
+from lib.finance_paths import bookkeeper_root
+
 
 import argparse
 import csv
@@ -61,7 +63,7 @@ def _resolve_ledger_path(ledger_arg: str) -> Path:
     override = os.environ.get("BOOKKEEPER_LEDGER_DIR")
     if override:
         return Path(override) / p
-    return _find_vault_root() / ".user" / "finance" / "bookkeeper" / "ledgers" / p
+    return bookkeeper_root(_find_vault_root()) / "ledgers" / p
 
 
 def _matches(row: dict, month: str | None, category: str | None,

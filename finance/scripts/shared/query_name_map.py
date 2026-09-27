@@ -23,6 +23,8 @@ Exit codes:
     1  No rows matched or name_map.csv not found
 """
 from __future__ import annotations
+from lib.finance_paths import bookkeeper_root
+
 
 import argparse
 import csv
@@ -46,8 +48,7 @@ def _default_name_map_path() -> Path:
     if override:
         return Path(override)
     return (
-        _find_vault_root()
-        / ".user" / "finance" / "bookkeeper"
+        bookkeeper_root(_find_vault_root())
         / "ledgers" / "investimentos" / "name_map.csv"
     )
 

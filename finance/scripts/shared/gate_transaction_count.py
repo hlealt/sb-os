@@ -19,6 +19,8 @@ Exit codes:
 """
 
 from __future__ import annotations
+from lib.finance_paths import bookkeeper_root
+
 
 import argparse
 import csv
@@ -163,7 +165,7 @@ def main() -> int:
         expenses_dir = Path(args.expenses_dir)
     else:
         vault_root = _find_vault_root()
-        expenses_base = vault_root / ".user" / "finance" / "bookkeeper" / "ledgers" / "expenses"
+        expenses_base = bookkeeper_root(vault_root) / "ledgers" / "expenses"
         # Pick the most-recently-modified month directory.
         month_dirs = [d for d in expenses_base.iterdir() if d.is_dir() and d.name != "months.json"]
         if not month_dirs:

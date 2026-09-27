@@ -51,8 +51,10 @@ if str(_SHARED) not in sys.path:
     sys.path.insert(0, str(_SHARED))
 try:
     from lib import audit  # type: ignore  # noqa: E402
+    from lib.finance_paths import bookkeeper_root as _resolve_bookkeeper_root
 except Exception:  # pragma: no cover - audit is best-effort
     audit = None  # type: ignore
+    from lib.finance_paths import bookkeeper_root as _resolve_bookkeeper_root
 
 
 # ---------------------------------------------------------------------------
@@ -69,11 +71,12 @@ def find_vault_root() -> Path:
 
 
 def bookkeeper_root() -> Path:
-    """`.user/finance/bookkeeper/`, overridable via BOOKKEEPER_ROOT."""
-    override = os.environ.get("BOOKKEEPER_ROOT")
-    if override:
-        return Path(override)
-    return find_vault_root() / ".user" / "finance" / "bookkeeper"
+    """`{finance_root}/bookkeeper`, overridable via BOOKKEEPER_ROOT.
+
+    Delegates to the single resolver in `lib.finance_paths` (sb-os.json
+    `finance_root`, default `.user/finance`).
+    """
+    return _resolve_bookkeeper_root(find_vault_root())
 
 
 def config_dir() -> Path:

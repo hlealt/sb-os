@@ -38,6 +38,8 @@ Exit codes:
 """
 
 from __future__ import annotations
+from lib.finance_paths import bookkeeper_root
+
 
 import csv
 import os
@@ -73,8 +75,7 @@ def _default_orders_path() -> Path:
     if override:
         return Path(override)
     return (
-        _find_vault_root()
-        / ".user" / "finance" / "bookkeeper" / "ledgers" / "investimentos" / "orders.csv"
+        bookkeeper_root(_find_vault_root()) / "ledgers" / "investimentos" / "orders.csv"
     )
 
 
@@ -83,8 +84,7 @@ def _default_corrections_dir() -> Path:
     if override:
         return Path(override)
     return (
-        _find_vault_root()
-        / ".user" / "finance" / "bookkeeper" / "config" / "corrections"
+        bookkeeper_root(_find_vault_root()) / "config" / "corrections"
     )
 
 

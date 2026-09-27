@@ -9,6 +9,13 @@ import csv
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import sys as _fp_sys
+_FP_SHARED = Path(__file__).resolve().parents[1] / "shared"
+if str(_FP_SHARED) not in _fp_sys.path:
+    _fp_sys.path.insert(0, str(_FP_SHARED))
+from lib.finance_paths import bookkeeper_root
+
+
 
 def _find_vault_root() -> Path:
     for parent in Path(__file__).resolve().parents:
@@ -19,9 +26,9 @@ def _find_vault_root() -> Path:
 
 VAULT_ROOT = _find_vault_root()
 
-LEDGER_DIR = VAULT_ROOT / ".user" / "finance" / "bookkeeper" / "ledgers" / "investimentos"
-ASSETS_PATH = VAULT_ROOT / ".user" / "finance" / "bookkeeper" / "data" / "assets.csv"
-CORRECTIONS_DIR = VAULT_ROOT / ".user" / "finance" / "bookkeeper" / "config" / "corrections"
+LEDGER_DIR = bookkeeper_root(VAULT_ROOT) / "ledgers" / "investimentos"
+ASSETS_PATH = bookkeeper_root(VAULT_ROOT) / "data" / "assets.csv"
+CORRECTIONS_DIR = bookkeeper_root(VAULT_ROOT) / "config" / "corrections"
 
 
 @dataclass

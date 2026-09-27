@@ -10,6 +10,8 @@ Verifies:
      (user decision 2026-05-26; manual-overrides.csv per-row; iof supplier default_category=compras)
 """
 from __future__ import annotations
+from lib.finance_paths import bookkeeper_root
+
 
 import csv
 import json
@@ -70,7 +72,7 @@ def test_categorize_never_emits_impostos(description):
 
 def test_validate_separation_raises_on_collision(tmp_path, monkeypatch):
     """V-B: collision between category and tag name raises RuntimeError."""
-    tags_path = tmp_path / ".user" / "finance" / "bookkeeper" / "config" / "tags.json"
+    tags_path = bookkeeper_root(tmp_path) / "config" / "tags.json"
     tags_path.parent.mkdir(parents=True, exist_ok=True)
     tags_path.write_text(
         json.dumps({"tags": {"impostos": {"label": "test"}}}), encoding="utf-8"
@@ -90,7 +92,7 @@ def test_validate_separation_raises_on_collision(tmp_path, monkeypatch):
 
 def test_validate_separation_passes_when_impostos_tag_only(tmp_path, monkeypatch):
     """After p2-3: impostos is a tag, not a category — no collision."""
-    tags_path = tmp_path / ".user" / "finance" / "bookkeeper" / "config" / "tags.json"
+    tags_path = bookkeeper_root(tmp_path) / "config" / "tags.json"
     tags_path.parent.mkdir(parents=True, exist_ok=True)
     tags_path.write_text(
         json.dumps({"tags": {"impostos": {"label": "Impostos (IPTU, IOF, IR)"}}}),
@@ -141,7 +143,7 @@ def test_live_categories_json_does_not_contain_impostos():
     """categories.json must not have 'impostos' as a category after p2-3."""
     vault = Path(__file__).resolve()
     for parent in vault.parents:
-        cats = parent / ".user" / "finance" / "bookkeeper" / "config" / "categories.json"
+        cats = bookkeeper_root(parent) / "config" / "categories.json"
         if cats.exists():
             data = json.loads(cats.read_text(encoding="utf-8"))
             assert "impostos" not in data.get("categories", {}), (

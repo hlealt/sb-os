@@ -43,6 +43,13 @@ import os
 import sys
 from pathlib import Path
 
+import sys as _fp_sys
+_FP_SHARED = Path(__file__).resolve().parents[1] / "shared"
+if str(_FP_SHARED) not in _fp_sys.path:
+    _fp_sys.path.insert(0, str(_FP_SHARED))
+from lib.finance_paths import bookkeeper_root
+
+
 
 # ---------------------------------------------------------------------------
 # Path resolution
@@ -60,8 +67,7 @@ def _default_portfolio_path() -> Path:
     if override:
         return Path(override)
     return (
-        _find_vault_root()
-        / ".user" / "finance" / "bookkeeper" / "ledgers" / "investimentos" / "portfolio.json"
+        bookkeeper_root(_find_vault_root()) / "ledgers" / "investimentos" / "portfolio.json"
     )
 
 
@@ -70,8 +76,7 @@ def _default_ledger_dir() -> Path:
     if override:
         return Path(override)
     return (
-        _find_vault_root()
-        / ".user" / "finance" / "bookkeeper" / "ledgers" / "investimentos"
+        bookkeeper_root(_find_vault_root()) / "ledgers" / "investimentos"
     )
 
 

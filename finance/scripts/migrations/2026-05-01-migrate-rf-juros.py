@@ -30,6 +30,7 @@ from pathlib import Path
 _SHARED = Path(__file__).resolve().parents[1] / "shared"
 if str(_SHARED) not in sys.path:
     sys.path.insert(0, str(_SHARED))
+from lib.finance_paths import bookkeeper_root  # noqa: E402
 try:
     from lib import audit  # noqa: E402
 except ImportError:
@@ -44,10 +45,10 @@ def _find_vault_root() -> Path:
 
 
 VAULT = _find_vault_root()
-LEDGER_DIR = VAULT / '.user' / 'finance' / 'bookkeeper' / 'ledgers' / 'investimentos'
+LEDGER_DIR = bookkeeper_root(VAULT) / 'ledgers' / 'investimentos'
 PROVENTOS = LEDGER_DIR / 'proventos.csv'
 BALCAO = LEDGER_DIR / 'balcao.csv'
-ASSETS = VAULT / '.user' / 'finance' / 'bookkeeper' / 'data' / 'assets.csv'
+ASSETS = bookkeeper_root(VAULT) / 'data' / 'assets.csv'
 LOG_DIR = Path(__file__).parent / 'logs'
 
 

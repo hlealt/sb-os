@@ -14,6 +14,13 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import sys as _fp_sys
+_FP_SHARED = Path(__file__).resolve().parents[1] / "shared"
+if str(_FP_SHARED) not in _fp_sys.path:
+    _fp_sys.path.insert(0, str(_FP_SHARED))
+from lib.finance_paths import bookkeeper_root
+
+
 
 def _find_vault_root() -> Path:
     for parent in Path(__file__).resolve().parents:
@@ -37,7 +44,7 @@ from irr_calculator import compute_xirr
 from lib import audit  # noqa: E402
 from lib.safe_write import atomic_write_json  # noqa: E402
 
-OUTPUT_DIR = VAULT_ROOT / ".user" / "finance" / "bookkeeper" / "ledgers" / "investimentos"
+OUTPUT_DIR = bookkeeper_root(VAULT_ROOT) / "ledgers" / "investimentos"
 SNAPSHOTS_JSON = OUTPUT_DIR / 'snapshots.json'
 
 # RF tradicional product types — non-defaulted instruments should not yield

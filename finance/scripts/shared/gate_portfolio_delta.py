@@ -32,6 +32,8 @@ Exit codes:
 """
 
 from __future__ import annotations
+from lib.finance_paths import bookkeeper_root
+
 
 import argparse
 import json
@@ -148,7 +150,7 @@ def main() -> int:
     args = parser.parse_args()
 
     vault_root = _find_vault_root()
-    inv_dir = vault_root / ".user" / "finance" / "bookkeeper" / "ledgers" / "investimentos"
+    inv_dir = bookkeeper_root(vault_root) / "ledgers" / "investimentos"
 
     # Resolve portfolio path.
     portfolio_path = Path(args.portfolio) if args.portfolio else inv_dir / "portfolio.json"

@@ -7,11 +7,25 @@ const CACHE_BUST = `?v=${Date.now()}`;
 // Vault-root-absolute base for the bookkeeper data stores. The dashboard
 // server serves the vault root as docroot, and the entry HTML's location is
 // configurable (finance_dashboard_html_path) — so data fetches MUST be
-// root-absolute, never relative to the page. This path is FIXED by the
-// finance contract (p1-3: `.user/finance/bookkeeper/{ledgers,config}/` is
-// not configurable); all data consumers (expenses.js, inv-data.js,
-// inv-historico.js) build their fetch paths from this constant.
-const FIN_DATA_BASE = '/.user/finance/bookkeeper';
+// root-absolute, never relative to the page. The prefix is sb-os.json
+// `finance_root` (same field as lib/finance_paths.py); absent means
+// `.user/finance`. Sync so later scripts can read FIN_DATA_BASE at parse time.
+function _financeDataBase() {
+  var rel = '.user/finance';
+  try {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', '/sb-os.json', false);
+    xhr.send(null);
+    if (xhr.status === 200 || xhr.status === 0) {
+      var cfg = JSON.parse(xhr.responseText);
+      if (cfg && typeof cfg.finance_root === 'string' && cfg.finance_root.trim()) {
+        rel = cfg.finance_root.replace(/^\/+|\/+$/g, '');
+      }
+    }
+  } catch (e) { /* default */ }
+  return '/' + rel + '/bookkeeper';
+}
+const FIN_DATA_BASE = _financeDataBase();
 
 const COLOR_PALETTE = [
   '#38BDF8', '#22C55E', '#2563EB', '#14B8A6', '#7C3AED',

@@ -17,6 +17,8 @@ test isolation.
 """
 
 from __future__ import annotations
+from lib.finance_paths import bookkeeper_root
+
 
 import csv
 import hashlib
@@ -64,12 +66,12 @@ _VAULT_ROOT = next(
     None,
 )
 _REAL_ASSETS = (
-    _VAULT_ROOT / ".user" / "finance" / "bookkeeper" / "data" / "assets.csv"
+    bookkeeper_root(_VAULT_ROOT) / "data" / "assets.csv"
     if _VAULT_ROOT
     else None
 )
 _REAL_CONFIG = (
-    _VAULT_ROOT / ".user" / "finance" / "bookkeeper" / "config"
+    bookkeeper_root(_VAULT_ROOT) / "config"
     if _VAULT_ROOT
     else None
 )

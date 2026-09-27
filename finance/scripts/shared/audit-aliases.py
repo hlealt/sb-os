@@ -22,6 +22,8 @@ Exit codes:
     1  One or more duplicate aliases detected (suitable for pre-commit hook)
 """
 from __future__ import annotations
+from lib.finance_paths import bookkeeper_root
+
 
 import argparse
 import json
@@ -43,8 +45,7 @@ def _default_suppliers_path() -> Path:
     if override:
         return Path(override)
     return (
-        _find_vault_root()
-        / ".user" / "finance" / "bookkeeper" / "config" / "suppliers.json"
+        bookkeeper_root(_find_vault_root()) / "config" / "suppliers.json"
     )
 
 

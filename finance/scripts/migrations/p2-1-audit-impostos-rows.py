@@ -14,6 +14,13 @@ import json
 import sys
 from pathlib import Path
 
+import sys as _fp_sys
+_FP_SHARED = Path(__file__).resolve().parents[1] / "shared"
+if str(_FP_SHARED) not in _fp_sys.path:
+    _fp_sys.path.insert(0, str(_FP_SHARED))
+from lib.finance_paths import bookkeeper_root
+
+
 
 def _find_vault_root() -> Path:
     for parent in Path(__file__).resolve().parents:
@@ -67,7 +74,7 @@ def main() -> int:
     args = parser.parse_args()
 
     vault = _find_vault_root()
-    ledger_base = vault / ".user" / "finance" / "bookkeeper" / "ledgers" / "fechamento"
+    ledger_base = bookkeeper_root(vault) / "ledgers" / "fechamento"
 
     if not ledger_base.exists():
         print(f"ERROR: ledger base not found: {ledger_base}", file=sys.stderr)

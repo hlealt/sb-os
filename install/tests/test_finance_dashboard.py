@@ -319,19 +319,19 @@ class TestManifestKnob(unittest.TestCase):
 class TestDashboardJsDataPaths(unittest.TestCase):
     """Guard the data-path reconciliation in the shipped dashboard JS.
 
-    Data fetches must be vault-root-absolute under the fixed
-    ``/.user/finance/bookkeeper`` contract (p1-3) — never relative to the
-    entry HTML, whose location is configurable.
+    Data fetches must be vault-root-absolute under ``/{finance_root}/bookkeeper``
+    (sb-os.json ``finance_root``, default ``.user/finance``) — never relative
+    to the entry HTML, whose location is configurable.
     """
 
     def _read(self, name: str) -> str:
         return (_REPO_ROOT / "finance" / "dashboard" / name).read_text(encoding="utf-8")
 
     def test_shared_defines_fin_data_base(self) -> None:
-        self.assertIn(
-            "const FIN_DATA_BASE = '/.user/finance/bookkeeper'",
-            self._read("shared.js"),
-        )
+        text = self._read("shared.js")
+        self.assertIn("const FIN_DATA_BASE = _financeDataBase()", text)
+        self.assertIn("finance_root", text)
+        self.assertIn("'.user/finance'", text)
 
     def test_data_consumers_use_fin_data_base(self) -> None:
         for name in ("expenses.js", "inv-data.js", "inv-historico.js"):

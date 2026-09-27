@@ -68,6 +68,8 @@ Exit codes:
        bad JSON, malformed ack header)
 """
 from __future__ import annotations
+from lib.finance_paths import bookkeeper_root
+
 
 import argparse
 import csv
@@ -106,14 +108,13 @@ def _find_vault_root() -> Path:
 
 def _default_ack_path(vault_root: Path) -> Path:
     return (
-        vault_root
-        / ".user" / "finance" / "bookkeeper" / "config" / "corrections"
+        bookkeeper_root(vault_root) / "config" / "corrections"
         / "tag-review-acks.csv"
     )
 
 
 def _default_fechamento_dir(vault_root: Path) -> Path:
-    return vault_root / ".user" / "finance" / "bookkeeper" / "ledgers" / "fechamento"
+    return bookkeeper_root(vault_root) / "ledgers" / "fechamento"
 
 
 def _now_iso() -> str:

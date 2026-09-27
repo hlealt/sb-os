@@ -15,6 +15,12 @@ Schema (architecture §6)::
 Optional ``env_file`` (vault-relative): where scripts read local API keys when
 the OS environment lacks them; absent means ``.user/config/env/.env``.
 
+Optional ``finance_root`` (vault-relative): finance data root (bookkeeper,
+investor, dashboard.html). Absent or empty means ``.user/finance``. Read by
+``finance/scripts/shared/lib/finance_paths.py``; do not hardcode the prefix
+in tools. ``finance_dashboard_html_path`` remains the entry-HTML knob and is
+independent of this field.
+
 The manifest is the sb-os-owned record at vault root. It tracks WHAT the
 installer created (not file hashes) — paired with the marker-block protocol
 this is enough state for idempotent --upgrade runs.
@@ -47,6 +53,7 @@ _KEY_ORDER = (
     "user_context_root",
     "sb_os_path",
     "finance_dashboard_html_path",
+    "finance_root",
     "selected_modules",
     "excluded_components",
     "created_paths",

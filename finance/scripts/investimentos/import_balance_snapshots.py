@@ -25,6 +25,13 @@ import csv
 import sys
 from pathlib import Path
 
+import sys as _fp_sys
+_FP_SHARED = Path(__file__).resolve().parents[1] / "shared"
+if str(_FP_SHARED) not in _fp_sys.path:
+    _fp_sys.path.insert(0, str(_FP_SHARED))
+from lib.finance_paths import bookkeeper_root
+
+
 sys.path.insert(0, str(Path(__file__).parent))
 from parsers.safra_fundos import SafraFundosParser
 from parsers.safra_titulos import SafraTitulosParser
@@ -45,11 +52,11 @@ def _find_vault_root() -> Path:
 
 
 VAULT_ROOT = _find_vault_root()
-LEDGER_DIR = VAULT_ROOT / ".user" / "finance" / "bookkeeper" / "ledgers" / "investimentos"
+LEDGER_DIR = bookkeeper_root(VAULT_ROOT) / "ledgers" / "investimentos"
 SNAPSHOTS_FILE = LEDGER_DIR / "balance-snapshots.csv"
 BALCAO_FILE = LEDGER_DIR / "balcao.csv"
-ASSETS_FILE = VAULT_ROOT / ".user" / "finance" / "bookkeeper" / "data" / "assets.csv"
-CONFIG_DIR = VAULT_ROOT / ".user" / "finance" / "bookkeeper" / "config"
+ASSETS_FILE = bookkeeper_root(VAULT_ROOT) / "data" / "assets.csv"
+CONFIG_DIR = bookkeeper_root(VAULT_ROOT) / "config"
 SNAPSHOTS_COLUMNS = ['date', 'product_id', 'balance', 'source']
 BALCAO_COLUMNS = ['date', 'operation', 'product_id', 'product_type', 'quantity',
                   'amount', 'irrf', 'iof', 'broker', 'source']

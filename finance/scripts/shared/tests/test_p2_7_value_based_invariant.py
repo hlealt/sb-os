@@ -14,6 +14,8 @@ Background (p2-5 fragility note / p2-5-ordering.md §9):
   This test converts that silent-wrong risk into a loud-fail gate.
 """
 from __future__ import annotations
+from lib.finance_paths import bookkeeper_root
+
 
 import json
 from pathlib import Path
@@ -25,8 +27,8 @@ def _find_live_config() -> tuple[Path, Path] | None:
     """Return (categories.json path, suppliers.json path) from the live vault config."""
     here = Path(__file__).resolve()
     for parent in here.parents:
-        cats = parent / ".user" / "finance" / "bookkeeper" / "config" / "categories.json"
-        sups = parent / ".user" / "finance" / "bookkeeper" / "config" / "suppliers.json"
+        cats = bookkeeper_root(parent) / "config" / "categories.json"
+        sups = bookkeeper_root(parent) / "config" / "suppliers.json"
         if cats.exists() and sups.exists():
             return cats, sups
     return None
