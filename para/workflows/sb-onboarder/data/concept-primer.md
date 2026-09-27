@@ -72,7 +72,7 @@ For deeper wiki guidance, run `/sb-tutor` on the topic, or read `{sb_os_path}/wi
 | **Monthly** | Last month's weeklies | Month intentions | Thematic — what to build or change | End of every month |
 | **Quarterly** | Last quarter's monthlies | Quarter intentions | Strategic — where you're heading | End of every quarter |
 
-The workflow produces weekly/monthly/quarterly notes in `0-periodic-notes/{period}/` using the templates at `.user/config/templates/periodic-notes/`. **It does not produce daily notes** — dailies are inputs.
+The workflow produces weekly/monthly/quarterly notes in `0-periodic-notes/{period}/` using the periodic-note templates under `templates_root` from `sb-os.json` at the vault root (default `.user/config/templates/periodic-notes/`). **It does not produce daily notes** — dailies are inputs.
 
 ### What the weekly review actually does
 

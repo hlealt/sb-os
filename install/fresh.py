@@ -422,7 +422,7 @@ def build_fresh_plan(
     for _src, target_rel in templates:
         _add_file_action(
             plan,
-            loaders.rebase_finance_target(target_root, target_rel),
+            loaders.rebase_template_target(target_root, target_rel),
             detail="template (install-if-missing)",
         )
 
@@ -592,12 +592,14 @@ def _execute_fresh(
 
     # Managed CLAUDE.mds (vault structure — always)
     for source_rel, dest_rel in CLAUDE_MD_MAP:
-        inside = _read_source(sb_os_root, source_rel)
-        _write_managed(target_root, dest_rel, inside, created)
+        source = loaders.render_claude_md(_read_source(sb_os_root, source_rel), target_root)
+        _write_managed(target_root, dest_rel, source, created)
     if install_wiki:
-        wiki_claude_inside = _read_source(sb_os_root, WIKI_CLAUDE_MD_SOURCE)
+        wiki_claude_source = loaders.render_claude_md(
+            _read_source(sb_os_root, WIKI_CLAUDE_MD_SOURCE), target_root
+        )
         wiki_claude_dest = wiki_root.rstrip("/") + "/CLAUDE.md"
-        _write_managed(target_root, wiki_claude_dest, wiki_claude_inside, created)
+        _write_managed(target_root, wiki_claude_dest, wiki_claude_source, created)
 
     # Loaders
     for name, desc, module in loaders.manifest_skills(modules_scoped, excluded_components):

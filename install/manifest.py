@@ -21,6 +21,13 @@ investor, dashboard.html). Absent or empty means ``.user/finance``. Read by
 in tools. ``finance_dashboard_html_path`` remains the entry-HTML knob and is
 independent of this field.
 
+Optional ``templates_root`` (vault-relative): periodic-note templates root.
+Absent or empty means ``.user/config/templates``. Read by
+``finance/scripts/shared/lib/manifest_roots.py`` (the one mechanism shared
+with ``finance_root``); the installer rebases manifest template targets
+under the default root onto the configured one and renders the root
+CLAUDE.md path table from it. Do not hardcode the prefix in tools.
+
 The manifest is the sb-os-owned record at vault root. It tracks WHAT the
 installer created (not file hashes) — paired with the marker-block protocol
 this is enough state for idempotent --upgrade runs.
@@ -54,6 +61,7 @@ _KEY_ORDER = (
     "sb_os_path",
     "finance_dashboard_html_path",
     "finance_root",
+    "templates_root",
     "selected_modules",
     "excluded_components",
     "created_paths",

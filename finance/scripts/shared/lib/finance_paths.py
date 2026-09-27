@@ -4,15 +4,29 @@ One source for the `.user/finance` prefix. `sb-os.json` may set optional
 `finance_root` (vault-relative). Absent or empty means `.user/finance`, so
 other vaults keep the historical default. `BOOKKEEPER_ROOT`, when set, is
 the absolute bookkeeper directory (test isolation) and wins over the manifest.
+
+Key-reading and prefix-rebasing live in `lib.manifest_roots` (the one
+mechanism, shared with `templates_root`); this module is the finance facade.
 """
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 
-DEFAULT_FINANCE_ROOT = ".user/finance"
-FINANCE_ROOT_KEY = "finance_root"
+try:
+    from .manifest_roots import (
+        DEFAULT_FINANCE_ROOT,
+        FINANCE_ROOT_KEY,
+        rebase_root_rel,
+        root_rel,
+    )
+except ImportError:  # executed outside a package (plain script dir on sys.path)
+    from manifest_roots import (  # type: ignore
+        DEFAULT_FINANCE_ROOT,
+        FINANCE_ROOT_KEY,
+        rebase_root_rel,
+        root_rel,
+    )
 
 
 def find_vault_root(start: Path | None = None) -> Path:
@@ -26,16 +40,7 @@ def find_vault_root(start: Path | None = None) -> Path:
 
 def finance_root_rel(vault_root: Path) -> str:
     """Vault-relative finance root. Default `.user/finance` when unset."""
-    manifest = Path(vault_root) / "sb-os.json"
-    if manifest.is_file():
-        try:
-            data = json.loads(manifest.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            data = {}
-        rel = data.get(FINANCE_ROOT_KEY) if isinstance(data, dict) else None
-        if isinstance(rel, str) and rel.strip():
-            return rel.strip().strip("/")
-    return DEFAULT_FINANCE_ROOT
+    return root_rel(vault_root, FINANCE_ROOT_KEY, DEFAULT_FINANCE_ROOT)
 
 
 def finance_root(vault_root: Path | None = None) -> Path:
@@ -58,9 +63,4 @@ def rebase_finance_rel(vault_root: Path | str, rel: str) -> str:
     installer defaults for other users stay put. When `finance_root` is unset
     this is the identity function.
     """
-    normalized = rel.replace("\\", "/").lstrip("/")
-    default = DEFAULT_FINANCE_ROOT.strip("/")
-    configured = finance_root_rel(Path(vault_root)).strip("/")
-    if normalized == default or normalized.startswith(default + "/"):
-        return configured + normalized[len(default):]
-    return normalized
+    return rebase_root_rel(vault_root, rel, FINANCE_ROOT_KEY, DEFAULT_FINANCE_ROOT)

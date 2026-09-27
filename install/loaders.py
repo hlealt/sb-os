@@ -566,18 +566,44 @@ def install_command_loader(
     return target
 
 
-def rebase_finance_target(target_root: Path | str, target_rel: str) -> str:
-    """Rewrite a manifest template target that sits under the default finance root.
+def _shared_lib() -> None:
+    """Put ``finance/scripts/shared`` on ``sys.path`` (for ``lib.manifest_roots``).
 
-    Delegates to ``lib.finance_paths.rebase_finance_rel`` (sb-os.json
-    ``finance_root``, default ``.user/finance``). Other targets are unchanged.
+    The shared lib holds the single resolver for sb-os.json root overrides
+    (``finance_root``, ``templates_root``); the installer reaches it by
+    import rather than re-implementing the key-reading/rebasing.
     """
     shared = Path(__file__).resolve().parents[1] / "finance" / "scripts" / "shared"
     if str(shared) not in sys.path:
         sys.path.insert(0, str(shared))
-    from lib.finance_paths import rebase_finance_rel
 
-    return rebase_finance_rel(target_root, target_rel)
+
+def rebase_template_target(target_root: Path | str, target_rel: str) -> str:
+    """Rewrite a manifest template target that sits under a configurable root.
+
+    Delegates to ``lib.manifest_roots.rebase_manifest_rel`` (sb-os.json
+    ``finance_root`` / ``templates_root``; defaults ``.user/finance`` /
+    ``.user/config/templates``). Targets under neither default root are
+    returned unchanged.
+    """
+    _shared_lib()
+    from lib.manifest_roots import rebase_manifest_rel
+
+    return rebase_manifest_rel(target_root, target_rel)
+
+
+def render_claude_md(source_text: str, vault_root: Path | str) -> str:
+    """Render a managed CLAUDE.md source for ``vault_root``.
+
+    Substitutes install-time placeholders in managed CLAUDE.md content.
+    ``{templates_root}`` resolves to the sb-os.json ``templates_root``
+    (default ``.user/config/templates``) via ``lib.manifest_roots`` — the
+    same single resolver the template-target rebasing uses.
+    """
+    _shared_lib()
+    from lib.manifest_roots import templates_root_rel
+
+    return source_text.replace("{templates_root}", templates_root_rel(vault_root))
 
 
 def install_template_if_missing(
@@ -601,7 +627,7 @@ def install_template_if_missing(
         raise FileNotFoundError(
             f"sb-os template source missing: {src}. Re-clone the sb-os repo."
         )
-    target_rel = rebase_finance_target(target_root, target_rel)
+    target_rel = rebase_template_target(target_root, target_rel)
     dst = Path(target_root) / target_rel
     if dst.exists():
         return None

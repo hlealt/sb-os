@@ -472,7 +472,7 @@ def build_upgrade_plan(
         ))
     for _src, target_rel in loaders.manifest_templates(modules_scoped, excl):
         planned = (
-            loaders.rebase_finance_target(target_root, target_rel)
+            loaders.rebase_template_target(target_root, target_rel)
             if target_root is not None
             else target_rel
         )
@@ -552,12 +552,15 @@ def _execute_upgrade(
 
     # Marker-block replacements.
     for source_rel, dest_rel in CLAUDE_MD_MAP:
-        inside = markers.extract_inside(_read_source(sb_os_root, source_rel))
+        inside = loaders.render_claude_md(
+            markers.extract_inside(_read_source(sb_os_root, source_rel)), target_root
+        )
         dest = target_root / dest_rel
         _track(dest, lambda dest=dest, inside=inside: markers.replace_managed(dest, inside))
     if install_wiki:
-        wiki_claude_inside = markers.extract_inside(
-            _read_source(sb_os_root, WIKI_CLAUDE_MD_SOURCE)
+        wiki_claude_inside = loaders.render_claude_md(
+            markers.extract_inside(_read_source(sb_os_root, WIKI_CLAUDE_MD_SOURCE)),
+            target_root,
         )
         dest = target_root / (wiki_root.rstrip("/") + "/CLAUDE.md")
         _track(dest, lambda dest=dest, c=wiki_claude_inside: markers.replace_managed(dest, c))
@@ -599,7 +602,7 @@ def _execute_upgrade(
     for source_rel, target_rel in loaders.manifest_templates(
         modules_scoped, excluded_components
     ):
-        dest = target_root / loaders.rebase_finance_target(target_root, target_rel)
+        dest = target_root / loaders.rebase_template_target(target_root, target_rel)
         _track(dest, lambda source_rel=source_rel, target_rel=target_rel: loaders.install_template_if_missing(
             target_root=target_root,
             sb_os_root=sb_os_root,
