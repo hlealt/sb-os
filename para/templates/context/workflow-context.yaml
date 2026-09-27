@@ -34,6 +34,7 @@ context:
     path: .user/profile/preferences.md
     instruction: >
       Load user preferences and apply them throughout this workflow step.
+      Skip silently when the file does not exist (graceful degradation).
 
   # --- type: file with sections filter ---
   - name: Weekly goals
@@ -63,7 +64,9 @@ context:
     mode: write
     path: .user/runtime/state/weekly-summary.md
     instruction: >
-      Write the consolidated summary from this step to this file.
+      Write the consolidated summary from this step to this file. Only when
+      this state folder exists in the vault — otherwise keep the summary in
+      the session output; never re-create a deleted state folder.
 
   # --- type: file (read-write) ---
   - name: Running log
@@ -71,18 +74,8 @@ context:
     mode: read-write
     path: .user/runtime/state/running-log.md
     instruction: >
-      Read the current log, append today's observations, write back.
-
-  # --- type: script ---
-  - name: External data fetch
-    type: script
-    command: python
-    args:
-      - .user/runtime/scripts/fetch-data.py
-      - --account
-      - default
-    instruction: >
-      Run the script. Use the output as input for this step.
+      Read the current log, append today's observations, write back. Only
+      when the file exists — skip silently otherwise (graceful degradation).
 
   # --- type: url ---
   - name: External reference

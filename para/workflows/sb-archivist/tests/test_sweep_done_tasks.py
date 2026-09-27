@@ -119,6 +119,53 @@ def test_rollover_refuses_to_overwrite_existing_archive(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# Graceful degradation: owner-deleted .user/runtime/ is skipped, never re-created
+# --------------------------------------------------------------------------- #
+
+def test_rollover_skips_when_state_folder_missing(tmp_path, capsys):
+    """No .user/runtime/ at all: rollover reports the skip and creates nothing."""
+    vault = tmp_path   # no make_vault — state folder absent, as after owner cleanup
+
+    rc = run(vault, "--rollover-only")
+    assert rc == 0
+    assert not (vault / ".user").exists()          # folder NOT re-created
+    out = capsys.readouterr().out
+    assert "state-folder-missing" in out
+    assert "graceful degradation" in out
+
+
+def test_write_sweep_degrades_to_report_only_when_state_folder_missing(tmp_path, capsys):
+    """Write-mode sweep with the state folder gone: report-only, sources intact.
+
+    Swept blocks route into work-logs under .user/runtime/state/ — without the
+    folder nothing can be appended, so (append-then-remove) nothing is removed
+    from sources either, and the folder is never re-created.
+    """
+    vault = tmp_path
+    foo = vault / "1-projects" / "foo" / "foo-tasks.md"
+    src = "# foo\n\n- [x] Task A ✅ 2026-06-18\n"
+    write_bytes(foo, src, crlf=False)
+
+    rc = run(vault)                                 # write mode, no --dry-run
+    assert rc == 0
+    assert foo.read_text(encoding="utf-8") == src   # source untouched
+    assert not (vault / ".user").exists()           # folder NOT re-created
+    out = capsys.readouterr().out
+    assert "state folder missing" in out
+
+
+def test_dry_run_unchanged_when_state_folder_missing(tmp_path):
+    """--dry-run never writes; with the folder gone it still reports sweepables."""
+    vault = tmp_path
+    foo = vault / "1-projects" / "foo" / "foo-tasks.md"
+    write_bytes(foo, "# foo\n\n- [x] Task A ✅ 2026-06-18\n", crlf=False)
+
+    report = run_sweep(vault, dry_run=True)
+    assert report["tasks_swept"] == 1
+    assert foo.read_text(encoding="utf-8").count("Task A") == 1
+
+
+# --------------------------------------------------------------------------- #
 # Sweep
 # --------------------------------------------------------------------------- #
 

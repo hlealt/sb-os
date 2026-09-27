@@ -47,6 +47,8 @@ sb-os ships generic behavior. User-specific behavior lives in `.user/`. The spli
 | User profile, preferences, glossary, credentials | `.user/profile/`, `.user/docs/`, `.user/state/` | Personal name glossary; review state |
 | User-only workflow that does not ship with sb-os | `.user/workflows/{name}/` plus matching `.claude/` thin loader | accountant, mentor, sb-life-planner |
 
+Route into a `.user/` folder the vault already has: when a listed root does not exist in this vault (owner-deleted, e.g. `.user/profile/` or `.user/workflows/`), use an existing alternative from the table — never re-create a deleted root, and never fail a read of a missing personal file: skip silently (graceful degradation, `.user/CLAUDE.md`).
+
 If the temptation is "let me bake my preference into the sb-os rule/workflow," the answer is almost always: write a YAML under `{user_context_root}/` instead. The context-injection hook is the supported extension point — it fires the resolver automatically (schema: `para/docs/context-injection-schema.md`).
 
 ## Why

@@ -103,7 +103,8 @@ def test_skill_path_resolves_under_ucr_skills(tmp_path, capsys):
 
 # =========================================================================== #
 # Criterion 2 — step path mirrors workflow-relative path (.md->.yaml) across
-#   BOTH .user/workflows/ and {sb_os_path}/{module}/workflows/; unknown root -> exit 2
+#   BOTH .user/workflows/ (when present) and {sb_os_path}/{module}/workflows/;
+#   an absent root is skipped (graceful degradation); unknown root -> exit 2
 # =========================================================================== #
 
 def test_step_path_under_user_workflows(tmp_path, capsys):
@@ -136,6 +137,30 @@ def test_step_under_no_known_root_errors_exit_2(tmp_path, capsys):
     stray.parent.mkdir(parents=True, exist_ok=True)
     stray.write_text("# step", encoding="utf-8")
     code, out = run_cli(vault, "--surface", "step", "--file", str(stray), capsys=capsys)
+    assert code == 2
+    assert "not under a known workflow root" in out
+
+
+def test_absent_user_workflows_root_is_skipped_not_an_error(tmp_path, capsys):
+    """Owner-deleted .user/workflows/: the root is skipped (never re-created,
+    never matched) and sb-os workflow steps keep resolving — no exit 2."""
+    vault = make_vault(tmp_path)          # .user/workflows/ NOT created
+    step = vault / NON_DEFAULT_SB_OS.rstrip("/") / "para" / "workflows" / "wf" / "s.md"
+    step.parent.mkdir(parents=True, exist_ok=True)
+    step.write_text("# step", encoding="utf-8")
+    code, out = run_cli(vault, "--surface", "step", "--file", str(step),
+                        "--path-only", capsys=capsys)
+    assert code == 0
+    assert out.strip() == f"{NON_DEFAULT_UCR}wf/s.yaml"
+    assert not (vault / ".user" / "workflows").exists()   # nothing created
+
+
+def test_step_under_absent_user_workflows_root_errors_exit_2(tmp_path, capsys):
+    """A path under the absent root matches nothing (its files cannot exist);
+    it gets the same unknown-root exit 2 as any stray path."""
+    vault = make_vault(tmp_path)          # .user/workflows/ NOT created
+    step = vault / ".user" / "workflows" / "wf" / "s.md"
+    code, out = run_cli(vault, "--surface", "step", "--file", str(step), capsys=capsys)
     assert code == 2
     assert "not under a known workflow root" in out
 

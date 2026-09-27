@@ -132,15 +132,20 @@ def resolve_step_yaml(vault_root, ucr, sb_os_path, step_file):
 
     Returns (yaml_path, error). The step file's path relative to its workflow
     root is reused verbatim (only .md -> .yaml), per the Path Resolution in
-    `para/docs/context-injection-schema.md`. Workflow roots: .user/workflows/
-    and each {sb_os_path}/<module>/workflows/.
+    `para/docs/context-injection-schema.md`. Workflow roots: `.user/workflows/`
+    (when present) and each existing `{sb_os_path}/<module>/workflows/`. A root
+    that does not exist in the vault is skipped, not matched — an owner-deleted
+    `.user/workflows/` never breaks resolution for sb-os workflow steps.
     """
     step = Path(step_file)
     if not step.is_absolute():
         step = vault_root / step
     step = step.resolve()
 
-    roots = [(vault_root / ".user" / "workflows").resolve()]
+    roots = []
+    user_root = (vault_root / ".user" / "workflows").resolve()
+    if user_root.is_dir():
+        roots.append(user_root)
     sb_dir = (vault_root / sb_os_path).resolve()
     if sb_dir.exists():
         roots.extend(sorted(p.resolve() for p in sb_dir.glob("*/workflows")))

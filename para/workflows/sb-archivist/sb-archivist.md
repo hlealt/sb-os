@@ -13,7 +13,7 @@ Document all work done in this conversation into the work-log file. Capture the 
    ```
    python {sb_os_path}/para/workflows/sb-archivist/sweep_done_tasks.py --vault-path "." --rollover-only
    ```
-   It archives a stale `work-log.md` to `.user/runtime/state/work-log-archive/{its-frontmatter-date}-work-log.md` and creates a fresh today-dated work-log from the template; it is a no-op when the log already carries today's date (you append this session's work to it in steps 4–6). Read its one-line report.
+   It archives a stale `work-log.md` to `.user/runtime/state/work-log-archive/{its-frontmatter-date}-work-log.md` and creates a fresh today-dated work-log from the template; it is a no-op when the log already carries today's date (you append this session's work to it in steps 4–6). Read its one-line report. When `.user/runtime/state/` does not exist (owner-deleted personal state), the rollover reports `state-folder-missing` and writes nothing — the folder is never re-created (graceful degradation, `.user/CLAUDE.md`); steps 4–6 then have no work-log to append to, so report that and stop.
 
 3. **Review the full conversation history.** Scan the entire session and extract:
    - Files read, created, edited, or deleted
@@ -68,6 +68,8 @@ python {sb_os_path}/para/workflows/sb-archivist/sweep_done_tasks.py --vault-path
 An `--only` path that matches no task file exits 2 with an error — pass paths verbatim from the Stage-1 keys.
 
 Both stages perform day-rollover (idempotent) then the sweep: every top-level `- [x]` task in `*-tasks.md` under `1-projects/` and `2-areas/` (within the chosen scope) is extracted verbatim, routed by its `✅ YYYY-MM-DD` marker (today → `work-log.md`, earlier → `{date}-work-log.md` in the archive), appended under a `### Swept from [[{file-name}]] ({vault-relative-path})` group inside the target's `## Completed` section (deduplicated by task line; missing archive files created with frontmatter + `# Work Log` heading + `## Completed`), and removed from the source. Each block is preserved byte-for-byte, each source file's line endings are kept, and a checked item nested under an open `- [ ]` parent is never swept.
+
+When `.user/runtime/state/` does not exist, the act stage degrades to report-only (the check stage already is): nothing is swept, nothing removed from sources, and the folder is never re-created — the report says `state folder missing`. Run the check stage, report what would sweep, and stop there.
 
 Any remaining task whose `_Depends:_` / `_Done-after:_` pointed at a task just swept has that ref dropped (a swept task is done, so its edge is satisfied) — otherwise `sb-task deps` fails on the whole file. Each drop is listed in `sweep.refs_scrubbed`.
 

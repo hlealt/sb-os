@@ -30,11 +30,18 @@ the parser keys on is documented in
 `para/workflows/sb-vault-ops/data/tasks.md` (§ Sweep contract). Skip-not-delete
 is the invariant: on ANY routing doubt the sweep refuses to remove content.
 
-REF INTEGRITY: after removing a block, the sweep drops every same-file
-`_Depends:_` / `_Done-after:_` ref pointing at a task it just swept (a swept
-task is done, so its edge is satisfied) and REPORTS each drop. Left standing,
-those refs are unresolvable same-file refs that make `sb-task deps` fail on the
-whole file. Ref parsing is reused from the sb-task CLI, never reimplemented.
+  REF INTEGRITY: after removing a block, the sweep drops every same-file
+  `_Depends:_` / `_Done-after:_` ref pointing at a task it just swept (a swept
+  task is done, so its edge is satisfied) and REPORTS each drop. Left standing,
+  those refs are unresolvable same-file refs that make `sb-task deps` fail on the
+  whole file. Ref parsing is reused from the sb-task CLI, never reimplemented.
+
+  GRACEFUL DEGRADATION: when `.user/runtime/state/` does not exist (the vault
+  owner may delete personal state), the day-rollover skips instead of creating
+  the folder, and a write-mode sweep degrades to report-only (swept blocks are
+  routed into work-logs under that folder, so without it nothing may be removed
+  from sources). The deleted folder is NEVER re-created. `--dry-run` never
+  writes and is unaffected.
 
 Usage:
     python sweep_done_tasks.py [--vault-path PATH] [--rollover-only]
@@ -704,6 +711,9 @@ def format_text_report(rollover, sweep_report):
                 tgt = ", ".join(info["targets"]) if info["targets"] else "—"
                 extra = f", {info['skipped']} skipped" if info["skipped"] else ""
                 lines.append(f"  - {rel}: {info['swept']} sweepable → {tgt}{extra}")
+        if sweep_report.get("state_folder_missing"):
+            lines.append("[sweep] state folder missing — report-only; nothing swept, "
+                         "`.user/runtime/state/` not re-created (graceful degradation)")
         if sweep_report.get("ref_scrub_unavailable"):
             lines.append(f"[sweep] WARNING: {sweep_report['ref_scrub_unavailable']}")
         scrubs = sweep_report.get("refs_scrubbed", [])
@@ -780,10 +790,25 @@ def main(argv=None):
             print(f"error: {err}", file=sys.stderr)
             return 2
 
-    rollover = day_rollover(state_dir, archive_dir, template_path, today, now_hm, args.dry_run)
+    # Graceful degradation (.user/CLAUDE.md: a missing personal folder is
+    # skipped silently, never re-created): with `.user/runtime/state/` deleted
+    # by the owner, the rollover skips (creating a fresh work-log would have to
+    # re-create the folder) and a write-mode sweep degrades to report-only —
+    # see the GRACEFUL DEGRADATION note in the module docstring.
+    if state_dir.is_dir():
+        rollover = day_rollover(state_dir, archive_dir, template_path, today, now_hm, args.dry_run)
+    else:
+        rollover = ("skipped", {
+            "reason": "state-folder-missing",
+            "detail": f"{state_dir} does not exist — work-log write skipped, "
+                      "folder not re-created (graceful degradation)",
+        })
     sweep_report = None
     if not args.rollover_only:
-        sweep_report = sweep(vault, state_dir, archive_dir, today, now_hm, args.dry_run, only=only)
+        sweep_report = sweep(vault, state_dir, archive_dir, today, now_hm,
+                             dry_run=args.dry_run or not state_dir.is_dir(), only=only)
+        if not state_dir.is_dir():
+            sweep_report["state_folder_missing"] = True
 
     if args.json:
         print(json.dumps({"rollover": {"action": rollover[0], **rollover[1]},

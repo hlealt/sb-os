@@ -23,6 +23,8 @@ A "workflow root" is any directory that contains workflow definitions. Two roots
 | sb-os repo per-module workflows directories (`{sb_os_path}/{module}/workflows/`, where `{module}` is `para`, `wiki`, or `finance`) | Shippable sb-os workflows installed via the sb-os installer |
 | Personal workflows directory (e.g., `.user/workflows/`) | User-owned workflows that ship with the vault but not with sb-os (accountant, mentor, sb-life-planner, therapy-summarizer, etc.) |
 
+A root that does not exist in the vault is skipped, never matched and never re-created (graceful degradation): an owner-deleted `.user/workflows/` leaves sb-os workflow steps resolving exactly as before.
+
 ## Path Resolution
 
 The base path is ALWAYS resolved through `sb-os.json`: the resolver reads the `user_context_root` field; if `sb-os.json` is missing or the field is unset, it uses the default `.user/context/`. Never hardcoded.
