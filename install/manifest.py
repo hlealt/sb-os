@@ -12,6 +12,9 @@ Schema (architecture §6)::
       "created_paths": []
     }
 
+Optional ``env_file`` (vault-relative): where scripts read local API keys when
+the OS environment lacks them; absent means ``.user/config/env/.env``.
+
 The manifest is the sb-os-owned record at vault root. It tracks WHAT the
 installer created (not file hashes) — paired with the marker-block protocol
 this is enough state for idempotent --upgrade runs.

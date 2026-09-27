@@ -5,7 +5,7 @@ Maintains a local SQLite index (FTS5 keyword table + Voyage embedding
 vectors) over `{wiki_root}/wiki/**/*.md` and answers ranked queries for
 agents. The semantic tier is availability-gated per the wiki schema:
 
-- key available (`VOYAGE_API_KEY` env var, else `{vault_root}/.user/config/env/.env`)
+- key available (`VOYAGE_API_KEY` env var, else the `env_file` named in sb-os.json, default `.user/config/env/.env`)
                             -> hybrid mode (FTS5 BM25 + vector cosine, RRF-fused)
 - key absent                -> FTS5-only mode (no API calls, still ranked)
 - wiki root unresolvable    -> `probe` and `search --json` return a clean
@@ -128,12 +128,21 @@ def resolve_wiki_root(vault_root: Path) -> Path:
     return vault_root / manifest["wiki_root"]
 
 
+def resolve_env_file(vault_root: Path) -> Path:
+    """The vault's local-keys file: `env_file` in sb-os.json, else `.user/config/env/.env`."""
+    try:
+        manifest = json.loads((vault_root / "sb-os.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        manifest = {}
+    return vault_root / manifest.get("env_file", ".user/config/env/.env")
+
+
 def resolve_api_key(vault_root: Path) -> str | None:
-    """VOYAGE_API_KEY from the environment, else from `.user/config/env/.env`."""
+    """VOYAGE_API_KEY from the environment, else from the vault env file."""
     key = os.environ.get("VOYAGE_API_KEY")
     if key:
         return key
-    env_file = vault_root / ".user" / "config" / "env" / ".env"
+    env_file = resolve_env_file(vault_root)
     if env_file.is_file():
         for line in read_text(env_file).splitlines():
             line = line.strip()
@@ -721,7 +730,7 @@ def main() -> int:
         print(f"indexed: +{counts['added']} ~{counts['changed']} -{counts['removed']} files "
               f"({total} total), {counts['embedded']} chunks embedded, mode={mode}")
         if mode == "fts-only":
-            print("VOYAGE_API_KEY unavailable (env var or .user/config/env/.env) — "
+            print("VOYAGE_API_KEY unavailable (env var or the env_file named in sb-os.json) — "
                   "vector tier off, keyword (FTS5) tier active",
                   file=sys.stderr)
         return 0

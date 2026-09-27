@@ -72,8 +72,17 @@ except ImportError:
 # BRAPI token loader
 # ---------------------------------------------------------------------------
 
+def _env_file(vault_root: Path) -> Path:
+    """The vault's local-keys file: `env_file` in sb-os.json, else `.user/config/env/.env`."""
+    try:
+        manifest = json.loads((vault_root / "sb-os.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        manifest = {}
+    return vault_root / manifest.get("env_file", ".user/config/env/.env")
+
+
 def _load_brapi_token() -> str | None:
-    """Resolve BRAPI_TOKEN: OS env first, then vault .user/config/env/.env.
+    """Resolve BRAPI_TOKEN: OS env first, then the vault env file (`_env_file`).
 
     Returns the token string if found, or None if absent. Never raises.
     """
@@ -82,8 +91,8 @@ def _load_brapi_token() -> str | None:
     if token:
         return token.strip() or None
 
-    # 2. .user/config/env/.env at vault root
-    env_path = VAULT_ROOT / '.user' / 'config' / 'env' / '.env'
+    # 2. the vault env file
+    env_path = _env_file(VAULT_ROOT)
     try:
         with open(env_path, encoding='utf-8') as f:
             for line in f:

@@ -24,7 +24,7 @@ BR arm (CVM dados-abertos):
 
 User-Agent:
   SEC fair-access endpoints 403 non-contact UAs. Resolved from SEC_EDGAR_UA
-  (OS env, then vault .user/config/env/.env — same convention as BRAPI_TOKEN
+  (OS env, then the env_file named in sb-os.json — same convention as BRAPI_TOKEN
   in price_fetcher.py), falling back to a neutral placeholder that will get
   403'd by SEC — set the env var. Override either with --user-agent. CVM does
   not require a contact UA but uses the same header for consistency.
@@ -63,8 +63,17 @@ from typing import Optional
 PLACEHOLDER_UA = "sb-os-user your-email@example.com"
 
 
+def _env_file(vault_root: Path) -> Path:
+    """The vault's local-keys file: `env_file` in sb-os.json, else `.user/config/env/.env`."""
+    try:
+        manifest = json.loads((vault_root / "sb-os.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        manifest = {}
+    return vault_root / manifest.get("env_file", ".user/config/env/.env")
+
+
 def _load_ua() -> str:
-    """Resolve SEC_EDGAR_UA: OS env first, then vault .user/config/env/.env.
+    """Resolve SEC_EDGAR_UA: OS env first, then the vault env file (`_env_file`).
 
     Mirrors price_fetcher.py's _load_brapi_token() convention. Falls back to
     a neutral placeholder — SEC will 403 requests sent with it.
@@ -74,8 +83,8 @@ def _load_ua() -> str:
         return ua.strip()
 
     for parent in Path(__file__).resolve().parents:
-        if (parent / "CLAUDE.md").exists() and (parent / ".user").is_dir():
-            env_path = parent / ".user" / "config" / "env" / ".env"
+        if (parent / "sb-os.json").is_file():
+            env_path = _env_file(parent)
             try:
                 with open(env_path, encoding="utf-8") as f:
                     for line in f:
@@ -352,7 +361,7 @@ def resolve_sec(
     if user_agent == PLACEHOLDER_UA:
         raise ValueError(
             "No contact User-Agent set — SEC EDGAR will 403 this request. "
-            "Set SEC_EDGAR_UA (env var or .user/config/env/.env) or pass "
+            "Set SEC_EDGAR_UA (env var or the env_file named in sb-os.json) or pass "
             "--user-agent 'Your Name your-email@example.com'."
         )
 
