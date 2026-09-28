@@ -166,8 +166,8 @@ expected_inputs: |
   comma-separated page-type filter (concept|entity|topic|source|thesis|decision), --json machine
   output, --no-sync to skip the pre-search reindex; index [--full] to (re)build. Reads
   {wiki_root}/wiki/**/*.md and the local index at {wiki_root}/.sb-wiki-search/index.db; reads
-  VOYAGE_API_KEY (OS env, else {vault_root}/.user/config/env/.env) — key present → hybrid (FTS5 BM25
-  + Voyage vector cosine, RRF-fused); key absent → FTS5-only (no API calls, still ranked).
+  VOYAGE_API_KEY (OS env, else the env file named by `env_file` in the vault's `sb-os.json`) — key present → hybrid
+  (FTS5 BM25 + Voyage vector cosine, RRF-fused); key absent → FTS5-only (no API calls, still ranked).
 outputs: |
   search — ranked results (page path, type, score, snippet) as a table or JSON (--json). index —
   build/refresh summary. status — index freshness + active mode as JSON. probe — availability + mode

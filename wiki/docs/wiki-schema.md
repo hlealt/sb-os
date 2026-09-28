@@ -924,7 +924,7 @@ Multi-call operations (e.g. an ingest probing several stub-candidates): the FIRS
 
 | Property | Rule |
 |----------|------|
-| Key resolution | The Voyage key resolves from the `VOYAGE_API_KEY` environment variable first, else from `{vault_root}/.user/config/env/.env` — the STANDARD location for local API keys in an sb-os vault. One `KEY=value` line per key (`VOYAGE_API_KEY=...`). The file is user-owned and MUST be gitignored (keep a tracked `.env.example` with empty values for new-machine setup). Missing file or empty value → keyword-only mode, never an error. |
+| Key resolution | The Voyage key resolves from the `VOYAGE_API_KEY` environment variable first, else from the env file named by `env_file` in the vault's `sb-os.json`, defaulting to `{vault_root}/.user/config/env/.env`. One `KEY=value` line per key (`VOYAGE_API_KEY=...`). The file is user-owned and MUST be gitignored (keep a tracked `.env.example` with empty values for new-machine setup). Missing file or empty value → keyword-only mode, never an error. |
 | Index artifact | `{wiki_root}/.sb-wiki-search/index.db` — DERIVED data, machine-local. Never commit it (add the folder to the vault `.gitignore`); deleting it is always safe (rebuilt by the next `index`/`search`). |
 | Scope | `{wiki_root}/wiki/**/*.md` pages only — leaf/origin indexes, `CLAUDE.md`, `raw/`, the `logs/` queue folder, and root-level queues (`questions.md`, `open-gaps.md`, `purpose.md`) are NEVER indexed. Extension page trees (e.g. `wiki/theses/`, `wiki/decisions/`) are included automatically. |
 | Self-healing | `search` re-syncs before answering: changed/added/removed pages are detected (mtime+size prefilter, sha256 confirm) and re-indexed incrementally. Results never go stale; unchanged files are never re-embedded. |
