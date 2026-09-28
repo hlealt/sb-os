@@ -148,6 +148,18 @@
           "target": ".claude/skills/sb-wiki-create-topic/SKILL.md"
         },
         {
+          "name": "sb-wiki-create-entity",
+          "module": "wiki",
+          "source_template": "wiki/skills/sb-wiki-create-entity/SKILL.md",
+          "target": ".claude/skills/sb-wiki-create-entity/SKILL.md"
+        },
+        {
+          "name": "sb-wiki-create-concept",
+          "module": "wiki",
+          "source_template": "wiki/skills/sb-wiki-create-concept/SKILL.md",
+          "target": ".claude/skills/sb-wiki-create-concept/SKILL.md"
+        },
+        {
           "name": "sb-wiki-query",
           "module": "wiki",
           "source_template": "wiki/skills/sb-wiki-query/SKILL.md",

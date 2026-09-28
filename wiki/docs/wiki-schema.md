@@ -39,7 +39,7 @@ This wiki uses ONE canonical name per term. Every wiki engine doc, workflow, com
 
 ## Installer scope guarantee
 
-The sb-os installer (`install.py`) NEVER reads or writes any file under `{wiki_root}/wiki/` or `{wiki_root}/raw/`. The installer's write surface is limited to: managed CLAUDE.mds (marker blocks only), `.claude/` thin loaders, and `sb-os.json` at the vault root. Wiki content — leaf indexes (`wiki/concepts/concepts.md`, `wiki/entities/entities.md`, `wiki/topics/topics.md`, `wiki/sources/{origin}/{origin}.md`), raw leaf indexes (`raw/{origin}/{origin}.md`), source pages, concept pages, entity pages, topic pages, and the `logs/` queues — is created and maintained EXCLUSIVELY by `/sb-wiki-lint` and `/sb-wiki-ingest`. Re-running `install.py --upgrade` is safe at any time and will not modify, overwrite, or delete any wiki content.
+The sb-os installer (`install.py`) NEVER reads or writes any file under `{wiki_root}/wiki/` or `{wiki_root}/raw/`. The installer's write surface is limited to: managed CLAUDE.mds (marker blocks only), `.claude/` thin loaders, and `sb-os.json` at the vault root. Wiki content — leaf indexes (`wiki/concepts/concepts.md`, `wiki/entities/entities.md`, `wiki/topics/topics.md`, `wiki/sources/{origin}/{origin}.md`), raw leaf indexes (`raw/{origin}/{origin}.md`), source pages, concept pages, entity pages, topic pages, and the `logs/` queues — is created and maintained EXCLUSIVELY by `/sb-wiki-lint`, `/sb-wiki-ingest`, and the `sb-wiki-create-*` skills. Re-running `install.py --upgrade` is safe at any time and will not modify, overwrite, or delete any wiki content.
 
 ## Page types
 
@@ -615,7 +615,7 @@ The agent auto-creates a stub Concept or Entity page when the cluster representa
 2. **Source title/headline** — fires only when the title name ALSO appears in a `Substance` bullet (see "Title-branch rule" below). Title-only names go to discretion.
 3. **An extracted Notable Quote** — DISCRETIONARY (see "Notable Quote stub creation" below).
 
-If none of the three branches fire, log a `candidate-mention` in `logs/mentions.md` for periodic review by lint. Do NOT create a page.
+If none of the three branches fire, log a `candidate-mention` in `logs/mentions.md` for periodic review by lint. Do NOT create a page. Promotion later is user-gated via `sb-wiki-create-entity` or `sb-wiki-create-concept` — never auto-authored from the queue.
 
 #### Near-duplicate probe (non-skippable)
 
@@ -943,6 +943,8 @@ Multi-call operations (e.g. an ingest probing several stub-candidates): the FIRS
 | `/sb-wiki-ingest` | Step 3 near-duplicate stub probe (Stub policy § "Near-duplicate probe"); Step 3·7b speculative-tier semantic fires; Step 3·7c answer-scan semantic check; Step 3·7d semantic source-level topic-update probe (§ "Existing topic updates" → "Semantic tier (source-level)" — ONE `--type topic --k 5` probe, arm OFF when the tier is unavailable). The FIRM tier never consumes the semantic tier — its read-shortlist is deterministic (listing + grep) per § "Existing topic updates" |
 | `/sb-wiki-lint` | Step 7.7a questions answer-sweep — matching open questions against existing wiki content |
 | `sb-wiki-create-topic` | Step 1.5 scope-overlap check — surface overlap candidates beyond the `Scope`-cell comparison |
+| `sb-wiki-create-entity` | Step 1.5 same-referent check — surface an existing page for the same referent before creating a stub |
+| `sb-wiki-create-concept` | Step 1.5 same-referent check — surface an existing page for the same referent before creating a stub |
 | `sb-fin-create-thesis` (finance ext) | Step 1.3 scope-overlap check — same pattern over `wiki/theses/` |
 | Any agent reading the wiki | Per the `{wiki_root}/CLAUDE.md` Retrieval rule — search before bulk-reading |
 
@@ -956,6 +958,8 @@ The operations covering the wiki lifecycle:
 | `/sb-wiki-ingest-all [origin \| file …]` | Slash command | The user | Backfill: ingest non-ingested raw sources (all, one origin, or an explicit file list) via batched subagents, then lint |
 | `/sb-wiki-ingest-healing [target …]` | Slash command | The user | Healing: re-read an already-ingested source and edit its pages in place to recover lost substance (self-heal for 1 target; orchestrated for ≥2 / "heal all" = heal-index `heal=yes` rows; close-out flips healed rows to `heal=no`). Also: `scan`/`check` mode runs `sb-wiki-heal-scan.py` to refresh the metrics sidecar and merge the heal-index. Superseded the retired `/sb-wiki-reingest` on 2026-06-19. |
 | `sb-wiki-create-topic` | Skill (auto-discovered) | Agent mid-ingest, OR auto-fired when the user expresses intent | Create a topic page from a candidate or freshly-proposed topic |
+| `sb-wiki-create-entity` | Skill (auto-discovered) | Auto-fired when the user expresses intent, OR a dashboard dispatch | Create an entity stub from a proposed mention (slug + seed source) |
+| `sb-wiki-create-concept` | Skill (auto-discovered) | Auto-fired when the user expresses intent, OR a dashboard dispatch | Create a concept stub from a proposed mention (slug + seed source) |
 | `/sb-wiki-lint` | Slash command | The user | Structural and citation lint + index maintenance for `raw/` and `wiki/` |
 | `/sb-wiki-query <question>` | Slash command | The user | Synthesize an answer from wiki + optionally file the result back |
 | `/sb-wiki-update-backfill <mode>` | Slash command | The user | Retroactive backfill — scan all sources for missed topic updates (propose-only) or apply owner-accepted rows |
@@ -1152,6 +1156,36 @@ A skill agents can invoke mid-ingest (when the user accepts a PROPOSED TOPIC at 
 
 When invoked mid-ingest, no separate user checkpoint — the parent `/sb-wiki-ingest` Stage 1 acceptance covers it AND the step 1.5 overlap prompt fires inline before commit. When auto-fired by user intent, the agent runs step 1.5 first, then confirms the proposed sections + scope sentence with the user before writing (single confirmation checkpoint, two distinct prompts when overlap is detected).
 
+### `sb-wiki-create-entity`
+
+A skill auto-fired when the user expresses intent to create an entity from a proposed mention ("create an entity for X", "promote the {slug} entity") OR pastes a dashboard dispatch `/sb-wiki-create-entity {slug}`. No slash command — invocation is intent-driven. A space-separated batch is one invocation per slug. Agent NEVER auto-creates a page from a `candidate-mention`. Ingest stub creation (when the stub rule fires) does not invoke this skill.
+
+| Step | Operation | Owner |
+|------|-----------|-------|
+| 1 | Resolve the entity slug (`lowercase-kebab`). Load every matching `candidate-mention` in `logs/mentions.md` whose classification is entity. Extract `name:`, the kind hint — the leading kind word of the classification parenthetical, with or without the literal `kind:` prefix (`entity (kind: person — …)` and `entity (person — …)` both yield `person`) — `reason:`, and every `seeded-by:` source wikilink. The kind must be one of the entity enum in `frontmatter-schemas.md` as merged by installed wiki-exts (finance adds `asset` / `country` / `sector` — `finance/wiki-ext/page-types.ext.md`). Halt if classification is concept (point at `sb-wiki-create-concept`). Halt if no seed source is available — a stub is born cited. | Agent |
+| 1.5 | **Collision + same-referent check.** Halt if an entity page with that slug already exists (flat or subfolder) — offer `use existing` (remove the mention only) or `abort`; never overwrite. Forbidden: same slug in `topics/` or `wiki/theses/`. Same slug in `concepts/` is allowed. When the semantic tier is available (§ "Retrieval tiers — hybrid search"), run the near-duplicate probe (§ "Near-duplicate probe"): a SAME-referent hit does not create a page; a related or uncertain hit proceeds. Helper failure never halts — the filename checks are the floor. | Agent + User |
+| 2 | Write the stub at the routed path. Read `wiki/entities/CLAUDE.md` § "Subfolder routing"; a kind listed there lands in `wiki/entities/{subfolder}/{slug}.md`, otherwise `wiki/entities/{slug}.md`. Frontmatter per Entity schema (`kind` MUST be one of the entity enum). Required sections only: `What it is` (one cited sentence) + `Sources`. No optional sections (stub policy). One footnote per seed source, citing the wiki source page, never a raw file. | Agent |
+| 3 | Do not edit the seed source page. The citation is the link. Do not create any other page. | Agent |
+| 4 | REMOVE every matching entity `candidate-mention` for that slug from `logs/mentions.md` (the page is now the record — resolution = page exists). No `entity-created` entry. A fresh proposal with no entry leaves the log untouched. | Agent |
+| 5 | Append a `\| File \| Description \|` row to the leaf index of the folder the page landed in (subfolder index, the router's `## Flat pages` table, or the flat type index). Description is the `What it is` sentence, ≤280 chars. Create the index header if the file is missing. Preserve a non-standard column layout. | Agent |
+
+Single confirmation checkpoint between step 1.5 and step 2 (kind, sentence, seed sources, destination). `kind` must be an enum value before the write.
+
+### `sb-wiki-create-concept`
+
+Same shape as `sb-wiki-create-entity`, for a concept mention. Auto-fired on "create a concept for X", "promote the {slug} concept", or `/sb-wiki-create-concept {slug}`. No slash command. Agent NEVER auto-creates a page from a `candidate-mention`.
+
+| Step | Operation | Owner |
+|------|-----------|-------|
+| 1 | Resolve the concept slug. Load every matching `candidate-mention` whose classification is concept. Extract `name:`, the kind hint — the leading kind word of the classification parenthetical, with or without the literal `kind:` prefix (`entity (kind: person — …)` and `entity (person — …)` both yield `person`) — (free-form), `reason:`, and every `seeded-by:` wikilink. Halt if classification is entity (point at `sb-wiki-create-entity`). Halt if no seed source is available. | Agent |
+| 1.5 | **Collision + same-referent check.** Same rules as `sb-wiki-create-entity` step 1.5, against `wiki/concepts/` (forbidden collision is `topics/` or `wiki/theses/`; same slug in `entities/` is allowed). | Agent + User |
+| 2 | Write the stub at the routed path (`wiki/concepts/CLAUDE.md` routing table; else `wiki/concepts/{slug}.md`). Frontmatter per Concept schema (`kind` is free-form, never blank). Required sections only: `Definition` (one cited sentence) + `Sources`. No optional sections. One footnote per seed source. | Agent |
+| 3 | Do not edit the seed source page. The citation is the link. Do not create any other page. | Agent |
+| 4 | REMOVE every matching concept `candidate-mention` for that slug. No `concept-created` entry. A fresh proposal leaves the log untouched. | Agent |
+| 5 | Append a `\| File \| Description \|` row to the concepts leaf index of the folder the page landed in, same rules as the entity skill. Description is the `Definition` sentence. | Agent |
+
+Single confirmation checkpoint between step 1.5 and step 2.
+
 ### `/sb-wiki-lint`
 
 Single command: `/sb-wiki-lint`. Runs across `raw/` and `wiki/` folders. Mostly read-only; deterministic index sync writes are auto-applied (no diff to accept). Judgment-bearing index cells are never script-filled.
@@ -1308,7 +1342,7 @@ The queue is SPLIT into three per-type files under `{wiki_root}/logs/` (the dete
 | Type | File | Trigger | Awaiting action | Leaves the queue when |
 |------|------|---------|-----------------|------------------------|
 | `candidate-topic` | `logs/topics.md` | Auto-fired during `ingest` or `lint` when 1 of 3 triggers fires. Standalone H2 entry — does NOT reference a parent ingest | Decide whether to promote via the `sb-wiki-create-topic` skill | The topic page exists (create-topic removes the entry on promotion; lint prunes any candidate whose topic page exists) |
-| `candidate-mention` | `logs/mentions.md` | Auto-fired during `ingest` step 3 when an entity/concept name surfaces but the stub-creation rule does NOT fire (per Stub policy). Standalone H2 entry | Review → promote to a stub, or dismiss | The matching page exists (lint prunes), or the user dismisses it. NEVER auto-aged — mentions persist until actioned |
+| `candidate-mention` | `logs/mentions.md` | Auto-fired during `ingest` step 3 when an entity/concept name surfaces but the stub-creation rule does NOT fire (per Stub policy). Standalone H2 entry | Review → promote via `sb-wiki-create-entity` or `sb-wiki-create-concept`, or dismiss. NEVER auto-authored | The matching page exists (the create skill removes it on promotion; lint prunes any mention whose page exists), or the user dismisses it. NEVER auto-aged — mentions persist until actioned |
 | `proposed-new-thesis` | `logs/theses.md` | Fired on the investor path when a new-thesis trigger fires (per `finance/wiki-ext/candidate-thesis-triggers.md`). Standalone H2 entry | Decide whether to promote via `sb-fin-create-thesis` | The thesis page exists — create-thesis removes the entry on promotion; lint prunes by filename against `wiki/theses/` pages (resolves like `candidate-topic`) |
 | `speculative-thesis-update` | `logs/theses.md` | Fired on the investor path when a speculative change to an EXISTING thesis is proposed (e.g. a thesis-invalidation signal). Standalone H2 entry | `sb-fin-create-thesis` extend applies it on user action, or the user dismisses | The user acts or dismisses. **Lint NEVER auto-prunes it** — the target page already exists, so "page exists" is not a resolution signal; lint ages + surfaces it as "awaiting investor decision" |
 
@@ -1330,6 +1364,7 @@ The queue is SPLIT into three per-type files under `{wiki_root}/logs/` (the dete
 - name: sandboxing
 - classification: concept
 - reason: stub rule did not fire (name not in source title, Notable Quote, or Substance bullet)
+- promote via: sb-wiki-create-concept skill (express intent: "create the sandboxing concept"; an entity mention uses sb-wiki-create-entity)
 
 ## [2026-06-09 10:15] proposed-new-thesis | ai-capex-overbuild
 - thesis: <one-line statement of the proposed new thesis>
@@ -1375,6 +1410,8 @@ Source files live in the sb-os repo under `sb-os/workflows/sb-wiki-*/`. Skills a
 | `sb-wiki-ingest-all` | Slash command | `sb-os/workflows/sb-wiki-ingest-all/` | `.claude/commands/sb-wiki-ingest-all.md` | User-invocable batch backfill of all non-ingested sources (orchestration only) |
 | `sb-wiki-ingest-healing` | Slash command | `sb-os/workflows/sb-wiki-ingest-healing/` | `.claude/commands/sb-wiki-ingest-healing.md` | User-invocable healing: re-read an already-ingested source and edit its pages in place to recover lost substance (superseded the retired `/sb-wiki-reingest` on 2026-06-19) |
 | `sb-wiki-create-topic` | Skill (auto-discovered) | `sb-os/workflows/sb-wiki-create-topic/` | `.claude/skills/sb-wiki-create-topic/SKILL.md` | Agent-invokable mid-ingest; auto-fires when the user expresses topic-creation intent |
+| `sb-wiki-create-entity` | Skill (auto-discovered) | `sb-os/workflows/sb-wiki-create-entity/` | `.claude/skills/sb-wiki-create-entity/SKILL.md` | Auto-fires when the user expresses entity-creation intent, or on a dashboard dispatch; creates an entity stub from a proposed mention |
+| `sb-wiki-create-concept` | Skill (auto-discovered) | `sb-os/workflows/sb-wiki-create-concept/` | `.claude/skills/sb-wiki-create-concept/SKILL.md` | Auto-fires when the user expresses concept-creation intent, or on a dashboard dispatch; creates a concept stub from a proposed mention |
 | `sb-wiki-lint` | Slash command | `sb-os/workflows/sb-wiki-lint/` | `.claude/commands/sb-wiki-lint.md` | User-invocable structural and citation lint + index maintenance |
 | `sb-wiki-query` | Skill (auto-discovered) | `sb-os/workflows/sb-wiki-query/` | `.claude/skills/sb-wiki-query/SKILL.md` | Auto-fires on open / knowledge-seeking questions unless web research is explicitly requested; also user-invocable via `/sb-wiki-query` |
 

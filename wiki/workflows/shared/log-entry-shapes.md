@@ -25,7 +25,7 @@ Each log is an ACTIONABLE QUEUE — it holds ONLY items awaiting a user action. 
 | Type | File | Trigger | Awaiting action | Leaves the queue when |
 |------|------|---------|-----------------|------------------------|
 | `candidate-topic` | `logs/topics.md` | One of 3 triggers fires during ingest or lint | Promote via `sb-wiki-create-topic`, or dismiss | The topic page exists (create-topic removes it on promotion; lint prunes any candidate whose page exists) |
-| `candidate-mention` | `logs/mentions.md` | Entity/concept name surfaced in ingest step 3 but the stub-creation rule did NOT fire (per `stub-policy.md`) | Review → promote to a stub, or dismiss | The matching page exists (lint prunes), or the user dismisses it. NEVER auto-aged |
+| `candidate-mention` | `logs/mentions.md` | Entity/concept name surfaced in ingest step 3 but the stub-creation rule did NOT fire (per `stub-policy.md`) | Promote via `sb-wiki-create-entity` or `sb-wiki-create-concept`, or dismiss. NEVER auto-authored | The matching page exists (the create skill removes it on promotion; lint prunes any mention whose page exists), or the user dismisses it. NEVER auto-aged |
 | `proposed-new-thesis` | `logs/theses.md` | A new-thesis trigger fires on the investor path (per `finance/wiki-ext/candidate-thesis-triggers.md`) | Promote via `sb-fin-create-thesis`, or dismiss | The thesis page exists — create-thesis removes it on promotion; lint prunes by filename against `wiki/theses/` pages (resolves like `candidate-topic`) |
 | `speculative-thesis-update` | `logs/theses.md` | A speculative change to an EXISTING thesis is proposed on the investor path | `sb-fin-create-thesis` extend applies it on user action, or the user dismisses | The user acts (create-thesis extend deletes the referenced entry) or dismisses. **Lint NEVER auto-prunes it** (see below) |
 
@@ -47,6 +47,7 @@ Each log is an ACTIONABLE QUEUE — it holds ONLY items awaiting a user action. 
 - name: sandboxing
 - classification: concept
 - reason: stub rule did not fire (name not in source title, Notable Quote, or Substance bullet)
+- promote via: sb-wiki-create-concept skill (express intent: "create the sandboxing concept"; an entity mention uses sb-wiki-create-entity)
 
 ## [2026-06-09 10:15] proposed-new-thesis | ai-capex-overbuild
 - thesis: <one-line statement of the proposed new thesis>

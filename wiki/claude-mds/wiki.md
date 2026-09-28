@@ -75,13 +75,15 @@ Canonical spec (artifact, entry schema, two-homes resolution, lifecycle, the ans
 
 ## Operations
 
-Five operations cover the wiki lifecycle.
+Operations covering the wiki lifecycle:
 
 | Component | Type | Invoked by | Purpose |
 |-----------|------|------------|---------|
 | `/sb-wiki-ingest <slug>` | Slash command | User | Distill a raw source into wiki pages |
 | `/sb-wiki-ingest-healing [targets]` | Slash command | User (on-demand), AND auto-fired after every PDF first-ingest | HEAL a thin or lossy already-ingested source: an agent re-reads the source (the **original PDF** for a PDF) and EDITS the page in place to the reconstruction standard — augmenting the agent-authored sections, preserving `My take` + every human edit byte-identical, never deleting or rebuilding — then propagates the recovered substance to the linked concept/entity/topic pages and flips the healed row to `heal=no` in the heal-index. ONE target heals in-session (previews before its own commit); TWO OR MORE (or `heal all` = the heal-index `heal=yes` rows) dispatch one sub-agent per source, strictly sequentially at the ingest-all Sonnet/Opus split, then one final lint + one commit (hands-off). `scan`/`check` mode: runs `sb-wiki-heal-scan.py` to refresh the metrics sidecar and merge the heal-index (no healing pass). PDF auto-heal is hands-off (PROBATIONARY) and rides the first-ingest commit. NO AI judge, NO no-worse gate, NO thin-page detector — the healing pass is the sole quality check |
 | `sb-wiki-create-topic` | Skill (auto-discovered) | Agent mid-ingest, OR auto-fired when user expresses topic-creation intent | Create a topic page from a candidate or fresh proposal |
+| `sb-wiki-create-entity` | Skill (auto-discovered) | Auto-fired when user expresses entity-creation intent, or a dashboard dispatch | Create an entity stub from a proposed mention (slug + seed source). Never auto-authored from the queue |
+| `sb-wiki-create-concept` | Skill (auto-discovered) | Auto-fired when user expresses concept-creation intent, or a dashboard dispatch | Create a concept stub from a proposed mention (slug + seed source). Never auto-authored from the queue |
 | `/sb-wiki-lint` | Slash command | User | Structural and citation lint + index maintenance for `raw/` and `wiki/` |
 | `/sb-wiki-query <question>` | Slash command | User | Synthesize an answer from wiki + optionally file the result back |
 
@@ -118,7 +120,7 @@ Agent auto-creates a stub Concept or Entity page when the entity/concept name fi
 - **Source title/headline — title-only** (NOT in any `Substance` bullet): ask "would this stub plausibly become a real concept/entity page given the source's actual content?" If YES → stub; if NO → log `candidate-mention`.
 - **An extracted Notable Quote** — same relevance heuristic.
 
-If no branch fires, the agent logs a `candidate-mention` entry in `logs/mentions.md` for periodic review by lint — never creates a page.
+If no branch fires, the agent logs a `candidate-mention` entry in `logs/mentions.md` for periodic review — never creates a page. Promotion later is user-gated via `sb-wiki-create-entity` or `sb-wiki-create-concept`.
 
 Lint detects stub-state structurally (frontmatter + ≤2-sentence preamble + Sources section, with main content sections empty or absent) and flags stubs aged >30 days. Empty user-half sections on Source pages do NOT count toward stub-state.
 
@@ -148,8 +150,8 @@ The wiki maintains five indexes. The user NEVER writes indexes manually — agen
 |-------|------|--------|---------------|
 | Raw leaf index | `raw/{origin}/{origin}.md`, `raw/studies/studies.md` | `\| File \| Title \| Date \| Wiki \|` | Lint creates and maintains; ingest sets `Wiki = Yes` (or `Partial` on partial reject; or `Duplicate (of [[<existing-raw>]])` / `Original (twin: [[<existing-raw>]])` on a silent content-duplicate fire — `Duplicate` for a markdown re-clip, `Original (twin: …)` for a kept PDF original) |
 | Wiki sources leaf index | `wiki/sources/{origin}/{origin}.md` | `\| File \| What it says \| My take \|` | Ingest writes `What it says` (factual derivative of source page's `Substance`); ingest/lint write `My take` (derived from source page's `My take` section); user fills the source page, never the index |
-| Wiki concepts leaf index | `wiki/concepts/concepts.md` | `\| File \| Description \|` | Lint creates and maintains |
-| Wiki entities leaf index | `wiki/entities/entities.md` | `\| File \| Description \|` | Lint creates and maintains |
+| Wiki concepts leaf index | `wiki/concepts/concepts.md` | `\| File \| Description \|` | `sb-wiki-create-concept` writes new rows defensively; lint owns full creation and maintenance |
+| Wiki entities leaf index | `wiki/entities/entities.md` | `\| File \| Description \|` | `sb-wiki-create-entity` writes new rows defensively; lint owns full creation and maintenance |
 | Wiki topics leaf index | `wiki/topics/topics.md` | `\| File \| Scope \|` | `sb-wiki-create-topic` writes new rows defensively; lint owns full creation and maintenance |
 
 Lint's raw-index responsibility is explicit: every `raw/{origin}/` directory gets a `{origin}.md` index — if missing, lint CREATES it with the standard header; for each raw file, lint ensures a row exists with `Wiki = No` (default) or preserves the existing `Yes`/`Partial`/`No`/`Duplicate (…)`/`Original (twin: …)` value. Same for `raw/studies/studies.md`.
