@@ -28,7 +28,7 @@ These are surfaces a home dashboard *could* expose. Pick the ones that match how
 | Today's date | Long-form date prominently rendered |
 | Calendar overlay | Today's reading from a cultural / astrological / religious / lunar calendar (e.g. "favorable", "neutral", "unfavorable" with color-coded text) |
 | Daily quote | A rotating quote drawn from a source file, deterministically picked from the day-of-year so the same day always yields the same quote |
-| Periodic-note quick links | One-click jumps to today's daily, this week's weekly, this month's monthly, this quarter's quarterly. The daily link should also **create** today's note from the daily template (`.user/config/templates/periodic-notes/Daily.md`) when it doesn't exist yet — one click takes you from a fresh vault open to a writable note |
+| Periodic-note quick links | One-click jumps to today's daily, this week's weekly, this month's monthly, this quarter's quarterly. The daily link should also **create** today's note from the daily template (`{templates_root}/periodic-notes/Daily.md`, where `templates_root` comes from `sb-os.json` at the vault root, default `.user/config/templates`) when it doesn't exist yet — one click takes you from a fresh vault open to a writable note |
 
 ### Intent and direction
 

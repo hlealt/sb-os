@@ -32,7 +32,7 @@ Sources live under per-module folders at the sb-os repo root: `{module}` is `par
 | Skills (`sb-*/SKILL.md` and refs) | `{sb_os_path}/{module}/skills/<name>/` | `.claude/skills/sb-*/` |
 | Commands (`sb-*.md`) | `{sb_os_path}/{module}/commands/<name>.md` | `.claude/commands/sb-*.md` |
 | Workflows | `{sb_os_path}/{module}/workflows/` | *(not installed — referenced via loaders)* |
-| Templates | `{sb_os_path}/para/templates/` | `.user/config/templates/` (installed copies) |
+| Templates | `{sb_os_path}/para/templates/` | `templates_root` from `sb-os.json` at the vault root (default `.user/config/templates/`) (installed copies) |
 | Managed CLAUDE.mds (PARA) | `{sb_os_path}/para/claude-mds/` | Marker-block content in target vault CLAUDE.mds |
 | Managed CLAUDE.md (wiki) | `{sb_os_path}/wiki/claude-mds/wiki.md` | Marker-block content in `{wiki_root}/CLAUDE.md` |
 

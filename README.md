@@ -139,7 +139,7 @@ Open Obsidian on the vault root and configure:
 |---|---|---|
 | Daily notes (core) | Folder | `0-periodic-notes/daily/` |
 | Daily notes (core) | Date format | `YYYY-MM-DD` |
-| Templates (core) | Template folder | `.user/config/templates/` |
+| Templates (core) | Template folder | `templates_root` from `sb-os.json` at the vault root (default `.user/config/templates/`) |
 | Unique note creator (core) | — | Disable. sb-os uses predictable paths. |
 | [Calendar](https://github.com/liamcain/obsidian-calendar-plugin) (community) | — | Week/day navigation for periodic notes |
 | [Dataview](https://github.com/blacksmithgu/obsidian-dataview) (community) | — | Required if you build a Home dashboard |
