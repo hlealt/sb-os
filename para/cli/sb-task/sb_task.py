@@ -38,6 +38,10 @@ HEADING_RE = re.compile(r"^#{1,6} ")
 MOSCOW_RE = re.compile(r"^#### (Must|Should|Could)\s*$", re.IGNORECASE)
 SUB_CHECKBOX_RE = re.compile(r"^(\s+)- \[( |x)\] (.*)$")
 FIELD_RE = re.compile(r"^(\s+)- _([A-Za-z][A-Za-z-]*):_\s*(.*)$")
+# The same bullet with ANY label — `_Gated on:_`, `_Context (cold-start):_`:
+# still a sibling field bullet for bounding a value, even when FIELD_RE,
+# which fixes the EDITABLE labels, does not recognise the spelling.
+FIELD_BULLET_RE = re.compile(r"^(\s+)- _(.+?):_")
 LIST_ITEM_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s")   # starts a new list item
 
 MOSCOW_LEVELS = ["Must", "Should", "Could"]
@@ -455,17 +459,18 @@ class Task:
         covers leaves the rest standing under the new text at rc=0.
 
         A field's value therefore ends only where the NEXT field bullet of the
-        same block starts at or shallower than its own indent — the parser's
-        own field predicate — or where the block ends. A deeper-indented
-        `_Field:_` bullet is part of the value, not a terminator. Trailing
-        blank lines are left out so a replace does not swallow the separation
-        before whatever follows.
+        same block starts at or shallower than its own indent — ANY `_Label:_`
+        bullet (FIELD_BULLET_RE), including one whose spelling FIELD_RE cannot
+        edit, such as `_Context (cold-start):_` or `_Gated on:_` — or where
+        the block ends. A deeper-indented `_Field:_` bullet is part of the
+        value, not a terminator. Trailing blank lines are left out so a
+        replace does not swallow the separation before whatever follows.
         """
         indent = len(FIELD_RE.match(self.tf.lines[idx]).group(1))
         j = end = idx + 1
         while j < self.end:
             line = self.tf.lines[j]
-            fm = FIELD_RE.match(line)
+            fm = FIELD_BULLET_RE.match(line)
             if fm and len(fm.group(1)) <= indent:
                 break
             if line.strip():
@@ -1779,6 +1784,12 @@ type: tasks
 - [ ] 10 Backslash value on the insert path
   - _Criteria:_ crit
 
+- [ ] 11 Custom sibling field bullets
+  - _Goal:_ old goal
+  - _Context (cold-start):_ cold start context
+  - _Gated on:_ gated on text
+  - _Criteria:_ crit
+
 #### Should
 
 #### Could
@@ -2152,6 +2163,24 @@ def cmd_selftest(args):
             "- [ ] 10 Backslash value on the insert path",
             r"  - _Why:_ D:\Users\new\tab \1 \g<0>",
             "  - _Criteria:_ crit"], b)
+
+        # Custom-labelled sibling bullets (`_Context (cold-start):_`,
+        # `_Gated on:_`) are field bullets FIELD_RE cannot edit; replacing
+        # or inserting Goal/Context/Why/Criteria must bound at them — a
+        # replace consumes only its own value, never a sibling bullet.
+        code, out = invoke(*V, "edit", "fieldp", "11", "--goal", "NEW goal")
+        code, out = invoke(*V, "edit", "fieldp", "11", "--context", "NEW ctx")
+        code, out = invoke(*V, "edit", "fieldp", "11", "--why", "NEW why")
+        code, out = invoke(*V, "edit", "fieldp", "11", "--criteria", "NEW crit")
+        b = fblock("11")
+        ok("edit-fields-preserve-custom-bullets", code == 0 and b.splitlines() == [
+            "- [ ] 11 Custom sibling field bullets",
+            "  - _Why:_ NEW why",
+            "  - _Goal:_ NEW goal",
+            "  - _Context:_ NEW ctx",
+            "  - _Context (cold-start):_ cold start context",
+            "  - _Gated on:_ gated on text",
+            "  - _Criteria:_ NEW crit"], b)
 
         # --- bulk edit: one call, many refs ------------------------------
         code, out = invoke(*V, "edit", "fieldp", "4,5,6", "--batch", "bulk1",
