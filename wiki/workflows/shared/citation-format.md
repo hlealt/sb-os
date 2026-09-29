@@ -20,6 +20,7 @@ Rules for inline citations and Sources section format. Validated canonical forma
 
 - **One footnote per source** — never merge multiple sources into one footnote definition.
 - **Multi-source claims** — multiple markers on the same sentence: `...claim X[^1][^2][^3]`.
+- **Every `[^N]` is a citation marker** — every `[^N]` in the body (callouts included) is read as a citation: it counts toward the page's footnote order and is rewritten by the lint renumber. Referring to footnotes by number in prose ("see footnotes [^1] and [^10]–[^23]") is UNSUPPORTED — name the sources instead. A range written with markers (`[^a]–[^b]`) is not a citation form: lint reports it as `footnote range` and does not renumber that page until it is rewritten.
 - **Born cited** — every page is CREATED with its first content sentence (Definition / What it is / preamble) carrying the inline `[^1]` marker. A `[^N]:` definition MUST NEVER be written without at least one inline `[^N]` marker on the page.
 - **User prose preservation** — if the user manually added prose context within a footnote definition (e.g., `[^1]: [[file.md]] — note: this is the original`), lint preserves the user prose and only renumbers.
 - **Stale removal is REPORT-ONLY** — lint NEVER auto-removes a footnote definition. The source genuinely contributed to the page; auto-removal strips the page's only graph edge to that source. Lint reports unreferenced defs; removal is a human/LLM hand-reconciliation against the cited sources.

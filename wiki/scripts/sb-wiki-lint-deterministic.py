@@ -1932,7 +1932,11 @@ def footnote_state(text: str) -> dict[str, object]:
     for marker in inline_all:
         if marker not in order:
             order.append(marker)
-    return {"defs": defs, "inline": inline_all, "order": order}
+    # A range (``[^10]–[^23]``) is a prose reference to footnote numbers, not
+    # a citation form (citation-format.md allows only adjacent markers). Its
+    # meaning cannot survive a renumber, so the walk reports it and blocks C3.
+    ranges = re.findall(r"\[\^(\d+)\][ \t]*[-–—][ \t]*\[\^(\d+)\]", body)
+    return {"defs": defs, "inline": inline_all, "order": order, "ranges": ranges}
 
 
 def cmd_check_pages(args_list: list[str]) -> int:
@@ -2066,6 +2070,11 @@ def structural_walk(wiki_root: Path, report: Report, apply_changes: bool) -> Non
         stale = sorted(set(defs) - set(inline), key=int)
         if inline and stale:
             issues.append(f"stale defs: {','.join(stale)}")
+        if state["ranges"]:
+            issues.append(
+                "footnote range (prose reference, renumber blocked): "
+                + ",".join(f"[^{x}]-[^{y}]" for x, y in state["ranges"])
+            )
         non_sequential = order != [str(i) for i in range(1, len(order) + 1)]
         if non_sequential:
             issues.append("non-sequential")

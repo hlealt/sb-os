@@ -216,6 +216,7 @@ For each wiki page (concepts, entities, topics, source pages):
    - NEVER auto-remove a footnote definition. A def with no inline reference is mechanically indistinguishable from stub provenance (stubs are born with defs and no inline markers; later ingests append inline-cited sections while the original def stays unreferenced) — auto-removal strips the page's graph edge to that source. REPORT unreferenced defs in the LINT REPORT for hand-reconciliation.
    - A page with definitions and ZERO inline markers is the ingest-built stub-provenance shape (`../shared/stub-policy.md`) — not a finding; never touched.
    - Set mismatches (inline marker without definition, duplicate definitions) are content defects: report in the LINT REPORT, never auto-repair.
+   - A marker range (`[^a]–[^b]`, a prose reference to footnote numbers) is reported as `footnote range` and the page is NOT renumbered — rewrite the prose to name the sources, then re-lint.
 2. Capture `footnotes-renumbered` count (pages touched) for the LINT REPORT.
 
 ### Step 7 — Verify and create raw indexes; verify wiki leaf indexes
