@@ -62,8 +62,8 @@ Tell the user briefly what RBTV is. Deliver the pitch in the session's language 
 # Step 1: clone RBTV into the tools folder
 git clone https://github.com/tecer-ai/rbtv 3-resources/tools/rbtv
 
-# Step 2: run RBTV's installer
-cd 3-resources/tools/rbtv && python install.py
+# Step 2: start RBTV's guided installer for this vault
+python 3-resources/tools/rbtv/meta/installer/install.py interactive --target .
 ```
 
 After printing, the agent does NOT execute the commands. The user runs them in their terminal.
