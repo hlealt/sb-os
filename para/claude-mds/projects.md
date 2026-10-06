@@ -30,10 +30,10 @@ When the outcome is reached or the work stops, move the folder to `4-archives/`.
 | Item | Rule |
 |------|------|
 | One folder per project | `1-projects/{project-name}/` (lowercase kebab-case). The folder is already inside `1-projects/` — do NOT prefix names with `project-` |
-| Index file | `{project-name}.md` inside the folder — describes goal, status, optional due date, links |
-| Index frontmatter | YAML frontmatter on the index SHOULD declare `area:` (the parent area this project rolls up to) and MAY declare `due:` (an optional due date) — see Frontmatter Convention below |
+| Overview file | `{project-name}.md` inside the folder — describes goal, current status, optional due date and useful links; retains its index metadata |
+| Overview frontmatter | YAML frontmatter on the overview SHOULD declare `area:` (the parent area this project rolls up to) and MAY declare `due:` (an optional due date) — see Frontmatter Convention below |
 | Task file | `{project-name}-tasks.md` inside the folder — single source of tasks for the project (tasks carry their own dates). OPTIONAL: create it when the project's first task lands — a project with no tasks has no tasks file (dashboards discover task files; empty ones only add noise) |
-| Per-project `CLAUDE.md` | User-owned (sb-os does not manage it). Use it for project-specific agent rules |
+| Per-project `CLAUDE.md` | User-owned (sb-os does not manage it). It owns project-specific instructions and conditions for reading or acting on records |
 | Sub-folders | Nest planning and build-record artifacts under one `build/` folder; keep the root to the living set (see Root Layout). Other reference sub-folders are free-form — agents follow the project's own `CLAUDE.md` if present |
 | Sub-files | Loose `.md` files at the `1-projects/` root (siblings of project folders) are user-owned and freeform — sb-os does not manage their structure or naming |
 
@@ -43,21 +43,23 @@ Use evocative folder names that describe the work itself: `marketing-launch-2027
 
 ## Root Layout — keep the root scannable
 
-Only files navigated constantly stay at the project root; everything that records *how* the work was planned and built drops into a single `build/` folder.
+Keep the current working set at the project root. Put planning and build records under `build/`, in a named subfolder per run or topic; do not leave records loose at the root of `build/`.
 
-| At the root (living) | One level down, in `build/` |
-|----------------------|------------------------------|
-| `{project-name}.md` — index, carries current **status** | plan, design, decisions, deliverables |
-| `{project-name}-tasks.md` — open tasks | run log, state snapshots, specs, phase folders |
-| the current product (code package, main document) | dispatch prompts, evidence sheets, review mockups |
+| Current working set | Build and historical records |
+|---|---|
+| `{project-name}.md` — overview, purpose and status | `build/<run-or-topic>/` — plans, designs, specifications, dispatch prompts and evidence |
+| `{project-name}-tasks.md` — unfinished tasks | `build/old/` — superseded states and completed work records |
+| Current product and authoritative workflow, state or decisions used to continue work | Preserved historical runs and their decisions, with working references |
 
-Status lives in the index, open work in the tasks file — mutually exclusive and jointly complete: the index states *where the work stands* (never re-listing tasks); the tasks file lists *what is left*. A root accumulating planning/record files is the signal to move them into `build/`.
+Each changing fact has one maintained home. If a workflow or status file owns execution state, the overview links it; otherwise the overview states current status. The tasks file lists unfinished work, not a second status narrative. Folder instructions own directions for when agents read or act; an overview may link useful records without duplicating their maintained inventories or instructions.
+
+Move a record to history only when it is superseded or no longer authoritative; a completed producing run does not retire a still-current decision or plan. Preserve the record and update current links in the same change. Keep the workspace's task-file locations and metadata, and add a board or other artifact only when the work needs it. Do not create empty standard files.
 
 ---
 
 ## Frontmatter Convention
 
-Each project's index file SHOULD carry YAML frontmatter identifying it and linking it to its parent area:
+Each project's overview file SHOULD carry YAML frontmatter identifying it and linking it to its parent area:
 
 ```yaml
 ---
@@ -84,7 +86,7 @@ The `{project-name}-tasks.md` file carries the same `tags` + `area` pair — das
 
 | Situation | Action |
 |-----------|--------|
-| New bounded work with a defined "done" | Create `1-projects/{project-name}/` with index (frontmatter + body); add `{project-name}-tasks.md` when the first task lands |
+| New bounded work with a defined "done" | Create `1-projects/{project-name}/` with overview (frontmatter + body); add `{project-name}-tasks.md` when the first task lands |
 | Project complete or abandoned | Move folder to `4-archives/` (preserves history; deletion is a later step) |
 | Work has no defined endpoint / is ongoing | Belongs in `2-areas/`, not here |
 | A single dated to-do (not a project) | Add it to the relevant project or area's tasks file — do NOT create a project folder for it |

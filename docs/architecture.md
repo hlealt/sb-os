@@ -341,7 +341,11 @@ Plus the **sb-os repo's own root `CLAUDE.md`** — agent context for anyone work
 | Subfolder CLAUDE.mds (e.g., `2-areas/health/CLAUDE.md`) | User-owned. sb-os never creates, never touches. |
 | Any other CLAUDE.md outside the managed set | User-owned; sb-os never creates and never touches. |
 
-Contents of each managed CLAUDE.md are defined in the source files under `sb-os/claude-mds/`.
+Contents of each managed CLAUDE.md are defined in the module sources listed above, including `para/claude-mds/`.
+
+Project and area folders retain their named overview pages and existing metadata. Overviews describe purpose and current status and link useful records; folder instructions own conditions for reading and acting. When a dedicated workflow or status file owns execution state, the overview links it rather than maintaining another task or state inventory. Task filenames and discovery metadata remain unchanged.
+
+Planning and build records stay under `build/`, in named run or topic folders. Superseded states and completed work records belong under `build/old/`, with current routes updated and history preserved. Current authoritative decisions, plans and products remain in the established living set. This organization does not create empty standard artifacts, require project/area boards, or change whole-folder archive boundaries.
 
 ---
 
