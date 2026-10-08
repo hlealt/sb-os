@@ -41,29 +41,7 @@ Example shape:
 }
 ```
 
-### 2. Log work-log entries via an archivist hook
-
-If you keep an archivist workflow that logs edits to a work log, fire it after `Edit`, `Write`, and `MultiEdit`:
-
-```json
-{
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "claude skill invoke sb-archivist"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-### 3. Inject user context on prompt submit
+### 2. Inject user context on prompt submit
 
 > **SUPERSEDED — do NOT install.** This is the historical MANUAL `UserPromptSubmit` snippet from before context-injection was auto-wired. It is now replaced by the [Auto-installed hook: context-injection](#auto-installed-hook-context-injection) below, which the installer wires into `.claude/settings.local.json` (sentinel `"__sb__": "sb:context-injection"`) on every `python install.py` run. Do NOT install this snippet alongside the auto hook — it is retained only as a reference for the old manual approach.
 
@@ -88,7 +66,7 @@ Run `sb-inject-context` on every user prompt so the configured `user_context_roo
 
 These snippets show the **shape** of the config; adapt the `command` field to whatever invocation form your harness supports.
 
-### 4. Finance — structural non-overlap (ME) gate (pre-commit + quarterly)
+### 3. Finance — structural non-overlap (ME) gate (pre-commit + quarterly)
 
 If the finance module is installed, run the structural non-overlap gate as a pre-commit check so a commit that introduces a **second store for an already-tracked concept** (a new vendor→category dict when `suppliers.json` already owns it, a parallel tag file, etc.) is refused before it lands. The gate detects overlap at the SEMANTIC level against the 23 p2-7 sources-of-truth domains — not a filesystem existence check. Exit 0 = no overlap (allow), exit 1 = overlap (block).
 
@@ -98,9 +76,9 @@ Pre-commit, sweeping a manifest of the stores a change proposes (a JSON list of 
 python 3-resources/tools/sb-os/finance/scripts/shared/me_gate.py --manifest proposed-stores.json
 ```
 
-The same command is the **quarterly** drift sweep: run it over the full set of stores/configs to confirm no overlapping store crept in between closes. Pair it with the deferred cross-config duplicate auditor (`audit-data-duplication.py`, plan task p5-12) once that ships — the gate composes it automatically and reports it as not-yet-built until then. This is distinct from the doc-currency hard-block hook (§5 below), which blocks on stale docs, not on store overlap.
+The same command is the **quarterly** drift sweep: run it over the full set of stores/configs to confirm no overlapping store crept in between closes. Pair it with the deferred cross-config duplicate auditor (`audit-data-duplication.py`, plan task p5-12) once that ships — the gate composes it automatically and reports it as not-yet-built until then. This is distinct from the doc-currency hard-block hook (§4 below), which blocks on stale docs, not on store overlap.
 
-### 5. Finance — doc-currency HARD BLOCK (pre-commit)
+### 4. Finance — doc-currency HARD BLOCK (pre-commit)
 
 If the finance module is installed, run the doc-currency check as a pre-commit hook so a commit that changes a **coupled code/config surface without updating the doc that describes it** is refused before it lands. This is **layer 3** of the documentation-currency Option D Hybrid mechanism (`finance/CLAUDE.md` § Documentation Currency). It is a HARD block, not advisory: an advisory hook lets documentation drift accumulate exactly when it matters. The block message names the stale doc + the fix; the only pass-path is reconciling the doc (run the `doc-maintainer` companion, stage the doc, re-commit) — there is no per-hook bypass flag.
 

@@ -84,14 +84,6 @@
           "target": ".claude/rules/sb-source-of-truth.md",
           "mode": "copy",
           "description": "Warns that sb-os components in .claude/ are overwritten on re-install."
-        },
-        {
-          "name": "sb-no-task-forgotten",
-          "module": "para",
-          "source": "para/rules/sb-no-task-forgotten.md",
-          "target": ".claude/rules/sb-no-task-forgotten.md",
-          "mode": "copy",
-          "description": "Job-end gate: capture deferred loose ends as cold-start-sufficient vault tasks before declaring a job done."
         }
       ],
       "templates": [
@@ -136,7 +128,7 @@
       ]
     },
     "wiki": {
-      "description": "Wiki / knowledge-base layer. Atomic — all components install together, plus the wiki folder and wiki CLAUDE.md. Sources live primarily under the wiki/ module folder; sb-archivist is wiki-gated but its source lives in para/.",
+      "description": "Wiki / knowledge-base layer. Atomic — all components install together, plus the wiki folder and wiki CLAUDE.md. Sources live under the wiki/ module folder.",
       "always_installed": false,
       "atomic": true,
       "wiki_artifacts": true,
@@ -167,12 +159,6 @@
         }
       ],
       "commands": [
-        {
-          "name": "sb-archivist",
-          "module": "para",
-          "source_template": "para/commands/sb-archivist.md",
-          "target": ".claude/commands/sb-archivist.md"
-        },
         {
           "name": "sb-wiki-ingest",
           "module": "wiki",

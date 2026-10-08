@@ -1401,7 +1401,7 @@ These types were logged in earlier versions and are NO LONGER written. Lint prun
 
 ## Component structure
 
-Each wiki capability is its own component under the `sb-` prefix (alongside other sb-os components such as `sb-vault-ops`, `sb-tutor`, `sb-archivist`). No umbrella `sb-wiki` skill — capabilities are independent.
+Each wiki capability is its own component under the `sb-` prefix (alongside other sb-os components such as `sb-vault-ops`, `sb-tutor`). No umbrella `sb-wiki` skill — capabilities are independent.
 
 Source files live in the sb-os repo under `sb-os/workflows/sb-wiki-*/`. Skills and commands installed into `.claude/` are **thin loaders** that point back to those source files (per architecture doc §4 loader pattern). Editing installed loaders is forbidden — the source is the repo. Re-running `python install.py` regenerates loaders.
 

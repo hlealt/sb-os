@@ -178,7 +178,6 @@ Editing the installed file directly is forbidden — the source is the repo. Re-
 
 | Command | Purpose |
 |---------|---------|
-| `/sb-archivist` | Rolling per-day session work-log (decisions, refinements, discoveries, files touched); on fresh-session runs, sweeps done tasks from task files into date-correct work logs |
 | `/sb-tutor` | Tutor persona for guided learning sessions |
 | `/sb-inject-context` | Manual context injection helper |
 | `/sb-onboarder` | Post-install interactive onboarding — orient the user, populate PARA, optionally build Home, optionally point at RBTV |
@@ -192,7 +191,6 @@ Editing the installed file directly is forbidden — the source is the repo. Re-
 | ~~`sb-workflow-context.md`~~ | **Retired.** Context injection no longer fires via an active rule — it is auto-wired as a hook in `.claude/settings.local.json` (PreToolUse/Skill + PostToolUse/Read) calling `resolve_context.py --hook`. Schema: `para/docs/context-injection-schema.md` |
 | `sb-source-of-truth.md` | Edit-source-not-installed-copies reminder |
 | `sb-sub-agents.md` | Mandatory skill directives in Agent dispatches |
-| `sb-no-task-forgotten.md` | Job-end gate: capture deferred loose ends as cold-start-sufficient vault tasks |
 
 The `"stale"` manifest mechanism that retires rules like `sb-user-preferences` is described in §6 "Stale components".
 

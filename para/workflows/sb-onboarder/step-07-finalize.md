@@ -88,7 +88,6 @@ State preserved at sb-os.json under `onboarder_state`.
 Next steps you might enjoy:
   /sb-life-planner   — start a weekly review
   /sb-tutor          — guided learning sessions
-  /sb-archivist      — log this session into your work-log
   /sb-wiki-ingest    — ingest your first external source
 ```
 

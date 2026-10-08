@@ -24,9 +24,9 @@ When the probe succeeds, NEVER hand-edit a task's main line or structured sub-bu
 
 Completion: `- [x] 📅 2026-03-31 Close design partner ✅ 2026-04-01` — keep original `📅`, add `✅ YYYY-MM-DD`.
 
-## Sweep Contract (the archivist Done-Task Sweep keys on this)
+## Sweep Contract (the completed-task line format)
 
-The `sb-archivist` Done-Task Sweep (`sweep_done_tasks.py`) moves completed tasks out of `*-tasks.md` into the work-log and REMOVES them from source. Because it deletes from source, it routes a block ONLY when it can do so with confidence; on ANY doubt it SKIPS the block (leaves it byte-for-byte in source, never writes it to a work-log) and logs the reason. To be swept, a completed task MUST satisfy this contract:
+A done-task sweep moves completed tasks out of `*-tasks.md` and REMOVES them from source. Because it deletes from source, it routes a block ONLY when it can do so with confidence; on ANY doubt it SKIPS the block (leaves it byte-for-byte in source) and logs the reason. To be swept, a completed task MUST satisfy this contract:
 
 | # | Rule | A block that violates it is |
 |---|------|-----------------------------|
@@ -37,25 +37,18 @@ The `sb-archivist` Done-Task Sweep (`sweep_done_tasks.py`) moves completed tasks
 
 Trailing prose after the date is allowed (`✅ 2026-04-01 — note…`) and does NOT block the sweep. The block body is every following line up to the next column-0 `- [` or heading — sub-bullets travel with the task verbatim.
 
-**Author takeaway:** a completed task with no `✅` date, or a malformed/ambiguous one, will NOT be swept and WILL be reported as a skip — it stays in the file until corrected. This is intentional: it guarantees the sweep can never move or drop content it cannot route. Column-0 `- [x]` checklist items that are NOT work-log tasks (e.g. domain tracking checkboxes without a `✅` date) are safely left in place by this same rule.
+**Author takeaway:** a completed task with no `✅` date, or a malformed/ambiguous one, will NOT be swept and WILL be reported as a skip — it stays in the file until corrected. This is intentional: it guarantees a sweep can never move or drop content it cannot route. Column-0 `- [x]` checklist items that are NOT completed tasks (e.g. domain tracking checkboxes without a `✅` date) are safely left in place by this same rule.
 
 ### Write-Time Validation (enforced on completion — BLOCK)
 
-When this skill **completes a task** — writes a new `- [x] … ✅ YYYY-MM-DD` line, or flips an existing `- [ ]` to `- [x]` and appends `✅ YYYY-MM-DD` — it MUST validate that exact line against the Sweep Contract above BEFORE finalizing the write, by running the sweep's own checker:
+The gate lives in the `sb-task` CLI (`validate_completion_line` in `para/cli/sb-task/sb_task.py`). When this skill **completes a task** it runs `sb-task edit <file> <ref> --status done`, which flips `- [ ]` to `- [x]`, appends `✅ YYYY-MM-DD`, and validates that exact line against rules 1–3 of the Sweep Contract above BEFORE writing:
 
-```
-python {sb_os_path}/para/workflows/sb-archivist/sweep_done_tasks.py --validate-line="<the completed task line>"
-```
+| Verdict | Action |
+|---------|--------|
+| conforming | Line satisfies the contract and will sweep cleanly. The write is finalized. |
+| violation | Column-0 `- [x]` but the `✅` date is missing, malformed (no space, unpadded, impossible calendar date), or ambiguous (two distinct dates). **BLOCK** — the CLI refuses with error code `sweep-violation` (exit `1`) and writes nothing. Correct the line content per the stated reason and re-run. |
 
-`{sb_os_path}` resolves from `sb-os.json`. Use the `=` form shown — a value starting with `-` is otherwise parsed as a flag. Gate on the EXIT CODE (encoding-independent):
-
-| Exit | Verdict | Action |
-|------|---------|--------|
-| `0` | `CONFORMING` | Line satisfies the contract and will sweep cleanly. Finalize the write. |
-| `1` | `VIOLATION: <reason>` | Column-0 `- [x]` but the `✅` date is missing, malformed (no space, unpadded, impossible calendar date), or ambiguous (two distinct dates). **BLOCK** — do NOT finalize. Correct the line per `<reason>` and re-run until exit `0`. |
-| `2` | `NOT-A-TASK: <reason>` | Line is not a column-0 `- [x] ` top-level task. If you intended a top-level completion, the line is mis-formed (leading whitespace, or not `- [x] `) — fix it to column 0 and re-validate. |
-
-Invoke ONLY on a genuine completion. Do NOT validate indented subtasks, `~~strikethrough~~` relocation cross-refs, or domain tracking checkboxes — those are never sweep targets and carry no `✅` date by design; the checker sees only the line and would wrongly flag a column-0 one as a `VIOLATION`. The completion operation is the trigger; nothing else.
+The gate fires ONLY on a genuine completion. Indented subtasks, `~~strikethrough~~` relocation cross-refs, and domain tracking checkboxes are never sweep targets and carry no `✅` date by design; they are never passed through it.
 
 ## Sub-bullets
 

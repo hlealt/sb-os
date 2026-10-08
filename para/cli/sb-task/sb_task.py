@@ -11,7 +11,6 @@ Format contract: para/workflows/sb-vault-ops/data/tasks.md (sb-os repo).
 import argparse
 import contextlib
 import difflib
-import importlib.util
 import io
 import json
 import os
@@ -43,6 +42,11 @@ FIELD_RE = re.compile(r"^(\s+)- _([A-Za-z][A-Za-z-]*):_\s*(.*)$")
 # which fixes the EDITABLE labels, does not recognise the spelling.
 FIELD_BULLET_RE = re.compile(r"^(\s+)- _(.+?):_")
 LIST_ITEM_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s")   # starts a new list item
+# A completed top-level task: `- [x] ` at column 0 only.
+COMPLETED_LINE_RE = re.compile(r"^- \[x\] ")
+# Completion-date marker on the task line. Zero-padded 4-2-2 shape required;
+# calendar validity (e.g. no month 13) is checked separately by valid_iso_date.
+COMPLETION_DATE_RE = re.compile(r"✅ (\d{4}-\d{2}-\d{2})")
 
 MOSCOW_LEVELS = ["Must", "Should", "Could"]
 DIFF_CANON = {"easy": "easy", "med": "med", "hard": "hard",
@@ -168,17 +172,79 @@ def sb_os_root(vault):
     return Path(__file__).resolve().parents[3]
 
 
-def load_sweep_validator(vault):
-    p = sb_os_root(vault) / "para" / "workflows" / "sb-archivist" / "sweep_done_tasks.py"
-    if not p.is_file():
-        return None, str(p)
-    spec = importlib.util.spec_from_file_location("sweep_done_tasks", p)
-    mod = importlib.util.module_from_spec(spec)
+def valid_iso_date(s):
+    """True iff `s` is a real, zero-padded YYYY-MM-DD calendar date.
+
+    datetime.date.fromisoformat rejects both impossible dates (2026-13-40,
+    2026-02-30) and unpadded ones (2026-6-1), giving a strict validity check.
+    """
     try:
-        spec.loader.exec_module(mod)
-    except Exception:
-        return None, str(p)
-    return getattr(mod, "validate_completion_line", None), str(p)
+        date.fromisoformat(s)
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
+def routed_date(task_line, today):
+    """Decide the routing date for a `- [x]` task line, fail-safe.
+
+    Returns (date, None) when the line can be routed WITH CONFIDENCE, or
+    (None, reason) when it cannot and the block must be skipped (left in source,
+    never moved). Confidence requires exactly one calendar-valid `✅ YYYY-MM-DD`
+    on the task line. The `today` argument is accepted for signature symmetry and
+    intentionally NOT used as a fallback — a missing/invalid date is a skip, never
+    a silent route-to-today (that was the data-loss path this replaces).
+    """
+    dates = COMPLETION_DATE_RE.findall(task_line)
+    if not dates:
+        return None, "no valid ✅ YYYY-MM-DD on task line"
+    valid = [d for d in dates if valid_iso_date(d)]
+    if not valid:
+        return None, f"✅ date not a valid calendar date: {dates[0]}"
+    distinct = set(valid)
+    if len(distinct) > 1:
+        return None, f"multiple distinct ✅ dates: {sorted(distinct)}"
+    return valid[0], None
+
+
+def validate_completion_line(task_line, today):
+    """Author-side contract check for ONE completed-task line — the write-time
+    twin of the sweep's routing decision.
+
+    Returns a dict {status, reason, date}. Reuses the SAME checks the sweep keys
+    on — COMPLETED_LINE_RE for rule 1 (column-0 `- [x] `), routed_date/valid_iso_date
+    for rules 2-3 (single calendar-valid ✅ date) — so an author-side CONFORMING
+    GUARANTEES the sweep can route the block; the two can never drift. Rule 4
+    (file is valid UTF-8) is file-level and not applicable to a single line.
+
+    The line is checked AS GIVEN: trailing CR/LF are ignored, but leading
+    whitespace is significant — it is what makes a line an indented child.
+
+      status == "conforming"  column-0 `- [x] ` + exactly one calendar-valid
+                              `✅ YYYY-MM-DD`; the block will sweep cleanly.
+      status == "violation"   column-0 `- [x] ` but the ✅ date is missing,
+                              malformed, or ambiguous (reason says which) — the
+                              unsweepable done-task this guard exists to catch.
+      status == "not-a-task"  not a column-0 `- [x] ` top-level task (indented
+                              subtask or non-checkbox); the sweep ignores it by
+                              rule 1, so the contract does not apply.
+
+    The validator is intentionally dumb: a column-0 `- [x]` with no ✅ date is a
+    `violation` whether it is a forgotten-date completion OR a legitimate
+    `~~strikethrough~~` relocation cross-ref / tracking checkbox. Distinguishing
+    those is the CALLER's job — `edit --status done` invokes this ONLY on a
+    genuine completion, never on subtasks, cross-refs, or tracking checkboxes.
+    """
+    line = task_line.rstrip("\r\n")
+    if not COMPLETED_LINE_RE.match(line):
+        return {"status": "not-a-task",
+                "reason": "not a column-0 '- [x] ' top-level task "
+                          "(rule 1: indented subtasks and non-checkbox lines are never sweep targets)",
+                "date": None}
+    done_date, reason = routed_date(line, today)
+    if reason is not None:
+        return {"status": "violation", "reason": reason, "date": None}
+    return {"status": "conforming", "reason": None, "date": done_date}
 
 
 def discover_task_files(vault):
@@ -803,10 +869,6 @@ def cmd_doctor(args):
         emit(args, [f"vault: MISSING — {e}"], {"ok": False, "error": {
             "code": e.code, "message": str(e), "hint": e.hint}})
         return e.exit_code
-    validator, vpath = load_sweep_validator(vault)
-    if validator is None:
-        issues.append(f"sweep validator not importable at {vpath} — "
-                      "`edit --status done` will refuse")
     files = discover_task_files(vault)
     if not files:
         issues.append("no *-tasks.md files under 1-projects/ or 2-areas/")
@@ -814,12 +876,11 @@ def cmd_doctor(args):
     emit(args, [
         f"vault: {vault}",
         f"sb-os: {sb_os_root(vault)}",
-        f"sweep validator: {'ok' if validator else 'MISSING'}",
         f"task files: {len(files)}",
         *(f"issue: {i}" for i in issues),
         "next: sb-task files",
     ], {"ok": ok, "vault": str(vault), "sb_os": str(sb_os_root(vault)),
-        "validator": bool(validator), "task_files": len(files), "issues": issues})
+        "task_files": len(files), "issues": issues})
     return 0 if ok else 1
 
 
@@ -1216,13 +1277,7 @@ def edit_one(args, vault, ref, sink=None):
                 line, _ = replace_token(line, re.compile(r"#wip\b"), "")
                 line = re.sub(r"\s+$", "", line)
                 line = line + f" {DONE_EMOJI} {date.today().isoformat()}"
-            validator, vpath = load_sweep_validator(vault)
-            if validator is None:
-                raise CliError("no-validator",
-                               f"cannot complete: sweep validator missing at {vpath}",
-                               hint="the sb-os repo must be present (sb-os.json sb_os_path)",
-                               exit_code=3)
-            verdict = validator(line, date.today())
+            verdict = validate_completion_line(line, date.today())
             if verdict.get("status") != "conforming":
                 raise CliError("sweep-violation",
                                f"completion line fails the sweep contract: {verdict.get('reason')}",
@@ -1900,18 +1955,13 @@ def cmd_selftest(args):
         code, out = invoke(*V, "--json", "edit", "testp", "2", "--status", "wip")
         ok("wip-on", code == 0 and json.loads(out)["task"]["wip"] is True, out)
         code, out = invoke(*V, "--json", "edit", "testp", "2", "--status", "done")
-        if real_sb_os:
-            j = json.loads(out) if code == 0 else {}
-            ok("done-validated", code == 0 and j["task"]["status"] == "done"
-               and j["task"]["wip"] is False and j["task"]["done_date"], out)
-            code, out = invoke(*V, "--json", "list", "testp", "--status", "done")
-            ok("list-done", code == 0 and json.loads(out)["count"] == 1)
-            code, out = invoke(*V, "--json", "edit", "testp", "2", "--status", "open")
-            ok("reopen", code == 0 and json.loads(out)["task"]["status"] == "open", out)
-        else:
-            ok("done-validated", code == 3, "no real sb-os repo; refusal path exercised")
-            ok("list-done", True, "skipped (no validator)")
-            ok("reopen", True, "skipped (no validator)")
+        j = json.loads(out) if code == 0 else {}
+        ok("done-validated", code == 0 and j["task"]["status"] == "done"
+           and j["task"]["wip"] is False and j["task"]["done_date"], out)
+        code, out = invoke(*V, "--json", "list", "testp", "--status", "done")
+        ok("list-done", code == 0 and json.loads(out)["count"] == 1)
+        code, out = invoke(*V, "--json", "edit", "testp", "2", "--status", "open")
+        ok("reopen", code == 0 and json.loads(out)["task"]["status"] == "open", out)
 
         code, out = invoke(*V, "--json", "edit", "testp", "3", "--moscow", "must")
         ok("moscow-move", code == 0 and json.loads(out)["task"]["moscow"] == "must", out)
@@ -1970,14 +2020,10 @@ def cmd_selftest(args):
         ok("done-gate-blocks", code == 1
            and json.loads(out)["error"]["code"] == "done-gated", out)
         code, out = invoke(*V, "--json", "edit", "testp", "3", "--status", "done", "--force")
-        if real_sb_os:
-            ok("done-gate-force", code == 0
-               and json.loads(out)["task"]["status"] == "done", out)
-            code, out = invoke(*V, "edit", "testp", "3", "--status", "open")
-            ok("done-gate-reopen", code == 0, out)
-        else:
-            ok("done-gate-force", code == 3, "gate bypassed; validator-missing refusal")
-            ok("done-gate-reopen", True, "skipped (no validator)")
+        ok("done-gate-force", code == 0
+           and json.loads(out)["task"]["status"] == "done", out)
+        code, out = invoke(*V, "edit", "testp", "3", "--status", "open")
+        ok("done-gate-reopen", code == 0, out)
         # sort orders by the union: 4 gated on 3 must land after it
         code, out = invoke(*V, "create", "testp", "--title", "Deliver the thing",
                            "--number", "4", "--moscow", "must",
@@ -2243,7 +2289,7 @@ def build_parser():
                             epilog=f"example:\n  {example}\nnext: {next_}")
         return sp
 
-    cmd("doctor", "environment health: vault, validator, task-file census",
+    cmd("doctor", "environment health: vault, task-file census",
         "sb-task --json doctor", "sb-task files")
 
     cmd("files", "discovery: every *-tasks.md with tag + open/done counts",
